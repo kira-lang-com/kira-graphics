@@ -1,0 +1,38 @@
+import KiraGraphics
+
+@Main
+@Native
+function main() {
+    let app: Application = Application()
+    app.title = "Kira Graphics Triangle"
+    app.width = 640
+    app.height = 480
+
+    let scene: Scene = Scene()
+    scene.vertex_source = "#version 330
+out vec4 color;
+const vec2 positions[3] = vec2[3](
+    vec2(0.0, 0.55),
+    vec2(0.55, -0.55),
+    vec2(-0.55, -0.55)
+);
+const vec4 colors[3] = vec4[3](
+    vec4(1.0, 0.25, 0.25, 1.0),
+    vec4(0.25, 1.0, 0.35, 1.0),
+    vec4(0.25, 0.45, 1.0, 1.0)
+);
+void main() {
+    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+    color = colors[gl_VertexID];
+}"
+    scene.fragment_source = "#version 330
+in vec4 color;
+out vec4 frag_color;
+void main() {
+    frag_color = color;
+}"
+    scene.label = "basic-triangle"
+    scene.draw_count = 3
+    
+    app.run(scene)
+}

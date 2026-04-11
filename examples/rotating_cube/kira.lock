@@ -1,0 +1,21 @@
+version = 1
+
+[root]
+name = "rotating_cube"
+version = "0.1.0"
+kind = "app"
+kira = "0.1.0"
+
+[[root_dependency]]
+name = "KiraGraphics"
+source = "path"
+path = "../.."
+
+[[package]]
+name = "KiraGraphics"
+version = "0.1.0"
+kind = "library"
+kira = "0.1.0"
+module_root = "KiraGraphics"
+source = "path"
+path = "C:\Users\Shadow\Coding\kira-projects\kira-graphics"

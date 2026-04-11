@@ -1,0 +1,52 @@
+import KiraGraphics
+
+@Main
+@Native
+function main() {
+    let app: Application = application_default()
+    app.title = "Kira Graphics Cube"
+    app.width = 800
+    app.height = 600
+
+    let scene: Scene = scene_default()
+    scene.vertex_source = "#version 330
+out vec4 color;
+const vec3 positions[36] = vec3[36](
+    vec3(-0.45, -0.45, -0.45), vec3(0.45, -0.45, -0.45), vec3(0.45, 0.45, -0.45),
+    vec3(-0.45, -0.45, -0.45), vec3(0.45, 0.45, -0.45), vec3(-0.45, 0.45, -0.45),
+    vec3(-0.45, -0.45, 0.45), vec3(0.45, -0.45, 0.45), vec3(0.45, 0.45, 0.45),
+    vec3(-0.45, -0.45, 0.45), vec3(0.45, 0.45, 0.45), vec3(-0.45, 0.45, 0.45),
+    vec3(-0.45, -0.45, -0.45), vec3(-0.45, 0.45, -0.45), vec3(-0.45, 0.45, 0.45),
+    vec3(-0.45, -0.45, -0.45), vec3(-0.45, 0.45, 0.45), vec3(-0.45, -0.45, 0.45),
+    vec3(0.45, -0.45, -0.45), vec3(0.45, 0.45, -0.45), vec3(0.45, 0.45, 0.45),
+    vec3(0.45, -0.45, -0.45), vec3(0.45, 0.45, 0.45), vec3(0.45, -0.45, 0.45),
+    vec3(-0.45, -0.45, -0.45), vec3(0.45, -0.45, -0.45), vec3(0.45, -0.45, 0.45),
+    vec3(-0.45, -0.45, -0.45), vec3(0.45, -0.45, 0.45), vec3(-0.45, -0.45, 0.45),
+    vec3(-0.45, 0.45, -0.45), vec3(0.45, 0.45, -0.45), vec3(0.45, 0.45, 0.45),
+    vec3(-0.45, 0.45, -0.45), vec3(0.45, 0.45, 0.45), vec3(-0.45, 0.45, 0.45)
+);
+const vec4 colors[6] = vec4[6](
+    vec4(1.0, 0.3, 0.3, 1.0),
+    vec4(0.3, 1.0, 0.4, 1.0),
+    vec4(0.3, 0.5, 1.0, 1.0),
+    vec4(1.0, 0.8, 0.3, 1.0),
+    vec4(0.9, 0.3, 1.0, 1.0),
+    vec4(0.3, 1.0, 1.0, 1.0)
+);
+void main() {
+    vec3 p = positions[gl_VertexID];
+    gl_Position = vec4(p.xy, 0.0, 1.0);
+    color = colors[gl_VertexID / 6];
+}"
+    scene.fragment_source = "#version 330
+in vec4 color;
+out vec4 frag_color;
+void main() {
+    frag_color = color;
+}"
+    scene.label = "cube-pipeline"
+    scene.draw_count = 36
+
+    application_run(app, scene)
+    return
+}

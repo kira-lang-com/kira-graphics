@@ -1,0 +1,12 @@
+import KiraGraphicsBackend
+
+type Application {
+    let title: String = "KiraGraphics"
+    let width: I32 = 1280
+    let height: I32 = 720
+    
+    function run(scene: Scene) {
+        print("Running scene: \(scene.label)")
+        RunBackendApp(title, width, height, scene.vertex_source, scene.fragment_source, scene.label, scene.draw_count)
+    }
+}

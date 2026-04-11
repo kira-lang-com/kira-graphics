@@ -1,0 +1,13 @@
+[package]
+name = "rotating_cube"
+version = "0.1.0"
+kind = "app"
+kira = "0.1.0"
+native_libraries = ["../../NativeLibs/Sokol.toml"]
+
+[defaults]
+execution_mode = "llvm"
+build_target = "host"
+
+[dependencies]
+KiraGraphics = { path = "../.." }

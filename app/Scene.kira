@@ -1,0 +1,6 @@
+type Scene {
+    let vertex_source: String = ""
+    let fragment_source: String = ""
+    let label: String = ""
+    let draw_count: I32 = 3
+}
