@@ -1,4 +1,3 @@
-function hello() {
-    print("hello from KiraGraphics")
-    return
+function inspectKslShaderAsset(shaderAssetsDirectory: String, shaderName: String, vertexLayout: String) {
+    inspectKslShaderAssetNative(shaderAssetsDirectory, shaderName, vertexLayout)
 }

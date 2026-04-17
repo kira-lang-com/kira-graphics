@@ -17,7 +17,7 @@ headers = ["Sokol/sokol_app.h", "Sokol/sokol_gfx.h", "Sokol/sokol_glue.h"]
 mode = "all_public"
 
 [build]
-sources = ["Sokol/sokol_impl.c"]
+sources = ["Sokol/sokol_impl.c", "Sokol/kira_graphics_native.c"]
 include_dirs = ["Sokol"]
 
 [target.aarch64-macos-none]
