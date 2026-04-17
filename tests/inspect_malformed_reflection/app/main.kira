@@ -1,0 +1,6 @@
+import KiraGraphics
+
+@Main
+function main() {
+    inspectKslShaderAsset("tests/fixtures/malformed_reflection", "BasicTriangle", "position=float2")
+}

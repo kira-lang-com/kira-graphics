@@ -1,0 +1,10 @@
+{
+  "shader": "BasicTriangle",
+  "kind": "graphics",
+  "backend": "glsl_330",
+  "options": [
+    { "name": "broken", "type": "Bool", "default": "true" }
+  ],
+  "stages": [
+    { "stage": "vertex", "entry": "BasicTriangle__vertex__entry", "input": "VertexIn", "output": "VertexOut" }
+  ]

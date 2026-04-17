@@ -1,0 +1,6 @@
+import KiraGraphics
+
+@Main
+function main() {
+    inspectKslShaderAsset("tests/fixtures/missing_fragment", "BasicTriangle", "position=float2")
+}

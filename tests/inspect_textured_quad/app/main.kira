@@ -1,0 +1,6 @@
+import KiraGraphics
+
+@Main
+function main() {
+    inspectKslShaderAsset("tests/fixtures/textured_quad", "TexturedQuad", "position=float3;uv=float2")
+}

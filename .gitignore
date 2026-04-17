@@ -5,6 +5,9 @@ zig-out/
 
 examples/*/generated/
 examples/*/kira.lock
+tests/*/generated/
+tests/*/kira.lock
+tests/ksl_asset_probe.exp
 
 generated/
 

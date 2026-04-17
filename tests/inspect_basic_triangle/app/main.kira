@@ -1,0 +1,6 @@
+import KiraGraphics
+
+@Main
+function main() {
+    inspectKslShaderAsset("tests/fixtures/basic_triangle", "BasicTriangle", "position=float2")
+}
