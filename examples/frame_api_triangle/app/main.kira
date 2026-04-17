@@ -1,0 +1,67 @@
+import KiraGraphics
+
+@Main
+function main() {
+    let app: Application = Application()
+    let graphics: Graphics = Graphics()
+    let shaderSource: GraphicsShaderSource = GraphicsShaderSource()
+    let shaderDescriptor: GraphicsShaderDescriptor = GraphicsShaderDescriptor()
+    var shader: GraphicsShader = GraphicsShader()
+    let vertexBufferDescriptor: GraphicsBufferDescriptor = GraphicsBufferDescriptor()
+    var vertexBuffer: GraphicsBuffer = GraphicsBuffer()
+    let vertexLayout: VertexLayoutDescriptor = VertexLayoutDescriptor()
+    let pipelineDescriptor: RenderPipelineDescriptor = RenderPipelineDescriptor()
+    var pipeline: RenderPipeline = RenderPipeline()
+    let clearColor: Float4 = Float4()
+    var renderPass: RenderPassDescriptor = RenderPassDescriptor()
+    let commandBuffer: GraphicsCommandBuffer = GraphicsCommandBuffer()
+    var renderEncoder: RenderEncoder = RenderEncoder()
+    let vertexData: [Float] = [
+        0.0, 0.55,
+        0.55, (0.0 - 0.55),
+        (0.0 - 0.55), (0.0 - 0.55)
+    ]
+
+    app.title = "Kira Graphics Frame API Triangle"
+    app.width = 640
+    app.height = 480
+
+    shaderSource.useKslAssets("../ksl_triangle/generated/shaders", "BasicTriangle")
+    shaderDescriptor.label = "triangle-shader"
+    shaderDescriptor.source = shaderSource
+    shader = graphics.createShader(shaderDescriptor)
+
+    vertexBufferDescriptor.label = "triangle-vertices"
+    vertexBufferDescriptor.usage = graphics.vertexBufferUsage()
+    vertexBufferDescriptor.floatData = vertexData
+    vertexBuffer = graphics.createBuffer(vertexBufferDescriptor)
+
+    vertexLayout.label = "triangle-layout"
+    vertexLayout.layoutText = "position=float2"
+
+    pipelineDescriptor.label = "triangle-pipeline"
+    pipelineDescriptor.shader = shader
+    pipelineDescriptor.vertexLayout = vertexLayout
+    pipelineDescriptor.primitiveType = graphics.trianglePrimitiveType()
+    pipelineDescriptor.colorAttachments = [graphics.defaultAlphaColorTarget(graphics.bgra8UnormFormat())]
+    pipelineDescriptor.depthState = graphics.noDepthState()
+    pipelineDescriptor.cullMode = graphics.noCullMode()
+    pipelineDescriptor.windingOrder = graphics.counterClockwiseWindingOrder()
+    pipeline = graphics.createRenderPipeline(pipelineDescriptor)
+
+    clearColor.r = 0.04
+    clearColor.g = 0.05
+    clearColor.b = 0.08
+    clearColor.a = 1.0
+    renderPass = graphics.makeSwapchainPass(clearColor)
+    renderPass.label = "swapchain-pass"
+
+    renderEncoder = createRenderEncoderForPass(renderPass)
+    renderEncoder.setLabel("triangle-render-encoder")
+    renderEncoder.setPipeline(pipeline)
+    renderEncoder.setVertexBuffer(vertexBuffer, 0, 0)
+    renderEncoder.draw(3)
+
+    applicationPresentFrame(app, commandBuffer.commitRenderCommands(renderPass, renderEncoder))
+    return
+}

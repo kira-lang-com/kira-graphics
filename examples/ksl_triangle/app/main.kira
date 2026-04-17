@@ -1,27 +1,24 @@
 import KiraGraphics
 
 @Main
-function main() -> Void {
+function main() {
     let app: Application = Application()
-    app.title = "Kira Basic Triangle Example"
+    app.title = "Kira Graphics KSL Triangle"
     app.width = 640
     app.height = 480
 
     let scene: Scene = Scene()
-    scene.useKslAssets("generated/Shaders", "BasicTriangle")
+    scene.useKslAssets("generated/shaders", "BasicTriangle")
     scene.vertexLayout = "position=float2"
     scene.drawCount = 3
     scene.label = "ksl-triangle"
+
     let vertexData: [Float] = [
         0.0, 0.55,
-        0.55, -0.55,
-        -0.55, -0.55
+        0.55, (0.0 - 0.55),
+        (0.0 - 0.55), (0.0 - 0.55)
     ]
 
-    applicationRunWithVertexData(
-        app,
-        scene,
-        vertexData
-    )
-    return;
+    applicationRunWithVertexData(app, scene, vertexData)
+    return
 }

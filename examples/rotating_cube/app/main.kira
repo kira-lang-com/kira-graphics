@@ -3,13 +3,13 @@ import KiraGraphics
 @Main
 @Native
 function main() {
-    let app: Application = application_default()
+    let app: Application = Application()
     app.title = "Kira Graphics Cube"
     app.width = 800
     app.height = 600
 
-    let scene: Scene = scene_default()
-    scene.vertex_source = "#version 330
+    let scene: Scene = Scene()
+    scene.vertexSource = "#version 330
 out vec4 color;
 const vec3 positions[36] = vec3[36](
     vec3(-0.45, -0.45, -0.45), vec3(0.45, -0.45, -0.45), vec3(0.45, 0.45, -0.45),
@@ -38,15 +38,15 @@ void main() {
     gl_Position = vec4(p.xy, 0.0, 1.0);
     color = colors[gl_VertexID / 6];
 }"
-    scene.fragment_source = "#version 330
+    scene.fragmentSource = "#version 330
 in vec4 color;
 out vec4 frag_color;
 void main() {
     frag_color = color;
 }"
     scene.label = "cube-pipeline"
-    scene.draw_count = 36
+    scene.drawCount = 36
 
-    application_run(app, scene)
+    applicationRun(app, scene)
     return
 }
