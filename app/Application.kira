@@ -1,12 +1,70 @@
-import KiraGraphicsBackend
-
 type Application {
-    let title: String = "KiraGraphics"
-    let width: I32 = 1280
-    let height: I32 = 720
-    
-    function run(scene: Scene) {
-        print("Running scene: \(scene.label)")
-        RunBackendApp(title, width, height, scene.vertex_source, scene.fragment_source, scene.label, scene.draw_count)
+    var title: String = "KiraGraphics"
+    var width: Int = 1280
+    var height: Int = 720
+
+    function presentFrame(frame: GraphicsFrame) {
+        let shader: GraphicsShader = frame.renderEncoder.pipeline.descriptor.shader
+        let shaderSource: GraphicsShaderSource = shader.descriptor.source
+        let clearColor: Float4 = frame.renderPassDescriptor.colorAttachment.clearColor
+
+        runBackendApp(
+            title,
+            width,
+            height,
+            shaderSource.shaderMode,
+            shaderSource.vertexSource,
+            shaderSource.fragmentSource,
+            shaderSource.shaderAssetsDirectory,
+            shaderSource.shaderName,
+            frame.renderEncoder.pipeline.descriptor.vertexLayout.layoutText,
+            frame.renderEncoder.vertexBuffer.floatData,
+            frame.renderEncoder.vertexCount,
+            frame.renderEncoder.instanceCount,
+            frame.renderEncoder.pipeline.descriptor.label,
+            clearColor.r,
+            clearColor.g,
+            clearColor.b,
+            clearColor.a
+        )
     }
+
+    function run(scene: Scene) {
+        let vertexData: [Float] = []
+        runWithVertexData(scene, vertexData)
+    }
+
+    function runWithVertexData(scene: Scene, vertexData: [Float]) {
+        runBackendApp(
+            title,
+            width,
+            height,
+            scene.shaderMode,
+            scene.vertexSource,
+            scene.fragmentSource,
+            scene.shaderAssetsDirectory,
+            scene.shaderName,
+            scene.vertexLayout,
+            vertexData,
+            scene.drawCount,
+            1,
+            scene.label,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+        )
+    }
+}
+
+function applicationRun(app: Application, scene: Scene) {
+    app.run(scene)
+}
+
+function applicationRunWithVertexData(app: Application, scene: Scene, vertexData: [Float]) {
+    app.runWithVertexData(scene, vertexData)
+}
+
+function applicationPresentFrame(app: Application, frame: GraphicsFrame) {
+    app.presentFrame(frame)
 }
