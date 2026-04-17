@@ -1,0 +1,1256 @@
+type GraphicsConstants {
+    let shaderModeInlineGlsl: Int = 0
+    let shaderModeKslAssets: Int = 1
+
+    let storageModeShared: Int = 0
+    let storageModeManaged: Int = 1
+    let storageModePrivate: Int = 2
+
+    let bufferUsageVertex: Int = 0
+    let bufferUsageIndex: Int = 1
+    let bufferUsageUniform: Int = 2
+    let bufferUsageStorage: Int = 3
+
+    let textureUsageShaderRead: Int = 0
+    let textureUsageRenderTarget: Int = 1
+    let textureUsageShaderWrite: Int = 2
+
+    let textureFormatInvalid: Int = 0
+    let textureFormatBgra8Unorm: Int = 1
+    let textureFormatRgba8Unorm: Int = 2
+    let textureFormatRgba16Float: Int = 3
+    let textureFormatDepth32Float: Int = 4
+
+    let loadActionDontCare: Int = 0
+    let loadActionLoad: Int = 1
+    let loadActionClear: Int = 2
+
+    let storeActionDontCare: Int = 0
+    let storeActionStore: Int = 1
+
+    let primitiveTypeTriangle: Int = 0
+    let primitiveTypeTriangleStrip: Int = 1
+    let primitiveTypeLine: Int = 2
+    let primitiveTypePoint: Int = 3
+
+    let indexTypeNone: Int = 0
+    let indexTypeUint16: Int = 1
+    let indexTypeUint32: Int = 2
+
+    let cullModeNone: Int = 0
+    let cullModeFront: Int = 1
+    let cullModeBack: Int = 2
+
+    let windingClockwise: Int = 0
+    let windingCounterClockwise: Int = 1
+
+    let compareAlways: Int = 0
+    let compareLess: Int = 1
+    let compareLessEqual: Int = 2
+    let compareGreater: Int = 3
+    let compareEqual: Int = 4
+
+    let blendFactorZero: Int = 0
+    let blendFactorOne: Int = 1
+    let blendFactorSourceAlpha: Int = 2
+    let blendFactorOneMinusSourceAlpha: Int = 3
+
+    let blendOpAdd: Int = 0
+    let blendOpSubtract: Int = 1
+
+    let filterNearest: Int = 0
+    let filterLinear: Int = 1
+
+    let addressModeClampToEdge: Int = 0
+    let addressModeRepeat: Int = 1
+    let addressModeMirrorRepeat: Int = 2
+
+    let vertexStepPerVertex: Int = 0
+    let vertexStepPerInstance: Int = 1
+
+    let resourceBindingUniformBuffer: Int = 0
+    let resourceBindingStorageBuffer: Int = 1
+    let resourceBindingTexture: Int = 2
+    let resourceBindingSampler: Int = 3
+}
+
+type Float2 {
+    var x: Float = 0.0
+    var y: Float = 0.0
+}
+
+type Float3 {
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var z: Float = 0.0
+}
+
+type Float4 {
+    var r: Float = 0.0
+    var g: Float = 0.0
+    var b: Float = 0.0
+    var a: Float = 1.0
+}
+
+type Float4x4 {
+    var m00: Float = 1.0
+    var m01: Float = 0.0
+    var m02: Float = 0.0
+    var m03: Float = 0.0
+    var m10: Float = 0.0
+    var m11: Float = 1.0
+    var m12: Float = 0.0
+    var m13: Float = 0.0
+    var m20: Float = 0.0
+    var m21: Float = 0.0
+    var m22: Float = 1.0
+    var m23: Float = 0.0
+    var m30: Float = 0.0
+    var m31: Float = 0.0
+    var m32: Float = 0.0
+    var m33: Float = 1.0
+}
+
+type Rect {
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var width: Float = 0.0
+    var height: Float = 0.0
+}
+
+type ScissorRect {
+    var x: Int = 0
+    var y: Int = 0
+    var width: Int = 0
+    var height: Int = 0
+}
+
+type Viewport {
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var width: Float = 0.0
+    var height: Float = 0.0
+    var nearDepth: Float = 0.0
+    var farDepth: Float = 1.0
+}
+
+type WindowSize {
+    var width: Int = 1280
+    var height: Int = 720
+}
+
+type TextureSize {
+    var width: Int = 1
+    var height: Int = 1
+    var depth: Int = 1
+}
+
+type TextureFormat {
+    var value: Int = 1
+}
+
+type BufferUsage {
+    var value: Int = 0
+}
+
+type TextureUsage {
+    var value: Int = 0
+}
+
+type StorageMode {
+    var value: Int = 0
+}
+
+type LoadAction {
+    var value: Int = 2
+}
+
+type StoreAction {
+    var value: Int = 1
+}
+
+type PrimitiveType {
+    var value: Int = 0
+}
+
+type IndexType {
+    var value: Int = 0
+}
+
+type CullMode {
+    var value: Int = 0
+}
+
+type WindingOrder {
+    var value: Int = 1
+}
+
+type CompareFunction {
+    var value: Int = 0
+}
+
+type BlendFactor {
+    var value: Int = 1
+}
+
+type BlendOperation {
+    var value: Int = 0
+}
+
+type FilterMode {
+    var value: Int = 1
+}
+
+type AddressMode {
+    var value: Int = 0
+}
+
+type VertexStepFunction {
+    var value: Int = 0
+}
+
+type ResourceBindingType {
+    var value: Int = 0
+}
+
+type ShaderStageSet {
+    var vertex: Bool = false
+    var fragment: Bool = false
+    var compute: Bool = false
+}
+
+type GraphicsShaderSource {
+    var shaderMode: Int = 0
+    var vertexSource: String = ""
+    var fragmentSource: String = ""
+    var computeSource: String = ""
+    var shaderAssetsDirectory: String = ""
+    var shaderName: String = ""
+
+    function useInlineGlsl(vertexSource: String, fragmentSource: String) {
+        shaderMode = 0
+        self.vertexSource = vertexSource
+        self.fragmentSource = fragmentSource
+        computeSource = ""
+        shaderAssetsDirectory = ""
+        shaderName = ""
+        return
+    }
+
+    function useKslAssets(shaderAssetsDirectory: String, shaderName: String) {
+        shaderMode = 1
+        self.shaderAssetsDirectory = shaderAssetsDirectory
+        self.shaderName = shaderName
+        vertexSource = ""
+        fragmentSource = ""
+        computeSource = ""
+        return
+    }
+}
+
+type GraphicsShaderReflection {
+    var shaderName: String = ""
+    var vertexEntryPoint: String = "main"
+    var fragmentEntryPoint: String = "main"
+    var computeEntryPoint: String = "main"
+    var vertexLayout: String = ""
+    var resources: [String]
+    var uniformBlocks: [String]
+}
+
+type GraphicsShaderDescriptor {
+    var label: String = ""
+    var source: GraphicsShaderSource
+    var reflection: GraphicsShaderReflection
+}
+
+type GraphicsShader {
+    var descriptor: GraphicsShaderDescriptor
+}
+
+type GraphicsBufferDescriptor {
+    var label: String = ""
+    var usage: BufferUsage
+    var storageMode: StorageMode
+    var byteCount: Int = 0
+    var stride: Int = 0
+    var floatData: [Float]
+    var integerData: [Int]
+}
+
+type GraphicsBuffer {
+    var descriptor: GraphicsBufferDescriptor
+    var label: String = ""
+    var byteCount: Int = 0
+    var floatData: [Float]
+    var integerData: [Int]
+}
+
+type GraphicsTextureDescriptor {
+    var label: String = ""
+    var textureFormat: TextureFormat
+    var textureSize: TextureSize
+    var mipmapLevelCount: Int = 1
+    var sampleCount: Int = 1
+    var usage: TextureUsage
+    var storageMode: StorageMode
+}
+
+type GraphicsTexture {
+    var descriptor: GraphicsTextureDescriptor
+    var label: String = ""
+}
+
+type GraphicsSamplerDescriptor {
+    var label: String = ""
+    var minFilter: FilterMode
+    var magFilter: FilterMode
+    var mipFilter: FilterMode
+    var addressModeS: AddressMode
+    var addressModeT: AddressMode
+    var addressModeR: AddressMode
+    var lodMinClamp: Float = 0.0
+    var lodMaxClamp: Float = 1000.0
+    var maxAnisotropy: Int = 1
+}
+
+type GraphicsSampler {
+    var descriptor: GraphicsSamplerDescriptor
+    var label: String = ""
+}
+
+type VertexAttributeDescriptor {
+    var name: String = ""
+    var format: TextureFormat
+    var byteOffset: Int = 0
+    var bufferIndex: Int = 0
+    var shaderLocation: Int = 0
+}
+
+type VertexBufferLayoutDescriptor {
+    var stride: Int = 0
+    var stepFunction: VertexStepFunction
+    var stepRate: Int = 1
+}
+
+type VertexLayoutDescriptor {
+    var label: String = ""
+    var layoutText: String = ""
+    var attributes: [VertexAttributeDescriptor]
+    var bufferLayouts: [VertexBufferLayoutDescriptor]
+}
+
+type BlendComponent {
+    var sourceFactor: BlendFactor
+    var destinationFactor: BlendFactor
+    var operation: BlendOperation
+}
+
+type ColorTargetDescriptor {
+    var textureFormat: TextureFormat
+    var blendingEnabled: Bool = false
+    var rgbBlend: BlendComponent
+    var alphaBlend: BlendComponent
+    var writeRed: Bool = true
+    var writeGreen: Bool = true
+    var writeBlue: Bool = true
+    var writeAlpha: Bool = true
+}
+
+type DepthState {
+    var compareFunction: CompareFunction
+    var depthWriteEnabled: Bool = false
+}
+
+type RenderPipelineDescriptor {
+    var label: String = ""
+    var shader: GraphicsShader
+    var vertexLayout: VertexLayoutDescriptor
+    var primitiveType: PrimitiveType
+    var colorAttachments: [ColorTargetDescriptor]
+    var hasDepthFormat: Bool = false
+    var depthFormat: TextureFormat
+    var depthState: DepthState
+    var cullMode: CullMode
+    var windingOrder: WindingOrder
+    var sampleCount: Int = 1
+    var indexType: IndexType
+}
+
+type RenderPipeline {
+    var descriptor: RenderPipelineDescriptor
+}
+
+type ComputePipelineDescriptor {
+    var label: String = ""
+    var shader: GraphicsShader
+}
+
+type ComputePipeline {
+    var descriptor: ComputePipelineDescriptor
+}
+
+type BindGroupLayoutEntry {
+    var bindingIndex: Int = 0
+    var resourceBindingType: ResourceBindingType
+    var stages: ShaderStageSet
+}
+
+type BindGroupLayoutDescriptor {
+    var label: String = ""
+    var entries: [BindGroupLayoutEntry]
+}
+
+type BindGroupLayout {
+    var descriptor: BindGroupLayoutDescriptor
+}
+
+type GraphicsBufferBinding {
+    var buffer: GraphicsBuffer
+    var byteOffset: Int = 0
+    var byteCount: Int = 0
+}
+
+type BindGroupResourceBinding {
+    var resourceBindingType: ResourceBindingType
+    var bufferBinding: GraphicsBufferBinding
+    var texture: GraphicsTexture
+    var sampler: GraphicsSampler
+}
+
+type BindGroupDescriptor {
+    var label: String = ""
+    var layout: BindGroupLayout
+    var resources: [BindGroupResourceBinding]
+}
+
+type BindGroup {
+    var descriptor: BindGroupDescriptor
+}
+
+type RenderTargetDescriptor {
+    var label: String = ""
+    var textureSize: TextureSize
+    var colorFormat: TextureFormat
+    var hasDepthFormat: Bool = false
+    var depthFormat: TextureFormat
+}
+
+type RenderTarget {
+    var descriptor: RenderTargetDescriptor
+    var colorTexture: GraphicsTexture
+    var depthTexture: GraphicsTexture
+}
+
+type ColorAttachmentDescriptor {
+    var target: RenderTarget
+    var loadAction: LoadAction
+    var storeAction: StoreAction
+    var clearColor: Float4
+}
+
+type DepthAttachmentDescriptor {
+    var target: RenderTarget
+    var loadAction: LoadAction
+    var storeAction: StoreAction
+    var clearDepth: Float = 1.0
+    var clearStencil: Int = 0
+}
+
+type RenderPassDescriptor {
+    var label: String = ""
+    var isSwapchainTarget: Bool = true
+    var colorAttachment: ColorAttachmentDescriptor
+    var depthAttachment: DepthAttachmentDescriptor
+    var hasDepthAttachment: Bool = false
+    var viewport: Viewport
+}
+
+type ComputePassDescriptor {
+    var label: String = ""
+}
+
+type CopyPassDescriptor {
+    var label: String = ""
+}
+
+type TransientBufferSlice {
+    var buffer: GraphicsBuffer
+    var byteOffset: Int = 0
+    var byteCount: Int = 0
+}
+
+type RenderPacket {
+    var pipeline: RenderPipeline
+    var vertexBuffer: GraphicsBufferBinding
+    var indexBuffer: GraphicsBufferBinding
+    var indexType: IndexType
+    var bindGroups: [BindGroup]
+    var viewport: Viewport
+    var scissorRect: ScissorRect
+    var hasViewport: Bool = false
+    var hasScissorRect: Bool = false
+    var vertexCount: Int = 0
+    var indexCount: Int = 0
+    var instanceCount: Int = 1
+    var baseVertex: Int = 0
+    var baseInstance: Int = 0
+}
+
+type RenderPacketList {
+    var packets: [RenderPacket]
+}
+
+type RenderEncoder {
+    var label: String = ""
+    var passLabel: String = ""
+    var pipeline: RenderPipeline
+    var vertexBuffer: GraphicsBuffer
+    var vertexBufferBinding: GraphicsBufferBinding
+    var indexBuffer: GraphicsBuffer
+    var indexBufferBinding: GraphicsBufferBinding
+    var indexType: IndexType
+    var bindGroups: [BindGroup]
+    var viewport: Viewport
+    var scissorRect: ScissorRect
+    var hasViewport: Bool = false
+    var hasScissorRect: Bool = false
+    var vertexStart: Int = 0
+    var vertexCount: Int = 0
+    var indexCount: Int = 0
+    var instanceCount: Int = 1
+    var baseVertex: Int = 0
+    var baseInstance: Int = 0
+
+    function setLabel(label: String) {
+        self.label = label
+        return
+    }
+
+    function setPipeline(renderPipeline: RenderPipeline) {
+        pipeline = renderPipeline
+        return
+    }
+
+    function setVertexBuffer(vertexBuffer: GraphicsBuffer, bufferIndex: Int, byteOffset: Int) {
+        let binding: GraphicsBufferBinding = GraphicsBufferBinding()
+        binding.buffer = vertexBuffer
+        binding.byteOffset = byteOffset
+        binding.byteCount = vertexBuffer.byteCount
+        self.vertexBuffer = vertexBuffer
+        vertexBufferBinding = binding
+        return
+    }
+
+    function setIndexBuffer(indexBuffer: GraphicsBuffer, byteOffset: Int, indexType: IndexType) {
+        let binding: GraphicsBufferBinding = GraphicsBufferBinding()
+        binding.buffer = indexBuffer
+        binding.byteOffset = byteOffset
+        binding.byteCount = indexBuffer.byteCount
+        self.indexBuffer = indexBuffer
+        indexBufferBinding = binding
+        self.indexType = indexType
+        return
+    }
+
+    function setBindGroup(bindGroup: BindGroup, bindingIndex: Int) {
+        bindGroups = [bindGroup]
+        return
+    }
+
+    function setViewport(viewport: Viewport) {
+        self.viewport = viewport
+        hasViewport = true
+        return
+    }
+
+    function setScissorRect(scissorRect: ScissorRect) {
+        self.scissorRect = scissorRect
+        hasScissorRect = true
+        return
+    }
+
+    function draw(vertexCount: Int) {
+        vertexStart = 0
+        self.vertexCount = vertexCount
+        indexCount = 0
+        instanceCount = 1
+        return
+    }
+
+    function drawInstanced(vertexCount: Int, instanceCount: Int) {
+        vertexStart = 0
+        self.vertexCount = vertexCount
+        indexCount = 0
+        self.instanceCount = instanceCount
+        return
+    }
+
+    function drawIndexed(indexCount: Int) {
+        vertexCount = 0
+        self.indexCount = indexCount
+        instanceCount = 1
+        return
+    }
+
+    function drawIndexedInstanced(indexCount: Int, instanceCount: Int) {
+        vertexCount = 0
+        self.indexCount = indexCount
+        self.instanceCount = instanceCount
+        return
+    }
+
+    function submit(packet: RenderPacket) {
+        pipeline = packet.pipeline
+        vertexBuffer = packet.vertexBuffer.buffer
+        vertexBufferBinding = packet.vertexBuffer
+        indexBuffer = packet.indexBuffer.buffer
+        indexBufferBinding = packet.indexBuffer
+        indexType = packet.indexType
+        bindGroups = packet.bindGroups
+        viewport = packet.viewport
+        scissorRect = packet.scissorRect
+        hasViewport = packet.hasViewport
+        hasScissorRect = packet.hasScissorRect
+        vertexCount = packet.vertexCount
+        indexCount = packet.indexCount
+        instanceCount = packet.instanceCount
+        baseVertex = packet.baseVertex
+        baseInstance = packet.baseInstance
+        return
+    }
+}
+
+type ComputeEncoder {
+    var label: String = ""
+    var pipeline: ComputePipeline
+    var bindGroups: [BindGroup]
+    var threadgroupsWidth: Int = 1
+    var threadgroupsHeight: Int = 1
+    var threadgroupsDepth: Int = 1
+
+    function setLabel(label: String) {
+        self.label = label
+        return
+    }
+
+    function setPipeline(computePipeline: ComputePipeline) {
+        pipeline = computePipeline
+        return
+    }
+
+    function setBindGroup(bindGroup: BindGroup, bindingIndex: Int) {
+        bindGroups = [bindGroup]
+        return
+    }
+
+    function dispatch(threadgroupsWidth: Int, threadgroupsHeight: Int, threadgroupsDepth: Int) {
+        self.threadgroupsWidth = threadgroupsWidth
+        self.threadgroupsHeight = threadgroupsHeight
+        self.threadgroupsDepth = threadgroupsDepth
+        return
+    }
+}
+
+type CopyEncoder {
+    var label: String = ""
+    var sourceBuffer: GraphicsBuffer
+    var destinationBuffer: GraphicsBuffer
+    var sourceTexture: GraphicsTexture
+    var destinationTexture: GraphicsTexture
+    var copyRegion: Rect
+
+    function setLabel(label: String) {
+        self.label = label
+        return
+    }
+
+    function copyBufferToBuffer(sourceBuffer: GraphicsBuffer, destinationBuffer: GraphicsBuffer) {
+        self.sourceBuffer = sourceBuffer
+        self.destinationBuffer = destinationBuffer
+        return
+    }
+
+    function copyTextureToTexture(sourceTexture: GraphicsTexture, destinationTexture: GraphicsTexture, copyRegion: Rect) {
+        self.sourceTexture = sourceTexture
+        self.destinationTexture = destinationTexture
+        self.copyRegion = copyRegion
+        return
+    }
+}
+
+type RenderPassSubmission {
+    var descriptor: RenderPassDescriptor
+    var renderEncoder: RenderEncoder
+}
+
+type ComputePassSubmission {
+    var descriptor: ComputePassDescriptor
+    var computeEncoder: ComputeEncoder
+}
+
+type CopyPassSubmission {
+    var descriptor: CopyPassDescriptor
+    var copyEncoder: CopyEncoder
+}
+
+type FrameSubmission {
+    var renderPasses: [RenderPassSubmission]
+    var computePasses: [ComputePassSubmission]
+    var copyPasses: [CopyPassSubmission]
+    var shouldPresent: Bool = false
+}
+
+type GraphicsFrame {
+    var label: String = ""
+    var submission: FrameSubmission
+    var renderPassDescriptor: RenderPassDescriptor
+    var renderEncoder: RenderEncoder
+    var computeEncoder: ComputeEncoder
+    var copyEncoder: CopyEncoder
+
+    function renderPass(renderPassDescriptor: RenderPassDescriptor) -> RenderEncoder {
+        let renderEncoder: RenderEncoder = RenderEncoder()
+        renderEncoder.passLabel = renderPassDescriptor.label
+        self.renderPassDescriptor = renderPassDescriptor
+        self.renderEncoder = renderEncoder
+        return renderEncoder
+    }
+
+    function commitRenderPass(renderPassDescriptor: RenderPassDescriptor, renderEncoder: RenderEncoder) {
+        let passSubmission: RenderPassSubmission = RenderPassSubmission()
+        passSubmission.descriptor = renderPassDescriptor
+        passSubmission.renderEncoder = renderEncoder
+        self.renderPassDescriptor = renderPassDescriptor
+        self.renderEncoder = renderEncoder
+        self.submission.renderPasses = [passSubmission]
+        return
+    }
+
+    function computePass(computePassDescriptor: ComputePassDescriptor) -> ComputeEncoder {
+        let computeEncoder: ComputeEncoder = ComputeEncoder()
+        computeEncoder.label = computePassDescriptor.label
+        self.computeEncoder = computeEncoder
+        return computeEncoder
+    }
+
+    function commitComputePass(computePassDescriptor: ComputePassDescriptor, computeEncoder: ComputeEncoder) {
+        let passSubmission: ComputePassSubmission = ComputePassSubmission()
+        passSubmission.descriptor = computePassDescriptor
+        passSubmission.computeEncoder = computeEncoder
+        self.computeEncoder = computeEncoder
+        self.submission.computePasses = [passSubmission]
+        return
+    }
+
+    function copyPass(copyPassDescriptor: CopyPassDescriptor) -> CopyEncoder {
+        let copyEncoder: CopyEncoder = CopyEncoder()
+        copyEncoder.label = copyPassDescriptor.label
+        self.copyEncoder = copyEncoder
+        return copyEncoder
+    }
+
+    function commitCopyPass(copyPassDescriptor: CopyPassDescriptor, copyEncoder: CopyEncoder) {
+        let passSubmission: CopyPassSubmission = CopyPassSubmission()
+        passSubmission.descriptor = copyPassDescriptor
+        passSubmission.copyEncoder = copyEncoder
+        self.copyEncoder = copyEncoder
+        self.submission.copyPasses = [passSubmission]
+        return
+    }
+
+    function present() {
+        self.submission.shouldPresent = true
+        return
+    }
+
+    function uploadTransientVertexData(vertexFloats: [Float]) -> TransientBufferSlice {
+        let bufferDescriptor: GraphicsBufferDescriptor = GraphicsBufferDescriptor()
+        let buffer: GraphicsBuffer = GraphicsBuffer()
+        let slice: TransientBufferSlice = TransientBufferSlice()
+        bufferDescriptor.label = "transient-vertex-data"
+        bufferDescriptor.usage = Graphics().vertexBufferUsage()
+        bufferDescriptor.floatData = vertexFloats
+        buffer.descriptor = bufferDescriptor
+        buffer.label = bufferDescriptor.label
+        buffer.floatData = vertexFloats
+        slice.buffer = buffer
+        slice.byteOffset = 0
+        slice.byteCount = buffer.byteCount
+        return slice
+    }
+
+    function uploadTransientIndexData(indexValues: [Int]) -> TransientBufferSlice {
+        let bufferDescriptor: GraphicsBufferDescriptor = GraphicsBufferDescriptor()
+        let buffer: GraphicsBuffer = GraphicsBuffer()
+        let slice: TransientBufferSlice = TransientBufferSlice()
+        bufferDescriptor.label = "transient-index-data"
+        bufferDescriptor.usage = Graphics().indexBufferUsage()
+        bufferDescriptor.integerData = indexValues
+        buffer.descriptor = bufferDescriptor
+        buffer.label = bufferDescriptor.label
+        buffer.integerData = indexValues
+        slice.buffer = buffer
+        slice.byteOffset = 0
+        slice.byteCount = buffer.byteCount
+        return slice
+    }
+
+    function uploadTransientUniformData(uniformFloats: [Float]) -> TransientBufferSlice {
+        let bufferDescriptor: GraphicsBufferDescriptor = GraphicsBufferDescriptor()
+        let buffer: GraphicsBuffer = GraphicsBuffer()
+        let slice: TransientBufferSlice = TransientBufferSlice()
+        bufferDescriptor.label = "transient-uniform-data"
+        bufferDescriptor.usage = Graphics().uniformBufferUsage()
+        bufferDescriptor.floatData = uniformFloats
+        buffer.descriptor = bufferDescriptor
+        buffer.label = bufferDescriptor.label
+        buffer.floatData = uniformFloats
+        slice.buffer = buffer
+        slice.byteOffset = 0
+        slice.byteCount = buffer.byteCount
+        return slice
+    }
+}
+
+type GraphicsCommandBuffer {
+    var label: String = ""
+    var frame: GraphicsFrame
+
+    function setLabel(label: String) {
+        self.label = label
+        return
+    }
+
+    function present() {
+        self.frame.present()
+        return
+    }
+
+    function commitRenderCommands(renderPassDescriptor: RenderPassDescriptor, renderEncoder: RenderEncoder) -> GraphicsFrame {
+        self.frame.label = renderPassDescriptor.label
+        self.frame.commitRenderPass(renderPassDescriptor, renderEncoder)
+        self.frame.present()
+        return self.frame
+    }
+
+    function commit() -> GraphicsFrame {
+        self.frame.present()
+        return self.frame
+    }
+}
+
+type GraphicsCommandQueueDescriptor {
+    var label: String = ""
+    var maxCommandBufferCount: Int = 1
+}
+
+type GraphicsCommandQueue {
+    var descriptor: GraphicsCommandQueueDescriptor
+}
+
+type GraphicsDeviceDescriptor {
+    var label: String = "KiraGraphicsDevice"
+    var backendName: String = "sokol"
+    var shaderLanguage: String = "glsl_330"
+    var supportsCompute: Bool = false
+    var supportsArgumentBuffers: Bool = false
+}
+
+type GraphicsDevice {
+    var descriptor: GraphicsDeviceDescriptor
+}
+
+type Transform2D {
+    var translation: Float2
+    var scale: Float2
+    var rotation: Float = 0.0
+}
+
+type QuadMesh {
+    var vertexBuffer: GraphicsBuffer
+    var indexBuffer: GraphicsBuffer
+    var indexCount: Int = 6
+}
+
+type Renderer2D {
+    var texturedPipeline: RenderPipeline
+    var coloredPipeline: RenderPipeline
+    var quadMesh: QuadMesh
+}
+
+type Graphics {
+    function frame() -> GraphicsFrame {
+        let graphicsFrame: GraphicsFrame = GraphicsFrame()
+        return graphicsFrame
+    }
+
+    function bgra8UnormFormat() -> TextureFormat {
+        let textureFormat: TextureFormat = TextureFormat()
+        textureFormat.value = 1
+        return textureFormat
+    }
+
+    function rgba8UnormFormat() -> TextureFormat {
+        let textureFormat: TextureFormat = TextureFormat()
+        textureFormat.value = 2
+        return textureFormat
+    }
+
+    function rgba16FloatFormat() -> TextureFormat {
+        let textureFormat: TextureFormat = TextureFormat()
+        textureFormat.value = 3
+        return textureFormat
+    }
+
+    function depth32FloatFormat() -> TextureFormat {
+        let textureFormat: TextureFormat = TextureFormat()
+        textureFormat.value = 4
+        return textureFormat
+    }
+
+    function vertexBufferUsage() -> BufferUsage {
+        let usage: BufferUsage = BufferUsage()
+        usage.value = 0
+        return usage
+    }
+
+    function indexBufferUsage() -> BufferUsage {
+        let usage: BufferUsage = BufferUsage()
+        usage.value = 1
+        return usage
+    }
+
+    function uniformBufferUsage() -> BufferUsage {
+        let usage: BufferUsage = BufferUsage()
+        usage.value = 2
+        return usage
+    }
+
+    function storageBufferUsage() -> BufferUsage {
+        let usage: BufferUsage = BufferUsage()
+        usage.value = 3
+        return usage
+    }
+
+    function shaderReadTextureUsage() -> TextureUsage {
+        let usage: TextureUsage = TextureUsage()
+        usage.value = 0
+        return usage
+    }
+
+    function renderTargetTextureUsage() -> TextureUsage {
+        let usage: TextureUsage = TextureUsage()
+        usage.value = 1
+        return usage
+    }
+
+    function clearLoadAction() -> LoadAction {
+        let action: LoadAction = LoadAction()
+        action.value = 2
+        return action
+    }
+
+    function loadLoadAction() -> LoadAction {
+        let action: LoadAction = LoadAction()
+        action.value = 1
+        return action
+    }
+
+    function storeAction() -> StoreAction {
+        let action: StoreAction = StoreAction()
+        action.value = 1
+        return action
+    }
+
+    function trianglePrimitiveType() -> PrimitiveType {
+        let primitiveType: PrimitiveType = PrimitiveType()
+        primitiveType.value = 0
+        return primitiveType
+    }
+
+    function uint16IndexType() -> IndexType {
+        let indexType: IndexType = IndexType()
+        indexType.value = 1
+        return indexType
+    }
+
+    function uint32IndexType() -> IndexType {
+        let indexType: IndexType = IndexType()
+        indexType.value = 2
+        return indexType
+    }
+
+    function noIndexType() -> IndexType {
+        let indexType: IndexType = IndexType()
+        indexType.value = 0
+        return indexType
+    }
+
+    function noCullMode() -> CullMode {
+        let cullMode: CullMode = CullMode()
+        cullMode.value = 0
+        return cullMode
+    }
+
+    function counterClockwiseWindingOrder() -> WindingOrder {
+        let windingOrder: WindingOrder = WindingOrder()
+        windingOrder.value = 1
+        return windingOrder
+    }
+
+    function vertexAndFragmentStages() -> ShaderStageSet {
+        let stages: ShaderStageSet = ShaderStageSet()
+        stages.vertex = true
+        stages.fragment = true
+        return stages
+    }
+
+    function fragmentStage() -> ShaderStageSet {
+        let stages: ShaderStageSet = ShaderStageSet()
+        stages.fragment = true
+        return stages
+    }
+
+    function uniformBufferBindingType() -> ResourceBindingType {
+        let bindingType: ResourceBindingType = ResourceBindingType()
+        bindingType.value = 0
+        return bindingType
+    }
+
+    function textureBindingType() -> ResourceBindingType {
+        let bindingType: ResourceBindingType = ResourceBindingType()
+        bindingType.value = 2
+        return bindingType
+    }
+
+    function samplerBindingType() -> ResourceBindingType {
+        let bindingType: ResourceBindingType = ResourceBindingType()
+        bindingType.value = 3
+        return bindingType
+    }
+
+    function createBuffer(descriptor: GraphicsBufferDescriptor) -> GraphicsBuffer {
+        let buffer: GraphicsBuffer = GraphicsBuffer()
+        buffer.descriptor = descriptor
+        buffer.label = descriptor.label
+        buffer.byteCount = descriptor.byteCount
+        buffer.floatData = descriptor.floatData
+        buffer.integerData = descriptor.integerData
+        return buffer
+    }
+
+    function createTexture(descriptor: GraphicsTextureDescriptor) -> GraphicsTexture {
+        let texture: GraphicsTexture = GraphicsTexture()
+        texture.descriptor = descriptor
+        texture.label = descriptor.label
+        return texture
+    }
+
+    function createSampler(descriptor: GraphicsSamplerDescriptor) -> GraphicsSampler {
+        let sampler: GraphicsSampler = GraphicsSampler()
+        sampler.descriptor = descriptor
+        sampler.label = descriptor.label
+        return sampler
+    }
+
+    function createShader(descriptor: GraphicsShaderDescriptor) -> GraphicsShader {
+        let shader: GraphicsShader = GraphicsShader()
+        shader.descriptor = descriptor
+        return shader
+    }
+
+    function createRenderPipeline(descriptor: RenderPipelineDescriptor) -> RenderPipeline {
+        let renderPipeline: RenderPipeline = RenderPipeline()
+        renderPipeline.descriptor = descriptor
+        return renderPipeline
+    }
+
+    function createComputePipeline(descriptor: ComputePipelineDescriptor) -> ComputePipeline {
+        let computePipeline: ComputePipeline = ComputePipeline()
+        computePipeline.descriptor = descriptor
+        return computePipeline
+    }
+
+    function createBindGroupLayout(descriptor: BindGroupLayoutDescriptor) -> BindGroupLayout {
+        let layout: BindGroupLayout = BindGroupLayout()
+        layout.descriptor = descriptor
+        return layout
+    }
+
+    function createBindGroup(descriptor: BindGroupDescriptor) -> BindGroup {
+        let bindGroup: BindGroup = BindGroup()
+        bindGroup.descriptor = descriptor
+        return bindGroup
+    }
+
+    function createTransientBindGroup(layout: BindGroupLayout, resources: [BindGroupResourceBinding]) -> BindGroup {
+        let descriptor: BindGroupDescriptor = BindGroupDescriptor()
+        descriptor.layout = layout
+        descriptor.resources = resources
+        return createBindGroup(descriptor)
+    }
+
+    function createRenderTarget(textureSize: TextureSize, colorFormat: TextureFormat) -> RenderTarget {
+        let descriptor: RenderTargetDescriptor = RenderTargetDescriptor()
+        let colorTextureDescriptor: GraphicsTextureDescriptor = GraphicsTextureDescriptor()
+        let target: RenderTarget = RenderTarget()
+        descriptor.textureSize = textureSize
+        descriptor.colorFormat = colorFormat
+        colorTextureDescriptor.textureSize = textureSize
+        colorTextureDescriptor.textureFormat = colorFormat
+        colorTextureDescriptor.usage = renderTargetTextureUsage()
+        target.descriptor = descriptor
+        target.colorTexture = createTexture(colorTextureDescriptor)
+        return target
+    }
+
+    function makeSwapchainPass(clearColor: Float4) -> RenderPassDescriptor {
+        let renderPassDescriptor: RenderPassDescriptor = RenderPassDescriptor()
+        renderPassDescriptor.isSwapchainTarget = true
+        renderPassDescriptor.colorAttachment.clearColor = clearColor
+        renderPassDescriptor.colorAttachment.loadAction = clearLoadAction()
+        renderPassDescriptor.colorAttachment.storeAction = storeAction()
+        return renderPassDescriptor
+    }
+
+    function makeOffscreenPass(target: RenderTarget, clearColor: Float4) -> RenderPassDescriptor {
+        let renderPassDescriptor: RenderPassDescriptor = RenderPassDescriptor()
+        renderPassDescriptor.isSwapchainTarget = false
+        renderPassDescriptor.colorAttachment.target = target
+        renderPassDescriptor.colorAttachment.clearColor = clearColor
+        renderPassDescriptor.colorAttachment.loadAction = clearLoadAction()
+        renderPassDescriptor.colorAttachment.storeAction = storeAction()
+        return renderPassDescriptor
+    }
+
+    function defaultAlphaColorTarget(textureFormat: TextureFormat) -> ColorTargetDescriptor {
+        let descriptor: ColorTargetDescriptor = ColorTargetDescriptor()
+        let sourceAlpha: BlendFactor = BlendFactor()
+        let oneMinusSourceAlpha: BlendFactor = BlendFactor()
+        let one: BlendFactor = BlendFactor()
+        sourceAlpha.value = 2
+        oneMinusSourceAlpha.value = 3
+        one.value = 1
+        descriptor.textureFormat = textureFormat
+        descriptor.blendingEnabled = true
+        descriptor.rgbBlend.sourceFactor = sourceAlpha
+        descriptor.rgbBlend.destinationFactor = oneMinusSourceAlpha
+        descriptor.alphaBlend.sourceFactor = one
+        descriptor.alphaBlend.destinationFactor = oneMinusSourceAlpha
+        return descriptor
+    }
+
+    function noDepthState() -> DepthState {
+        let depthState: DepthState = DepthState()
+        depthState.depthWriteEnabled = false
+        return depthState
+    }
+
+    function createUniformBufferBindingLayoutEntry(bindingIndex: Int, stages: ShaderStageSet) -> BindGroupLayoutEntry {
+        let entry: BindGroupLayoutEntry = BindGroupLayoutEntry()
+        entry.bindingIndex = bindingIndex
+        entry.stages = stages
+        entry.resourceBindingType = uniformBufferBindingType()
+        return entry
+    }
+
+    function createTextureBindingLayoutEntry(bindingIndex: Int, stages: ShaderStageSet) -> BindGroupLayoutEntry {
+        let entry: BindGroupLayoutEntry = BindGroupLayoutEntry()
+        entry.bindingIndex = bindingIndex
+        entry.stages = stages
+        entry.resourceBindingType = textureBindingType()
+        return entry
+    }
+
+    function createSamplerBindingLayoutEntry(bindingIndex: Int, stages: ShaderStageSet) -> BindGroupLayoutEntry {
+        let entry: BindGroupLayoutEntry = BindGroupLayoutEntry()
+        entry.bindingIndex = bindingIndex
+        entry.stages = stages
+        entry.resourceBindingType = samplerBindingType()
+        return entry
+    }
+
+    function bindUniformBuffer(bufferBinding: GraphicsBufferBinding) -> BindGroupResourceBinding {
+        let binding: BindGroupResourceBinding = BindGroupResourceBinding()
+        binding.resourceBindingType = uniformBufferBindingType()
+        binding.bufferBinding = bufferBinding
+        return binding
+    }
+
+    function bindTexture(texture: GraphicsTexture) -> BindGroupResourceBinding {
+        let binding: BindGroupResourceBinding = BindGroupResourceBinding()
+        binding.resourceBindingType = textureBindingType()
+        binding.texture = texture
+        return binding
+    }
+
+    function bindSampler(sampler: GraphicsSampler) -> BindGroupResourceBinding {
+        let binding: BindGroupResourceBinding = BindGroupResourceBinding()
+        binding.resourceBindingType = samplerBindingType()
+        binding.sampler = sampler
+        return binding
+    }
+
+    function createRenderer2D(texturedShader: GraphicsShader, coloredShader: GraphicsShader, colorFormat: TextureFormat) -> Renderer2D {
+        let renderer: Renderer2D = Renderer2D()
+        let texturedPipelineDescriptor: RenderPipelineDescriptor = RenderPipelineDescriptor()
+        let coloredPipelineDescriptor: RenderPipelineDescriptor = RenderPipelineDescriptor()
+        let quadMesh: QuadMesh = createQuadMesh()
+        texturedPipelineDescriptor.label = "textured-2d-pipeline"
+        texturedPipelineDescriptor.shader = texturedShader
+        texturedPipelineDescriptor.colorAttachments = [defaultAlphaColorTarget(colorFormat)]
+        coloredPipelineDescriptor.label = "colored-2d-pipeline"
+        coloredPipelineDescriptor.shader = coloredShader
+        coloredPipelineDescriptor.colorAttachments = [defaultAlphaColorTarget(colorFormat)]
+        renderer.texturedPipeline = createRenderPipeline(texturedPipelineDescriptor)
+        renderer.coloredPipeline = createRenderPipeline(coloredPipelineDescriptor)
+        renderer.quadMesh = quadMesh
+        return renderer
+    }
+
+    function createQuadMesh() -> QuadMesh {
+        let quadMesh: QuadMesh = QuadMesh()
+        let vertexDescriptor: GraphicsBufferDescriptor = GraphicsBufferDescriptor()
+        let indexDescriptor: GraphicsBufferDescriptor = GraphicsBufferDescriptor()
+        vertexDescriptor.label = "quad-vertices"
+        vertexDescriptor.usage = vertexBufferUsage()
+        vertexDescriptor.floatData = [
+            0.0, 0.0, 0.0, 0.0,
+            1.0, 0.0, 1.0, 0.0,
+            1.0, 1.0, 1.0, 1.0,
+            0.0, 1.0, 0.0, 1.0
+        ]
+        indexDescriptor.label = "quad-indices"
+        indexDescriptor.usage = indexBufferUsage()
+        indexDescriptor.integerData = [0, 1, 2, 0, 2, 3]
+        quadMesh.vertexBuffer = createBuffer(vertexDescriptor)
+        quadMesh.indexBuffer = createBuffer(indexDescriptor)
+        quadMesh.indexCount = 6
+        return quadMesh
+    }
+
+    function createTexturedQuadPacket(renderer2D: Renderer2D, bindGroup: BindGroup) -> RenderPacket {
+        let packet: RenderPacket = RenderPacket()
+        packet.pipeline = renderer2D.texturedPipeline
+        packet.vertexBuffer.buffer = renderer2D.quadMesh.vertexBuffer
+        packet.indexBuffer.buffer = renderer2D.quadMesh.indexBuffer
+        packet.indexType = uint16IndexType()
+        packet.bindGroups = [bindGroup]
+        packet.indexCount = renderer2D.quadMesh.indexCount
+        packet.instanceCount = 1
+        return packet
+    }
+
+    function createColoredQuadPacket(renderer2D: Renderer2D, bindGroup: BindGroup) -> RenderPacket {
+        let packet: RenderPacket = RenderPacket()
+        packet.pipeline = renderer2D.coloredPipeline
+        packet.vertexBuffer.buffer = renderer2D.quadMesh.vertexBuffer
+        packet.indexBuffer.buffer = renderer2D.quadMesh.indexBuffer
+        packet.indexType = uint16IndexType()
+        packet.bindGroups = [bindGroup]
+        packet.indexCount = renderer2D.quadMesh.indexCount
+        packet.instanceCount = 1
+        return packet
+    }
+}
