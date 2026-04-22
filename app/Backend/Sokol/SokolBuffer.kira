@@ -1,0 +1,11 @@
+function sokolCreateBuffer(descriptor: BufferDescriptor) -> GraphicsBuffer {
+    return GraphicsBuffer {
+        handle: BackendBufferHandle {
+            id: 0
+        }
+    }
+}
+
+function sokolDestroyBuffer(buffer: GraphicsBuffer): Void {
+    return
+}

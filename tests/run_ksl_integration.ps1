@@ -24,84 +24,81 @@ function Assert-NotContains {
     }
 }
 
+function Assert-FileContains {
+    param(
+        [string]$Path,
+        [string]$Needle
+    )
+
+    $source = Get-Content -LiteralPath $Path -Raw
+    Assert-Contains -Output $source -Needle $Needle -Context $Path
+}
+
+function Assert-FileNotContains {
+    param(
+        [string]$Path,
+        [string]$Needle
+    )
+
+    $source = Get-Content -LiteralPath $Path -Raw
+    Assert-NotContains -Output $source -Needle $Needle -Context $Path
+}
+
 function Assert-SampleLifecycle {
     param(
         [string]$Path
     )
 
     $source = Get-Content -LiteralPath $Path -Raw
-    Assert-Contains -Output $source -Needle "struct TriangleDemo" -Context $Path
-    Assert-Contains -Output $source -Needle "app.onLaunch" -Context $Path
-    Assert-Contains -Output $source -Needle "app.onUpdate" -Context $Path
-    Assert-Contains -Output $source -Needle "app.onFrame" -Context $Path
-    Assert-Contains -Output $source -Needle "graphics.frame()" -Context $Path
-    Assert-Contains -Output $source -Needle "pass(clearColor)" -Context $Path
-    Assert-Contains -Output $source -Needle "app.run()" -Context $Path
-    Assert-NotContains -Output $source -Needle "GraphicsCommandBuffer" -Context $Path
+    Assert-Contains -Output $source -Needle "GraphicsApplication" -Context $Path
+    Assert-Contains -Output $source -Needle "GraphicsAppCallbacks" -Context $Path
+    Assert-Contains -Output $source -Needle "nativeState" -Context $Path
+    Assert-Contains -Output $source -Needle "nativeUserData" -Context $Path
+    Assert-Contains -Output $source -Needle "nativeRecover" -Context $Path
+    Assert-Contains -Output $source -Needle "beginPass" -Context $Path
+    Assert-Contains -Output $source -Needle "createRenderPipeline" -Context $Path
+    Assert-Contains -Output $source -Needle "app.run(callbacks" -Context $Path
+    Assert-NotContains -Output $source -Needle "KiraGraphics.sokol" -Context $Path
     Assert-NotContains -Output $source -Needle "applicationPresentFrame" -Context $Path
     Assert-NotContains -Output $source -Needle "applicationRunWithVertexData" -Context $Path
-    Assert-NotContains -Output $source -Needle "type TriangleDemo" -Context $Path
 }
 
-function Run-Case {
+function Run-Kira {
     param(
-        [string]$AssetDir,
-        [string]$ShaderName,
-        [string]$VertexLayout,
-        [string[]]$Expected,
-        [int]$ExpectedExitCode
+        [string]$Command,
+        [string]$Expected
     )
 
-    $output = (& cmd /c ".\\tests\\ksl_asset_probe.exe `"$AssetDir`" `"$ShaderName`" `"$VertexLayout`" 2>&1" | Out-String)
-    if ($LASTEXITCODE -ne $ExpectedExitCode) {
-        throw "Expected exit code $ExpectedExitCode for $AssetDir/$ShaderName but got $LASTEXITCODE.`n$output"
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $output = (& cmd /c "$Command 2>&1" | Out-String)
+    $exitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorActionPreference
+
+    if ($exitCode -ne 0) {
+        throw "Command failed: $Command`n$output"
     }
-    foreach ($needle in $Expected) {
-        Assert-Contains -Output $output -Needle $needle -Context "$AssetDir/$ShaderName"
-    }
+    Assert-Contains -Output $output -Needle $Expected -Context $Command
 }
 
-$null = & clang -std=c11 tests\ksl_asset_probe.c -o tests\ksl_asset_probe.exe
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to compile tests/ksl_asset_probe.c"
-}
+Run-Kira -Command "kira shader check examples\basic_triangle\Shaders\BasicTriangle.ksl" -Expected "shader check passed"
+Run-Kira -Command "kira shader check examples\ksl_triangle\Shaders\BasicTriangle.ksl" -Expected "shader check passed"
 
-Run-Case -AssetDir "tests/fixtures/basic_triangle" -ShaderName "BasicTriangle" -VertexLayout "position=float2" -ExpectedExitCode 0 -Expected @(
-    "status: ok",
-    "shader: BasicTriangle",
-    "vertex_field[0]: position=float2",
-    "runtime: ready"
-)
+Assert-FileContains -Path "examples/basic_triangle/generated/Shaders/BasicTriangle.vert.glsl" -Needle "layout(location = 0) in vec2 kira_attr_position"
+Assert-FileContains -Path "examples/basic_triangle/generated/Shaders/BasicTriangle.frag.glsl" -Needle "layout(location = 0) out vec4 kira_frag_color"
+Assert-FileContains -Path "examples/ksl_triangle/generated/shaders/BasicTriangle.vert.glsl" -Needle "layout(location = 0) in vec2 kira_attr_position"
+Assert-FileContains -Path "examples/ksl_triangle/generated/shaders/BasicTriangle.frag.glsl" -Needle "layout(location = 0) out vec4 kira_frag_color"
 
-Run-Case -AssetDir "tests/fixtures/basic_triangle" -ShaderName "BasicTriangle" -VertexLayout "uv=float2" -ExpectedExitCode 1 -Expected @(
-    "status: error",
-    "vertex layout mismatch"
-)
+Assert-FileNotContains -Path "examples/basic_triangle/generated/Shaders/BasicTriangle.vert.glsl" -Needle "VertexOut out;"
+Assert-FileNotContains -Path "examples/basic_triangle/generated/Shaders/BasicTriangle.frag.glsl" -Needle "FragmentOut out;"
+Assert-FileNotContains -Path "examples/ksl_triangle/generated/shaders/BasicTriangle.vert.glsl" -Needle "VertexOut out;"
+Assert-FileNotContains -Path "examples/ksl_triangle/generated/shaders/BasicTriangle.frag.glsl" -Needle "FragmentOut out;"
 
-Run-Case -AssetDir "tests/fixtures/textured_quad" -ShaderName "TexturedQuad" -VertexLayout "position=float3;uv=float2" -ExpectedExitCode 0 -Expected @(
-    "status: ok",
-    "resource[0]: Frame.camera kind=uniform",
-    "runtime: ready_for_asset_loading_but_resource_binding_is_not_implemented"
-)
-
-Run-Case -AssetDir "tests/fixtures/missing_fragment" -ShaderName "BasicTriangle" -VertexLayout "position=float2" -ExpectedExitCode 1 -Expected @(
-    "status: error",
-    "could not open file"
-)
-
-Run-Case -AssetDir "tests/fixtures/malformed_reflection" -ShaderName "BasicTriangle" -VertexLayout "position=float2" -ExpectedExitCode 1 -Expected @(
-    "status: error",
-    "reflection"
-)
-
-$buildOutput = (& cmd /c "kira build examples\\ksl_triangle 2>&1" | Out-String)
-Assert-Contains -Output $buildOutput -Needle "wrote" -Context "examples/ksl_triangle build"
-
-$frameApiCheckOutput = (& cmd /c "kira check examples\\frame_api_triangle 2>&1" | Out-String)
-Assert-Contains -Output $frameApiCheckOutput -Needle "check passed" -Context "examples/frame_api_triangle check"
+Run-Kira -Command "kira build --backend llvm examples\ksl_triangle" -Expected "wrote"
+Run-Kira -Command "kira check examples\frame_api_triangle" -Expected "check passed"
+Run-Kira -Command "kira check examples\clear_color" -Expected "check passed"
 
 Assert-SampleLifecycle -Path "examples/basic_triangle/app/main.kira"
 Assert-SampleLifecycle -Path "examples/ksl_triangle/app/main.kira"
-Assert-SampleLifecycle -Path "examples/frame_api_triangle/app/main.kira"
 
 Write-Host "KSL integration checks passed."

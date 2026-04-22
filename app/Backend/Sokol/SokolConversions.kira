@@ -1,0 +1,9 @@
+function sokolDefaultViewport() -> Viewport {
+    return Viewport {
+        x: 0
+        y: 0
+        width: sapp_width()
+        height: sapp_height()
+    }
+}
+

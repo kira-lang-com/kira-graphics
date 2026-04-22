@@ -1,67 +1,86 @@
 import KiraGraphics
 
+struct FrameTriangleState {
+    var shader: GraphicsShader
+    var pipeline: RenderPipeline
+}
+
+function frameTriangleVertexSource() -> String {
+    return "#version 330 core\nlayout(location = 0) in vec2 kira_attr_position;\nout vec4 color;\nvoid main() {\n    gl_Position = vec4(kira_attr_position, 0.0, 1.0);\n    color = vec4(0.28, 0.78, 1.0, 1.0);\n}\n"
+}
+
+function frameTriangleFragmentSource() -> String {
+    return "#version 330 core\nin vec4 color;\nout vec4 frag_color;\nvoid main() {\n    frag_color = color;\n}\n"
+}
+
+function initFrameTriangle(graphics: Graphics, data: RawPtr) {
+    var state = nativeRecover<FrameTriangleState>(data)
+
+    state.shader = graphics.createShader(ShaderDescriptor {
+        label: "frame-api-triangle-shader"
+        vertexSource: frameTriangleVertexSource()
+        fragmentSource: frameTriangleFragmentSource()
+        vertexPath: ""
+        fragmentPath: ""
+    })
+
+    state.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+        label: "frame-api-triangle-pipeline"
+        shader: state.shader
+    })
+    return
+}
+
+function frameFrameTriangle(frame: GraphicsFrame, data: RawPtr) {
+    var state = nativeRecover<FrameTriangleState>(data)
+    let encoder = frame.beginPass(Color {
+        r: 0.05
+        g: 0.07
+        b: 0.10
+        a: 1.0
+    })
+
+    encoder.setPipeline(state.pipeline)
+    encoder.draw(3)
+    frame.endPass(encoder)
+    frame.requestQuit()
+    return
+}
+
+function cleanupFrameTriangle(graphics: Graphics, data: RawPtr) {
+    var state = nativeRecover<FrameTriangleState>(data)
+    graphics.destroyPipeline(state.pipeline)
+    graphics.destroyShader(state.shader)
+    return
+}
+
 @Main
+@Native
 function main() {
-    var app = Application()
-    let graphics: Graphics = Graphics()
-    let shaderSource: GraphicsShaderSource = GraphicsShaderSource()
-    let shaderDescriptor: GraphicsShaderDescriptor = GraphicsShaderDescriptor()
-    var shader: GraphicsShader = GraphicsShader()
-    let vertexBufferDescriptor: GraphicsBufferDescriptor = GraphicsBufferDescriptor()
-    var vertexBuffer: GraphicsBuffer = GraphicsBuffer()
-    let vertexLayout: VertexLayoutDescriptor = VertexLayoutDescriptor()
-    let pipelineDescriptor: RenderPipelineDescriptor = RenderPipelineDescriptor()
-    var pipeline: RenderPipeline = RenderPipeline()
-    let clearColor: Float4 = Float4()
-    var renderPass: RenderPassDescriptor = RenderPassDescriptor()
-    let commandBuffer: GraphicsCommandBuffer = GraphicsCommandBuffer()
-    var renderEncoder: RenderEncoder = RenderEncoder()
-    let vertexData: [Float] = [
-        0.0, 0.55,
-        0.55, (0.0 - 0.55),
-        (0.0 - 0.55), (0.0 - 0.55)
-    ]
+    let app = GraphicsApplication {
+        title: "Kira Graphics Frame API Triangle"
+        width: 640
+        height: 480
+        sampleCount: 1
+    }
+    let callbacks = GraphicsAppCallbacks {
+        onInit: initFrameTriangle
+        onFrame: frameFrameTriangle
+        onCleanup: cleanupFrameTriangle
+    }
+    var state = nativeState(FrameTriangleState {
+        shader: GraphicsShader {
+            handle: BackendShaderHandle {
+                id: 0
+            }
+        }
+        pipeline: RenderPipeline {
+            handle: BackendPipelineHandle {
+                id: 0
+            }
+        }
+    })
 
-    app.title = "Kira Graphics Frame API Triangle"
-    app.windowWidth = 640
-    app.windowHeight = 480
-
-    shaderSource.useKslAssets("../ksl_triangle/generated/shaders", "BasicTriangle")
-    shaderDescriptor.label = "triangle-shader"
-    shaderDescriptor.source = shaderSource
-    shader = graphics.createShader(shaderDescriptor)
-
-    vertexBufferDescriptor.label = "triangle-vertices"
-    vertexBufferDescriptor.usage = graphics.vertexBufferUsage()
-    vertexBufferDescriptor.floatData = vertexData
-    vertexBuffer = graphics.createBuffer(vertexBufferDescriptor)
-
-    vertexLayout.label = "triangle-layout"
-    vertexLayout.layoutText = "position=float2"
-
-    pipelineDescriptor.label = "triangle-pipeline"
-    pipelineDescriptor.shader = shader
-    pipelineDescriptor.vertexLayout = vertexLayout
-    pipelineDescriptor.primitiveType = graphics.trianglePrimitiveType()
-    pipelineDescriptor.colorAttachments = [graphics.defaultAlphaColorTarget(graphics.bgra8UnormFormat())]
-    pipelineDescriptor.depthState = graphics.noDepthState()
-    pipelineDescriptor.cullMode = graphics.noCullMode()
-    pipelineDescriptor.windingOrder = graphics.counterClockwiseWindingOrder()
-    pipeline = graphics.createRenderPipeline(pipelineDescriptor)
-
-    clearColor.r = 0.04
-    clearColor.g = 0.05
-    clearColor.b = 0.08
-    clearColor.a = 1.0
-    renderPass = graphics.makeSwapchainPass(clearColor)
-    renderPass.label = "swapchain-pass"
-
-    renderEncoder = createRenderEncoderForPass(renderPass)
-    renderEncoder.setLabel("triangle-render-encoder")
-    renderEncoder.setPipeline(pipeline)
-    renderEncoder.setVertexBuffer(vertexBuffer, 0, 0)
-    renderEncoder.draw(3)
-
-    applicationPresentFrame(app, commandBuffer.commitRenderCommands(renderPass, renderEncoder))
+    app.run(callbacks, nativeUserData(state))
     return
 }

@@ -1,0 +1,42 @@
+import KiraGraphics
+
+function initClearColor(graphics: Graphics, data: RawPtr) {
+    return
+}
+
+function frameClearColor(frame: GraphicsFrame, data: RawPtr) {
+    let encoder = frame.beginPass(Color {
+        r: 0.08
+        g: 0.12
+        b: 0.16
+        a: 1.0
+    })
+
+    frame.endPass(encoder)
+    frame.requestQuit()
+    return
+}
+
+function cleanupClearColor(graphics: Graphics, data: RawPtr) {
+    return
+}
+
+@Main
+@Native
+function main() {
+    let app = GraphicsApplication {
+        title: "Kira Graphics Clear Color"
+        width: 640
+        height: 480
+        sampleCount: 1
+    }
+    let callbacks = GraphicsAppCallbacks {
+        onInit: initClearColor
+        onFrame: frameClearColor
+        onCleanup: cleanupClearColor
+    }
+
+    app.run(callbacks, 0)
+    return
+}
+

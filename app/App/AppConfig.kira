@@ -1,0 +1,11 @@
+struct GraphicsApplication {
+    var title: String = "Kira Graphics"
+    var width: Int = 640
+    var height: Int = 480
+    var sampleCount: Int = 1
+
+    function run(callbacks: GraphicsAppCallbacks, userData: RawPtr) {
+        graphicsRuntimeRun(self, callbacks, userData)
+        return
+    }
+}

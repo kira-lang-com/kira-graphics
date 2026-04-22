@@ -1,0 +1,12 @@
+@Native
+function sokolCreateShaderId(label: String, vertexSource: String, fragmentSource: String, vertexPath: String, fragmentPath: String) -> U32 {
+    return kgMakeShader(label, vertexSource, fragmentSource, vertexPath, fragmentPath)
+}
+
+@Native
+function sokolDestroyShaderId(shaderId: U32): Void {
+    if (shaderId != 0) {
+        kgDestroyShaderId(shaderId)
+    }
+    return
+}

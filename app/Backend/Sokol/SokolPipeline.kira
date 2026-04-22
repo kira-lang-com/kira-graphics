@@ -1,0 +1,12 @@
+@Native
+function sokolCreateRenderPipelineId(label: String, shaderId: U32) -> U32 {
+    return kgMakePipeline(shaderId, label)
+}
+
+@Native
+function sokolDestroyRenderPipelineId(pipelineId: U32): Void {
+    if (pipelineId != 0) {
+        kgDestroyPipelineId(pipelineId)
+    }
+    return
+}

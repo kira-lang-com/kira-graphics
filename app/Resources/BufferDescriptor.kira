@@ -1,0 +1,4 @@
+struct BufferDescriptor {
+    var label: String = ""
+    var floatData: [Float]
+}

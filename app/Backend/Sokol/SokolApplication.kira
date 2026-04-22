@@ -1,0 +1,58 @@
+@Native
+function sokolRunApplication(app: GraphicsApplication, runtimeUserData: RawPtr): Void {
+    let desc = sapp_desc {
+        init_userdata_cb: kiraGraphicsSokolInit
+        frame_userdata_cb: kiraGraphicsSokolFrame
+        cleanup_userdata_cb: kiraGraphicsSokolCleanup
+        user_data: runtimeUserData
+        width: app.width
+        height: app.height
+        sample_count: app.sampleCount
+        window_title: app.title
+    }
+
+    sapp_run(desc)
+    return
+}
+
+@Native
+function kiraGraphicsSokolInit(runtimeUserData: RawPtr): Void {
+    let desc = sg_desc {
+        environment: sglue_environment()
+    }
+    sg_setup(desc)
+
+    var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    let callbacks = state.callbacks
+    let onInit: (Graphics, RawPtr) -> Void = callbacks.onInit
+    let graphics = Graphics()
+    onInit(graphics, state.userData)
+    return
+}
+
+@Native
+function kiraGraphicsSokolFrame(runtimeUserData: RawPtr): Void {
+    var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    let callbacks = state.callbacks
+    let onFrame: (GraphicsFrame, RawPtr) -> Void = callbacks.onFrame
+    let graphics = Graphics()
+    let frame = graphics.frame()
+
+    state.frameIndex = state.frameIndex + 1
+    onFrame(frame, state.userData)
+    graphicsSubmitFrame(frame)
+    return
+}
+
+@Native
+function kiraGraphicsSokolCleanup(runtimeUserData: RawPtr): Void {
+    var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    let callbacks = state.callbacks
+    let onCleanup: (Graphics, RawPtr) -> Void = callbacks.onCleanup
+    let graphics = Graphics()
+
+    onCleanup(graphics, state.userData)
+    kgDestroyDefaultResources()
+    sg_shutdown()
+    return
+}

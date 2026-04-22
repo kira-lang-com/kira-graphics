@@ -1,0 +1,7 @@
+struct ShaderDescriptor {
+    var label: String = ""
+    var vertexSource: String = ""
+    var fragmentSource: String = ""
+    var vertexPath: String = ""
+    var fragmentPath: String = ""
+}

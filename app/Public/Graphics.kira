@@ -1,0 +1,59 @@
+class Graphics {
+    function createShader(descriptor: ShaderDescriptor) -> GraphicsShader {
+        return GraphicsShader {
+            handle: BackendShaderHandle {
+                id: sokolCreateShaderId(descriptor.label, descriptor.vertexSource, descriptor.fragmentSource, descriptor.vertexPath, descriptor.fragmentPath)
+            }
+        }
+    }
+
+    function destroyShader(shader: GraphicsShader) {
+        sokolDestroyShaderId(shader.handle.id)
+        return
+    }
+
+    function createRenderPipeline(descriptor: RenderPipelineDescriptor) -> RenderPipeline {
+        return RenderPipeline {
+            handle: BackendPipelineHandle {
+                id: sokolCreateRenderPipelineId(descriptor.label, descriptor.shader.handle.id)
+            }
+        }
+    }
+
+    function destroyPipeline(pipeline: RenderPipeline) {
+        sokolDestroyRenderPipelineId(pipeline.handle.id)
+        return
+    }
+
+    function createBuffer(descriptor: BufferDescriptor) -> GraphicsBuffer {
+        return sokolCreateBuffer(descriptor)
+    }
+
+    function destroyBuffer(buffer: GraphicsBuffer) {
+        sokolDestroyBuffer(buffer)
+        return
+    }
+
+    function frame() -> GraphicsFrame {
+        return GraphicsFrame {
+            clearColor: Color {
+                r: 0.0
+                g: 0.0
+                b: 0.0
+                a: 1.0
+            }
+            encoder: RenderEncoder {
+                pipeline: RenderPipeline {
+                    handle: BackendPipelineHandle {
+                        id: 0
+                    }
+                }
+                vertexCount: 0
+                instanceCount: 1
+            }
+            hasRenderPass: false
+            shouldPresent: false
+            shouldQuit: false
+        }
+    }
+}

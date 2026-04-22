@@ -1,0 +1,17 @@
+class RenderEncoder {
+    var pipeline: RenderPipeline
+    var vertexCount: Int = 0
+    var instanceCount: Int = 1
+
+    function setPipeline(pipeline: RenderPipeline) {
+        self.pipeline = pipeline
+        return
+    }
+
+    function draw(vertexCount: Int) {
+        self.vertexCount = vertexCount
+        self.instanceCount = 1
+        return
+    }
+}
+

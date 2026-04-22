@@ -1,0 +1,5 @@
+struct ResourceRegistry {
+    var createdShaders: Int = 0
+    var createdPipelines: Int = 0
+    var createdBuffers: Int = 0
+}

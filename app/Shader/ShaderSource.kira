@@ -1,0 +1,6 @@
+struct ShaderSource {
+    var vertexSource: String = ""
+    var fragmentSource: String = ""
+    var vertexPath: String = ""
+    var fragmentPath: String = ""
+}

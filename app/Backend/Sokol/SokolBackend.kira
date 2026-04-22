@@ -1,0 +1,23 @@
+@FFI.Extern { library: sokol; symbol: kg_shader_source; abi: c; }
+function kgShaderSource(inlineSource: CString, path: CString): CString;
+
+@FFI.Extern { library: sokol; symbol: kg_apply_pipeline_and_draw; abi: c; }
+function kgApplyPipelineAndDraw(pipelineId: U32, vertexCount: I32, instanceCount: I32): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_begin_swapchain_pass; abi: c; }
+function kgBeginSwapchainPass(r: F32, g: F32, b: F32, a: F32): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_destroy_pipeline_id; abi: c; }
+function kgDestroyPipelineId(pipelineId: U32): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_destroy_default_resources; abi: c; }
+function kgDestroyDefaultResources(): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_destroy_shader_id; abi: c; }
+function kgDestroyShaderId(shaderId: U32): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_make_pipeline; abi: c; }
+function kgMakePipeline(shaderId: U32, label: CString): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_make_shader; abi: c; }
+function kgMakeShader(label: CString, vertexSource: CString, fragmentSource: CString, vertexPath: CString, fragmentPath: CString): U32;

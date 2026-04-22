@@ -1,0 +1,3 @@
+struct GraphicsBuffer {
+    var handle: BackendBufferHandle
+}

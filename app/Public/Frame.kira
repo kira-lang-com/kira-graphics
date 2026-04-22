@@ -1,0 +1,43 @@
+class GraphicsFrame {
+    var clearColor: Color
+    var encoder: RenderEncoder
+    var hasRenderPass: Bool = false
+    var shouldPresent: Bool = false
+    var shouldQuit: Bool = false
+
+    function beginPass(clearColor: Color) -> RenderEncoder {
+        let encoder = RenderEncoder {
+            pipeline: RenderPipeline {
+                handle: BackendPipelineHandle {
+                    id: 0
+                }
+            }
+            vertexCount: 0
+            instanceCount: 1
+        }
+
+        self.clearColor = clearColor
+        self.encoder = encoder
+        self.hasRenderPass = true
+        return encoder
+    }
+
+    function endPass(encoder: RenderEncoder) {
+        self.encoder = encoder
+        self.shouldPresent = true
+        return
+    }
+
+    function pass(clearColor: Color, body: (RenderEncoder) -> Void) {
+        let encoder = beginPass(clearColor)
+        body(encoder)
+        endPass(encoder)
+        return
+    }
+
+    function requestQuit() {
+        self.shouldQuit = true
+        return
+    }
+}
+

@@ -1,0 +1,4 @@
+function graphicsValidatePipeline(pipeline: RenderPipeline) -> Bool {
+    return pipeline.handle.id != 0
+}
+

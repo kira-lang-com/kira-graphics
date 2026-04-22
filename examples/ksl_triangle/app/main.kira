@@ -1,140 +1,78 @@
 import KiraGraphics
 
-struct TriangleDemo {
+struct TriangleState {
+    var shader: GraphicsShader
     var pipeline: RenderPipeline
-    var vertexBuffer: GraphicsBuffer
 }
 
-function createBasicTrianglePipeline(graphics: Graphics) -> RenderPipeline {
-    let shaderSource = GraphicsShaderSource {
-        shaderMode: 0
-        vertexSource: "#version 330 core\nout vec4 kira_color;\nvec2 positions[3] = vec2[3](vec2(0.0, 0.55), vec2(0.55, -0.55), vec2(-0.55, -0.55));\nvoid main() {\n    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);\n    kira_color = vec4(1.0, 0.95, 0.85, 1.0);\n}\n"
-        fragmentSource: "#version 330 core\nin vec4 kira_color;\nout vec4 kira_frag_color;\nvoid main() {\n    kira_frag_color = kira_color;\n}\n"
-        computeSource: ""
-        shaderAssetsDirectory: ""
-        shaderName: ""
-    }
+function initKslTriangle(graphics: Graphics, data: RawPtr) {
+    var state = nativeRecover<TriangleState>(data)
 
-    let shaderReflection = GraphicsShaderReflection {
-        shaderName: "InlineTriangle"
-        vertexEntryPoint: "main"
-        fragmentEntryPoint: "main"
-        computeEntryPoint: "main"
-        vertexLayout: ""
-        resources: []
-        uniformBlocks: []
-    }
+    state.shader = graphics.createShader(ShaderDescriptor {
+        label: "ksl-triangle-shader"
+        vertexSource: ""
+        fragmentSource: ""
+        vertexPath: "generated/shaders/BasicTriangle.vert.glsl"
+        fragmentPath: "generated/shaders/BasicTriangle.frag.glsl"
+    })
 
-    let shaderDescriptor = GraphicsShaderDescriptor {
-        label: "triangle-shader"
-        source: shaderSource
-        reflection: shaderReflection
-    }
-
-    let vertexLayout = VertexLayoutDescriptor {
-        label: "triangle-layout"
-        layoutText: ""
-        attributes: []
-        bufferLayouts: []
-    }
-
-    let pipelineDescriptor = RenderPipelineDescriptor {
-        label: "triangle-pipeline"
-        shader: graphics.createShader(shaderDescriptor)
-        vertexLayout: vertexLayout
-        primitiveType: graphics.trianglePrimitiveType()
-        colorAttachments: [graphics.defaultAlphaColorTarget(graphics.bgra8UnormFormat())]
-        hasDepthFormat: false
-        depthFormat: graphics.depth32FloatFormat()
-        depthWriteEnabled: false
-        depthState: graphics.noDepthState()
-        cullMode: graphics.noCullMode()
-        windingOrder: graphics.counterClockwiseWindingOrder()
-        sampleCount: 1
-        indexType: graphics.noIndexType()
-    }
-
-    return graphics.createRenderPipeline(pipelineDescriptor)
-}
-
-function createBasicTriangleVertexBuffer(graphics: Graphics) -> GraphicsBuffer {
-    let vertexBufferDescriptor = GraphicsBufferDescriptor {
-        label: "triangle-vertices"
-        usage: graphics.vertexBufferUsage()
-        storageMode: 0
-        byteCount: 0
-        stride: 0
-        floatData: [
-            0.0, 0.55,
-            0.55, (0.0 - 0.55),
-            (0.0 - 0.55), (0.0 - 0.55)
-        ]
-        integerData: []
-    }
-
-    return graphics.createBuffer(vertexBufferDescriptor)
-}
-
-function createBasicTriangleDemo(graphics: Graphics) -> TriangleDemo {
-    return TriangleDemo {
-        pipeline: createBasicTrianglePipeline(graphics)
-        vertexBuffer: createBasicTriangleVertexBuffer(graphics)
-    }
-}
-
-function initializeTriangle() {
-    print("triangle resources initialized")
+    state.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+        label: "ksl-triangle-pipeline"
+        shader: state.shader
+    })
     return
 }
 
-function updateTriangle(deltaTime: Float) {
-    print(deltaTime)
-    return
-}
-
-function encodeTriangle(renderEncoder: RenderEncoder) {
-    let demo = createBasicTriangleDemo(Graphics())
-    renderEncoder.setLabel("triangle-render-encoder")
-    renderEncoder.setPipeline(demo.pipeline)
-    renderEncoder.setVertexBuffer(demo.vertexBuffer, 0, 0)
-    renderEncoder.draw(3)
-    return
-}
-
-function renderTriangle(frame: GraphicsFrame) {
-    let clearColor = Float4 {
-        r: 0.04
-        g: 0.05
-        b: 0.08
+function frameKslTriangle(frame: GraphicsFrame, data: RawPtr) {
+    var state = nativeRecover<TriangleState>(data)
+    let encoder = frame.beginPass(Color {
+        r: 0.03
+        g: 0.04
+        b: 0.07
         a: 1.0
-    }
+    })
 
-    frame.pass(clearColor) { renderEncoder in
-        encodeTriangle(renderEncoder)
-    }
+    encoder.setPipeline(state.pipeline)
+    encoder.draw(3)
+    frame.endPass(encoder)
+    frame.requestQuit()
+    return
+}
+
+function cleanupKslTriangle(graphics: Graphics, data: RawPtr) {
+    var state = nativeRecover<TriangleState>(data)
+    graphics.destroyPipeline(state.pipeline)
+    graphics.destroyShader(state.shader)
     return
 }
 
 @Main
+@Native
 function main() {
-    var app = Application {
+    let app = GraphicsApplication {
         title: "Kira Graphics KSL Triangle"
-        windowWidth: 640
-        windowHeight: 480
+        width: 640
+        height: 480
+        sampleCount: 1
     }
-
-    app.onLaunch {
-        initializeTriangle()
+    let callbacks = GraphicsAppCallbacks {
+        onInit: initKslTriangle
+        onFrame: frameKslTriangle
+        onCleanup: cleanupKslTriangle
     }
+    var state = nativeState(TriangleState {
+        shader: GraphicsShader {
+            handle: BackendShaderHandle {
+                id: 0
+            }
+        }
+        pipeline: RenderPipeline {
+            handle: BackendPipelineHandle {
+                id: 0
+            }
+        }
+    })
 
-    app.onUpdate { deltaTime in
-        updateTriangle(deltaTime)
-    }
-
-    app.onFrame { frame in
-        renderTriangle(frame)
-    }
-
-    app.run()
+    app.run(callbacks, nativeUserData(state))
     return
 }

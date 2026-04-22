@@ -1,0 +1,5 @@
+function graphicsDiagnostic(message: String) {
+    print(message)
+    return
+}
+

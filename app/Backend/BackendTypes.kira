@@ -1,0 +1,11 @@
+struct BackendShaderHandle {
+    var id: U32
+}
+
+struct BackendPipelineHandle {
+    var id: U32
+}
+
+struct BackendBufferHandle {
+    var id: U32
+}

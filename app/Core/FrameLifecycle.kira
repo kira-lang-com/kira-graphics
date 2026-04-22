@@ -1,0 +1,5 @@
+function graphicsSubmitFrame(frame: GraphicsFrame) {
+    sokolSubmitFrame(frame)
+    return
+}
+

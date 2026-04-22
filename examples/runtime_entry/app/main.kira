@@ -1,0 +1,62 @@
+import KiraGraphics
+
+struct RuntimeState {
+    var initCount: Int
+    var frameCount: Int
+    var cleanupCount: Int
+}
+
+function initRuntime(graphics: Graphics, data: RawPtr) {
+    var state = nativeRecover<RuntimeState>(data)
+    state.initCount = state.initCount + 1
+    return
+}
+
+function frameRuntime(frame: GraphicsFrame, data: RawPtr) {
+    var state = nativeRecover<RuntimeState>(data)
+    state.frameCount = state.frameCount + 1
+
+    let encoder = frame.beginPass(Color {
+        r: 0.10
+        g: 0.10
+        b: 0.13
+        a: 1.0
+    })
+    frame.endPass(encoder)
+    frame.requestQuit()
+    return
+}
+
+function cleanupRuntime(graphics: Graphics, data: RawPtr) {
+    var state = nativeRecover<RuntimeState>(data)
+    state.cleanupCount = state.cleanupCount + 1
+    print(state.initCount)
+    print(state.frameCount)
+    print(state.cleanupCount)
+    return
+}
+
+@Main
+@Native
+function main() {
+    let app = GraphicsApplication {
+        title: "Kira Graphics Runtime Entry"
+        width: 320
+        height: 240
+        sampleCount: 1
+    }
+    let callbacks = GraphicsAppCallbacks {
+        onInit: initRuntime
+        onFrame: frameRuntime
+        onCleanup: cleanupRuntime
+    }
+    var state = nativeState(RuntimeState {
+        initCount: 0
+        frameCount: 0
+        cleanupCount: 0
+    })
+
+    app.run(callbacks, nativeUserData(state))
+    return
+}
+

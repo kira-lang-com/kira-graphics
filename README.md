@@ -1,115 +1,110 @@
 # Kira Graphics
 
-Kira Graphics is shaped around an application lifecycle and frame-scoped rendering API. Public examples should model an app that owns persistent state, initializes resources during launch, updates simulation state during ticks, and records render work through a frame object.
+Kira Graphics is now structured as a real Kira library package with a small public graphics API over a Sokol backend. Normal users import `KiraGraphics`, configure a `GraphicsApplication`, create long-lived resources during init, encode work through `GraphicsFrame` and `RenderEncoder`, and keep app state in opaque callback storage with `nativeState`, `nativeUserData`, and `nativeRecover<T>`.
 
-The current backend path is still Sokol GFX through a native bridge, but that bridge should be treated as backend interop, not as the engine architecture. Kira-side code owns the lifecycle shape and resource ownership model.
+The raw Sokol binding still exists for backend and interop work, but it is not the public API.
 
-## Lifecycle
+## Source Layout
 
-An app has three public phases:
-
-- `onLaunch`: one-time setup for persistent resources such as pipelines, buffers, textures, samplers, and app state.
-- `onUpdate`: per-tick simulation and input work. It exists even when a minimal sample has no animation yet.
-- `onFrame`: per-frame rendering. Render passes and encoders are scoped to the frame API.
-
-The current compiler now checks direct trailing callbacks and function types, so public samples can use the intended lifecycle spelling directly. The current callback implementation is intentionally non-capturing, so examples lean on top-level helper functions and explicit data construction rather than captured locals.
-
-```kira
-import KiraGraphics
-
-struct TriangleDemo {
-    var pipeline: RenderPipeline
-    var vertexBuffer: GraphicsBuffer
-}
-
-@Main
-function main() {
-    let app = Application {
-        title: "Kira Graphics KSL Triangle"
-        windowWidth: 640
-        windowHeight: 480
-    }
-
-    app.onLaunch {
-        initializeTriangle()
-    }
-
-    app.onUpdate { deltaTime in
-        updateTriangle(deltaTime)
-    }
-
-    app.onFrame { frame in
-        renderTriangle(frame)
-    }
-
-    app.run()
-}
+```text
+app/
+  kiragraphics.kira
+  sokol.kira                  # generated raw Sokol binding for backend/interop use
+  Public/
+    Buffer.kira
+    Color.kira
+    Frame.kira
+    Graphics.kira
+    Pipeline.kira
+    RenderEncoder.kira
+    Shader.kira
+    Types.kira
+  Core/
+    Diagnostics.kira
+    FrameLifecycle.kira
+    GraphicsRuntime.kira
+    HandleTable.kira
+    ResourceRegistry.kira
+    Validation.kira
+  Backend/
+    Backend.kira
+    BackendTypes.kira
+    Sokol/
+      SokolApplication.kira
+      SokolBackend.kira
+      SokolBuffer.kira
+      SokolConversions.kira
+      SokolFrame.kira
+      SokolPipeline.kira
+      SokolShader.kira
+  Shader/
+    ShaderDescriptor.kira
+    ShaderSource.kira
+  Resources/
+    BufferDescriptor.kira
+    PipelineDescriptor.kira
+  App/
+    AppCallbacks.kira
+    AppConfig.kira
+    NativeStateBridge.kira
 ```
 
-## Frame API
+`Public/` is the user-facing facade. `Core/` owns runtime flow and validation. `Backend/` owns the backend abstraction and Sokol implementation. `Shader/` and `Resources/` hold the descriptors used by the current vertical slice. `App/` owns app callback/runtime state bridging.
 
-Render encoders are frame-scoped. User code should not construct a command buffer in `main()` or manually stitch presentation together.
+## Public API Slice
 
-Use this shape:
+The current vertical slice supports:
 
-```kira
-app.onFrame { frame in
-    frame.pass(clearColor) { renderEncoder in
-        encodeTriangle(renderEncoder)
-    }
-}
-```
+- window configuration with `GraphicsApplication`
+- init/frame/cleanup lifecycle with `GraphicsAppCallbacks`
+- persistent callback state through `nativeState`, `nativeUserData`, and `nativeRecover<T>`
+- shader and render-pipeline creation
+- clear passes through `GraphicsFrame`
+- command encoding through `RenderEncoder`
+- triangle drawing through the Sokol backend path
+- explicit cleanup for shaders, pipelines, and backend-owned default triangle resources
 
-Avoid the old transitional shape:
-
-```kira
-let commandBuffer: GraphicsCommandBuffer = GraphicsCommandBuffer()
-var renderEncoder: RenderEncoder = RenderEncoder()
-applicationPresentFrame(app, commandBuffer.commitRenderCommands(renderPass, renderEncoder))
-```
+Public examples should import only `KiraGraphics`. Direct Sokol imports belong only in raw backend interop examples.
 
 ## Examples
 
-Build the KSL triangle sample:
+Public Kira Graphics API examples:
+
+- `examples/clear_color`: minimal clear pass and app lifecycle.
+- `examples/basic_triangle`: public API triangle using generated GLSL paths.
+- `examples/frame_api_triangle`: explicit begin/end frame API triangle.
+- `examples/ksl_triangle`: public API triangle using existing KSL-generated GLSL output.
+- `examples/runtime_entry`: lifecycle and callback-state smoke test.
+
+Raw backend interop example:
+
+- `examples/raw_sokol_interop`: direct Sokol binding usage for backend proof-of-interop work.
+
+The old `rotating_cube` placeholder was removed because it rendered a triangle under a stale cube name.
+
+## Temporary KSL Path Handling
+
+KSL asset discovery is intentionally not designed in this pass. The triangle examples use explicit generated GLSL paths such as:
+
+- `generated/Shaders/BasicTriangle.vert.glsl` from `examples/basic_triangle`
+- `generated/Shaders/BasicTriangle.frag.glsl` from `examples/basic_triangle`
+- `generated/shaders/BasicTriangle.vert.glsl` from `examples/ksl_triangle`
+- `generated/shaders/BasicTriangle.frag.glsl` from `examples/ksl_triangle`
+
+A later compiler/build metadata pass should replace these hardcoded paths.
+
+## Validation
+
+Useful commands:
 
 ```powershell
-kira build examples/ksl_triangle
+kira check .
+kira check examples\clear_color
+kira check examples\basic_triangle
+kira check examples\frame_api_triangle
+kira check examples\ksl_triangle
+kira check examples\raw_sokol_interop
+kira build --backend llvm examples\basic_triangle
+kira run --backend llvm examples\runtime_entry
+powershell -ExecutionPolicy Bypass -File tests\run_ksl_integration.ps1
 ```
-
-Check the frame API sample:
-
-```powershell
-kira check examples/frame_api_triangle
-```
-
-Run integration and lifecycle-shape checks:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tests/run_ksl_integration.ps1
-```
-
-## Architecture Note
-
-Moved out of the public architecture:
-
-- the one-shot `main()` render pass pattern
-- top-level user-owned command buffers for the triangle sample
-- manual `applicationPresentFrame(...)` calls in public examples
-- `type` declarations in public Kira Graphics code
-- the compatibility `Scene.encodeFrame` path using `GraphicsCommandBuffer`
-- the KSL inspection/report entrypoint from the backend runtime body; it now lives in `NativeLibs/Sokol/kira_graphics_asset_inspection.inc`
-
-Still native-only today:
-
-- Sokol App setup, frame callbacks, swapchain access, cleanup, and GFX submit
-- native shader, pipeline, buffer creation, and draw submission
-- KSL asset file IO, generated GLSL loading, reflection JSON parsing, GLSL compatibility fixups, and vertex layout validation
-
-The remaining native KSL asset/reflection work is isolated as transitional backend compatibility. It should move behind generated Kira asset metadata or a smaller asset-loading module once Kira has the needed file/path/reflection facilities. The C bridge should continue shrinking toward a thin native backend that accepts already-described frame/resource work from Kira.
-
-## Current Limits
-
-- Trailing callbacks are currently non-capturing. Public samples use top-level helper functions instead of captured local state.
-- Builder/tree lowering is preserved semantically for construct-driven DSLs, but Kira Graphics itself is using ordinary callback-style lifecycle APIs rather than builder DSLs.
-- Interactive render verification still requires running the produced executable in a windowed environment.
-- Compute, copy, bind group application, and offscreen targets are represented in the public model but are not fully executed by the current GLSL 330 Sokol path.

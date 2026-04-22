@@ -1,96 +1,78 @@
-import KiraGraphics.sokol
+import KiraGraphics
 
-@FFI.Struct { layout: c; }
 struct TriangleState {
-    var shader: sg_shader
-    var pipeline: sg_pipeline
+    var shader: GraphicsShader
+    var pipeline: RenderPipeline
 }
 
-function triangleVertexSource() -> String {
-    return "#version 330 core
-out vec4 kira_color;
-vec2 positions[3] = vec2[3](vec2(0.0, 0.55), vec2(0.55, -0.55), vec2(-0.55, -0.55));
-void main() {
-    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
-    kira_color = vec4(1.0, 0.95, 0.85, 1.0);
-}
-"
-}
+function initTriangle(graphics: Graphics, data: RawPtr) {
+    var state = nativeRecover<TriangleState>(data)
 
-function triangleFragmentSource() -> String {
-    return "#version 330 core
-in vec4 kira_color;
-out vec4 kira_frag_color;
-void main() {
-    kira_frag_color = kira_color;
-}
-"
-}
+    state.shader = graphics.createShader(ShaderDescriptor {
+        label: "basic-triangle-shader"
+        vertexSource: ""
+        fragmentSource: ""
+        vertexPath: "generated/Shaders/BasicTriangle.vert.glsl"
+        fragmentPath: "generated/Shaders/BasicTriangle.frag.glsl"
+    })
 
-@Native
-function onInit(data: RawPtr) -> Void {
-    var desc = sg_desc {
-        environment: sglue_environment()
-    }
-    sg_setup(desc)
-
-    var shaderDesc = sg_shader_desc {
-        vertex_func: sg_shader_function {
-            source: triangleVertexSource()
-        }
-        fragment_func: sg_shader_function {
-            source: triangleFragmentSource()
-        }
-        label: "triangle-shader"
-    }
-    data.shader = sg_make_shader(shaderDesc)
-
-    var pipelineDesc = sg_pipeline_desc {
-        shader: data.shader
-        label: "triangle-pipeline"
-    }
-    data.pipeline = sg_make_pipeline(pipelineDesc)
+    state.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+        label: "basic-triangle-pipeline"
+        shader: state.shader
+    })
     return
 }
 
-@Native
-function onFrame(data: RawPtr) -> Void {
-    var pass = sg_pass {
-        swapchain: sglue_swapchain()
-    }
+function frameTriangle(frame: GraphicsFrame, data: RawPtr) {
+    var state = nativeRecover<TriangleState>(data)
+    let encoder = frame.beginPass(Color {
+        r: 0.04
+        g: 0.05
+        b: 0.08
+        a: 1.0
+    })
 
-    sg_begin_pass(pass)
-    sg_apply_viewport(0, 0, sapp_width(), sapp_height(), true)
-    sg_apply_pipeline(data.pipeline)
-    sg_draw(0, 3, 1)
-    sg_end_pass()
-    sg_commit()
+    encoder.setPipeline(state.pipeline)
+    encoder.draw(3)
+    frame.endPass(encoder)
+    frame.requestQuit()
     return
 }
 
-@Native
-function onCleanup(data: RawPtr) -> Void {
-    sg_destroy_pipeline(data.pipeline)
-    sg_destroy_shader(data.shader)
-    sg_shutdown()
+function cleanupTriangle(graphics: Graphics, data: RawPtr) {
+    var state = nativeRecover<TriangleState>(data)
+    graphics.destroyPipeline(state.pipeline)
+    graphics.destroyShader(state.shader)
     return
 }
 
 @Main
 @Native
 function main() {
-    var state = TriangleState()
-    var desc = sapp_desc {
-        user_data: state
-        init_userdata_cb: onInit
-        frame_userdata_cb: onFrame
-        cleanup_userdata_cb: onCleanup
+    let app = GraphicsApplication {
+        title: "Kira Graphics Basic Triangle"
         width: 640
         height: 480
-        sample_count: 1
-        window_title: "Kira Basic Triangle Example"
+        sampleCount: 1
     }
+    let callbacks = GraphicsAppCallbacks {
+        onInit: initTriangle
+        onFrame: frameTriangle
+        onCleanup: cleanupTriangle
+    }
+    var state = nativeState(TriangleState {
+        shader: GraphicsShader {
+            handle: BackendShaderHandle {
+                id: 0
+            }
+        }
+        pipeline: RenderPipeline {
+            handle: BackendPipelineHandle {
+                id: 0
+            }
+        }
+    })
 
-    sapp_run(desc)
+    app.run(callbacks, nativeUserData(state))
     return
 }

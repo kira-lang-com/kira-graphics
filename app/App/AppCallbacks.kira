@@ -1,0 +1,5 @@
+struct GraphicsAppCallbacks {
+    var onInit: (Graphics, RawPtr) -> Void
+    var onFrame: (GraphicsFrame, RawPtr) -> Void
+    var onCleanup: (Graphics, RawPtr) -> Void
+}

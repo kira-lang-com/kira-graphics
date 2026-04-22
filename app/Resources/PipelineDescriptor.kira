@@ -1,0 +1,4 @@
+struct RenderPipelineDescriptor {
+    var label: String = ""
+    var shader: GraphicsShader
+}

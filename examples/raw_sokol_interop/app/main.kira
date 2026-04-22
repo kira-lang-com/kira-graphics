@@ -1,0 +1,90 @@
+import KiraGraphics
+import KiraGraphics.sokol
+
+struct RawSokolState {
+    var shader: sg_shader
+    var pipeline: sg_pipeline
+}
+
+function rawTriangleVertexSource() -> String {
+    return "#version 330 core\nout vec4 color;\nvec2 positions[3] = vec2[3](vec2(0.0, 0.55), vec2(0.55, -0.55), vec2(-0.55, -0.55));\nvoid main() {\n    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);\n    color = vec4(1.0, 0.95, 0.85, 1.0);\n}\n"
+}
+
+function rawTriangleFragmentSource() -> String {
+    return "#version 330 core\nin vec4 color;\nout vec4 frag_color;\nvoid main() {\n    frag_color = color;\n}\n"
+}
+
+@Native
+function rawSokolInit(data: RawPtr) -> Void {
+    var state = nativeRecover<RawSokolState>(data)
+    let desc = sg_desc {
+        environment: sglue_environment()
+    }
+    sg_setup(desc)
+
+    let shaderDesc = sg_shader_desc {
+        vertex_func: sg_shader_function {
+            source: rawTriangleVertexSource()
+        }
+        fragment_func: sg_shader_function {
+            source: rawTriangleFragmentSource()
+        }
+        label: "raw-sokol-triangle-shader"
+    }
+    state.shader = sg_make_shader(shaderDesc)
+
+    let pipelineDesc = sg_pipeline_desc {
+        shader: state.shader
+        label: "raw-sokol-triangle-pipeline"
+    }
+    state.pipeline = sg_make_pipeline(pipelineDesc)
+    return
+}
+
+@Native
+function rawSokolFrame(data: RawPtr) -> Void {
+    var state = nativeRecover<RawSokolState>(data)
+    kgBeginSwapchainPass(0.04, 0.05, 0.08, 1.0)
+    sg_apply_viewport(0, 0, sapp_width(), sapp_height(), true)
+    sg_apply_pipeline(state.pipeline)
+    sg_draw(0, 3, 1)
+    sg_end_pass()
+    sg_commit()
+    sapp_request_quit()
+    return
+}
+
+@Native
+function rawSokolCleanup(data: RawPtr) -> Void {
+    var state = nativeRecover<RawSokolState>(data)
+    sg_destroy_pipeline(state.pipeline)
+    sg_destroy_shader(state.shader)
+    sg_shutdown()
+    return
+}
+
+@Main
+@Native
+function main() {
+    var state = nativeState(RawSokolState {
+        shader: sg_shader {
+            id: 0
+        }
+        pipeline: sg_pipeline {
+            id: 0
+        }
+    })
+    let desc = sapp_desc {
+        init_userdata_cb: rawSokolInit
+        frame_userdata_cb: rawSokolFrame
+        cleanup_userdata_cb: rawSokolCleanup
+        user_data: nativeUserData(state)
+        width: 640
+        height: 480
+        sample_count: 1
+        window_title: "Kira Graphics Raw Sokol Interop"
+    }
+
+    sapp_run(desc)
+    return
+}

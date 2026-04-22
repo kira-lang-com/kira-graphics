@@ -1,0 +1,33 @@
+@Native
+function sokolSubmitFrame(frame: GraphicsFrame): Void {
+    if (!frame.hasRenderPass) {
+        return
+    }
+
+    kgBeginSwapchainPass(frame.clearColor.r, frame.clearColor.g, frame.clearColor.b, frame.clearColor.a)
+    sg_apply_viewport(0, 0, sapp_width(), sapp_height(), true)
+
+    if (frame.encoder.vertexCount == 0) {
+        sg_end_pass()
+        sg_commit()
+
+        if (frame.shouldQuit) {
+            sapp_request_quit()
+        }
+        return
+    }
+
+    if (graphicsValidatePipeline(frame.encoder.pipeline)) {
+        kgApplyPipelineAndDraw(frame.encoder.pipeline.handle.id, frame.encoder.vertexCount, frame.encoder.instanceCount)
+    } else {
+        graphicsDiagnostic("Kira Graphics skipped draw because no render pipeline was bound")
+    }
+
+    sg_end_pass()
+    sg_commit()
+
+    if (frame.shouldQuit) {
+        sapp_request_quit()
+    }
+    return
+}
