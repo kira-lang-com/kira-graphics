@@ -2,7 +2,7 @@ import KiraGraphics
 
 @Main
 function main() {
-    let app: Application = Application()
+    var app = Application()
     let graphics: Graphics = Graphics()
     let shaderSource: GraphicsShaderSource = GraphicsShaderSource()
     let shaderDescriptor: GraphicsShaderDescriptor = GraphicsShaderDescriptor()
@@ -23,8 +23,8 @@ function main() {
     ]
 
     app.title = "Kira Graphics Frame API Triangle"
-    app.width = 640
-    app.height = 480
+    app.windowWidth = 640
+    app.windowHeight = 480
 
     shaderSource.useKslAssets("../ksl_triangle/generated/shaders", "BasicTriangle")
     shaderDescriptor.label = "triangle-shader"

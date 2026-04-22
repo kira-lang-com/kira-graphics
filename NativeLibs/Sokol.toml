@@ -10,14 +10,14 @@ defines = ["SOKOL_NO_ENTRY", "SOKOL_GLCORE"]
 
 [autobinding]
 module = "sokol"
-output = "../sokol.kira"
+output = "../app/sokol.kira"
 headers = ["Sokol/sokol_app.h", "Sokol/sokol_gfx.h", "Sokol/sokol_glue.h"]
 
 [bindings]
 mode = "all_public"
 
 [build]
-sources = ["Sokol/sokol_impl.c", "Sokol/kira_graphics_native.c"]
+sources = ["Sokol/sokol_impl.c"]
 include_dirs = ["Sokol"]
 
 [target.aarch64-macos-none]

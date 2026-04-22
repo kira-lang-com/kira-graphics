@@ -1,0 +1,133 @@
+import KiraGraphics
+
+@Main
+function main() {
+    var app: Application = Application()
+    app.title = "Kira Graphics KSL Triangle"
+    app.width = 640
+    app.height = 480
+
+    var device: GraphicsDevice = GraphicsDevice()
+    var queue: GraphicsCommandQueue = GraphicsCommandQueue()
+    var command_buffer: GraphicsCommandBuffer = GraphicsCommandBuffer()
+    var drawable: GraphicsDrawable = GraphicsDrawable()
+    var shader_library: GraphicsShaderLibrary = GraphicsShaderLibrary()
+    var shader_reflection: GraphicsShaderReflection = GraphicsShaderReflection()
+    let vertex_data: [Float] = [
+        0.0, 0.55,
+        0.55, -0.55,
+        -0.55, -0.55
+    ]
+    var vertex_buffer: GraphicsBuffer = GraphicsBuffer()
+    var vertex_buffer_descriptor: GraphicsBufferDescriptor = GraphicsBufferDescriptor()
+    var pipeline_descriptor: GraphicsRenderPipelineDescriptor = GraphicsRenderPipelineDescriptor()
+    var vertex_function: GraphicsShaderFunction = GraphicsShaderFunction()
+    var vertex_function_descriptor: GraphicsShaderFunctionDescriptor = GraphicsShaderFunctionDescriptor()
+    var fragment_function: GraphicsShaderFunction = GraphicsShaderFunction()
+    var fragment_function_descriptor: GraphicsShaderFunctionDescriptor = GraphicsShaderFunctionDescriptor()
+    var vertex_descriptor: GraphicsVertexDescriptor = GraphicsVertexDescriptor()
+    var color_target: GraphicsColorTargetDescriptor = GraphicsColorTargetDescriptor()
+    var rgb_blend: GraphicsBlendComponent = GraphicsBlendComponent()
+    var alpha_blend: GraphicsBlendComponent = GraphicsBlendComponent()
+    var depth_stencil_descriptor: GraphicsDepthStencilDescriptor = GraphicsDepthStencilDescriptor()
+    var front_face_stencil: GraphicsStencilDescriptor = GraphicsStencilDescriptor()
+    var back_face_stencil: GraphicsStencilDescriptor = GraphicsStencilDescriptor()
+    var rasterization_descriptor: GraphicsRasterizationDescriptor = GraphicsRasterizationDescriptor()
+    var pipeline: GraphicsRenderPipeline = GraphicsRenderPipeline()
+    var render_pass_descriptor: GraphicsRenderPassDescriptor = GraphicsRenderPassDescriptor()
+    var color_attachment: GraphicsColorAttachmentDescriptor = GraphicsColorAttachmentDescriptor()
+    var clear_color: GraphicsClearColor = GraphicsClearColor()
+    var depth_attachment: GraphicsDepthAttachmentDescriptor = GraphicsDepthAttachmentDescriptor()
+    var depth_clear: GraphicsClearDepthStencil = GraphicsClearDepthStencil()
+    var stencil_attachment: GraphicsStencilAttachmentDescriptor = GraphicsStencilAttachmentDescriptor()
+    var stencil_clear: GraphicsClearDepthStencil = GraphicsClearDepthStencil()
+    device.descriptor.label = "triangle-device"
+    queue.descriptor.label = "main-queue"
+    command_buffer.label = queue.descriptor.label
+    drawable.label = device.descriptor.label
+    drawable.size = GraphicsSize2D()
+    shader_library.label = device.descriptor.label
+    shader_reflection.resources = []
+    shader_reflection.uniform_blocks = []
+    shader_library.reflection = shader_reflection
+    shader_library.useKslAssets("generated/Shaders", "BasicTriangle")
+    vertex_buffer.label = "ksl-triangle-vertices"
+    vertex_buffer.float_data = vertex_data
+    vertex_buffer_descriptor.label = vertex_buffer.label
+    vertex_buffer_descriptor.float_data = vertex_data
+    vertex_buffer.descriptor = vertex_buffer_descriptor
+    pipeline_descriptor.label = "ksl-triangle"
+    pipeline_descriptor.shader_library = shader_library
+    pipeline_descriptor.vertex_layout = "position=float2"
+    vertex_function_descriptor.label = "ksl-triangle-vertex"
+    vertex_function_descriptor.shader_mode = shader_library.shader_mode
+    vertex_function_descriptor.shader_assets_dir = shader_library.shader_assets_dir
+    vertex_function_descriptor.shader_name = shader_library.shader_name
+    vertex_function_descriptor.stage = "vertex"
+    vertex_function.descriptor = vertex_function_descriptor
+    fragment_function_descriptor.label = "ksl-triangle-fragment"
+    fragment_function_descriptor.shader_mode = shader_library.shader_mode
+    fragment_function_descriptor.shader_assets_dir = shader_library.shader_assets_dir
+    fragment_function_descriptor.shader_name = shader_library.shader_name
+    fragment_function_descriptor.stage = "fragment"
+    fragment_function.descriptor = fragment_function_descriptor
+    vertex_descriptor.attributes = []
+    vertex_descriptor.buffer_layouts = []
+    vertex_descriptor.layout_text = "position=float2"
+    color_target.rgb_blend = rgb_blend
+    color_target.alpha_blend = alpha_blend
+    depth_stencil_descriptor.front_face_stencil = front_face_stencil
+    depth_stencil_descriptor.back_face_stencil = back_face_stencil
+    pipeline_descriptor.vertex_function = vertex_function
+    pipeline_descriptor.fragment_function = fragment_function
+    pipeline_descriptor.vertex_descriptor = vertex_descriptor
+    pipeline_descriptor.color_target = color_target
+    pipeline_descriptor.depth_stencil = depth_stencil_descriptor
+    pipeline_descriptor.rasterization = rasterization_descriptor
+    pipeline.descriptor = pipeline_descriptor
+    color_attachment.clear_color = clear_color
+    depth_attachment.clear_value = depth_clear
+    stencil_attachment.clear_value = stencil_clear
+    render_pass_descriptor.color_attachment = color_attachment
+    render_pass_descriptor.depth_attachment = depth_attachment
+    render_pass_descriptor.stencil_attachment = stencil_attachment
+    render_pass_descriptor.label = "main-pass"
+    render_pass_descriptor.color_attachment.clear_color.red = 0.04
+    render_pass_descriptor.color_attachment.clear_color.green = 0.05
+    render_pass_descriptor.color_attachment.clear_color.blue = 0.08
+    render_pass_descriptor.color_attachment.clear_color.alpha = 1.0
+    var encoder: GraphicsRenderCommandEncoder = GraphicsRenderCommandEncoder()
+    var encoder_depth_stencil_state: GraphicsDepthStencilState = GraphicsDepthStencilState()
+    var encoder_depth_stencil_descriptor: GraphicsDepthStencilDescriptor = GraphicsDepthStencilDescriptor()
+    var encoder_front_stencil: GraphicsStencilDescriptor = GraphicsStencilDescriptor()
+    var encoder_back_stencil: GraphicsStencilDescriptor = GraphicsStencilDescriptor()
+    var encoder_index_buffer: GraphicsBuffer = GraphicsBuffer()
+    var encoder_fragment_texture: GraphicsTexture = GraphicsTexture()
+    var encoder_fragment_texture_descriptor: GraphicsTextureDescriptor = GraphicsTextureDescriptor()
+    var encoder_fragment_sampler: GraphicsSamplerState = GraphicsSamplerState()
+    var encoder_fragment_sampler_descriptor: GraphicsSamplerDescriptor = GraphicsSamplerDescriptor()
+    var encoder_viewport: GraphicsViewport = GraphicsViewport()
+    var encoder_scissor_rect: GraphicsScissorRect = GraphicsScissorRect()
+    encoder_depth_stencil_descriptor.front_face_stencil = encoder_front_stencil
+    encoder_depth_stencil_descriptor.back_face_stencil = encoder_back_stencil
+    encoder_depth_stencil_state.descriptor = encoder_depth_stencil_descriptor
+    encoder_fragment_texture.descriptor = encoder_fragment_texture_descriptor
+    encoder_fragment_sampler.descriptor = encoder_fragment_sampler_descriptor
+    encoder.debug_groups = []
+    encoder.resource_bindings = []
+    encoder.depth_stencil_state = encoder_depth_stencil_state
+    encoder.index_buffer = encoder_index_buffer
+    encoder.fragment_texture = encoder_fragment_texture
+    encoder.fragment_sampler = encoder_fragment_sampler
+    encoder.viewport = encoder_viewport
+    encoder.scissor_rect = encoder_scissor_rect
+    encoder.pass_label = render_pass_descriptor.label
+    encoder.setLabel("triangle-encoder")
+    encoder.setRenderPipelineState(pipeline)
+    encoder.setVertexBuffer(vertex_buffer)
+    encoder.drawPrimitives(3)
+    encoder.endEncoding()
+    command_buffer.present(drawable)
+
+    applicationPresentFrame(app, command_buffer.commitRenderCommands(render_pass_descriptor, encoder))
+}
