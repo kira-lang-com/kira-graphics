@@ -1,27 +1,96 @@
-import KiraGraphics
+import KiraGraphics.sokol
+
+@FFI.Struct { layout: c; }
+struct TriangleState {
+    var shader: sg_shader
+    var pipeline: sg_pipeline
+}
+
+function triangleVertexSource() -> String {
+    return "#version 330 core
+out vec4 kira_color;
+vec2 positions[3] = vec2[3](vec2(0.0, 0.55), vec2(0.55, -0.55), vec2(-0.55, -0.55));
+void main() {
+    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+    kira_color = vec4(1.0, 0.95, 0.85, 1.0);
+}
+"
+}
+
+function triangleFragmentSource() -> String {
+    return "#version 330 core
+in vec4 kira_color;
+out vec4 kira_frag_color;
+void main() {
+    kira_frag_color = kira_color;
+}
+"
+}
+
+@Native
+function onInit(data: RawPtr) -> Void {
+    var desc = sg_desc {
+        environment: sglue_environment()
+    }
+    sg_setup(desc)
+
+    var shaderDesc = sg_shader_desc {
+        vertex_func: sg_shader_function {
+            source: triangleVertexSource()
+        }
+        fragment_func: sg_shader_function {
+            source: triangleFragmentSource()
+        }
+        label: "triangle-shader"
+    }
+    data.shader = sg_make_shader(shaderDesc)
+
+    var pipelineDesc = sg_pipeline_desc {
+        shader: data.shader
+        label: "triangle-pipeline"
+    }
+    data.pipeline = sg_make_pipeline(pipelineDesc)
+    return
+}
+
+@Native
+function onFrame(data: RawPtr) -> Void {
+    var pass = sg_pass {
+        swapchain: sglue_swapchain()
+    }
+
+    sg_begin_pass(pass)
+    sg_apply_viewport(0, 0, sapp_width(), sapp_height(), true)
+    sg_apply_pipeline(data.pipeline)
+    sg_draw(0, 3, 1)
+    sg_end_pass()
+    sg_commit()
+    return
+}
+
+@Native
+function onCleanup(data: RawPtr) -> Void {
+    sg_destroy_pipeline(data.pipeline)
+    sg_destroy_shader(data.shader)
+    sg_shutdown()
+    return
+}
 
 @Main
-function main() -> Void {
-    let app: Application = Application()
-    app.title = "Kira Basic Triangle Example"
-    app.width = 640
-    app.height = 480
+@Native
+function main() {
+    var state = TriangleState()
+    var desc = sapp_desc {
+        user_data: state
+        init_userdata_cb: onInit
+        frame_userdata_cb: onFrame
+        cleanup_userdata_cb: onCleanup
+        width: 640
+        height: 480
+        sample_count: 1
+        window_title: "Kira Basic Triangle Example"
+    }
 
-    let scene: Scene = Scene()
-    scene.useKslAssets("generated/Shaders", "BasicTriangle")
-    scene.vertexLayout = "position=float2"
-    scene.drawCount = 3
-    scene.label = "ksl-triangle"
-    let vertexData: [Float] = [
-        0.0, 0.55,
-        0.55, -0.55,
-        -0.55, -0.55
-    ]
-
-    applicationRunWithVertexData(
-        app,
-        scene,
-        vertexData
-    )
-    return;
+    sapp_run(desc)
+    return
 }

@@ -12,6 +12,37 @@ function Assert-Contains {
     }
 }
 
+function Assert-NotContains {
+    param(
+        [string]$Output,
+        [string]$Needle,
+        [string]$Context
+    )
+
+    if ($Output.Contains($Needle)) {
+        throw "Did not expect '$Needle' in $Context. Actual output:`n$Output"
+    }
+}
+
+function Assert-SampleLifecycle {
+    param(
+        [string]$Path
+    )
+
+    $source = Get-Content -LiteralPath $Path -Raw
+    Assert-Contains -Output $source -Needle "struct TriangleDemo" -Context $Path
+    Assert-Contains -Output $source -Needle "app.onLaunch" -Context $Path
+    Assert-Contains -Output $source -Needle "app.onUpdate" -Context $Path
+    Assert-Contains -Output $source -Needle "app.onFrame" -Context $Path
+    Assert-Contains -Output $source -Needle "graphics.frame()" -Context $Path
+    Assert-Contains -Output $source -Needle "pass(clearColor)" -Context $Path
+    Assert-Contains -Output $source -Needle "app.run()" -Context $Path
+    Assert-NotContains -Output $source -Needle "GraphicsCommandBuffer" -Context $Path
+    Assert-NotContains -Output $source -Needle "applicationPresentFrame" -Context $Path
+    Assert-NotContains -Output $source -Needle "applicationRunWithVertexData" -Context $Path
+    Assert-NotContains -Output $source -Needle "type TriangleDemo" -Context $Path
+}
+
 function Run-Case {
     param(
         [string]$AssetDir,
@@ -68,5 +99,9 @@ Assert-Contains -Output $buildOutput -Needle "wrote" -Context "examples/ksl_tria
 
 $frameApiCheckOutput = (& cmd /c "kira check examples\\frame_api_triangle 2>&1" | Out-String)
 Assert-Contains -Output $frameApiCheckOutput -Needle "check passed" -Context "examples/frame_api_triangle check"
+
+Assert-SampleLifecycle -Path "examples/basic_triangle/app/main.kira"
+Assert-SampleLifecycle -Path "examples/ksl_triangle/app/main.kira"
+Assert-SampleLifecycle -Path "examples/frame_api_triangle/app/main.kira"
 
 Write-Host "KSL integration checks passed."

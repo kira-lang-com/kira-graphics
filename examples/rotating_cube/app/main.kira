@@ -1,15 +1,13 @@
 import KiraGraphics
 
-@Main
-@Native
-function main() {
-    let app: Application = Application()
-    app.title = "Kira Graphics Cube"
-    app.width = 800
-    app.height = 600
+struct CubeDemo {
+    var pipeline: RenderPipeline
+}
 
-    let scene: Scene = Scene()
-    scene.vertexSource = "#version 330
+function createCubePipeline(graphics: Graphics) -> RenderPipeline {
+    let shaderSource = GraphicsShaderSource {
+        shaderMode: 0
+        vertexSource: "#version 330
 out vec4 color;
 const vec3 positions[36] = vec3[36](
     vec3(-0.45, -0.45, -0.45), vec3(0.45, -0.45, -0.45), vec3(0.45, 0.45, -0.45),
@@ -38,15 +36,106 @@ void main() {
     gl_Position = vec4(p.xy, 0.0, 1.0);
     color = colors[gl_VertexID / 6];
 }"
-    scene.fragmentSource = "#version 330
+        fragmentSource: "#version 330
 in vec4 color;
 out vec4 frag_color;
 void main() {
     frag_color = color;
 }"
-    scene.label = "cube-pipeline"
-    scene.drawCount = 36
+        computeSource: ""
+        shaderAssetsDirectory: ""
+        shaderName: ""
+    }
+    let shaderReflection = GraphicsShaderReflection {
+        shaderName: "CubeShader"
+        vertexEntryPoint: "main"
+        fragmentEntryPoint: "main"
+        computeEntryPoint: "main"
+        vertexLayout: ""
+        resources: []
+        uniformBlocks: []
+    }
+    let shaderDescriptor = GraphicsShaderDescriptor {
+        label: "cube-shader"
+        source: shaderSource
+        reflection: shaderReflection
+    }
+    let pipelineDescriptor = RenderPipelineDescriptor {
+        label: "cube-pipeline"
+        shader: graphics.createShader(shaderDescriptor)
+        vertexLayout: VertexLayoutDescriptor { label: "cube-layout" layoutText: "" attributes: [] bufferLayouts: [] }
+        primitiveType: graphics.trianglePrimitiveType()
+        colorAttachments: [graphics.defaultAlphaColorTarget(graphics.bgra8UnormFormat())]
+        hasDepthFormat: false
+        depthFormat: graphics.depth32FloatFormat()
+        depthWriteEnabled: false
+        depthState: graphics.noDepthState()
+        cullMode: graphics.noCullMode()
+        windingOrder: graphics.counterClockwiseWindingOrder()
+        sampleCount: 1
+        indexType: graphics.noIndexType()
+    }
+    return graphics.createRenderPipeline(pipelineDescriptor)
+}
 
-    applicationRun(app, scene)
+function createCubeDemo(graphics: Graphics) -> CubeDemo {
+    return CubeDemo {
+        pipeline: createCubePipeline(graphics)
+    }
+}
+
+function initializeCube() {
+    print("cube resources initialized")
+    return
+}
+
+function updateCube(deltaTime: Float) {
+    print(deltaTime)
+    return
+}
+
+function encodeCube(renderEncoder: RenderEncoder) {
+    let demo = createCubeDemo(Graphics())
+    renderEncoder.setPipeline(demo.pipeline)
+    renderEncoder.draw(36)
+    return
+}
+
+function renderCube(frame: GraphicsFrame) {
+    let clearColor = Float4 {
+        r: 0.02
+        g: 0.03
+        b: 0.05
+        a: 1.0
+    }
+
+    frame.pass(clearColor) { renderEncoder in
+        encodeCube(renderEncoder)
+    }
+    return
+}
+
+@Main
+@Native
+function main() {
+    var app = Application {
+        title: "Kira Graphics Cube"
+        windowWidth: 800
+        windowHeight: 600
+    }
+
+    app.onLaunch {
+        initializeCube()
+    }
+
+    app.onUpdate { deltaTime in
+        updateCube(deltaTime)
+    }
+
+    app.onFrame { frame in
+        renderCube(frame)
+    }
+
+    app.run()
     return
 }

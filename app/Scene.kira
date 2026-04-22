@@ -1,4 +1,4 @@
-type Scene {
+class Scene {
     var shaderMode: Int = 0
     var vertexSource: String = ""
     var fragmentSource: String = ""

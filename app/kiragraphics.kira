@@ -1,3 +1,4 @@
 function inspectKslShaderAsset(shaderAssetsDirectory: String, shaderName: String, vertexLayout: String) {
-    inspectKslShaderAssetNative(shaderAssetsDirectory, shaderName, vertexLayout)
+    print("KSL asset inspection is not available in the direct Sokol backend")
+    return
 }

@@ -1,24 +1,140 @@
 import KiraGraphics
 
+struct TriangleDemo {
+    var pipeline: RenderPipeline
+    var vertexBuffer: GraphicsBuffer
+}
+
+function createBasicTrianglePipeline(graphics: Graphics) -> RenderPipeline {
+    let shaderSource = GraphicsShaderSource {
+        shaderMode: 0
+        vertexSource: "#version 330 core\nout vec4 kira_color;\nvec2 positions[3] = vec2[3](vec2(0.0, 0.55), vec2(0.55, -0.55), vec2(-0.55, -0.55));\nvoid main() {\n    gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);\n    kira_color = vec4(1.0, 0.95, 0.85, 1.0);\n}\n"
+        fragmentSource: "#version 330 core\nin vec4 kira_color;\nout vec4 kira_frag_color;\nvoid main() {\n    kira_frag_color = kira_color;\n}\n"
+        computeSource: ""
+        shaderAssetsDirectory: ""
+        shaderName: ""
+    }
+
+    let shaderReflection = GraphicsShaderReflection {
+        shaderName: "InlineTriangle"
+        vertexEntryPoint: "main"
+        fragmentEntryPoint: "main"
+        computeEntryPoint: "main"
+        vertexLayout: ""
+        resources: []
+        uniformBlocks: []
+    }
+
+    let shaderDescriptor = GraphicsShaderDescriptor {
+        label: "triangle-shader"
+        source: shaderSource
+        reflection: shaderReflection
+    }
+
+    let vertexLayout = VertexLayoutDescriptor {
+        label: "triangle-layout"
+        layoutText: ""
+        attributes: []
+        bufferLayouts: []
+    }
+
+    let pipelineDescriptor = RenderPipelineDescriptor {
+        label: "triangle-pipeline"
+        shader: graphics.createShader(shaderDescriptor)
+        vertexLayout: vertexLayout
+        primitiveType: graphics.trianglePrimitiveType()
+        colorAttachments: [graphics.defaultAlphaColorTarget(graphics.bgra8UnormFormat())]
+        hasDepthFormat: false
+        depthFormat: graphics.depth32FloatFormat()
+        depthWriteEnabled: false
+        depthState: graphics.noDepthState()
+        cullMode: graphics.noCullMode()
+        windingOrder: graphics.counterClockwiseWindingOrder()
+        sampleCount: 1
+        indexType: graphics.noIndexType()
+    }
+
+    return graphics.createRenderPipeline(pipelineDescriptor)
+}
+
+function createBasicTriangleVertexBuffer(graphics: Graphics) -> GraphicsBuffer {
+    let vertexBufferDescriptor = GraphicsBufferDescriptor {
+        label: "triangle-vertices"
+        usage: graphics.vertexBufferUsage()
+        storageMode: 0
+        byteCount: 0
+        stride: 0
+        floatData: [
+            0.0, 0.55,
+            0.55, (0.0 - 0.55),
+            (0.0 - 0.55), (0.0 - 0.55)
+        ]
+        integerData: []
+    }
+
+    return graphics.createBuffer(vertexBufferDescriptor)
+}
+
+function createBasicTriangleDemo(graphics: Graphics) -> TriangleDemo {
+    return TriangleDemo {
+        pipeline: createBasicTrianglePipeline(graphics)
+        vertexBuffer: createBasicTriangleVertexBuffer(graphics)
+    }
+}
+
+function initializeTriangle() {
+    print("triangle resources initialized")
+    return
+}
+
+function updateTriangle(deltaTime: Float) {
+    print(deltaTime)
+    return
+}
+
+function encodeTriangle(renderEncoder: RenderEncoder) {
+    let demo = createBasicTriangleDemo(Graphics())
+    renderEncoder.setLabel("triangle-render-encoder")
+    renderEncoder.setPipeline(demo.pipeline)
+    renderEncoder.setVertexBuffer(demo.vertexBuffer, 0, 0)
+    renderEncoder.draw(3)
+    return
+}
+
+function renderTriangle(frame: GraphicsFrame) {
+    let clearColor = Float4 {
+        r: 0.04
+        g: 0.05
+        b: 0.08
+        a: 1.0
+    }
+
+    frame.pass(clearColor) { renderEncoder in
+        encodeTriangle(renderEncoder)
+    }
+    return
+}
+
 @Main
 function main() {
-    let app: Application = Application()
-    app.title = "Kira Graphics KSL Triangle"
-    app.width = 640
-    app.height = 480
+    var app = Application {
+        title: "Kira Graphics KSL Triangle"
+        windowWidth: 640
+        windowHeight: 480
+    }
 
-    let scene: Scene = Scene()
-    scene.useKslAssets("generated/shaders", "BasicTriangle")
-    scene.vertexLayout = "position=float2"
-    scene.drawCount = 3
-    scene.label = "ksl-triangle"
+    app.onLaunch {
+        initializeTriangle()
+    }
 
-    let vertexData: [Float] = [
-        0.0, 0.55,
-        0.55, (0.0 - 0.55),
-        (0.0 - 0.55), (0.0 - 0.55)
-    ]
+    app.onUpdate { deltaTime in
+        updateTriangle(deltaTime)
+    }
 
-    applicationRunWithVertexData(app, scene, vertexData)
+    app.onFrame { frame in
+        renderTriangle(frame)
+    }
+
+    app.run()
     return
 }
