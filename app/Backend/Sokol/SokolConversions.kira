@@ -1,3 +1,4 @@
+@Native
 function sokolDefaultViewport() -> Viewport {
     return Viewport {
         x: 0
@@ -6,4 +7,3 @@ function sokolDefaultViewport() -> Viewport {
         height: sapp_height()
     }
 }
-
