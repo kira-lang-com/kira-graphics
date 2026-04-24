@@ -1,6 +1,6 @@
-function graphicsRuntimeRun(app: GraphicsApplication, callbacks: GraphicsAppCallbacks, userData: RawPtr) {
+function graphicsRuntimeRun(app: GraphicsApplication, userData: RawPtr) {
     var runtimeState = nativeState(GraphicsAppRuntimeState {
-        callbacks: callbacks
+        app: app
         userData: userData
         frameIndex: 0
     })
@@ -8,4 +8,3 @@ function graphicsRuntimeRun(app: GraphicsApplication, callbacks: GraphicsAppCall
     sokolRunApplication(app, nativeUserData(runtimeState))
     return
 }
-

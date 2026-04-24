@@ -51,13 +51,15 @@ function Assert-SampleLifecycle {
 
     $source = Get-Content -LiteralPath $Path -Raw
     Assert-Contains -Output $source -Needle "GraphicsApplication" -Context $Path
-    Assert-Contains -Output $source -Needle "GraphicsAppCallbacks" -Context $Path
     Assert-Contains -Output $source -Needle "nativeState" -Context $Path
     Assert-Contains -Output $source -Needle "nativeUserData" -Context $Path
     Assert-Contains -Output $source -Needle "nativeRecover" -Context $Path
+    Assert-Contains -Output $source -Needle "app.onInit" -Context $Path
+    Assert-Contains -Output $source -Needle "app.onFrame" -Context $Path
+    Assert-Contains -Output $source -Needle "app.onCleanup" -Context $Path
     Assert-Contains -Output $source -Needle "beginPass" -Context $Path
     Assert-Contains -Output $source -Needle "createRenderPipeline" -Context $Path
-    Assert-Contains -Output $source -Needle "app.run(callbacks" -Context $Path
+    Assert-Contains -Output $source -Needle "app.run(nativeUserData" -Context $Path
     Assert-NotContains -Output $source -Needle "KiraGraphics.sokol" -Context $Path
     Assert-NotContains -Output $source -Needle "applicationPresentFrame" -Context $Path
     Assert-NotContains -Output $source -Needle "applicationRunWithVertexData" -Context $Path
@@ -94,9 +96,9 @@ Assert-FileNotContains -Path "examples/basic_triangle/generated/Shaders/BasicTri
 Assert-FileNotContains -Path "examples/ksl_triangle/generated/shaders/BasicTriangle.vert.glsl" -Needle "VertexOut out;"
 Assert-FileNotContains -Path "examples/ksl_triangle/generated/shaders/BasicTriangle.frag.glsl" -Needle "FragmentOut out;"
 
-Run-Kira -Command "kira build --backend llvm examples\ksl_triangle" -Expected "wrote"
-Run-Kira -Command "kira check examples\frame_api_triangle" -Expected "check passed"
-Run-Kira -Command "kira check examples\clear_color" -Expected "check passed"
+Run-Kira -Command "kira build --backend hybrid examples\ksl_triangle" -Expected "wrote"
+Run-Kira -Command "kira check --backend hybrid examples\frame_api_triangle" -Expected "check passed"
+Run-Kira -Command "kira check --backend hybrid examples\clear_color" -Expected "check passed"
 
 Assert-SampleLifecycle -Path "examples/basic_triangle/app/main.kira"
 Assert-SampleLifecycle -Path "examples/ksl_triangle/app/main.kira"

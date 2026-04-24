@@ -1,5 +1,5 @@
 struct GraphicsAppRuntimeState {
-    var callbacks: GraphicsAppCallbacks
+    var app: GraphicsApplication
     var userData: RawPtr
     var frameIndex: Int = 0
 }

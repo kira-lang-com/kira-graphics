@@ -5,62 +5,16 @@ struct TriangleState {
     var pipeline: RenderPipeline
 }
 
-function initKslTriangle(graphics: Graphics, data: RawPtr) {
-    var state = nativeRecover<TriangleState>(data)
-
-    state.shader = graphics.createShader(ShaderDescriptor {
-        label: "ksl-triangle-shader"
-        vertexSource: ""
-        fragmentSource: ""
-        vertexPath: "generated/shaders/BasicTriangle.vert.glsl"
-        fragmentPath: "generated/shaders/BasicTriangle.frag.glsl"
-    })
-
-    state.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
-        label: "ksl-triangle-pipeline"
-        shader: state.shader
-    })
-    return
-}
-
-function frameKslTriangle(frame: GraphicsFrame, data: RawPtr) {
-    var state = nativeRecover<TriangleState>(data)
-    let encoder = frame.beginPass(Color {
-        r: 0.03
-        g: 0.04
-        b: 0.07
-        a: 1.0
-    })
-
-    encoder.setPipeline(state.pipeline)
-    encoder.draw(3)
-    frame.endPass(encoder)
-    frame.requestQuit()
-    return
-}
-
-function cleanupKslTriangle(graphics: Graphics, data: RawPtr) {
-    var state = nativeRecover<TriangleState>(data)
-    graphics.destroyPipeline(state.pipeline)
-    graphics.destroyShader(state.shader)
-    return
-}
-
 @Main
 @Native
 function main() {
-    let app = GraphicsApplication {
+    var app = GraphicsApplication {
         title: "Kira Graphics KSL Triangle"
         width: 640
         height: 480
         sampleCount: 1
     }
-    let callbacks = GraphicsAppCallbacks {
-        onInit: initKslTriangle
-        onFrame: frameKslTriangle
-        onCleanup: cleanupKslTriangle
-    }
-    var state = nativeState(TriangleState {
+    let state = nativeState(TriangleState {
         shader: GraphicsShader {
             handle: BackendShaderHandle {
                 id: 0
@@ -73,6 +27,47 @@ function main() {
         }
     })
 
-    app.run(callbacks, nativeUserData(state))
+    app.onInit { graphics in
+        var triangleState = nativeRecover<TriangleState>(graphics.userData)
+
+        triangleState.shader = graphics.createShader(ShaderDescriptor {
+            label: "ksl-triangle-shader"
+            vertexSource: ""
+            fragmentSource: ""
+            vertexPath: "generated/shaders/BasicTriangle.vert.glsl"
+            fragmentPath: "generated/shaders/BasicTriangle.frag.glsl"
+        })
+
+        triangleState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+            label: "ksl-triangle-pipeline"
+            shader: triangleState.shader
+        })
+        return
+    }
+
+    app.onFrame { frame in
+        var triangleState = nativeRecover<TriangleState>(frame.userData)
+        let encoder = frame.beginPass(Color {
+            r: 0.03
+            g: 0.04
+            b: 0.07
+            a: 1.0
+        })
+
+        encoder.setPipeline(triangleState.pipeline)
+        encoder.draw(3)
+        frame.endPass(encoder)
+        frame.requestQuit()
+        return
+    }
+
+    app.onCleanup { graphics in
+        var triangleState = nativeRecover<TriangleState>(graphics.userData)
+        graphics.destroyPipeline(triangleState.pipeline)
+        graphics.destroyShader(triangleState.shader)
+        return
+    }
+
+    app.run(nativeUserData(state))
     return
 }

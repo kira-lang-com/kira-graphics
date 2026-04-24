@@ -13,62 +13,16 @@ function frameTriangleFragmentSource() -> String {
     return "#version 330 core\nin vec4 color;\nout vec4 frag_color;\nvoid main() {\n    frag_color = color;\n}\n"
 }
 
-function initFrameTriangle(graphics: Graphics, data: RawPtr) {
-    var state = nativeRecover<FrameTriangleState>(data)
-
-    state.shader = graphics.createShader(ShaderDescriptor {
-        label: "frame-api-triangle-shader"
-        vertexSource: frameTriangleVertexSource()
-        fragmentSource: frameTriangleFragmentSource()
-        vertexPath: ""
-        fragmentPath: ""
-    })
-
-    state.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
-        label: "frame-api-triangle-pipeline"
-        shader: state.shader
-    })
-    return
-}
-
-function frameFrameTriangle(frame: GraphicsFrame, data: RawPtr) {
-    var state = nativeRecover<FrameTriangleState>(data)
-    let encoder = frame.beginPass(Color {
-        r: 0.05
-        g: 0.07
-        b: 0.10
-        a: 1.0
-    })
-
-    encoder.setPipeline(state.pipeline)
-    encoder.draw(3)
-    frame.endPass(encoder)
-    frame.requestQuit()
-    return
-}
-
-function cleanupFrameTriangle(graphics: Graphics, data: RawPtr) {
-    var state = nativeRecover<FrameTriangleState>(data)
-    graphics.destroyPipeline(state.pipeline)
-    graphics.destroyShader(state.shader)
-    return
-}
-
 @Main
 @Native
 function main() {
-    let app = GraphicsApplication {
+    var app = GraphicsApplication {
         title: "Kira Graphics Frame API Triangle"
         width: 640
         height: 480
         sampleCount: 1
     }
-    let callbacks = GraphicsAppCallbacks {
-        onInit: initFrameTriangle
-        onFrame: frameFrameTriangle
-        onCleanup: cleanupFrameTriangle
-    }
-    var state = nativeState(FrameTriangleState {
+    let state = nativeState(FrameTriangleState {
         shader: GraphicsShader {
             handle: BackendShaderHandle {
                 id: 0
@@ -81,6 +35,47 @@ function main() {
         }
     })
 
-    app.run(callbacks, nativeUserData(state))
+    app.onInit { graphics in
+        var triangleState = nativeRecover<FrameTriangleState>(graphics.userData)
+
+        triangleState.shader = graphics.createShader(ShaderDescriptor {
+            label: "frame-api-triangle-shader"
+            vertexSource: frameTriangleVertexSource()
+            fragmentSource: frameTriangleFragmentSource()
+            vertexPath: ""
+            fragmentPath: ""
+        })
+
+        triangleState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+            label: "frame-api-triangle-pipeline"
+            shader: triangleState.shader
+        })
+        return
+    }
+
+    app.onFrame { frame in
+        var triangleState = nativeRecover<FrameTriangleState>(frame.userData)
+        let encoder = frame.beginPass(Color {
+            r: 0.05
+            g: 0.07
+            b: 0.10
+            a: 1.0
+        })
+
+        encoder.setPipeline(triangleState.pipeline)
+        encoder.draw(3)
+        frame.endPass(encoder)
+        frame.requestQuit()
+        return
+    }
+
+    app.onCleanup { graphics in
+        var triangleState = nativeRecover<FrameTriangleState>(graphics.userData)
+        graphics.destroyPipeline(triangleState.pipeline)
+        graphics.destroyShader(triangleState.shader)
+        return
+    }
+
+    app.run(nativeUserData(state))
     return
 }

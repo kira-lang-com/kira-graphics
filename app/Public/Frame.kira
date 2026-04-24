@@ -4,6 +4,7 @@ class GraphicsFrame {
     var hasRenderPass: Bool = false
     var shouldPresent: Bool = false
     var shouldQuit: Bool = false
+    var userData: RawPtr
 
     function beginPass(clearColor: Color) -> RenderEncoder {
         let encoder = RenderEncoder {
@@ -40,4 +41,3 @@ class GraphicsFrame {
         return
     }
 }
-

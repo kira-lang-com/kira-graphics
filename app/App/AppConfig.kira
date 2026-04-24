@@ -1,11 +1,41 @@
+function graphicsApplicationDefaultInit(graphics: Graphics) {
+    return
+}
+
+function graphicsApplicationDefaultFrame(frame: GraphicsFrame) {
+    return
+}
+
+function graphicsApplicationDefaultCleanup(graphics: Graphics) {
+    return
+}
+
 struct GraphicsApplication {
     var title: String = "Kira Graphics"
     var width: Int = 640
     var height: Int = 480
     var sampleCount: Int = 1
+    var initHandler: (Graphics) -> Void = graphicsApplicationDefaultInit
+    var frameHandler: (GraphicsFrame) -> Void = graphicsApplicationDefaultFrame
+    var cleanupHandler: (Graphics) -> Void = graphicsApplicationDefaultCleanup
 
-    function run(callbacks: GraphicsAppCallbacks, userData: RawPtr) {
-        graphicsRuntimeRun(self, callbacks, userData)
+    function onInit(body: (Graphics) -> Void) {
+        self.initHandler = body
+        return
+    }
+
+    function onFrame(body: (GraphicsFrame) -> Void) {
+        self.frameHandler = body
+        return
+    }
+
+    function onCleanup(body: (Graphics) -> Void) {
+        self.cleanupHandler = body
+        return
+    }
+
+    function run(userData: RawPtr) {
+        graphicsRuntimeRun(self, userData)
         return
     }
 }

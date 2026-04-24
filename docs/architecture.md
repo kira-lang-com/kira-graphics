@@ -5,7 +5,6 @@ Kira Graphics is organized around one public package and one backend implementat
 Public users should import `KiraGraphics` and stay in the facade types:
 
 - `GraphicsApplication`
-- `GraphicsAppCallbacks`
 - `Graphics`
 - `GraphicsFrame`
 - `RenderEncoder`

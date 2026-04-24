@@ -1,4 +1,6 @@
 class Graphics {
+    var userData: RawPtr
+
     function createShader(descriptor: ShaderDescriptor) -> GraphicsShader {
         return GraphicsShader {
             handle: BackendShaderHandle {
@@ -54,6 +56,7 @@ class Graphics {
             hasRenderPass: false
             shouldPresent: false
             shouldQuit: false
+            userData: self.userData
         }
     }
 }

@@ -1,6 +1,6 @@
 # Kira Graphics
 
-Kira Graphics is now structured as a real Kira library package with a small public graphics API over a Sokol backend. Normal users import `KiraGraphics`, configure a `GraphicsApplication`, create long-lived resources during init, encode work through `GraphicsFrame` and `RenderEncoder`, and keep app state in opaque callback storage with `nativeState`, `nativeUserData`, and `nativeRecover<T>`.
+Kira Graphics is now structured as a real Kira library package with a small public graphics API over a Sokol backend. Normal users import `KiraGraphics`, configure a `GraphicsApplication`, register lifecycle callbacks with trailing blocks such as `app.onFrame { frame in ... }`, create long-lived resources during init, encode work through `GraphicsFrame` and `RenderEncoder`, and keep app state in opaque callback storage with `nativeState`, `nativeUserData`, and `nativeRecover<T>`.
 
 The raw Sokol binding still exists for backend and interop work, but it is not the public API.
 
@@ -44,7 +44,6 @@ app/
     BufferDescriptor.kira
     PipelineDescriptor.kira
   App/
-    AppCallbacks.kira
     AppConfig.kira
     NativeStateBridge.kira
 ```
@@ -56,7 +55,7 @@ app/
 The current vertical slice supports:
 
 - window configuration with `GraphicsApplication`
-- init/frame/cleanup lifecycle with `GraphicsAppCallbacks`
+- init/frame/cleanup lifecycle registration with trailing callbacks on `GraphicsApplication`
 - persistent callback state through `nativeState`, `nativeUserData`, and `nativeRecover<T>`
 - shader and render-pipeline creation
 - clear passes through `GraphicsFrame`
@@ -99,12 +98,12 @@ Useful commands:
 
 ```powershell
 kira check .
-kira check examples\clear_color
-kira check examples\basic_triangle
-kira check examples\frame_api_triangle
-kira check examples\ksl_triangle
-kira check examples\raw_sokol_interop
-kira build --backend llvm examples\basic_triangle
-kira run --backend llvm examples\runtime_entry
+kira check --backend hybrid examples\clear_color
+kira check --backend hybrid examples\basic_triangle
+kira check --backend hybrid examples\frame_api_triangle
+kira check --backend hybrid examples\ksl_triangle
+kira check --backend hybrid examples\raw_sokol_interop
+kira build --backend hybrid examples\basic_triangle
+kira run --backend hybrid examples\runtime_entry
 powershell -ExecutionPolicy Bypass -File tests\run_ksl_integration.ps1
 ```
