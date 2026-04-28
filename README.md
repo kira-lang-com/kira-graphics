@@ -1,3 +1,9 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Images/KiraGraphicsBannerDark.png">
+  <source media="(prefers-color-scheme: light)" srcset="Images/KiraGraphicsBannerLight.png">
+  <img alt="Kira Graphics" src="Images/KiraGraphicsBannerLight.png">
+</picture>
+
 # Kira Graphics
 
 Kira Graphics is now structured as a real Kira library package with a small public graphics API over a Sokol backend. Normal users import `KiraGraphics`, configure a `GraphicsApplication`, register lifecycle callbacks with trailing blocks such as `app.onFrame { frame in ... }`, create long-lived resources during init, encode work through `GraphicsFrame` and `RenderEncoder`, and keep app state in opaque callback storage with `nativeState`, `nativeUserData`, and `nativeRecover<T>`.
