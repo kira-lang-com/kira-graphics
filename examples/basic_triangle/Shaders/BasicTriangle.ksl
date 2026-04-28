@@ -18,11 +18,11 @@ shader BasicTriangle {
         input VertexIn
         output VertexOut
 
-        function entry(input: VertexIn) -> VertexOut {
-            let out: VertexOut
-            out.clip_position = Float4(input.position, 0.0, 1.0)
-            out.color = Float4(1.0, 0.95, 0.85, 1.0)
-            return out
+        function entry(vertexInput: VertexIn) -> VertexOut {
+            let result: VertexOut
+            result.clip_position = Float4(vertexInput.position, 0.0, 1.0)
+            result.color = Float4(0.3, 0.45, 0.85, 1.0)
+            return result
         }
     }
 
@@ -30,10 +30,10 @@ shader BasicTriangle {
         input VertexOut
         output FragmentOut
 
-        function entry(input: VertexOut) -> FragmentOut {
-            let out: FragmentOut
-            out.color = input.color
-            return out
+        function entry(fragmentInput: VertexOut) -> FragmentOut {
+            let result: FragmentOut
+            result.color = fragmentInput.color
+            return result
         }
     }
 }

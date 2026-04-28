@@ -1,14 +1,42 @@
 #define SOKOL_IMPL
 #define SOKOL_NO_ENTRY
 #define SOKOL_GLCORE
+#include <stdio.h>
+#include <stdlib.h>
 #include "sokol_app.h"
 #include "sokol_gfx.h"
 #include "sokol_glue.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-
 static sg_buffer kg_triangle_vertex_buffer = {0};
+
+static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* message, uint32_t line, const char* filename, void* user_data) {
+    (void)user_data;
+    const char* level = "info";
+    if (log_level == 0) {
+        level = "panic";
+    } else if (log_level == 1) {
+        level = "error";
+    } else if (log_level == 2) {
+        level = "warning";
+    }
+    fprintf(stderr, "Kira Graphics: %s[%u] %s:%u: %s: %s\n",
+        tag ? tag : "sokol",
+        log_item_id,
+        filename ? filename : "sokol_gfx.h",
+        line,
+        level,
+        message ? message : "");
+    if (log_level == 0) {
+        abort();
+    }
+}
+
+void kg_setup(void) {
+    sg_desc desc = {0};
+    desc.environment = sglue_environment();
+    desc.logger.func = kg_sokol_log;
+    sg_setup(&desc);
+}
 
 static void kg_ensure_triangle_vertex_buffer(void) {
     if (kg_triangle_vertex_buffer.id != 0) {
@@ -91,8 +119,12 @@ uint32_t kg_make_pipeline(uint32_t shader_id, const char* label) {
     sg_swapchain swapchain = sglue_swapchain();
     sg_pipeline_desc desc = {0};
     desc.shader.id = shader_id;
-    desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
     desc.layout.buffers[0].stride = sizeof(float) * 2;
+    desc.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
+    desc.layout.buffers[0].step_rate = 1;
+    desc.layout.attrs[0].buffer_index = 0;
+    desc.layout.attrs[0].offset = 0;
+    desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
     desc.color_count = 1;
     desc.colors[0].pixel_format = swapchain.color_format;
     desc.sample_count = swapchain.sample_count;

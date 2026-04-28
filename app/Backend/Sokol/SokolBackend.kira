@@ -1,6 +1,9 @@
 @FFI.Extern { library: sokol; symbol: kg_shader_source; abi: c; }
 function kgShaderSource(inlineSource: CString, path: CString): CString;
 
+@FFI.Extern { library: sokol; symbol: kg_setup; abi: c; }
+function kgSetup(): Void;
+
 @FFI.Extern { library: sokol; symbol: kg_apply_pipeline_and_draw; abi: c; }
 function kgApplyPipelineAndDraw(pipelineId: U32, vertexCount: I32, instanceCount: I32): Void;
 

@@ -17,10 +17,7 @@ function sokolRunApplication(app: GraphicsApplication, runtimeUserData: RawPtr):
 
 @Native
 function kiraGraphicsSokolInit(runtimeUserData: RawPtr): Void {
-    let desc = sg_desc {
-        environment: sglue_environment()
-    }
-    sg_setup(desc)
+    kgSetup()
 
     var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
     let app = state.app
