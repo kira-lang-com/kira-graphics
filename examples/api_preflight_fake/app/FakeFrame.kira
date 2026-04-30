@@ -1,0 +1,105 @@
+class FakeGraphicsFrame {
+    var descriptor: FakeRenderPassDescriptor = FakeRenderPassDescriptor {}
+    var encoder: FakeRenderEncoder = FakeRenderEncoder {}
+
+    function beginRenderPass(descriptor: FakeRenderPassDescriptor) -> FakeRenderEncoder {
+        self.descriptor = descriptor
+        self.encoder = FakeRenderEncoder {}
+        return self.encoder
+    }
+
+    function endPass(encoder: FakeRenderEncoder) {
+        self.encoder = encoder
+        return
+    }
+
+    function renderPass(descriptor: FakeRenderPassDescriptor, body: (FakeRenderEncoder) -> Void) {
+        let encoder = beginRenderPass(descriptor)
+        body(encoder)
+        endPass(encoder)
+        return
+    }
+}
+
+class FakeGraphics {
+    function createShaderFromKsl(descriptor: FakeKslShaderDescriptor) -> FakeShader {
+        return FakeShader {
+            handle: FakeBackendShaderHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createBuffer(descriptor: FakeBufferDescriptor) -> FakeGraphicsBuffer {
+        return FakeGraphicsBuffer {
+            handle: FakeBackendBufferHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createTexture(descriptor: FakeTextureDescriptor) -> FakeGraphicsTexture {
+        return FakeGraphicsTexture {
+            handle: FakeBackendTextureHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createSampler(descriptor: FakeSamplerDescriptor) -> FakeGraphicsSampler {
+        return FakeGraphicsSampler {
+            handle: FakeBackendSamplerHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createRenderPipeline(descriptor: FakePipelineDescriptor) -> FakeRenderPipeline {
+        return FakeRenderPipeline {
+            handle: FakeBackendPipelineHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createBindGroup(descriptor: FakeBindGroupDescriptor) -> FakeBindGroup {
+        return FakeBindGroup {
+            handle: FakeBackendBindGroupHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createUniform() -> FakeGraphicsUniform {
+        return FakeGraphicsUniform {
+            handle: FakeBackendUniformHandle {
+                id: 1
+            }
+        }
+    }
+
+    function destroyShader(shader: FakeShader) {
+        return
+    }
+
+    function destroyBuffer(buffer: FakeGraphicsBuffer) {
+        return
+    }
+
+    function destroyTexture(texture: FakeGraphicsTexture) {
+        return
+    }
+
+    function destroySampler(sampler: FakeGraphicsSampler) {
+        return
+    }
+
+    function destroyRenderPipeline(pipeline: FakeRenderPipeline) {
+        return
+    }
+
+    function destroyBindGroup(bindGroup: FakeBindGroup) {
+        return
+    }
+}
+

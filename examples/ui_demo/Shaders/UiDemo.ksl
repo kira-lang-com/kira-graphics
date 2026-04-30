@@ -1,0 +1,53 @@
+type VertexIn {
+    let position: Float2
+}
+
+type VertexOut {
+    @builtin(position)
+    let clip_position: Float4
+
+    let color: Float4
+}
+
+type FragmentOut {
+    let color: Float4
+}
+
+function uiColor(position: Float2) -> Float4 {
+    if position.y > 0.0 {
+        if position.y < 0.20 {
+            return Float4(0.78, 0.86, 0.94, 1.0)
+        }
+    }
+    if position.y > -0.20 {
+        if position.y < 0.0 {
+            return Float4(0.47, 0.58, 0.70, 1.0)
+        }
+    }
+    return Float4(0.16, 0.22, 0.30, 1.0)
+}
+
+shader UiDemo {
+    vertex {
+        input VertexIn
+        output VertexOut
+
+        function entry(input: VertexIn) -> VertexOut {
+            let result: VertexOut
+            result.clip_position = Float4(input.position, 0.0, 1.0)
+            result.color = uiColor(input.position)
+            return result
+        }
+    }
+
+    fragment {
+        input VertexOut
+        output FragmentOut
+
+        function entry(input: VertexOut) -> FragmentOut {
+            let result: FragmentOut
+            result.color = input.color
+            return result
+        }
+    }
+}

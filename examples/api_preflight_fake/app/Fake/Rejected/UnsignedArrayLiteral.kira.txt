@@ -1,0 +1,23 @@
+what it was trying to test
+- Whether `[U16]` and `[U32]` fields accept ordinary numeric array literals directly.
+
+exact compiler error
+```text
+error[KSEM031]: type mismatch
+  Kira expected U16 here, but the value resolves to Int.
+  --> C:\Users\Shadow\Coding\kira-projects\kira-graphics\examples\api_preflight_fake\app\main.kira:173:5
+   173 |     var uint16Data: [U16] = [0]
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ value does not match the required type
+  help: Add an explicit type declaration where coercion is allowed, or change the value so the type is unambiguous.
+```
+
+exact failing snippet
+```kira
+struct FakeBufferDescriptor {
+    var uint16Data: [U16] = [0]
+    var uint32Data: [U32] = [0]
+}
+```
+
+fallback used
+- Use `[Int]` arrays for fake index and unsigned-data probes in the compiling example.

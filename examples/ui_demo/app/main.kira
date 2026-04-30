@@ -1,0 +1,72 @@
+import KiraGraphics
+
+struct UiDemoState {
+    var shader: GraphicsShader
+    var pipeline: RenderPipeline
+}
+
+@Main
+@Native
+function main() {
+    var app = GraphicsApplication {
+        title: "Kira Graphics UI Demo"
+        width: 640
+        height: 480
+        sampleCount: 1
+    }
+    let state = nativeState(UiDemoState {
+        shader: GraphicsShader {
+            handle: BackendShaderHandle {
+                id: 0
+            }
+        }
+        pipeline: RenderPipeline {
+            handle: BackendPipelineHandle {
+                id: 0
+            }
+        }
+    })
+
+    app.onInit { graphics in
+        var uiState = nativeRecover<UiDemoState>(graphics.userData)
+
+        uiState.shader = graphics.createShader(ShaderDescriptor {
+            label: "ui-demo-shader"
+            vertexSource: ""
+            fragmentSource: ""
+            vertexPath: "generated/shaders/UiDemo.vert.glsl"
+            fragmentPath: "generated/shaders/UiDemo.frag.glsl"
+        })
+
+        uiState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+            label: "ui-demo-pipeline"
+            shader: uiState.shader
+        })
+        return
+    }
+
+    app.onFrame { frame in
+        var uiState = nativeRecover<UiDemoState>(frame.userData)
+        let encoder = frame.beginPass(Color {
+            r: 0.05
+            g: 0.06
+            b: 0.08
+            a: 1.0
+        })
+
+        encoder.setPipeline(uiState.pipeline)
+        encoder.draw(18)
+        frame.endPass(encoder)
+        return
+    }
+
+    app.onCleanup { graphics in
+        var uiState = nativeRecover<UiDemoState>(graphics.userData)
+        graphics.destroyPipeline(uiState.pipeline)
+        graphics.destroyShader(uiState.shader)
+        return
+    }
+
+    app.run(nativeUserData(state))
+    return
+}

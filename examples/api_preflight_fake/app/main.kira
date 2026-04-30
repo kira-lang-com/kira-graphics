@@ -1,0 +1,1091 @@
+import KiraGraphics
+
+struct FakeBackendShaderHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendPipelineHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendBufferHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendTextureHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendSamplerHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendBindGroupHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendUniformHandle {
+    var id: U32 = 0
+}
+
+
+struct FakeShader {
+    var handle: FakeBackendShaderHandle = FakeBackendShaderHandle {}
+}
+
+struct FakeRenderPipeline {
+    var handle: FakeBackendPipelineHandle = FakeBackendPipelineHandle {}
+}
+
+struct FakeGraphicsBuffer {
+    var handle: FakeBackendBufferHandle = FakeBackendBufferHandle {}
+}
+
+struct FakeGraphicsTexture {
+    var handle: FakeBackendTextureHandle = FakeBackendTextureHandle {}
+}
+
+struct FakeGraphicsSampler {
+    var handle: FakeBackendSamplerHandle = FakeBackendSamplerHandle {}
+}
+
+struct FakeBindGroup {
+    var handle: FakeBackendBindGroupHandle = FakeBackendBindGroupHandle {}
+}
+
+struct FakeGraphicsUniform {
+    var handle: FakeBackendUniformHandle = FakeBackendUniformHandle {}
+}
+
+
+enum FakeBufferUsage {
+    vertex
+    index
+    uniform
+    storage
+}
+
+enum FakeVertexFormat {
+    float2
+    float3
+    float4
+}
+
+enum FakeTextureFormat {
+    rgba8Unorm
+    rgba16Float
+    depth24Stencil8
+}
+
+enum FakePrimitiveTopology {
+    triangleList
+    triangleStrip
+    lineList
+}
+
+enum FakeBlendPreset {
+    replace
+    alpha
+    premultipliedAlpha
+    additive
+}
+
+enum FakeCompareFunction {
+    never
+    less
+    lessEqual
+    equal
+    greaterEqual
+    greater
+    always
+}
+
+enum FakeCullMode {
+    none
+    front
+    back
+}
+
+enum FakeFrontFace {
+    counterClockwise
+    clockwise
+}
+
+enum FakeIndexFormat {
+    uint16
+    uint32
+}
+
+enum FakeLoadAction {
+    clear
+    load
+    dontCare
+}
+
+enum FakeStoreAction {
+    store
+    dontCare
+}
+
+enum FakeRenderTargetKind {
+    swapchain
+    texture
+}
+
+enum FakeTextureUsage {
+    sampled
+    renderTarget
+    renderTargetSampled
+    depthStencil
+}
+
+enum FakeAttachmentStorageMode {
+    persistent
+    transient
+    memoryless
+}
+
+enum FakeTextureFilter {
+    nearest
+    linear
+}
+
+enum FakeTextureAddressMode {
+    clampToEdge
+    repeat
+}
+
+enum FakeBindEntryKind {
+    buffer
+    texture
+    sampler
+    uniform
+}
+
+struct FakePrimitiveDescriptor {
+    var topology: String = "triangleList"
+}
+
+struct FakeBufferDescriptor {
+    var label: String = ""
+    var usage: String = "vertex"
+    var floatData: [Float] = [0.0]
+    var uint16Data: [Int] = [0]
+    var uint32Data: [Int] = [0]
+    var stride: Int = 0
+}
+
+struct FakeVertexAttribute {
+    var name: String = ""
+    var location: Int = 0
+    var format: String = "float2"
+    var offset: Int = 0
+}
+
+struct FakeVertexLayout {
+    var stride: Int = 0
+    var attributes: [FakeVertexAttribute] = [FakeVertexAttribute {}]
+}
+
+struct FakeVertexLayoutFixed {
+    var stride: Int = 0
+    var attribute0: FakeVertexAttribute = FakeVertexAttribute {}
+    var hasAttribute0: Bool = false
+    var attribute1: FakeVertexAttribute = FakeVertexAttribute {}
+    var hasAttribute1: Bool = false
+    var attribute2: FakeVertexAttribute = FakeVertexAttribute {}
+    var hasAttribute2: Bool = false
+    var attribute3: FakeVertexAttribute = FakeVertexAttribute {}
+    var hasAttribute3: Bool = false
+}
+
+struct FakeTextureDescriptor {
+    var label: String = ""
+    var width: Int = 1
+    var height: Int = 1
+    var format: String = "rgba8Unorm"
+    var usage: String = "sampled"
+    var sampleCount: Int = 1
+    var storageMode: String = "persistent"
+}
+
+struct FakeSamplerDescriptor {
+    var label: String = ""
+    var minFilter: String = "linear"
+    var magFilter: String = "linear"
+    var addressModeU: String = "clampToEdge"
+    var addressModeV: String = "clampToEdge"
+}
+
+struct FakeBindEntry {
+    var name: String = ""
+    var kind: String = "buffer"
+    var buffer: FakeGraphicsBuffer = FakeGraphicsBuffer {}
+    var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var sampler: FakeGraphicsSampler = FakeGraphicsSampler {}
+    var uniform: FakeGraphicsUniform = FakeGraphicsUniform {}
+}
+
+struct FakeBindGroupDescriptor {
+    var label: String = ""
+    var entries: [FakeBindEntry] = [FakeBindEntry {}]
+}
+
+struct FakeBufferBindEntry {
+    var name: String = ""
+    var buffer: FakeGraphicsBuffer = FakeGraphicsBuffer {}
+}
+
+struct FakeTextureBindEntry {
+    var name: String = ""
+    var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
+}
+
+struct FakeSamplerBindEntry {
+    var name: String = ""
+    var sampler: FakeGraphicsSampler = FakeGraphicsSampler {}
+}
+
+struct FakeUniformBindEntry {
+    var name: String = ""
+    var uniform: FakeGraphicsUniform = FakeGraphicsUniform {}
+}
+
+struct FakeKslShaderDescriptor {
+    var label: String = ""
+    var asset: String = ""
+    var directory: String = "generated/shaders"
+}
+
+function fakeTriangleVertices() -> [Float] {
+    return [
+        0.0, 0.55,
+        0.55, -0.55,
+        -0.55, -0.55
+    ]
+}
+
+
+struct FakeBlendState {
+    var enabled: Bool = false
+    var preset: String = "replace"
+}
+
+struct FakeColorTargetDescriptor {
+    var format: String = "rgba8Unorm"
+    var blend: FakeBlendState = FakeBlendState {}
+}
+
+struct FakeDepthStencilDescriptor {
+    var depthEnabled: Bool = false
+    var depthWriteEnabled: Bool = false
+    var depthCompare: String = "lessEqual"
+    var format: String = "depth24Stencil8"
+}
+
+struct FakeRasterizationDescriptor {
+    var cullMode: String = "back"
+    var frontFace: String = "counterClockwise"
+}
+
+struct FakePipelineDescriptor {
+    var label: String = ""
+    var shader: FakeShader = FakeShader {}
+    var vertexLayout: FakeVertexLayout = FakeVertexLayout {}
+    var colorTargets: [FakeColorTargetDescriptor] = [FakeColorTargetDescriptor {}]
+    var depthStencil: FakeDepthStencilDescriptor = FakeDepthStencilDescriptor {}
+    var rasterization: FakeRasterizationDescriptor = FakeRasterizationDescriptor {}
+    var primitive: FakePrimitiveDescriptor = FakePrimitiveDescriptor {}
+}
+
+struct FakePipelineDescriptorFixed {
+    var label: String = ""
+    var shader: FakeShader = FakeShader {}
+    var vertexLayout: FakeVertexLayoutFixed = FakeVertexLayoutFixed {}
+    var colorTarget0: FakeColorTargetDescriptor = FakeColorTargetDescriptor {}
+    var hasColorTarget0: Bool = false
+    var colorTarget1: FakeColorTargetDescriptor = FakeColorTargetDescriptor {}
+    var hasColorTarget1: Bool = false
+    var depthStencil: FakeDepthStencilDescriptor = FakeDepthStencilDescriptor {}
+    var rasterization: FakeRasterizationDescriptor = FakeRasterizationDescriptor {}
+    var primitive: FakePrimitiveDescriptor = FakePrimitiveDescriptor {}
+}
+
+
+
+struct FakeRenderTarget {
+    var kind: String = "swapchain"
+    var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var mipLevel: Int = 0
+    var arrayLayer: Int = 0
+}
+
+struct FakeColorAttachment {
+    var target: FakeRenderTarget = FakeRenderTarget {}
+    var loadAction: String = "clear"
+    var storeAction: String = "store"
+    var clearColor: Color = Color {
+        r: 0.0
+        g: 0.0
+        b: 0.0
+        a: 1.0
+    }
+    var resolveTarget: FakeRenderTarget = FakeRenderTarget {}
+    var hasResolveTarget: Bool = false
+}
+
+struct FakeDepthAttachment {
+    var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var loadAction: String = "clear"
+    var storeAction: String = "store"
+    var clearDepth: Float = 1.0
+    var readOnly: Bool = false
+}
+
+struct FakeStencilAttachment {
+    var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var loadAction: String = "clear"
+    var storeAction: String = "store"
+    var clearStencil: Int = 0
+    var readOnly: Bool = false
+}
+
+struct FakeRenderPassDescriptor {
+    var label: String = ""
+    var colorAttachments: [FakeColorAttachment] = [FakeColorAttachment {}]
+    var depthAttachment: FakeDepthAttachment = FakeDepthAttachment {}
+    var hasDepthAttachment: Bool = false
+    var stencilAttachment: FakeStencilAttachment = FakeStencilAttachment {}
+    var hasStencilAttachment: Bool = false
+}
+
+struct FakeRenderPassDescriptorFixed {
+    var label: String = ""
+    var colorAttachment0: FakeColorAttachment = FakeColorAttachment {}
+    var hasColorAttachment0: Bool = false
+    var colorAttachment1: FakeColorAttachment = FakeColorAttachment {}
+    var hasColorAttachment1: Bool = false
+    var colorAttachment2: FakeColorAttachment = FakeColorAttachment {}
+    var hasColorAttachment2: Bool = false
+    var colorAttachment3: FakeColorAttachment = FakeColorAttachment {}
+    var hasColorAttachment3: Bool = false
+    var depthAttachment: FakeDepthAttachment = FakeDepthAttachment {}
+    var hasDepthAttachment: Bool = false
+    var stencilAttachment: FakeStencilAttachment = FakeStencilAttachment {}
+    var hasStencilAttachment: Bool = false
+}
+
+
+class FakeRenderEncoder {
+    var pipeline: FakeRenderPipeline = FakeRenderPipeline {}
+    var vertexBuffer: FakeGraphicsBuffer = FakeGraphicsBuffer {}
+    var hasVertexBuffer: Bool = false
+    var indexBuffer: FakeGraphicsBuffer = FakeGraphicsBuffer {}
+    var hasIndexBuffer: Bool = false
+    var indexFormat: String = "uint32"
+    var bindGroup0: FakeBindGroup = FakeBindGroup {}
+    var hasBindGroup0: Bool = false
+    var bindGroup1: FakeBindGroup = FakeBindGroup {}
+    var hasBindGroup1: Bool = false
+    var bindGroup2: FakeBindGroup = FakeBindGroup {}
+    var hasBindGroup2: Bool = false
+    var bindGroup3: FakeBindGroup = FakeBindGroup {}
+    var hasBindGroup3: Bool = false
+    var vertexCount: Int = 0
+    var indexCount: Int = 0
+    var instanceCount: Int = 1
+
+    function setPipeline(pipeline: FakeRenderPipeline) {
+        self.pipeline = pipeline
+        return
+    }
+
+    function setVertexBuffer(buffer: FakeGraphicsBuffer) {
+        self.vertexBuffer = buffer
+        self.hasVertexBuffer = true
+        return
+    }
+
+    function setIndexBuffer(buffer: FakeGraphicsBuffer, format: String) {
+        self.indexBuffer = buffer
+        self.indexFormat = format
+        self.hasIndexBuffer = true
+        return
+    }
+
+    function setBindGroup(slot: Int, bindGroup: FakeBindGroup) {
+        if (slot == 0) {
+            self.bindGroup0 = bindGroup
+            self.hasBindGroup0 = true
+        }
+        if (slot == 1) {
+            self.bindGroup1 = bindGroup
+            self.hasBindGroup1 = true
+        }
+        if (slot == 2) {
+            self.bindGroup2 = bindGroup
+            self.hasBindGroup2 = true
+        }
+        if (slot == 3) {
+            self.bindGroup3 = bindGroup
+            self.hasBindGroup3 = true
+        }
+        return
+    }
+
+    function draw(vertexCount: Int) {
+        self.vertexCount = vertexCount
+        self.indexCount = 0
+        self.instanceCount = 1
+        return
+    }
+
+    function drawIndexed(indexCount: Int) {
+        self.indexCount = indexCount
+        self.vertexCount = 0
+        self.instanceCount = 1
+        return
+    }
+
+    function drawInstanced(vertexCount: Int, instanceCount: Int) {
+        self.vertexCount = vertexCount
+        self.indexCount = 0
+        self.instanceCount = instanceCount
+        return
+    }
+
+    function drawIndexedInstanced(indexCount: Int, instanceCount: Int) {
+        self.indexCount = indexCount
+        self.vertexCount = 0
+        self.instanceCount = instanceCount
+        return
+    }
+}
+
+
+class FakeGraphicsFrame {
+    var descriptor: FakeRenderPassDescriptor = FakeRenderPassDescriptor {}
+    var encoder: FakeRenderEncoder = FakeRenderEncoder {}
+
+    function beginRenderPass(descriptor: FakeRenderPassDescriptor) -> FakeRenderEncoder {
+        self.descriptor = descriptor
+        self.encoder = FakeRenderEncoder {}
+        return self.encoder
+    }
+
+    function endPass(encoder: FakeRenderEncoder) {
+        self.encoder = encoder
+        return
+    }
+
+    function renderPass(descriptor: FakeRenderPassDescriptor, body: (FakeRenderEncoder) -> Void) {
+        let encoder = beginRenderPass(descriptor)
+        body(encoder)
+        endPass(encoder)
+        return
+    }
+}
+
+class FakeGraphics {
+    function createShaderFromKsl(descriptor: FakeKslShaderDescriptor) -> FakeShader {
+        return FakeShader {
+            handle: FakeBackendShaderHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createBuffer(descriptor: FakeBufferDescriptor) -> FakeGraphicsBuffer {
+        return FakeGraphicsBuffer {
+            handle: FakeBackendBufferHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createTexture(descriptor: FakeTextureDescriptor) -> FakeGraphicsTexture {
+        return FakeGraphicsTexture {
+            handle: FakeBackendTextureHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createSampler(descriptor: FakeSamplerDescriptor) -> FakeGraphicsSampler {
+        return FakeGraphicsSampler {
+            handle: FakeBackendSamplerHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createRenderPipeline(descriptor: FakePipelineDescriptor) -> FakeRenderPipeline {
+        return FakeRenderPipeline {
+            handle: FakeBackendPipelineHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createBindGroup(descriptor: FakeBindGroupDescriptor) -> FakeBindGroup {
+        return FakeBindGroup {
+            handle: FakeBackendBindGroupHandle {
+                id: 1
+            }
+        }
+    }
+
+    function createUniform() -> FakeGraphicsUniform {
+        return FakeGraphicsUniform {
+            handle: FakeBackendUniformHandle {
+                id: 1
+            }
+        }
+    }
+
+    function destroyShader(shader: FakeShader) {
+        return
+    }
+
+    function destroyBuffer(buffer: FakeGraphicsBuffer) {
+        return
+    }
+
+    function destroyTexture(texture: FakeGraphicsTexture) {
+        return
+    }
+
+    function destroySampler(sampler: FakeGraphicsSampler) {
+        return
+    }
+
+    function destroyRenderPipeline(pipeline: FakeRenderPipeline) {
+        return
+    }
+
+    function destroyBindGroup(bindGroup: FakeBindGroup) {
+        return
+    }
+}
+
+
+
+struct FakeCubeState {
+    var shader: FakeShader = FakeShader {}
+    var pipeline: FakeRenderPipeline = FakeRenderPipeline {}
+    var vertices: FakeGraphicsBuffer = FakeGraphicsBuffer {}
+    var indices: FakeGraphicsBuffer = FakeGraphicsBuffer {}
+    var depthTexture: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var cameraBindings: FakeBindGroup = FakeBindGroup {}
+    var objectBindings: FakeBindGroup = FakeBindGroup {}
+    var indexCount: Int = 0
+}
+
+function fakeCubeVertices() -> [Float] {
+    return [
+        -1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+        -1.0, 1.0, 1.0, 0.0, 0.0, 1.0
+    ]
+}
+
+function fakeCubeIndices() -> [Int] {
+    return [
+        0, 1, 2,
+        0, 2, 3
+    ]
+}
+
+function fakeCubeLayout() -> FakeVertexLayout {
+    return FakeVertexLayout {
+        stride: 24
+        attributes: [
+            FakeVertexAttribute {
+                name: "position"
+                location: 0
+                format: "float3"
+                offset: 0
+            },
+            FakeVertexAttribute {
+                name: "normal"
+                location: 1
+                format: "float3"
+                offset: 12
+            }
+        ]
+    }
+}
+
+function fakeSetupCube(graphics: FakeGraphics) -> FakeCubeState {
+    let shader = graphics.createShaderFromKsl(FakeKslShaderDescriptor {
+        label: "basic-3d-cube"
+        asset: "BasicCube"
+        directory: "generated/shaders"
+    })
+    let vertices = graphics.createBuffer(FakeBufferDescriptor {
+        label: "cube-vertices"
+        usage: "vertex"
+        floatData: fakeCubeVertices()
+        stride: 24
+    })
+    let indices = graphics.createBuffer(FakeBufferDescriptor {
+        label: "cube-indices"
+        usage: "index"
+        uint32Data: fakeCubeIndices()
+        stride: 4
+    })
+    let depthTexture = graphics.createTexture(FakeTextureDescriptor {
+        label: "cube-depth"
+        width: 1280
+        height: 720
+        format: "depth24Stencil8"
+        usage: "depthStencil"
+        sampleCount: 1
+        storageMode: "persistent"
+    })
+    let cameraUniform = graphics.createUniform()
+    let objectUniform = graphics.createUniform()
+    let cameraBindings = graphics.createBindGroup(FakeBindGroupDescriptor {
+        label: "camera-bindings"
+        entries: [
+            FakeBindEntry {
+                name: "camera"
+                kind: "uniform"
+                uniform: cameraUniform
+            }
+        ]
+    })
+    let objectBindings = graphics.createBindGroup(FakeBindGroupDescriptor {
+        label: "object-bindings"
+        entries: [
+            FakeBindEntry {
+                name: "object"
+                kind: "uniform"
+                uniform: objectUniform
+            }
+        ]
+    })
+    let pipeline = graphics.createRenderPipeline(FakePipelineDescriptor {
+        label: "cube-pipeline"
+        shader: shader
+        vertexLayout: fakeCubeLayout()
+        colorTargets: [
+            FakeColorTargetDescriptor {
+                format: "rgba8Unorm"
+                blend: FakeBlendState {
+                    enabled: true
+                    preset: "alpha"
+                }
+            }
+        ]
+        depthStencil: FakeDepthStencilDescriptor {
+            depthEnabled: true
+            depthWriteEnabled: true
+            depthCompare: "lessEqual"
+            format: "depth24Stencil8"
+        }
+        rasterization: FakeRasterizationDescriptor {
+            cullMode: "back"
+            frontFace: "counterClockwise"
+        }
+        primitive: FakePrimitiveDescriptor {
+            topology: "triangleList"
+        }
+    })
+
+    return FakeCubeState {
+        shader: shader
+        pipeline: pipeline
+        vertices: vertices
+        indices: indices
+        depthTexture: depthTexture
+        cameraBindings: cameraBindings
+        objectBindings: objectBindings
+        indexCount: 6
+    }
+}
+
+function fakeEncodeCubePass(encoder: FakeRenderEncoder, state: FakeCubeState) {
+    encoder.setPipeline(state.pipeline)
+    encoder.setVertexBuffer(state.vertices)
+    encoder.setIndexBuffer(state.indices, "uint32")
+    encoder.setBindGroup(0, state.cameraBindings)
+    encoder.setBindGroup(1, state.objectBindings)
+    encoder.drawIndexed(state.indexCount)
+    return
+}
+
+function fakeDrawCube(frame: FakeGraphicsFrame, state: FakeCubeState) {
+    let pass = FakeRenderPassDescriptor {
+        label: "fake-3d-cube-pass"
+        colorAttachments: [
+            FakeColorAttachment {
+                target: FakeRenderTarget {
+                    kind: "swapchain"
+                }
+                loadAction: "clear"
+                storeAction: "store"
+                clearColor: Color {
+                    r: 0.02
+                    g: 0.025
+                    b: 0.04
+                    a: 1.0
+                }
+            }
+        ]
+        depthAttachment: FakeDepthAttachment {
+            texture: state.depthTexture
+            loadAction: "clear"
+            storeAction: "store"
+            clearDepth: 1.0
+            readOnly: false
+        }
+        hasDepthAttachment: true
+    }
+
+    let encoder = frame.beginRenderPass(pass)
+    fakeEncodeCubePass(encoder, state)
+    frame.endPass(encoder)
+    return
+}
+
+function fakeDrawCubeTrailingAlias(frame: FakeGraphicsFrame, state: FakeCubeState) {
+    let pass = FakeRenderPassDescriptor {
+        label: "fake-3d-cube-trailing-alias"
+        colorAttachments: [
+            FakeColorAttachment {
+                target: FakeRenderTarget {
+                    kind: "swapchain"
+                }
+                loadAction: "clear"
+                storeAction: "store"
+                clearColor: Color {
+                    r: 0.015
+                    g: 0.02
+                    b: 0.03
+                    a: 1.0
+                }
+            }
+        ]
+        depthAttachment: FakeDepthAttachment {
+            texture: state.depthTexture
+            loadAction: "clear"
+            storeAction: "store"
+            clearDepth: 1.0
+            readOnly: false
+        }
+        hasDepthAttachment: true
+    }
+    let pipeline = state.pipeline
+    let vertices = state.vertices
+    let indexCount = state.indexCount
+
+    frame.renderPass(pass) { encoder in
+        encoder.setPipeline(pipeline)
+        encoder.setVertexBuffer(vertices)
+        encoder.drawIndexed(indexCount)
+    }
+    return
+}
+
+
+
+struct FakeUiSurface {
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var width: Float = 0.0
+    var height: Float = 0.0
+    var radius: Float = 0.0
+    var r: Float = 0.0
+    var g: Float = 0.0
+    var b: Float = 0.0
+    var a: Float = 0.0
+    var blur: Float = 0.0
+    var refraction: Float = 0.0
+    var glow: Float = 0.0
+}
+
+struct FakeUiEffectsState {
+    var shader: FakeShader = FakeShader {}
+    var pipeline: FakeRenderPipeline = FakeRenderPipeline {}
+    var vertices: FakeGraphicsBuffer = FakeGraphicsBuffer {}
+    var sceneTarget: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var blurTarget: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var sampler: FakeGraphicsSampler = FakeGraphicsSampler {}
+    var bindGroup: FakeBindGroup = FakeBindGroup {}
+    var surfaceCount: Int = 0
+}
+
+function fakeUiSurfaces() -> [FakeUiSurface] {
+    return [
+        FakeUiSurface {
+            x: 64.0
+            y: 48.0
+            width: 1152.0
+            height: 624.0
+            radius: 38.0
+            r: 0.09
+            g: 0.12
+            b: 0.18
+            a: 0.58
+            blur: 22.0
+            refraction: 0.018
+            glow: 0.8
+        },
+        FakeUiSurface {
+            x: 96.0
+            y: 82.0
+            width: 286.0
+            height: 556.0
+            radius: 30.0
+            r: 0.06
+            g: 0.08
+            b: 0.13
+            a: 0.72
+            blur: 16.0
+            refraction: 0.012
+            glow: 0.55
+        }
+    ]
+}
+
+function fakeUiVertexData() -> [Float] {
+    return [
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0,
+        0.0, 0.0,
+        1.0, 1.0,
+        0.0, 1.0
+    ]
+}
+
+function fakeSetupUi(graphics: FakeGraphics) -> FakeUiEffectsState {
+    let shader = graphics.createShaderFromKsl(FakeKslShaderDescriptor {
+        label: "ui-effects"
+        asset: "UiEffects"
+        directory: "generated/shaders"
+    })
+    let sceneTarget = graphics.createTexture(FakeTextureDescriptor {
+        label: "scene-target"
+        width: 1280
+        height: 720
+        format: "rgba16Float"
+        usage: "renderTargetSampled"
+        sampleCount: 1
+        storageMode: "persistent"
+    })
+    let blurTarget = graphics.createTexture(FakeTextureDescriptor {
+        label: "blur-target"
+        width: 1280
+        height: 720
+        format: "rgba16Float"
+        usage: "renderTargetSampled"
+        sampleCount: 1
+        storageMode: "transient"
+    })
+    let sampler = graphics.createSampler(FakeSamplerDescriptor {
+        label: "ui-sampler"
+        minFilter: "linear"
+        magFilter: "linear"
+        addressModeU: "clampToEdge"
+        addressModeV: "clampToEdge"
+    })
+    let vertices = graphics.createBuffer(FakeBufferDescriptor {
+        label: "ui-quad"
+        usage: "vertex"
+        floatData: fakeUiVertexData()
+        stride: 8
+    })
+    let bindGroup = graphics.createBindGroup(FakeBindGroupDescriptor {
+        label: "ui-effects-bindings"
+        entries: [
+            FakeBindEntry {
+                name: "scene"
+                kind: "texture"
+                texture: sceneTarget
+            },
+            FakeBindEntry {
+                name: "sampler"
+                kind: "sampler"
+                sampler: sampler
+            }
+        ]
+    })
+    let pipeline = graphics.createRenderPipeline(FakePipelineDescriptor {
+        label: "ui-effects-pipeline"
+        shader: shader
+        vertexLayout: FakeVertexLayout {
+            stride: 8
+            attributes: [
+                FakeVertexAttribute {
+                    name: "position"
+                    location: 0
+                    format: "float2"
+                    offset: 0
+                }
+            ]
+        }
+        colorTargets: [
+            FakeColorTargetDescriptor {
+                format: "rgba8Unorm"
+                blend: FakeBlendState {
+                    enabled: true
+                    preset: "premultipliedAlpha"
+                }
+            }
+        ]
+    })
+    let surfaces = fakeUiSurfaces()
+
+    return FakeUiEffectsState {
+        shader: shader
+        pipeline: pipeline
+        vertices: vertices
+        sceneTarget: sceneTarget
+        blurTarget: blurTarget
+        sampler: sampler
+        bindGroup: bindGroup
+        surfaceCount: 2
+    }
+}
+
+function fakeEncodeUiPass(encoder: FakeRenderEncoder, state: FakeUiEffectsState) {
+    encoder.setPipeline(state.pipeline)
+    encoder.setVertexBuffer(state.vertices)
+    encoder.setBindGroup(0, state.bindGroup)
+    encoder.draw(state.surfaceCount * 6)
+    return
+}
+
+function fakeDrawUi(frame: FakeGraphicsFrame, state: FakeUiEffectsState) {
+    let scenePass = FakeRenderPassDescriptor {
+        label: "offscreen-pass"
+        colorAttachments: [
+            FakeColorAttachment {
+                target: FakeRenderTarget {
+                    kind: "texture"
+                    texture: state.sceneTarget
+                    mipLevel: 0
+                    arrayLayer: 0
+                }
+                loadAction: "clear"
+                storeAction: "store"
+                clearColor: Color {
+                    r: 0.0
+                    g: 0.0
+                    b: 0.0
+                    a: 0.0
+                }
+            }
+        ]
+    }
+    let presentPass = FakeRenderPassDescriptor {
+        label: "ui-present-pass"
+        colorAttachments: [
+            FakeColorAttachment {
+                target: FakeRenderTarget {
+                    kind: "swapchain"
+                }
+                loadAction: "load"
+                storeAction: "store"
+                clearColor: Color {
+                    r: 0.04
+                    g: 0.05
+                    b: 0.08
+                    a: 1.0
+                }
+                resolveTarget: FakeRenderTarget {
+                    kind: "texture"
+                    texture: state.blurTarget
+                    mipLevel: 0
+                    arrayLayer: 0
+                }
+                hasResolveTarget: true
+            }
+        ]
+    }
+
+    let sceneEncoder = frame.beginRenderPass(scenePass)
+    fakeEncodeUiPass(sceneEncoder, state)
+    frame.endPass(sceneEncoder)
+
+    let presentEncoder = frame.beginRenderPass(presentPass)
+    fakeEncodeUiPass(presentEncoder, state)
+    frame.endPass(presentEncoder)
+    return
+}
+
+
+@Main
+function main() {
+    var graphics = FakeGraphics {}
+    var frame = FakeGraphicsFrame {}
+
+    let cube = fakeSetupCube(graphics)
+    fakeDrawCube(frame, cube)
+    fakeDrawCubeTrailingAlias(frame, cube)
+
+    let ui = fakeSetupUi(graphics)
+    fakeDrawUi(frame, ui)
+
+    let shader = graphics.createShaderFromKsl(FakeKslShaderDescriptor {
+        label: "basic-3d-cube"
+        asset: "BasicCube"
+        directory: "generated/shaders"
+    })
+    let offscreenTarget = graphics.createTexture(FakeTextureDescriptor {
+        label: "scene-target"
+        width: 640
+        height: 480
+        format: "rgba16Float"
+        usage: "renderTargetSampled"
+    })
+    let pass3d = FakeRenderPassDescriptor {
+        label: "main-3d-pass"
+        colorAttachments: [
+            FakeColorAttachment {
+                target: FakeRenderTarget {
+                    kind: "swapchain"
+                }
+                loadAction: "clear"
+                storeAction: "store"
+                clearColor: Color {
+                    r: 0.02
+                    g: 0.025
+                    b: 0.04
+                    a: 1.0
+                }
+            }
+        ]
+        depthAttachment: FakeDepthAttachment {
+            texture: offscreenTarget
+            loadAction: "clear"
+            storeAction: "store"
+            clearDepth: 1.0
+            readOnly: false
+        }
+        hasDepthAttachment: true
+    }
+    let encoder = frame.beginRenderPass(pass3d)
+    encoder.setPipeline(FakeRenderPipeline {
+        handle: FakeBackendPipelineHandle {
+            id: shader.handle.id
+        }
+    })
+    encoder.drawInstanced(3, 2)
+    frame.endPass(encoder)
+    return
+}
+
+
+
+
+
+
+
+
+
+
+

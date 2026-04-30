@@ -1,0 +1,45 @@
+struct FakeBlendState {
+    var enabled: Bool = false
+    var preset: FakeBlendPreset = FakeBlendPreset.replace
+}
+
+struct FakeColorTargetDescriptor {
+    var format: FakeTextureFormat = FakeTextureFormat.rgba8Unorm
+    var blend: FakeBlendState = FakeBlendState {}
+}
+
+struct FakeDepthStencilDescriptor {
+    var depthEnabled: Bool = false
+    var depthWriteEnabled: Bool = false
+    var depthCompare: FakeCompareFunction = FakeCompareFunction.lessEqual
+    var format: FakeTextureFormat = FakeTextureFormat.depth24Stencil8
+}
+
+struct FakeRasterizationDescriptor {
+    var cullMode: FakeCullMode = FakeCullMode.back
+    var frontFace: FakeFrontFace = FakeFrontFace.counterClockwise
+}
+
+struct FakePipelineDescriptor {
+    var label: String = ""
+    var shader: FakeShader = FakeShader {}
+    var vertexLayout: FakeVertexLayout = FakeVertexLayout {}
+    var colorTargets: [FakeColorTargetDescriptor] = []
+    var depthStencil: FakeDepthStencilDescriptor = FakeDepthStencilDescriptor {}
+    var rasterization: FakeRasterizationDescriptor = FakeRasterizationDescriptor {}
+    var primitive: FakePrimitiveDescriptor = FakePrimitiveDescriptor {}
+}
+
+struct FakePipelineDescriptorFixed {
+    var label: String = ""
+    var shader: FakeShader = FakeShader {}
+    var vertexLayout: FakeVertexLayoutFixed = FakeVertexLayoutFixed {}
+    var colorTarget0: FakeColorTargetDescriptor = FakeColorTargetDescriptor {}
+    var hasColorTarget0: Bool = false
+    var colorTarget1: FakeColorTargetDescriptor = FakeColorTargetDescriptor {}
+    var hasColorTarget1: Bool = false
+    var depthStencil: FakeDepthStencilDescriptor = FakeDepthStencilDescriptor {}
+    var rasterization: FakeRasterizationDescriptor = FakeRasterizationDescriptor {}
+    var primitive: FakePrimitiveDescriptor = FakePrimitiveDescriptor {}
+}
+

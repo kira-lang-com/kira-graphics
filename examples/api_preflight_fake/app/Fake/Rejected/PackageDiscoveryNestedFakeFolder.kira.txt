@@ -1,0 +1,26 @@
+what it was trying to test
+- Whether `examples/api_preflight_fake/app/Fake/*.kira` participates in the app package automatically.
+
+exact compiler error
+```text
+error[KSEM078]: unknown type in struct literal
+  Kira could not find a type named 'FakeGraphics'.
+  --> C:\Users\Shadow\Coding\kira-projects\kira-graphics\examples\api_preflight_fake\app\main.kira:5:20
+   5 |     var graphics = FakeGraphics {}
+     |                    ^^^^^^^^^^^^^^^ unknown type
+  help: Declare the type first or import the module that provides it.
+```
+
+exact failing snippet
+```kira
+import KiraGraphics
+
+@Main
+function main() {
+    var graphics = FakeGraphics {}
+    return
+}
+```
+
+fallback used
+- Flatten the fake files to `app/Fake*.kira` for artifact preservation, then collapse the compiling probe into `app/main.kira` because the app package did not auto-merge the sibling fake files either.

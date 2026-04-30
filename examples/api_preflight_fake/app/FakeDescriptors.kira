@@ -1,0 +1,207 @@
+enum FakeBufferUsage {
+    vertex
+    index
+    uniform
+    storage
+}
+
+enum FakeVertexFormat {
+    float2
+    float3
+    float4
+}
+
+enum FakeTextureFormat {
+    rgba8Unorm
+    rgba16Float
+    depth24Stencil8
+}
+
+enum FakePrimitiveTopology {
+    triangleList
+    triangleStrip
+    lineList
+}
+
+enum FakeBlendPreset {
+    replace
+    alpha
+    premultipliedAlpha
+    additive
+}
+
+enum FakeCompareFunction {
+    never
+    less
+    lessEqual
+    equal
+    greaterEqual
+    greater
+    always
+}
+
+enum FakeCullMode {
+    none
+    front
+    back
+}
+
+enum FakeFrontFace {
+    counterClockwise
+    clockwise
+}
+
+enum FakeIndexFormat {
+    uint16
+    uint32
+}
+
+enum FakeLoadAction {
+    clear
+    load
+    dontCare
+}
+
+enum FakeStoreAction {
+    store
+    dontCare
+}
+
+enum FakeRenderTargetKind {
+    swapchain
+    texture
+}
+
+enum FakeTextureUsage {
+    sampled
+    renderTarget
+    renderTargetSampled
+    depthStencil
+}
+
+enum FakeAttachmentStorageMode {
+    persistent
+    transient
+    memoryless
+}
+
+enum FakeTextureFilter {
+    nearest
+    linear
+}
+
+enum FakeTextureAddressMode {
+    clampToEdge
+    repeat
+}
+
+enum FakeBindEntryKind {
+    buffer
+    texture
+    sampler
+    uniform
+}
+
+struct FakePrimitiveDescriptor {
+    var topology: FakePrimitiveTopology = FakePrimitiveTopology.triangleList
+}
+
+struct FakeBufferDescriptor {
+    var label: String = ""
+    var usage: FakeBufferUsage = FakeBufferUsage.vertex
+    var floatData: [Float] = []
+    var uint16Data: [U16] = []
+    var uint32Data: [U32] = []
+    var stride: Int = 0
+}
+
+struct FakeVertexAttribute {
+    var name: String = ""
+    var location: Int = 0
+    var format: FakeVertexFormat = FakeVertexFormat.float2
+    var offset: Int = 0
+}
+
+struct FakeVertexLayout {
+    var stride: Int = 0
+    var attributes: [FakeVertexAttribute] = []
+}
+
+struct FakeVertexLayoutFixed {
+    var stride: Int = 0
+    var attribute0: FakeVertexAttribute = FakeVertexAttribute {}
+    var hasAttribute0: Bool = false
+    var attribute1: FakeVertexAttribute = FakeVertexAttribute {}
+    var hasAttribute1: Bool = false
+    var attribute2: FakeVertexAttribute = FakeVertexAttribute {}
+    var hasAttribute2: Bool = false
+    var attribute3: FakeVertexAttribute = FakeVertexAttribute {}
+    var hasAttribute3: Bool = false
+}
+
+struct FakeTextureDescriptor {
+    var label: String = ""
+    var width: Int = 1
+    var height: Int = 1
+    var format: FakeTextureFormat = FakeTextureFormat.rgba8Unorm
+    var usage: FakeTextureUsage = FakeTextureUsage.sampled
+    var sampleCount: Int = 1
+    var storageMode: FakeAttachmentStorageMode = FakeAttachmentStorageMode.persistent
+}
+
+struct FakeSamplerDescriptor {
+    var label: String = ""
+    var minFilter: FakeTextureFilter = FakeTextureFilter.linear
+    var magFilter: FakeTextureFilter = FakeTextureFilter.linear
+    var addressModeU: FakeTextureAddressMode = FakeTextureAddressMode.clampToEdge
+    var addressModeV: FakeTextureAddressMode = FakeTextureAddressMode.clampToEdge
+}
+
+struct FakeBindEntry {
+    var name: String = ""
+    var kind: FakeBindEntryKind = FakeBindEntryKind.buffer
+    var buffer: FakeGraphicsBuffer = FakeGraphicsBuffer {}
+    var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var sampler: FakeGraphicsSampler = FakeGraphicsSampler {}
+    var uniform: FakeGraphicsUniform = FakeGraphicsUniform {}
+}
+
+struct FakeBindGroupDescriptor {
+    var label: String = ""
+    var entries: [FakeBindEntry] = []
+}
+
+struct FakeBufferBindEntry {
+    var name: String = ""
+    var buffer: FakeGraphicsBuffer = FakeGraphicsBuffer {}
+}
+
+struct FakeTextureBindEntry {
+    var name: String = ""
+    var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
+}
+
+struct FakeSamplerBindEntry {
+    var name: String = ""
+    var sampler: FakeGraphicsSampler = FakeGraphicsSampler {}
+}
+
+struct FakeUniformBindEntry {
+    var name: String = ""
+    var uniform: FakeGraphicsUniform = FakeGraphicsUniform {}
+}
+
+struct FakeKslShaderDescriptor {
+    var label: String = ""
+    var asset: String = ""
+    var directory: String = "generated/shaders"
+}
+
+function fakeTriangleVertices() -> [Float] {
+    return [
+        0.0, 0.55,
+        0.55, -0.55,
+        -0.55, -0.55
+    ]
+}
+

@@ -1,0 +1,28 @@
+struct FakeBackendShaderHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendPipelineHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendBufferHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendTextureHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendSamplerHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendBindGroupHandle {
+    var id: U32 = 0
+}
+
+struct FakeBackendUniformHandle {
+    var id: U32 = 0
+}
+

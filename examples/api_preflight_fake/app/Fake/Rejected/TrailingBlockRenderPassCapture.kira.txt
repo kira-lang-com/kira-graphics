@@ -1,0 +1,66 @@
+what it was trying to test
+- A stateful trailing-block render-pass method in the exact future-facing style: `frame.renderPass(pass) { encoder in ... }` with the body referencing outer `state`.
+
+exact compiler error
+```text
+error[KSEM027]: invalid namespaced reference
+  Kira could not resolve the namespace root 'state'.
+  --> C:\Users\Shadow\Coding\kira-projects\kira-graphics\examples\api_preflight_fake\app\main.kira:1064:29
+   1064 |         encoder.setPipeline(state.pipeline)
+     |                             ^^^^^^^^^^^^^^ unknown namespace root
+  help: Import the module first or use a local name instead.
+```
+
+exact failing snippet
+```kira
+function exactRenderPassCapture(frame: FakeGraphicsFrame, state: FakeCubeState) {
+    let pass = FakeRenderPassDescriptor {
+        label: "capture-pass"
+        colorAttachments: [
+            FakeColorAttachment {
+                target: FakeRenderTarget {
+                    kind: "swapchain"
+                }
+            }
+        ]
+    }
+
+    frame.renderPass(pass) { encoder in
+        encoder.setPipeline(state.pipeline)
+        encoder.setVertexBuffer(state.vertices)
+        encoder.setIndexBuffer(state.indices, "uint32")
+        encoder.drawIndexed(state.indexCount)
+    }
+    return
+}
+```
+
+fallback used
+- Direct outer member capture still failed, but this hybrid-safe nearby form compiled:
+
+```kira
+function fakeDrawCubeTrailingAlias(frame: FakeGraphicsFrame, state: FakeCubeState) {
+    let pass = FakeRenderPassDescriptor {
+        label: "fake-3d-cube-trailing-alias"
+        colorAttachments: [
+            FakeColorAttachment {
+                target: FakeRenderTarget {
+                    kind: "swapchain"
+                }
+            }
+        ]
+    }
+    let pipeline = state.pipeline
+    let vertices = state.vertices
+    let indexCount = state.indexCount
+
+    frame.renderPass(pass) { encoder in
+        encoder.setPipeline(pipeline)
+        encoder.setVertexBuffer(vertices)
+        encoder.drawIndexed(indexCount)
+    }
+    return
+}
+```
+
+- The older explicit `beginRenderPass(...)`, helper encode call, and `endPass(...)` pattern remains the broadest safe fallback.

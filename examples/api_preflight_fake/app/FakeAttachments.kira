@@ -1,0 +1,64 @@
+import KiraGraphics
+
+struct FakeRenderTarget {
+    var kind: FakeRenderTargetKind = FakeRenderTargetKind.swapchain
+    var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var mipLevel: Int = 0
+    var arrayLayer: Int = 0
+}
+
+struct FakeColorAttachment {
+    var target: FakeRenderTarget = FakeRenderTarget {}
+    var loadAction: FakeLoadAction = FakeLoadAction.clear
+    var storeAction: FakeStoreAction = FakeStoreAction.store
+    var clearColor: Color = Color {
+        r: 0.0
+        g: 0.0
+        b: 0.0
+        a: 1.0
+    }
+    var resolveTarget: FakeRenderTarget = FakeRenderTarget {}
+    var hasResolveTarget: Bool = false
+}
+
+struct FakeDepthAttachment {
+    var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var loadAction: FakeLoadAction = FakeLoadAction.clear
+    var storeAction: FakeStoreAction = FakeStoreAction.store
+    var clearDepth: Float = 1.0
+    var readOnly: Bool = false
+}
+
+struct FakeStencilAttachment {
+    var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var loadAction: FakeLoadAction = FakeLoadAction.clear
+    var storeAction: FakeStoreAction = FakeStoreAction.store
+    var clearStencil: Int = 0
+    var readOnly: Bool = false
+}
+
+struct FakeRenderPassDescriptor {
+    var label: String = ""
+    var colorAttachments: [FakeColorAttachment] = []
+    var depthAttachment: FakeDepthAttachment = FakeDepthAttachment {}
+    var hasDepthAttachment: Bool = false
+    var stencilAttachment: FakeStencilAttachment = FakeStencilAttachment {}
+    var hasStencilAttachment: Bool = false
+}
+
+struct FakeRenderPassDescriptorFixed {
+    var label: String = ""
+    var colorAttachment0: FakeColorAttachment = FakeColorAttachment {}
+    var hasColorAttachment0: Bool = false
+    var colorAttachment1: FakeColorAttachment = FakeColorAttachment {}
+    var hasColorAttachment1: Bool = false
+    var colorAttachment2: FakeColorAttachment = FakeColorAttachment {}
+    var hasColorAttachment2: Bool = false
+    var colorAttachment3: FakeColorAttachment = FakeColorAttachment {}
+    var hasColorAttachment3: Bool = false
+    var depthAttachment: FakeDepthAttachment = FakeDepthAttachment {}
+    var hasDepthAttachment: Bool = false
+    var stencilAttachment: FakeStencilAttachment = FakeStencilAttachment {}
+    var hasStencilAttachment: Bool = false
+}
+

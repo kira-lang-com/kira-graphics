@@ -7,6 +7,7 @@
 - `runtime_entry`: lifecycle and callback-state smoke test.
 - `ksl_triangle`: public Kira Graphics triangle using the existing KSL-generated GLSL directory.
 - `frame_api_triangle`: explicit begin/end frame API triangle using inline shader source.
+- `ui_demo`: centered rectangle with two small rectangles standing in for text.
 
 ## Backend Interop
 

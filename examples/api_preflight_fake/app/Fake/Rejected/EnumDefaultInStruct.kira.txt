@@ -1,0 +1,49 @@
+what it was trying to test
+- Enum variant construction in descriptor-style field defaults.
+- Both the original lowercase variant style and a PascalCase probe.
+
+exact compiler error
+```text
+error[KSEM031]: type mismatch
+  Kira expected FakeBufferUsage here, but the value resolves to Unknown.
+  --> C:\Users\Shadow\Coding\kira-projects\kira-graphics\examples\api_preflight_fake\app\main.kira:171:5
+   171 |     var usage: FakeBufferUsage = FakeBufferUsage.vertex
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ value does not match the required type
+  help: Add an explicit type declaration where coercion is allowed, or change the value so the type is unambiguous.
+```
+
+```text
+error[KSEM031]: type mismatch
+  Kira expected PascalBufferUsage here, but the value resolves to Unknown.
+  --> C:\Users\Shadow\Coding\kira-projects\kira-graphics\examples\api_preflight_fake\app\main.kira:1054:5
+   1054 |     var usage: PascalBufferUsage = PascalBufferUsage.Vertex
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ value does not match the required type
+  help: Add an explicit type declaration where coercion is allowed, or change the value so the type is unambiguous.
+```
+
+exact failing snippet
+```kira
+enum FakeBufferUsage {
+    vertex
+    index
+    uniform
+    storage
+}
+
+struct FakeBufferDescriptor {
+    var usage: FakeBufferUsage = FakeBufferUsage.vertex
+}
+```
+
+```kira
+enum PascalBufferUsage {
+    Vertex
+}
+
+struct PascalEnumProbe {
+    var usage: PascalBufferUsage = PascalBufferUsage.Vertex
+}
+```
+
+fallback used
+- Keep the enum declarations as probe artifacts, but switch the live compiling descriptor fields to string-backed values such as `"vertex"` and `"triangleList"`.

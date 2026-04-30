@@ -1,0 +1,23 @@
+what it was trying to test
+- Empty array literals as typed struct field defaults.
+
+exact compiler error
+```text
+error[KSEM031]: type mismatch
+  Kira expected Float here, but the value resolves to [].
+  --> C:\Users\Shadow\Coding\kira-projects\kira-graphics\examples\api_preflight_fake\app\main.kira:172:5
+   172 |     var floatData: [Float] = []
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ value does not match the required type
+  help: Add an explicit type declaration where coercion is allowed, or change the value so the type is unambiguous.
+```
+
+exact failing snippet
+```kira
+struct FakeBufferDescriptor {
+    var label: String = ""
+    var floatData: [Float] = []
+}
+```
+
+fallback used
+- Replace empty array defaults with placeholder non-empty defaults in the compiling probe, then use explicit non-empty arrays at construction sites.

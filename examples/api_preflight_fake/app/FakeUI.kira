@@ -1,0 +1,228 @@
+import KiraGraphics
+
+struct FakeUiSurface {
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var width: Float = 0.0
+    var height: Float = 0.0
+    var radius: Float = 0.0
+    var r: Float = 0.0
+    var g: Float = 0.0
+    var b: Float = 0.0
+    var a: Float = 0.0
+    var blur: Float = 0.0
+    var refraction: Float = 0.0
+    var glow: Float = 0.0
+}
+
+struct FakeUiEffectsState {
+    var shader: FakeShader = FakeShader {}
+    var pipeline: FakeRenderPipeline = FakeRenderPipeline {}
+    var vertices: FakeGraphicsBuffer = FakeGraphicsBuffer {}
+    var sceneTarget: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var blurTarget: FakeGraphicsTexture = FakeGraphicsTexture {}
+    var sampler: FakeGraphicsSampler = FakeGraphicsSampler {}
+    var bindGroup: FakeBindGroup = FakeBindGroup {}
+    var surfaceCount: Int = 0
+}
+
+function fakeUiSurfaces() -> [FakeUiSurface] {
+    return [
+        FakeUiSurface {
+            x: 64.0
+            y: 48.0
+            width: 1152.0
+            height: 624.0
+            radius: 38.0
+            r: 0.09
+            g: 0.12
+            b: 0.18
+            a: 0.58
+            blur: 22.0
+            refraction: 0.018
+            glow: 0.8
+        },
+        FakeUiSurface {
+            x: 96.0
+            y: 82.0
+            width: 286.0
+            height: 556.0
+            radius: 30.0
+            r: 0.06
+            g: 0.08
+            b: 0.13
+            a: 0.72
+            blur: 16.0
+            refraction: 0.012
+            glow: 0.55
+        }
+    ]
+}
+
+function fakeUiVertexData() -> [Float] {
+    return [
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0,
+        0.0, 0.0,
+        1.0, 1.0,
+        0.0, 1.0
+    ]
+}
+
+function fakeSetupUi(graphics: FakeGraphics) -> FakeUiEffectsState {
+    let shader = graphics.createShaderFromKsl(FakeKslShaderDescriptor {
+        label: "ui-effects"
+        asset: "UiEffects"
+        directory: "generated/shaders"
+    })
+    let sceneTarget = graphics.createTexture(FakeTextureDescriptor {
+        label: "scene-target"
+        width: 1280
+        height: 720
+        format: FakeTextureFormat.rgba16Float
+        usage: FakeTextureUsage.renderTargetSampled
+        sampleCount: 1
+        storageMode: FakeAttachmentStorageMode.persistent
+    })
+    let blurTarget = graphics.createTexture(FakeTextureDescriptor {
+        label: "blur-target"
+        width: 1280
+        height: 720
+        format: FakeTextureFormat.rgba16Float
+        usage: FakeTextureUsage.renderTargetSampled
+        sampleCount: 1
+        storageMode: FakeAttachmentStorageMode.transient
+    })
+    let sampler = graphics.createSampler(FakeSamplerDescriptor {
+        label: "ui-sampler"
+        minFilter: FakeTextureFilter.linear
+        magFilter: FakeTextureFilter.linear
+        addressModeU: FakeTextureAddressMode.clampToEdge
+        addressModeV: FakeTextureAddressMode.clampToEdge
+    })
+    let vertices = graphics.createBuffer(FakeBufferDescriptor {
+        label: "ui-quad"
+        usage: FakeBufferUsage.vertex
+        floatData: fakeUiVertexData()
+        stride: 8
+    })
+    let bindGroup = graphics.createBindGroup(FakeBindGroupDescriptor {
+        label: "ui-effects-bindings"
+        entries: [
+            FakeBindEntry {
+                name: "scene"
+                kind: FakeBindEntryKind.texture
+                texture: sceneTarget
+            },
+            FakeBindEntry {
+                name: "sampler"
+                kind: FakeBindEntryKind.sampler
+                sampler: sampler
+            }
+        ]
+    })
+    let pipeline = graphics.createRenderPipeline(FakePipelineDescriptor {
+        label: "ui-effects-pipeline"
+        shader: shader
+        vertexLayout: FakeVertexLayout {
+            stride: 8
+            attributes: [
+                FakeVertexAttribute {
+                    name: "position"
+                    location: 0
+                    format: FakeVertexFormat.float2
+                    offset: 0
+                }
+            ]
+        }
+        colorTargets: [
+            FakeColorTargetDescriptor {
+                format: FakeTextureFormat.rgba8Unorm
+                blend: FakeBlendState {
+                    enabled: true
+                    preset: FakeBlendPreset.premultipliedAlpha
+                }
+            }
+        ]
+    })
+    let surfaces = fakeUiSurfaces()
+
+    return FakeUiEffectsState {
+        shader: shader
+        pipeline: pipeline
+        vertices: vertices
+        sceneTarget: sceneTarget
+        blurTarget: blurTarget
+        sampler: sampler
+        bindGroup: bindGroup
+        surfaceCount: 2
+    }
+}
+
+function fakeEncodeUiPass(encoder: FakeRenderEncoder, state: FakeUiEffectsState) {
+    encoder.setPipeline(state.pipeline)
+    encoder.setVertexBuffer(state.vertices)
+    encoder.setBindGroup(0, state.bindGroup)
+    encoder.draw(state.surfaceCount * 6)
+    return
+}
+
+function fakeDrawUi(frame: FakeGraphicsFrame, state: FakeUiEffectsState) {
+    let scenePass = FakeRenderPassDescriptor {
+        label: "offscreen-pass"
+        colorAttachments: [
+            FakeColorAttachment {
+                target: FakeRenderTarget {
+                    kind: FakeRenderTargetKind.texture
+                    texture: state.sceneTarget
+                    mipLevel: 0
+                    arrayLayer: 0
+                }
+                loadAction: FakeLoadAction.clear
+                storeAction: FakeStoreAction.store
+                clearColor: Color {
+                    r: 0.0
+                    g: 0.0
+                    b: 0.0
+                    a: 0.0
+                }
+            }
+        ]
+    }
+    let presentPass = FakeRenderPassDescriptor {
+        label: "ui-present-pass"
+        colorAttachments: [
+            FakeColorAttachment {
+                target: FakeRenderTarget {
+                    kind: FakeRenderTargetKind.swapchain
+                }
+                loadAction: FakeLoadAction.load
+                storeAction: FakeStoreAction.store
+                clearColor: Color {
+                    r: 0.04
+                    g: 0.05
+                    b: 0.08
+                    a: 1.0
+                }
+                resolveTarget: FakeRenderTarget {
+                    kind: FakeRenderTargetKind.texture
+                    texture: state.blurTarget
+                    mipLevel: 0
+                    arrayLayer: 0
+                }
+                hasResolveTarget: true
+            }
+        ]
+    }
+
+    let sceneEncoder = frame.beginRenderPass(scenePass)
+    fakeEncodeUiPass(sceneEncoder, state)
+    frame.endPass(sceneEncoder)
+
+    let presentEncoder = frame.beginRenderPass(presentPass)
+    fakeEncodeUiPass(presentEncoder, state)
+    frame.endPass(presentEncoder)
+    return
+}
+

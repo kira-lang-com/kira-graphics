@@ -1,0 +1,35 @@
+what it was trying to test
+- The exact array-of-struct spelling from the prompt with adjacent struct literals and no commas between array elements.
+
+exact compiler error
+```text
+error[KPAR001]: expected ']' after array literal
+  Kira expected ']', but found an identifier.
+  --> C:\Users\Shadow\Coding\kira-projects\kira-graphics\examples\api_preflight_fake\app\main.kira:1058:9
+   1058 |         FakeVertexAttribute {
+     |         ^^^^^^^^^^^^^^^^^^^ close the array literal here
+  help: Close the array or array type with ']'.
+```
+
+exact failing snippet
+```kira
+function exactStructArrayNoComma() -> [FakeVertexAttribute] {
+    return [
+        FakeVertexAttribute {
+            name: "position"
+            location: 0
+            format: "float3"
+            offset: 0
+        }
+        FakeVertexAttribute {
+            name: "normal"
+            location: 1
+            format: "float3"
+            offset: 12
+        }
+    ]
+}
+```
+
+fallback used
+- Use comma-separated struct elements inside array literals.
