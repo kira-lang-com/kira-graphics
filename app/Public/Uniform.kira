@@ -1,0 +1,14 @@
+struct GraphicsUniform {
+    var handle: BackendUniformHandle
+    var id: U32 = 0
+}
+
+@Native
+function emptyGraphicsUniform() -> GraphicsUniform {
+    return GraphicsUniform {
+        handle: BackendUniformHandle {
+            id: 0
+        }
+        id: 0
+    }
+}

@@ -1,6 +1,103 @@
 @Native
-function sokolCreateRenderPipelineId(label: String, shaderId: U32) -> U32 {
-    return kgMakePipeline(shaderId, label)
+function pipelineVertexAttribute(layout: VertexLayout, index: Int) -> VertexAttribute {
+    if (index < layout.attributes.count) {
+        return layout.attributes[index]
+    }
+
+    return VertexAttribute {
+        name: ""
+        location: index
+        format: vertexFormatFloat2()
+        offset: 0
+    }
+}
+
+@Native
+function pipelineColorTarget(descriptor: RenderPipelineDescriptor, index: Int) -> ColorTargetDescriptor {
+    if (index < descriptor.colorTargets.count) {
+        return descriptor.colorTargets[index]
+    }
+
+    return ColorTargetDescriptor {
+        format: textureFormatRgba8Unorm()
+        blend: BlendState {
+            enabled: false
+            preset: blendPresetReplace()
+        }
+    }
+}
+
+@Native
+function sokolCreateRenderPipeline(descriptor: RenderPipelineDescriptor) -> RenderPipeline {
+    let attributeCount: I64 = descriptor.vertexLayout.attributes.count
+    let colorTargetCount: I64 = descriptor.colorTargets.count
+
+    let attribute0 = pipelineVertexAttribute(descriptor.vertexLayout, 0)
+    let attribute1 = pipelineVertexAttribute(descriptor.vertexLayout, 1)
+    let attribute2 = pipelineVertexAttribute(descriptor.vertexLayout, 2)
+    let attribute3 = pipelineVertexAttribute(descriptor.vertexLayout, 3)
+
+    let colorTarget0 = pipelineColorTarget(descriptor, 0)
+
+    let stride: I64 = descriptor.vertexLayout.stride
+    let attr0Location: I64 = attribute0.location
+    let attr0Format: I64 = attribute0.format
+    let attr0Offset: I64 = attribute0.offset
+    let attr1Location: I64 = attribute1.location
+    let attr1Format: I64 = attribute1.format
+    let attr1Offset: I64 = attribute1.offset
+    let attr2Location: I64 = attribute2.location
+    let attr2Format: I64 = attribute2.format
+    let attr2Offset: I64 = attribute2.offset
+    let attr3Location: I64 = attribute3.location
+    let attr3Format: I64 = attribute3.format
+    let attr3Offset: I64 = attribute3.offset
+    let colorFormat: I64 = colorTarget0.format
+    let blendEnabled: I64 = colorTarget0.blend.enabled ? 1 : 0
+    let blendPreset: I64 = colorTarget0.blend.preset
+    let depthEnabled: I64 = descriptor.depthStencil.depthEnabled ? 1 : 0
+    let depthWriteEnabled: I64 = descriptor.depthStencil.depthWriteEnabled ? 1 : 0
+    let depthCompare: I64 = descriptor.depthStencil.depthCompare
+    let depthFormat: I64 = descriptor.depthStencil.format
+    let cullMode: I64 = descriptor.rasterization.cullMode
+    let frontFace: I64 = descriptor.rasterization.frontFace
+    let topology: I64 = descriptor.primitive.topology
+
+    let pipelineId = kgMakePipelineDetailed(
+        descriptor.shader.handle.id,
+        descriptor.label,
+        stride,
+        attributeCount,
+        attr0Location,
+        attr0Format,
+        attr0Offset,
+        attr1Location,
+        attr1Format,
+        attr1Offset,
+        attr2Location,
+        attr2Format,
+        attr2Offset,
+        attr3Location,
+        attr3Format,
+        attr3Offset,
+        colorTargetCount,
+        colorFormat,
+        blendEnabled,
+        blendPreset,
+        depthEnabled,
+        depthWriteEnabled,
+        depthCompare,
+        depthFormat,
+        cullMode,
+        frontFace,
+        topology
+    )
+    return RenderPipeline {
+        handle: BackendPipelineHandle {
+            id: pipelineId
+        }
+        id: pipelineId
+    }
 }
 
 @Native

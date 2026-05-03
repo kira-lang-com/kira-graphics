@@ -1,3 +1,14 @@
 struct GraphicsShader {
     var handle: BackendShaderHandle
+    var id: U32 = 0
+}
+
+@Native
+function emptyGraphicsShader() -> GraphicsShader {
+    return GraphicsShader {
+        handle: BackendShaderHandle {
+            id: 0
+        }
+        id: 0
+    }
 }

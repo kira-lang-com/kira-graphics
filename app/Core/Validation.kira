@@ -1,4 +1,14 @@
+@Native
 function graphicsValidatePipeline(pipeline: RenderPipeline) -> Bool {
     return pipeline.handle.id != 0
 }
 
+@Native
+function graphicsValidateBuffer(buffer: GraphicsBuffer) -> Bool {
+    return buffer.handle.id != 0
+}
+
+@Native
+function graphicsValidateTexture(texture: GraphicsTexture) -> Bool {
+    return texture.handle.id != 0
+}

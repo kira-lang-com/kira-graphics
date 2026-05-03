@@ -1,0 +1,14 @@
+struct GraphicsSampler {
+    var handle: BackendSamplerHandle
+    var id: U32 = 0
+}
+
+@Native
+function emptyGraphicsSampler() -> GraphicsSampler {
+    return GraphicsSampler {
+        handle: BackendSamplerHandle {
+            id: 0
+        }
+        id: 0
+    }
+}

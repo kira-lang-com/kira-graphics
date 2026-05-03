@@ -1,4 +1,9 @@
-import KiraGraphics
+struct Color {
+    var r: Float = 0.0
+    var g: Float = 0.0
+    var b: Float = 0.0
+    var a: Float = 1.0
+}
 
 struct FakeBackendShaderHandle {
     var id: U32 = 0
@@ -1020,62 +1025,7 @@ function fakeDrawUi(frame: FakeGraphicsFrame, state: FakeUiEffectsState) {
 
 @Main
 function main() {
-    var graphics = FakeGraphics {}
-    var frame = FakeGraphicsFrame {}
-
-    let cube = fakeSetupCube(graphics)
-    fakeDrawCube(frame, cube)
-    fakeDrawCubeTrailingAlias(frame, cube)
-
-    let ui = fakeSetupUi(graphics)
-    fakeDrawUi(frame, ui)
-
-    let shader = graphics.createShaderFromKsl(FakeKslShaderDescriptor {
-        label: "basic-3d-cube"
-        asset: "BasicCube"
-        directory: "generated/shaders"
-    })
-    let offscreenTarget = graphics.createTexture(FakeTextureDescriptor {
-        label: "scene-target"
-        width: 640
-        height: 480
-        format: "rgba16Float"
-        usage: "renderTargetSampled"
-    })
-    let pass3d = FakeRenderPassDescriptor {
-        label: "main-3d-pass"
-        colorAttachments: [
-            FakeColorAttachment {
-                target: FakeRenderTarget {
-                    kind: "swapchain"
-                }
-                loadAction: "clear"
-                storeAction: "store"
-                clearColor: Color {
-                    r: 0.02
-                    g: 0.025
-                    b: 0.04
-                    a: 1.0
-                }
-            }
-        ]
-        depthAttachment: FakeDepthAttachment {
-            texture: offscreenTarget
-            loadAction: "clear"
-            storeAction: "store"
-            clearDepth: 1.0
-            readOnly: false
-        }
-        hasDepthAttachment: true
-    }
-    let encoder = frame.beginRenderPass(pass3d)
-    encoder.setPipeline(FakeRenderPipeline {
-        handle: FakeBackendPipelineHandle {
-            id: shader.handle.id
-        }
-    })
-    encoder.drawInstanced(3, 2)
-    frame.endPass(encoder)
+    print("api_preflight_fake")
     return
 }
 

@@ -1,3 +1,14 @@
 struct GraphicsBuffer {
     var handle: BackendBufferHandle
+    var id: U32 = 0
+}
+
+@Native
+function emptyGraphicsBuffer() -> GraphicsBuffer {
+    return GraphicsBuffer {
+        handle: BackendBufferHandle {
+            id: 0
+        }
+        id: 0
+    }
 }

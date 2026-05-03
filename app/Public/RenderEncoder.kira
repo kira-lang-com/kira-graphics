@@ -1,17 +1,129 @@
-class RenderEncoder {
-    var pipeline: RenderPipeline
+struct RenderEncoderState {
+    var pipelineId: U32 = 0
+    var hasPipeline: Bool = false
+
+    var vertexBufferId: U32 = 0
+    var hasVertexBuffer: Bool = false
+
+    var indexBufferId: U32 = 0
+    var hasIndexBuffer: Bool = false
+    var indexFormat: Int
+
+    var bindGroup0Id: U32 = 0
+    var hasBindGroup0: Bool = false
+    var bindGroup1Id: U32 = 0
+    var hasBindGroup1: Bool = false
+    var bindGroup2Id: U32 = 0
+    var hasBindGroup2: Bool = false
+    var bindGroup3Id: U32 = 0
+    var hasBindGroup3: Bool = false
+
     var vertexCount: Int = 0
+    var indexCount: Int = 0
     var instanceCount: Int = 1
+}
+
+class RenderEncoder {
+    var storage: RawPtr
 
     function setPipeline(pipeline: RenderPipeline) {
-        self.pipeline = pipeline
+        var state = nativeRecover<RenderEncoderState>(self.storage)
+        state.pipelineId = pipeline.id
+        state.hasPipeline = pipeline.id != 0
+        return
+    }
+
+    function setVertexBuffer(buffer: GraphicsBuffer) {
+        var state = nativeRecover<RenderEncoderState>(self.storage)
+        state.vertexBufferId = buffer.id
+        state.hasVertexBuffer = buffer.id != 0
+        return
+    }
+
+    function setIndexBuffer(buffer: GraphicsBuffer, format: Int) {
+        var state = nativeRecover<RenderEncoderState>(self.storage)
+        state.indexBufferId = buffer.id
+        state.indexFormat = format
+        state.hasIndexBuffer = buffer.id != 0
+        return
+    }
+
+    function setBindGroup(slot: Int, bindGroup: BindGroup) {
+        var state = nativeRecover<RenderEncoderState>(self.storage)
+        if (slot == 0) {
+            state.bindGroup0Id = bindGroup.id
+            state.hasBindGroup0 = bindGroup.id != 0
+        }
+        if (slot == 1) {
+            state.bindGroup1Id = bindGroup.id
+            state.hasBindGroup1 = bindGroup.id != 0
+        }
+        if (slot == 2) {
+            state.bindGroup2Id = bindGroup.id
+            state.hasBindGroup2 = bindGroup.id != 0
+        }
+        if (slot == 3) {
+            state.bindGroup3Id = bindGroup.id
+            state.hasBindGroup3 = bindGroup.id != 0
+        }
         return
     }
 
     function draw(vertexCount: Int) {
-        self.vertexCount = vertexCount
-        self.instanceCount = 1
+        var state = nativeRecover<RenderEncoderState>(self.storage)
+        state.vertexCount = vertexCount
+        state.indexCount = 0
+        state.instanceCount = 1
+        return
+    }
+
+    function drawIndexed(indexCount: Int) {
+        var state = nativeRecover<RenderEncoderState>(self.storage)
+        state.indexCount = indexCount
+        state.vertexCount = 0
+        state.instanceCount = 1
+        return
+    }
+
+    function drawInstanced(vertexCount: Int, instanceCount: Int) {
+        var state = nativeRecover<RenderEncoderState>(self.storage)
+        state.vertexCount = vertexCount
+        state.indexCount = 0
+        state.instanceCount = instanceCount
+        return
+    }
+
+    function drawIndexedInstanced(indexCount: Int, instanceCount: Int) {
+        var state = nativeRecover<RenderEncoderState>(self.storage)
+        state.indexCount = indexCount
+        state.vertexCount = 0
+        state.instanceCount = instanceCount
         return
     }
 }
 
+function makeRenderEncoder() -> RenderEncoder {
+    let state = nativeState(RenderEncoderState {
+        pipelineId: 0
+        hasPipeline: false
+        vertexBufferId: 0
+        hasVertexBuffer: false
+        indexBufferId: 0
+        hasIndexBuffer: false
+        indexFormat: indexFormatUint32()
+        bindGroup0Id: 0
+        hasBindGroup0: false
+        bindGroup1Id: 0
+        hasBindGroup1: false
+        bindGroup2Id: 0
+        hasBindGroup2: false
+        bindGroup3Id: 0
+        hasBindGroup3: false
+        vertexCount: 0
+        indexCount: 0
+        instanceCount: 1
+    })
+    return RenderEncoder {
+        storage: nativeUserData(state)
+    }
+}

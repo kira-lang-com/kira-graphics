@@ -1,0 +1,231 @@
+import KiraGraphics
+
+struct CubeState {
+    var shader: GraphicsShader
+    var pipeline: RenderPipeline
+    var vertices: GraphicsBuffer
+    var indices: GraphicsBuffer
+    var depthTexture: GraphicsTexture
+    var indexCount: Int
+}
+
+function cubeVertices() -> [Float] {
+    return [
+        -1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+        -1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+
+        1.0, -1.0, -1.0, 0.0, 0.0, -1.0,
+        -1.0, -1.0, -1.0, 0.0, 0.0, -1.0,
+        -1.0, 1.0, -1.0, 0.0, 0.0, -1.0,
+        1.0, 1.0, -1.0, 0.0, 0.0, -1.0,
+
+        -1.0, -1.0, -1.0, -1.0, 0.0, 0.0,
+        -1.0, -1.0, 1.0, -1.0, 0.0, 0.0,
+        -1.0, 1.0, 1.0, -1.0, 0.0, 0.0,
+        -1.0, 1.0, -1.0, -1.0, 0.0, 0.0,
+
+        1.0, -1.0, 1.0, 1.0, 0.0, 0.0,
+        1.0, -1.0, -1.0, 1.0, 0.0, 0.0,
+        1.0, 1.0, -1.0, 1.0, 0.0, 0.0,
+        1.0, 1.0, 1.0, 1.0, 0.0, 0.0,
+
+        -1.0, 1.0, 1.0, 0.0, 1.0, 0.0,
+        1.0, 1.0, 1.0, 0.0, 1.0, 0.0,
+        1.0, 1.0, -1.0, 0.0, 1.0, 0.0,
+        -1.0, 1.0, -1.0, 0.0, 1.0, 0.0,
+
+        -1.0, -1.0, -1.0, 0.0, -1.0, 0.0,
+        1.0, -1.0, -1.0, 0.0, -1.0, 0.0,
+        1.0, -1.0, 1.0, 0.0, -1.0, 0.0,
+        -1.0, -1.0, 1.0, 0.0, -1.0, 0.0
+    ]
+}
+
+function cubeIndices() -> [Int] {
+    return [
+        0, 1, 2,
+        0, 2, 3,
+        4, 5, 6,
+        4, 6, 7,
+        8, 9, 10,
+        8, 10, 11,
+        12, 13, 14,
+        12, 14, 15,
+        16, 17, 18,
+        16, 18, 19,
+        20, 21, 22,
+        20, 22, 23
+    ]
+}
+
+function cubeVertexLayout() -> VertexLayout {
+    return VertexLayout {
+        stride: 24
+        attributes: [
+            VertexAttribute {
+                name: "position"
+                location: 0
+                format: vertexFormatFloat3()
+                offset: 0
+            },
+            VertexAttribute {
+                name: "normal"
+                location: 1
+                format: vertexFormatFloat3()
+                offset: 12
+            }
+        ]
+    }
+}
+
+function cubeRenderPass(depthTexture: GraphicsTexture) -> RenderPassDescriptor {
+    return RenderPassDescriptor {
+        label: "basic-3d-cube-pass"
+        colorAttachments: [
+            ColorAttachment {
+                target: swapchainRenderTarget()
+                loadAction: loadActionClear()
+                storeAction: storeActionStore()
+                clearColor: Color {
+                    r: 0.02
+                    g: 0.025
+                    b: 0.04
+                    a: 1.0
+                }
+                resolveTarget: emptyRenderTarget()
+                hasResolveTarget: false
+            }
+        ]
+        primaryColorAttachment: ColorAttachment {
+            target: swapchainRenderTarget()
+            loadAction: loadActionClear()
+            storeAction: storeActionStore()
+            clearColor: Color {
+                r: 0.02
+                g: 0.025
+                b: 0.04
+                a: 1.0
+            }
+            resolveTarget: emptyRenderTarget()
+            hasResolveTarget: false
+        }
+        hasPrimaryColorAttachment: true
+        depthAttachment: DepthAttachment {
+            texture: depthTexture
+            loadAction: loadActionClear()
+            storeAction: storeActionStore()
+            clearDepth: 1.0
+            readOnly: false
+        }
+        hasDepthAttachment: false
+        stencilAttachment: emptyStencilAttachment()
+        hasStencilAttachment: false
+    }
+}
+
+@Main
+@Native
+function main() {
+    var app = GraphicsApplication {
+        title: "Kira Graphics Basic 3D Cube"
+        width: 640
+        height: 480
+        sampleCount: 1
+    }
+    let state = nativeState(CubeState {
+        shader: emptyGraphicsShader()
+        pipeline: emptyRenderPipeline()
+        vertices: emptyGraphicsBuffer()
+        indices: emptyGraphicsBuffer()
+        depthTexture: emptyGraphicsTexture()
+        indexCount: 0
+    })
+
+    app.onInit { graphics in
+        var cubeState = nativeRecover<CubeState>(graphics.userData)
+
+        cubeState.shader = graphics.createShader(ShaderDescriptor {
+            label: "basic-3d-cube-shader"
+            vertexSource: ""
+            fragmentSource: ""
+            vertexPath: "generated/shaders/BasicCube.vert.glsl"
+            fragmentPath: "generated/shaders/BasicCube.frag.glsl"
+        })
+
+        cubeState.vertices = graphics.createBuffer(BufferDescriptor {
+            label: "basic-3d-cube-vertices"
+            usage: bufferUsageVertex()
+            stride: 24
+            data: cubeVertices()
+        })
+
+        cubeState.indices = graphics.createIndexBuffer(IndexBufferDescriptor {
+            label: "basic-3d-cube-indices"
+            usage: bufferUsageIndex()
+            data: cubeIndices()
+        })
+
+        cubeState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+            label: "basic-3d-cube-pipeline"
+            shader: cubeState.shader
+            vertexLayout: cubeVertexLayout()
+            colorTargets: [
+                ColorTargetDescriptor {
+                    format: textureFormatRgba8Unorm()
+                    blend: BlendState {
+                        enabled: false
+                        preset: blendPresetReplace()
+                    }
+                }
+            ]
+            depthStencil: DepthStencilDescriptor {
+                depthEnabled: false
+                depthWriteEnabled: false
+                depthCompare: compareFunctionAlways()
+                format: textureFormatDepth24Stencil8()
+            }
+            rasterization: RasterizationDescriptor {
+                cullMode: cullModeBack()
+                frontFace: frontFaceCounterClockwise()
+            }
+            primitive: PrimitiveDescriptor {
+                topology: primitiveTopologyTriangleList()
+            }
+        })
+
+        cubeState.indexCount = 36
+        return
+    }
+
+    app.onFrame { frame in
+        var cubeState = nativeRecover<CubeState>(frame.userData)
+        let pass = cubeRenderPass(cubeState.depthTexture)
+        let pipeline = cubeState.pipeline
+        let vertices = cubeState.vertices
+        let indices = cubeState.indices
+        let indexCount = cubeState.indexCount
+
+        frame.renderPass(pass) { encoder in
+            encoder.setPipeline(pipeline)
+            encoder.setVertexBuffer(vertices)
+            encoder.setIndexBuffer(indices, indexFormatUint32())
+            encoder.drawIndexed(indexCount)
+        }
+        return
+    }
+
+    app.onCleanup { graphics in
+        var cubeState = nativeRecover<CubeState>(graphics.userData)
+        graphics.destroyTexture(cubeState.depthTexture)
+        graphics.destroyBuffer(cubeState.indices)
+        graphics.destroyBuffer(cubeState.vertices)
+        graphics.destroyRenderPipeline(cubeState.pipeline)
+        graphics.destroyShader(cubeState.shader)
+        return
+    }
+
+    app.run(nativeUserData(state))
+    return
+}

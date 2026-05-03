@@ -1,11 +1,47 @@
-function sokolCreateBuffer(descriptor: BufferDescriptor) -> GraphicsBuffer {
-    return GraphicsBuffer {
-        handle: BackendBufferHandle {
-            id: 0
-        }
-    }
+@Native
+function sokolBeginFloatBufferUpload(label: String, usage: Int, stride: Int, count: Int) -> U32 {
+    let nativeUsage: I64 = usage
+    let nativeStride: I64 = stride
+    let nativeCount: I64 = count
+    return kgBeginFloatBufferUpload(label, nativeUsage, nativeStride, nativeCount)
 }
 
-function sokolDestroyBuffer(buffer: GraphicsBuffer): Void {
+@Native
+function sokolSetFloatBufferUploadValue(uploadId: U32, index: Int, value: Float) {
+    let nativeIndex: I64 = index
+    kgSetFloatBufferUploadValue(uploadId, nativeIndex, value)
+    return
+}
+
+@Native
+function sokolFinalizeFloatBufferUpload(uploadId: U32) -> U32 {
+    return kgFinalizeFloatBufferUpload(uploadId)
+}
+
+@Native
+function sokolBeginIndexBufferUpload(label: String, usage: Int, count: Int) -> U32 {
+    let nativeUsage: I64 = usage
+    let nativeCount: I64 = count
+    return kgBeginIndexBufferUpload(label, nativeUsage, nativeCount)
+}
+
+@Native
+function sokolSetIndexBufferUploadValue(uploadId: U32, index: Int, value: Int) {
+    let nativeIndex: I64 = index
+    let nativeValue: I64 = value
+    kgSetIndexBufferUploadValue(uploadId, nativeIndex, nativeValue)
+    return
+}
+
+@Native
+function sokolFinalizeIndexBufferUpload(uploadId: U32) -> U32 {
+    return kgFinalizeIndexBufferUpload(uploadId)
+}
+
+@Native
+function sokolDestroyBufferId(bufferId: U32): Void {
+    if (bufferId != 0) {
+        kgDestroyBufferId(bufferId)
+    }
     return
 }

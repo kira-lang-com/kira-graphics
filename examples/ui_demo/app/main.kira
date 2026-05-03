@@ -3,6 +3,46 @@ import KiraGraphics
 struct UiDemoState {
     var shader: GraphicsShader
     var pipeline: RenderPipeline
+    var vertices: GraphicsBuffer
+}
+
+function uiDemoVertices() -> [Float] {
+    return [
+        -0.44, -0.24,
+        0.44, -0.24,
+        0.44, 0.24,
+        -0.44, -0.24,
+        0.44, 0.24,
+        -0.44, 0.24,
+
+        -0.28, 0.06,
+        0.28, 0.06,
+        0.28, 0.12,
+        -0.28, 0.06,
+        0.28, 0.12,
+        -0.28, 0.12,
+
+        -0.28, -0.08,
+        0.16, -0.08,
+        0.16, -0.02,
+        -0.28, -0.08,
+        0.16, -0.02,
+        -0.28, -0.02
+    ]
+}
+
+function uiDemoVertexLayout() -> VertexLayout {
+    return VertexLayout {
+        stride: 8
+        attributes: [
+            VertexAttribute {
+                name: "position"
+                location: 0
+                format: vertexFormatFloat2()
+                offset: 0
+            }
+        ]
+    }
 }
 
 @Main
@@ -15,16 +55,9 @@ function main() {
         sampleCount: 1
     }
     let state = nativeState(UiDemoState {
-        shader: GraphicsShader {
-            handle: BackendShaderHandle {
-                id: 0
-            }
-        }
-        pipeline: RenderPipeline {
-            handle: BackendPipelineHandle {
-                id: 0
-            }
-        }
+        shader: emptyGraphicsShader()
+        pipeline: emptyRenderPipeline()
+        vertices: emptyGraphicsBuffer()
     })
 
     app.onInit { graphics in
@@ -38,31 +71,66 @@ function main() {
             fragmentPath: "generated/shaders/UiDemo.frag.glsl"
         })
 
+        uiState.vertices = graphics.createBuffer(BufferDescriptor {
+            label: "ui-demo-vertices"
+            usage: bufferUsageVertex()
+            stride: 8
+            data: uiDemoVertices()
+        })
+
         uiState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
             label: "ui-demo-pipeline"
             shader: uiState.shader
+            vertexLayout: uiDemoVertexLayout()
+            colorTargets: [
+                ColorTargetDescriptor {
+                    format: textureFormatRgba8Unorm()
+                    blend: BlendState {
+                        enabled: false
+                        preset: blendPresetReplace()
+                    }
+                }
+            ]
+            depthStencil: DepthStencilDescriptor {
+                depthEnabled: false
+                depthWriteEnabled: false
+                depthCompare: compareFunctionAlways()
+                format: textureFormatDepth24Stencil8()
+            }
+            rasterization: RasterizationDescriptor {
+                cullMode: cullModeNone()
+                frontFace: frontFaceCounterClockwise()
+            }
+            primitive: PrimitiveDescriptor {
+                topology: primitiveTopologyTriangleList()
+            }
         })
         return
     }
 
     app.onFrame { frame in
         var uiState = nativeRecover<UiDemoState>(frame.userData)
-        let encoder = frame.beginPass(Color {
+        let pass = clearSwapchainRenderPass(Color {
             r: 0.05
             g: 0.06
             b: 0.08
             a: 1.0
         })
+        let pipeline = uiState.pipeline
+        let vertices = uiState.vertices
 
-        encoder.setPipeline(uiState.pipeline)
-        encoder.draw(18)
-        frame.endPass(encoder)
+        frame.renderPass(pass) { encoder in
+            encoder.setPipeline(pipeline)
+            encoder.setVertexBuffer(vertices)
+            encoder.draw(18)
+        }
         return
     }
 
     app.onCleanup { graphics in
         var uiState = nativeRecover<UiDemoState>(graphics.userData)
-        graphics.destroyPipeline(uiState.pipeline)
+        graphics.destroyBuffer(uiState.vertices)
+        graphics.destroyRenderPipeline(uiState.pipeline)
         graphics.destroyShader(uiState.shader)
         return
     }

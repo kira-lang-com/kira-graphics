@@ -9,3 +9,19 @@ struct BackendPipelineHandle {
 struct BackendBufferHandle {
     var id: U32
 }
+
+struct BackendTextureHandle {
+    var id: U32
+}
+
+struct BackendSamplerHandle {
+    var id: U32
+}
+
+struct BackendBindGroupHandle {
+    var id: U32
+}
+
+struct BackendUniformHandle {
+    var id: U32
+}

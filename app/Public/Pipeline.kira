@@ -1,3 +1,14 @@
 struct RenderPipeline {
     var handle: BackendPipelineHandle
+    var id: U32 = 0
+}
+
+@Native
+function emptyRenderPipeline() -> RenderPipeline {
+    return RenderPipeline {
+        handle: BackendPipelineHandle {
+            id: 0
+        }
+        id: 0
+    }
 }

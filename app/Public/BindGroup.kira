@@ -1,0 +1,14 @@
+struct BindGroup {
+    var handle: BackendBindGroupHandle
+    var id: U32 = 0
+}
+
+@Native
+function emptyBindGroup() -> BindGroup {
+    return BindGroup {
+        handle: BackendBindGroupHandle {
+            id: 0
+        }
+        id: 0
+    }
+}

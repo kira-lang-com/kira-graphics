@@ -4,11 +4,44 @@ function kgShaderSource(inlineSource: CString, path: CString): CString;
 @FFI.Extern { library: sokol; symbol: kg_setup; abi: c; }
 function kgSetup(): Void;
 
-@FFI.Extern { library: sokol; symbol: kg_apply_pipeline_and_draw; abi: c; }
-function kgApplyPipelineAndDraw(pipelineId: U32, vertexCount: I32, instanceCount: I32): Void;
+@FFI.Extern { library: sokol; symbol: kg_begin_float_buffer_upload; abi: c; }
+function kgBeginFloatBufferUpload(label: CString, usage: I64, stride: I64, count: I64): U32;
 
-@FFI.Extern { library: sokol; symbol: kg_begin_swapchain_pass; abi: c; }
-function kgBeginSwapchainPass(r: F32, g: F32, b: F32, a: F32): Void;
+@FFI.Extern { library: sokol; symbol: kg_set_float_buffer_upload_value; abi: c; }
+function kgSetFloatBufferUploadValue(uploadId: U32, index: I64, value: Float): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_finalize_float_buffer_upload; abi: c; }
+function kgFinalizeFloatBufferUpload(uploadId: U32): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_begin_index_buffer_upload; abi: c; }
+function kgBeginIndexBufferUpload(label: CString, usage: I64, count: I64): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_set_index_buffer_upload_value; abi: c; }
+function kgSetIndexBufferUploadValue(uploadId: U32, index: I64, value: I64): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_finalize_index_buffer_upload; abi: c; }
+function kgFinalizeIndexBufferUpload(uploadId: U32): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_destroy_buffer_id; abi: c; }
+function kgDestroyBufferId(bufferId: U32): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_create_texture_id; abi: c; }
+function kgCreateTextureId(label: CString, width: I64, height: I64, format: I64, usage: I64, sampleCount: I64, storageMode: I64): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_destroy_texture_id; abi: c; }
+function kgDestroyTextureId(textureId: U32): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_begin_render_pass; abi: c; }
+function kgBeginRenderPass(label: CString, colorTargetKind: I64, colorTextureId: U32, colorMipLevel: I64, colorArrayLayer: I64, colorLoadAction: I64, colorStoreAction: I64, clearR: Float, clearG: Float, clearB: Float, clearA: Float, hasResolveTarget: I64, resolveTextureId: U32, resolveMipLevel: I64, resolveArrayLayer: I64, hasDepthAttachment: I64, depthTextureId: U32, depthLoadAction: I64, depthStoreAction: I64, clearDepth: Float, depthReadOnly: I64, hasStencilAttachment: I64, stencilTextureId: U32, stencilLoadAction: I64, stencilStoreAction: I64, clearStencil: I64, stencilReadOnly: I64): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_apply_pipeline_bindings_and_draw; abi: c; }
+function kgApplyPipelineBindingsAndDraw(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, vertexCount: I64, indexCount: I64, instanceCount: I64): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_log_submit_state; abi: c; }
+function kgLogSubmitState(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, vertexCount: I64, indexCount: I64, instanceCount: I64): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_end_pass_and_commit; abi: c; }
+function kgEndPassAndCommit(): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_destroy_pipeline_id; abi: c; }
 function kgDestroyPipelineId(pipelineId: U32): Void;
@@ -19,8 +52,11 @@ function kgDestroyDefaultResources(): Void;
 @FFI.Extern { library: sokol; symbol: kg_destroy_shader_id; abi: c; }
 function kgDestroyShaderId(shaderId: U32): Void;
 
-@FFI.Extern { library: sokol; symbol: kg_make_pipeline; abi: c; }
-function kgMakePipeline(shaderId: U32, label: CString): U32;
+@FFI.Extern { library: sokol; symbol: kg_make_pipeline_detailed; abi: c; }
+function kgMakePipelineDetailed(shaderId: U32, label: CString, vertexStride: I64, attributeCount: I64, attr0Location: I64, attr0Format: I64, attr0Offset: I64, attr1Location: I64, attr1Format: I64, attr1Offset: I64, attr2Location: I64, attr2Format: I64, attr2Offset: I64, attr3Location: I64, attr3Format: I64, attr3Offset: I64, colorTargetCount: I64, colorFormat: I64, blendEnabled: I64, blendPreset: I64, depthEnabled: I64, depthWriteEnabled: I64, depthCompare: I64, depthFormat: I64, cullMode: I64, frontFace: I64, topology: I64): U32;
 
 @FFI.Extern { library: sokol; symbol: kg_make_shader; abi: c; }
 function kgMakeShader(label: CString, vertexSource: CString, fragmentSource: CString, vertexPath: CString, fragmentPath: CString): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_make_ksl_shader; abi: c; }
+function kgMakeKslShader(label: CString, asset: CString, directory: CString): U32;

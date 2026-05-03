@@ -1,0 +1,14 @@
+struct GraphicsTexture {
+    var handle: BackendTextureHandle
+    var id: U32 = 0
+}
+
+@Native
+function emptyGraphicsTexture() -> GraphicsTexture {
+    return GraphicsTexture {
+        handle: BackendTextureHandle {
+            id: 0
+        }
+        id: 0
+    }
+}

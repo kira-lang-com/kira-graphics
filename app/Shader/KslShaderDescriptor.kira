@@ -1,0 +1,5 @@
+struct KslShaderDescriptor {
+    var label: String = ""
+    var asset: String = ""
+    var directory: String = "generated/shaders"
+}

@@ -1,0 +1,244 @@
+@Native
+function bufferUsageVertex() -> Int {
+    return 1
+}
+
+@Native
+function bufferUsageIndex() -> Int {
+    return 2
+}
+
+@Native
+function bufferUsageUniform() -> Int {
+    return 3
+}
+
+@Native
+function bufferUsageStorage() -> Int {
+    return 4
+}
+
+@Native
+function vertexFormatFloat2() -> Int {
+    return 1
+}
+
+@Native
+function vertexFormatFloat3() -> Int {
+    return 2
+}
+
+@Native
+function vertexFormatFloat4() -> Int {
+    return 3
+}
+
+@Native
+function textureFormatRgba8Unorm() -> Int {
+    return 1
+}
+
+@Native
+function textureFormatRgba16Float() -> Int {
+    return 2
+}
+
+@Native
+function textureFormatDepth24Stencil8() -> Int {
+    return 3
+}
+
+@Native
+function primitiveTopologyTriangleList() -> Int {
+    return 1
+}
+
+@Native
+function primitiveTopologyTriangleStrip() -> Int {
+    return 2
+}
+
+@Native
+function primitiveTopologyLineList() -> Int {
+    return 3
+}
+
+@Native
+function blendPresetReplace() -> Int {
+    return 1
+}
+
+@Native
+function blendPresetAlpha() -> Int {
+    return 2
+}
+
+@Native
+function blendPresetPremultipliedAlpha() -> Int {
+    return 3
+}
+
+@Native
+function blendPresetAdditive() -> Int {
+    return 4
+}
+
+@Native
+function compareFunctionNever() -> Int {
+    return 0
+}
+
+@Native
+function compareFunctionLess() -> Int {
+    return 1
+}
+
+@Native
+function compareFunctionLessEqual() -> Int {
+    return 2
+}
+
+@Native
+function compareFunctionEqual() -> Int {
+    return 3
+}
+
+@Native
+function compareFunctionGreaterEqual() -> Int {
+    return 4
+}
+
+@Native
+function compareFunctionGreater() -> Int {
+    return 5
+}
+
+@Native
+function compareFunctionAlways() -> Int {
+    return 6
+}
+
+@Native
+function cullModeNone() -> Int {
+    return 0
+}
+
+@Native
+function cullModeFront() -> Int {
+    return 1
+}
+
+@Native
+function cullModeBack() -> Int {
+    return 2
+}
+
+@Native
+function frontFaceCounterClockwise() -> Int {
+    return 1
+}
+
+@Native
+function frontFaceClockwise() -> Int {
+    return 2
+}
+
+@Native
+function indexFormatUint16() -> Int {
+    return 1
+}
+
+@Native
+function indexFormatUint32() -> Int {
+    return 2
+}
+
+@Native
+function loadActionClear() -> Int {
+    return 1
+}
+
+@Native
+function loadActionLoad() -> Int {
+    return 2
+}
+
+@Native
+function loadActionDontCare() -> Int {
+    return 3
+}
+
+@Native
+function storeActionStore() -> Int {
+    return 1
+}
+
+@Native
+function storeActionDontCare() -> Int {
+    return 2
+}
+
+@Native
+function renderTargetKindSwapchain() -> Int {
+    return 1
+}
+
+@Native
+function renderTargetKindTexture() -> Int {
+    return 2
+}
+
+@Native
+function textureUsageSampled() -> Int {
+    return 1
+}
+
+@Native
+function textureUsageRenderTarget() -> Int {
+    return 2
+}
+
+@Native
+function textureUsageRenderTargetSampled() -> Int {
+    return 3
+}
+
+@Native
+function textureUsageDepthStencil() -> Int {
+    return 4
+}
+
+@Native
+function attachmentStoragePersistent() -> Int {
+    return 1
+}
+
+@Native
+function attachmentStorageTransient() -> Int {
+    return 2
+}
+
+@Native
+function attachmentStorageMemoryless() -> Int {
+    return 3
+}
+
+@Native
+function textureFilterNearest() -> Int {
+    return 1
+}
+
+@Native
+function textureFilterLinear() -> Int {
+    return 2
+}
+
+@Native
+function textureAddressModeClampToEdge() -> Int {
+    return 1
+}
+
+@Native
+function textureAddressModeRepeat() -> Int {
+    return 2
+}

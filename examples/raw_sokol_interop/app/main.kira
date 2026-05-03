@@ -1,6 +1,9 @@
 import KiraGraphics
 import KiraGraphics.sokol
 
+@FFI.Extern { library: sokol; symbol: kg_begin_swapchain_pass; abi: c; }
+function kgBeginSwapchainPass(r: F32, g: F32, b: F32, a: F32): Void;
+
 struct RawSokolState {
     var shader: sg_shader
     var pipeline: sg_pipeline

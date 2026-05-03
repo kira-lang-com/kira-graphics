@@ -1,4 +1,12 @@
 struct BufferDescriptor {
     var label: String = ""
-    var floatData: [Float]
+    var usage: Int
+    var stride: Int = 0
+    var data: [Float]
+}
+
+struct IndexBufferDescriptor {
+    var label: String = ""
+    var usage: Int
+    var data: [Int]
 }

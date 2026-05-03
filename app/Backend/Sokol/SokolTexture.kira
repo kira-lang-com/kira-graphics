@@ -1,0 +1,18 @@
+@Native
+function sokolCreateTextureId(label: String, width: Int, height: Int, format: Int, usage: Int, sampleCount: Int, storageMode: Int) -> U32 {
+    let nativeWidth: I64 = width
+    let nativeHeight: I64 = height
+    let nativeFormat: I64 = format
+    let nativeUsage: I64 = usage
+    let nativeSampleCount: I64 = sampleCount
+    let nativeStorageMode: I64 = storageMode
+    return kgCreateTextureId(label, nativeWidth, nativeHeight, nativeFormat, nativeUsage, nativeSampleCount, nativeStorageMode)
+}
+
+@Native
+function sokolDestroyTextureId(textureId: U32): Void {
+    if (textureId != 0) {
+        kgDestroyTextureId(textureId)
+    }
+    return
+}

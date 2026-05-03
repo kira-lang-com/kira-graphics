@@ -3,10 +3,11 @@
 ## Public API
 
 - `basic_triangle`: public Kira Graphics triangle using generated GLSL paths.
+- `basic_3d_cube`: real vertex/index/depth example with a descriptor-first render pass.
 - `clear_color`: minimal frame and clear pass.
 - `runtime_entry`: lifecycle and callback-state smoke test.
 - `ksl_triangle`: public Kira Graphics triangle using the existing KSL-generated GLSL directory.
-- `frame_api_triangle`: explicit begin/end frame API triangle using inline shader source.
+- `frame_api_triangle`: explicit `beginRenderPass` / `endPass` triangle using inline shader source.
 - `ui_demo`: centered rectangle with two small rectangles standing in for text.
 
 ## Backend Interop

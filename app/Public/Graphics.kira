@@ -2,57 +2,149 @@ class Graphics {
     var userData: RawPtr
 
     function createShader(descriptor: ShaderDescriptor) -> GraphicsShader {
+        let shaderId = sokolCreateShaderId(descriptor.label, descriptor.vertexSource, descriptor.fragmentSource, descriptor.vertexPath, descriptor.fragmentPath)
         return GraphicsShader {
             handle: BackendShaderHandle {
-                id: sokolCreateShaderId(descriptor.label, descriptor.vertexSource, descriptor.fragmentSource, descriptor.vertexPath, descriptor.fragmentPath)
+                id: shaderId
             }
+            id: shaderId
+        }
+    }
+
+    function createShaderFromKsl(descriptor: KslShaderDescriptor) -> GraphicsShader {
+        let shaderId = sokolCreateShaderFromKslId(descriptor.label, descriptor.asset, descriptor.directory)
+        return GraphicsShader {
+            handle: BackendShaderHandle {
+                id: shaderId
+            }
+            id: shaderId
         }
     }
 
     function destroyShader(shader: GraphicsShader) {
-        sokolDestroyShaderId(shader.handle.id)
+        sokolDestroyShaderId(shader.id)
         return
     }
 
+    @Native
     function createRenderPipeline(descriptor: RenderPipelineDescriptor) -> RenderPipeline {
-        return RenderPipeline {
-            handle: BackendPipelineHandle {
-                id: sokolCreateRenderPipelineId(descriptor.label, descriptor.shader.handle.id)
-            }
-        }
+        return sokolCreateRenderPipeline(descriptor)
     }
 
     function destroyPipeline(pipeline: RenderPipeline) {
-        sokolDestroyRenderPipelineId(pipeline.handle.id)
+        sokolDestroyRenderPipelineId(pipeline.id)
+        return
+    }
+
+    function destroyRenderPipeline(pipeline: RenderPipeline) {
+        destroyPipeline(pipeline)
         return
     }
 
     function createBuffer(descriptor: BufferDescriptor) -> GraphicsBuffer {
-        return sokolCreateBuffer(descriptor)
+        let uploadId = sokolBeginFloatBufferUpload(descriptor.label, descriptor.usage, descriptor.stride, descriptor.data.count)
+        var index = 0
+
+        while index < descriptor.data.count {
+            sokolSetFloatBufferUploadValue(uploadId, index, descriptor.data[index])
+            index = index + 1
+        }
+
+        let bufferId = sokolFinalizeFloatBufferUpload(uploadId)
+        return GraphicsBuffer {
+            handle: BackendBufferHandle {
+                id: bufferId
+            }
+            id: bufferId
+        }
+    }
+
+    function createIndexBuffer(descriptor: IndexBufferDescriptor) -> GraphicsBuffer {
+        let uploadId = sokolBeginIndexBufferUpload(descriptor.label, descriptor.usage, descriptor.data.count)
+        var index = 0
+
+        while index < descriptor.data.count {
+            sokolSetIndexBufferUploadValue(uploadId, index, descriptor.data[index])
+            index = index + 1
+        }
+
+        let bufferId = sokolFinalizeIndexBufferUpload(uploadId)
+        return GraphicsBuffer {
+            handle: BackendBufferHandle {
+                id: bufferId
+            }
+            id: bufferId
+        }
     }
 
     function destroyBuffer(buffer: GraphicsBuffer) {
-        sokolDestroyBuffer(buffer)
+        sokolDestroyBufferId(buffer.id)
         return
     }
 
+    function createTexture(descriptor: TextureDescriptor) -> GraphicsTexture {
+        let textureId = sokolCreateTextureId(
+            descriptor.label,
+            descriptor.width,
+            descriptor.height,
+            descriptor.format,
+            descriptor.usage,
+            descriptor.sampleCount,
+            descriptor.storageMode
+        )
+        return GraphicsTexture {
+            handle: BackendTextureHandle {
+                id: textureId
+            }
+            id: textureId
+        }
+    }
+
+    function destroyTexture(texture: GraphicsTexture) {
+        sokolDestroyTextureId(texture.id)
+        return
+    }
+
+    @Native
     function frame() -> GraphicsFrame {
         return GraphicsFrame {
-            clearColor: Color {
-                r: 0.0
-                g: 0.0
-                b: 0.0
-                a: 1.0
-            }
-            encoder: RenderEncoder {
-                pipeline: RenderPipeline {
-                    handle: BackendPipelineHandle {
-                        id: 0
-                    }
-                }
-                vertexCount: 0
-                instanceCount: 1
-            }
+            hasColorAttachment: false
+            colorTargetKind: 0
+            colorTextureId: 0
+            colorMipLevel: 0
+            colorArrayLayer: 0
+            colorLoadAction: 0
+            colorStoreAction: 0
+            clearR: 0.0
+            clearG: 0.0
+            clearB: 0.0
+            clearA: 1.0
+            hasResolveTarget: false
+            resolveTextureId: 0
+            resolveMipLevel: 0
+            resolveArrayLayer: 0
+            hasDepthAttachment: false
+            depthTextureId: 0
+            depthLoadAction: 0
+            depthStoreAction: 0
+            clearDepth: 1.0
+            depthReadOnly: false
+            hasStencilAttachment: false
+            stencilTextureId: 0
+            stencilLoadAction: 0
+            stencilStoreAction: 0
+            clearStencil: 0
+            stencilReadOnly: false
+            encoderPipelineId: 0
+            encoderHasPipeline: false
+            encoderVertexBufferId: 0
+            encoderHasVertexBuffer: false
+            encoderIndexBufferId: 0
+            encoderHasIndexBuffer: false
+            encoderIndexFormat: indexFormatUint32()
+            encoderVertexCount: 0
+            encoderIndexCount: 0
+            encoderInstanceCount: 1
             hasRenderPass: false
             shouldPresent: false
             shouldQuit: false

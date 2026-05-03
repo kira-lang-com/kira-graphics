@@ -1,0 +1,114 @@
+struct RenderTarget {
+    var kind: Int
+    var texture: GraphicsTexture
+    var mipLevel: Int = 0
+    var arrayLayer: Int = 0
+}
+
+struct ColorAttachment {
+    var target: RenderTarget
+    var loadAction: Int
+    var storeAction: Int
+    var clearColor: Color
+    var resolveTarget: RenderTarget
+    var hasResolveTarget: Bool = false
+}
+
+struct DepthAttachment {
+    var texture: GraphicsTexture
+    var loadAction: Int
+    var storeAction: Int
+    var clearDepth: Float = 1.0
+    var readOnly: Bool = false
+}
+
+struct StencilAttachment {
+    var texture: GraphicsTexture
+    var loadAction: Int
+    var storeAction: Int
+    var clearStencil: Int = 0
+    var readOnly: Bool = false
+}
+
+struct RenderPassDescriptor {
+    var label: String = ""
+    var colorAttachments: [ColorAttachment]
+    var primaryColorAttachment: ColorAttachment
+    var hasPrimaryColorAttachment: Bool = false
+    var depthAttachment: DepthAttachment
+    var hasDepthAttachment: Bool = false
+    var stencilAttachment: StencilAttachment
+    var hasStencilAttachment: Bool = false
+}
+
+@Native
+function emptyRenderTarget() -> RenderTarget {
+    return RenderTarget {
+        kind: renderTargetKindSwapchain()
+        texture: emptyGraphicsTexture()
+        mipLevel: 0
+        arrayLayer: 0
+    }
+}
+
+@Native
+function emptyDepthAttachment() -> DepthAttachment {
+    return DepthAttachment {
+        texture: emptyGraphicsTexture()
+        loadAction: loadActionClear()
+        storeAction: storeActionStore()
+        clearDepth: 1.0
+        readOnly: false
+    }
+}
+
+@Native
+function emptyStencilAttachment() -> StencilAttachment {
+    return StencilAttachment {
+        texture: emptyGraphicsTexture()
+        loadAction: loadActionClear()
+        storeAction: storeActionStore()
+        clearStencil: 0
+        readOnly: false
+    }
+}
+
+@Native
+function swapchainRenderTarget() -> RenderTarget {
+    return RenderTarget {
+        kind: renderTargetKindSwapchain()
+        texture: emptyGraphicsTexture()
+        mipLevel: 0
+        arrayLayer: 0
+    }
+}
+
+@Native
+function clearSwapchainRenderPass(clearColor: Color) -> RenderPassDescriptor {
+    return RenderPassDescriptor {
+        label: "swapchain-pass"
+        colorAttachments: [
+            ColorAttachment {
+                target: swapchainRenderTarget()
+                loadAction: loadActionClear()
+                storeAction: storeActionStore()
+                clearColor: clearColor
+                resolveTarget: emptyRenderTarget()
+                hasResolveTarget: false
+            }
+        ]
+        primaryColorAttachment: ColorAttachment {
+            target: swapchainRenderTarget()
+            loadAction: loadActionClear()
+            storeAction: storeActionStore()
+            clearColor: clearColor
+            resolveTarget: emptyRenderTarget()
+            hasResolveTarget: false
+        }
+        hasPrimaryColorAttachment: true
+        depthAttachment: emptyDepthAttachment()
+        hasDepthAttachment: false
+        stencilAttachment: emptyStencilAttachment()
+        hasStencilAttachment: false
+    }
+}

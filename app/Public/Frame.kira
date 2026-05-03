@@ -1,38 +1,124 @@
 class GraphicsFrame {
-    var clearColor: Color
-    var encoder: RenderEncoder
+    var hasColorAttachment: Bool = false
+    var colorTargetKind: Int = 0
+    var colorTextureId: U32 = 0
+    var colorMipLevel: Int = 0
+    var colorArrayLayer: Int = 0
+    var colorLoadAction: Int = 0
+    var colorStoreAction: Int = 0
+    var clearR: Float = 0.0
+    var clearG: Float = 0.0
+    var clearB: Float = 0.0
+    var clearA: Float = 1.0
+    var hasResolveTarget: Bool = false
+    var resolveTextureId: U32 = 0
+    var resolveMipLevel: Int = 0
+    var resolveArrayLayer: Int = 0
+    var hasDepthAttachment: Bool = false
+    var depthTextureId: U32 = 0
+    var depthLoadAction: Int = 0
+    var depthStoreAction: Int = 0
+    var clearDepth: Float = 1.0
+    var depthReadOnly: Bool = false
+    var hasStencilAttachment: Bool = false
+    var stencilTextureId: U32 = 0
+    var stencilLoadAction: Int = 0
+    var stencilStoreAction: Int = 0
+    var clearStencil: Int = 0
+    var stencilReadOnly: Bool = false
+
+    var encoderPipelineId: U32 = 0
+    var encoderHasPipeline: Bool = false
+    var encoderVertexBufferId: U32 = 0
+    var encoderHasVertexBuffer: Bool = false
+    var encoderIndexBufferId: U32 = 0
+    var encoderHasIndexBuffer: Bool = false
+    var encoderIndexFormat: Int = 0
+    var encoderVertexCount: Int = 0
+    var encoderIndexCount: Int = 0
+    var encoderInstanceCount: Int = 1
+
     var hasRenderPass: Bool = false
     var shouldPresent: Bool = false
     var shouldQuit: Bool = false
     var userData: RawPtr
 
-    function beginPass(clearColor: Color) -> RenderEncoder {
-        let encoder = RenderEncoder {
-            pipeline: RenderPipeline {
-                handle: BackendPipelineHandle {
-                    id: 0
-                }
+    function beginRenderPass(descriptor: RenderPassDescriptor) -> RenderEncoder {
+        var colorAttachment = descriptor.primaryColorAttachment
+        self.hasColorAttachment = descriptor.hasPrimaryColorAttachment
+        if (!self.hasColorAttachment) {
+            if (descriptor.colorAttachments.count > 0) {
+                colorAttachment = descriptor.colorAttachments[0]
+                self.hasColorAttachment = true
             }
-            vertexCount: 0
-            instanceCount: 1
         }
-
-        self.clearColor = clearColor
-        self.encoder = encoder
+        self.colorTargetKind = colorAttachment.target.kind
+        self.colorTextureId = colorAttachment.target.texture.id
+        self.colorMipLevel = colorAttachment.target.mipLevel
+        self.colorArrayLayer = colorAttachment.target.arrayLayer
+        self.colorLoadAction = colorAttachment.loadAction
+        self.colorStoreAction = colorAttachment.storeAction
+        self.clearR = colorAttachment.clearColor.r
+        self.clearG = colorAttachment.clearColor.g
+        self.clearB = colorAttachment.clearColor.b
+        self.clearA = colorAttachment.clearColor.a
+        self.hasResolveTarget = colorAttachment.hasResolveTarget
+        self.resolveTextureId = colorAttachment.resolveTarget.texture.id
+        self.resolveMipLevel = colorAttachment.resolveTarget.mipLevel
+        self.resolveArrayLayer = colorAttachment.resolveTarget.arrayLayer
+        self.hasDepthAttachment = descriptor.hasDepthAttachment
+        self.depthTextureId = descriptor.depthAttachment.texture.id
+        self.depthLoadAction = descriptor.depthAttachment.loadAction
+        self.depthStoreAction = descriptor.depthAttachment.storeAction
+        self.clearDepth = descriptor.depthAttachment.clearDepth
+        self.depthReadOnly = descriptor.depthAttachment.readOnly
+        self.hasStencilAttachment = descriptor.hasStencilAttachment
+        self.stencilTextureId = descriptor.stencilAttachment.texture.id
+        self.stencilLoadAction = descriptor.stencilAttachment.loadAction
+        self.stencilStoreAction = descriptor.stencilAttachment.storeAction
+        self.clearStencil = descriptor.stencilAttachment.clearStencil
+        self.stencilReadOnly = descriptor.stencilAttachment.readOnly
         self.hasRenderPass = true
-        return encoder
+        self.shouldPresent = false
+
+        return makeRenderEncoder()
     }
 
     function endPass(encoder: RenderEncoder) {
-        self.encoder = encoder
+        let encoderState = nativeRecover<RenderEncoderState>(encoder.storage)
+        self.encoderPipelineId = encoderState.pipelineId
+        self.encoderHasPipeline = encoderState.hasPipeline
+        self.encoderVertexBufferId = encoderState.vertexBufferId
+        self.encoderHasVertexBuffer = encoderState.hasVertexBuffer
+        self.encoderIndexBufferId = encoderState.indexBufferId
+        self.encoderHasIndexBuffer = encoderState.hasIndexBuffer
+        self.encoderIndexFormat = encoderState.indexFormat
+        self.encoderVertexCount = encoderState.vertexCount
+        self.encoderIndexCount = encoderState.indexCount
+        self.encoderInstanceCount = encoderState.instanceCount
+        print("endPass")
+        print(self.encoderPipelineId)
+        print(self.encoderVertexBufferId)
+        print(self.encoderIndexBufferId)
+        print(self.encoderVertexCount)
+        print(self.encoderIndexCount)
         self.shouldPresent = true
         return
     }
 
-    function pass(clearColor: Color, body: (RenderEncoder) -> Void) {
-        let encoder = beginPass(clearColor)
+    function renderPass(descriptor: RenderPassDescriptor, body: (RenderEncoder) -> Void) {
+        let encoder = beginRenderPass(descriptor)
         body(encoder)
         endPass(encoder)
+        return
+    }
+
+    function beginPass(clearColor: Color) -> RenderEncoder {
+        return beginRenderPass(clearSwapchainRenderPass(clearColor))
+    }
+
+    function pass(clearColor: Color, body: (RenderEncoder) -> Void) {
+        renderPass(clearSwapchainRenderPass(clearColor), body)
         return
     }
 

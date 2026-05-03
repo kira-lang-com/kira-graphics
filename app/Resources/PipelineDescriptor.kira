@@ -1,4 +1,47 @@
+struct VertexAttribute {
+    var name: String = ""
+    var location: Int = 0
+    var format: Int
+    var offset: Int = 0
+}
+
+struct VertexLayout {
+    var stride: Int = 0
+    var attributes: [VertexAttribute]
+}
+
+struct BlendState {
+    var enabled: Bool = false
+    var preset: Int
+}
+
+struct ColorTargetDescriptor {
+    var format: Int
+    var blend: BlendState
+}
+
+struct DepthStencilDescriptor {
+    var depthEnabled: Bool = false
+    var depthWriteEnabled: Bool = false
+    var depthCompare: Int
+    var format: Int
+}
+
+struct RasterizationDescriptor {
+    var cullMode: Int
+    var frontFace: Int
+}
+
+struct PrimitiveDescriptor {
+    var topology: Int
+}
+
 struct RenderPipelineDescriptor {
     var label: String = ""
     var shader: GraphicsShader
+    var vertexLayout: VertexLayout
+    var colorTargets: [ColorTargetDescriptor]
+    var depthStencil: DepthStencilDescriptor
+    var rasterization: RasterizationDescriptor
+    var primitive: PrimitiveDescriptor
 }

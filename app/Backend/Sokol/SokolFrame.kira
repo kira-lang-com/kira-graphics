@@ -1,33 +1,135 @@
-@Native
+function sokolBeginRenderPass(frame: GraphicsFrame) -> Bool {
+    if (!frame.hasColorAttachment) {
+        graphicsDiagnostic("Kira Graphics skipped render pass because the pass descriptor has no color attachments")
+        return false
+    }
+
+    return sokolBeginRenderPassFlat(
+        "",
+        frame.colorTargetKind,
+        frame.colorTextureId,
+        frame.colorMipLevel,
+        frame.colorArrayLayer,
+        frame.colorLoadAction,
+        frame.colorStoreAction,
+        frame.clearR,
+        frame.clearG,
+        frame.clearB,
+        frame.clearA,
+        frame.hasResolveTarget ? 1 : 0,
+        frame.resolveTextureId,
+        frame.resolveMipLevel,
+        frame.resolveArrayLayer,
+        frame.hasDepthAttachment ? 1 : 0,
+        frame.depthTextureId,
+        frame.depthLoadAction,
+        frame.depthStoreAction,
+        frame.clearDepth,
+        frame.depthReadOnly ? 1 : 0,
+        frame.hasStencilAttachment ? 1 : 0,
+        frame.stencilTextureId,
+        frame.stencilLoadAction,
+        frame.stencilStoreAction,
+        frame.clearStencil,
+        frame.stencilReadOnly ? 1 : 0
+    )
+}
+
 function sokolSubmitFrame(frame: GraphicsFrame): Void {
     if (!frame.hasRenderPass) {
+        print("submit:no-pass")
         return
     }
 
-    kgBeginSwapchainPass(frame.clearColor.r, frame.clearColor.g, frame.clearColor.b, frame.clearColor.a)
-    sg_apply_viewport(0, 0, sapp_width(), sapp_height(), true)
-
-    if (frame.encoder.vertexCount == 0) {
-        sg_end_pass()
-        sg_commit()
-
+    if (!sokolBeginRenderPass(frame)) {
+        print("submit:begin-failed")
         if (frame.shouldQuit) {
-            sapp_request_quit()
+            sokolRequestQuitNative()
         }
         return
     }
 
-    if (graphicsValidatePipeline(frame.encoder.pipeline)) {
-        kgApplyPipelineAndDraw(frame.encoder.pipeline.handle.id, frame.encoder.vertexCount, frame.encoder.instanceCount)
-    } else {
-        graphicsDiagnostic("Kira Graphics skipped draw because no render pipeline was bound")
+    let hasDrawCall = frame.encoderVertexCount > 0 || frame.encoderIndexCount > 0
+    sokolLogSubmitState(
+        frame.encoderPipelineId,
+        frame.encoderVertexBufferId,
+        frame.encoderHasVertexBuffer ? 1 : 0,
+        frame.encoderIndexBufferId,
+        frame.encoderHasIndexBuffer ? 1 : 0,
+        frame.encoderVertexCount,
+        frame.encoderIndexCount,
+        frame.encoderInstanceCount
+    )
+    print("submit")
+    print(frame.encoderPipelineId)
+    print(frame.encoderVertexBufferId)
+    print(frame.encoderIndexBufferId)
+    print(frame.encoderVertexCount)
+    print(frame.encoderIndexCount)
+    print(frame.encoderInstanceCount)
+
+    if (hasDrawCall) {
+        if (!frame.encoderHasPipeline || frame.encoderPipelineId == 0) {
+            graphicsDiagnostic("Kira Graphics skipped draw because no render pipeline was bound")
+        } else if (!frame.encoderHasVertexBuffer || frame.encoderVertexBufferId == 0) {
+            graphicsDiagnostic("Kira Graphics skipped draw because no valid vertex buffer was bound")
+        } else if (frame.encoderIndexCount > 0 && (!frame.encoderHasIndexBuffer || frame.encoderIndexBufferId == 0)) {
+            graphicsDiagnostic("Kira Graphics skipped indexed draw because no valid index buffer was bound")
+        } else if (frame.encoderIndexCount > 0 && frame.encoderIndexFormat != indexFormatUint32()) {
+            graphicsDiagnostic("Kira Graphics skipped indexed draw because the current Sokol backend only supports indexFormatUint32() in this pass")
+        } else {
+            if (!sokolApplyPipelineBindingsAndDrawFlat(
+                frame.encoderPipelineId,
+                frame.encoderVertexBufferId,
+                frame.encoderHasVertexBuffer ? 1 : 0,
+                frame.encoderIndexBufferId,
+                frame.encoderHasIndexBuffer ? 1 : 0,
+                frame.encoderVertexCount,
+                frame.encoderIndexCount,
+                frame.encoderInstanceCount
+            )) {
+                graphicsDiagnostic("Kira Graphics skipped draw because the backend could not apply the current pipeline and bindings")
+            }
+        }
     }
 
-    sg_end_pass()
-    sg_commit()
+    sokolEndPassAndCommitNative()
 
     if (frame.shouldQuit) {
-        sapp_request_quit()
+        sokolRequestQuitNative()
     }
+    return
+}
+
+@Native
+function sokolBeginRenderPassFlat(label: String, colorTargetKind: I64, colorTextureId: U32, colorMipLevel: I64, colorArrayLayer: I64, colorLoadAction: I64, colorStoreAction: I64, clearR: Float, clearG: Float, clearB: Float, clearA: Float, hasResolveTarget: I64, resolveTextureId: U32, resolveMipLevel: I64, resolveArrayLayer: I64, hasDepthAttachment: I64, depthTextureId: U32, depthLoadAction: I64, depthStoreAction: I64, clearDepth: Float, depthReadOnly: I64, hasStencilAttachment: I64, stencilTextureId: U32, stencilLoadAction: I64, stencilStoreAction: I64, clearStencil: I64, stencilReadOnly: I64) -> Bool {
+    return kgBeginRenderPass(label, colorTargetKind, colorTextureId, colorMipLevel, colorArrayLayer, colorLoadAction, colorStoreAction, clearR, clearG, clearB, clearA, hasResolveTarget, resolveTextureId, resolveMipLevel, resolveArrayLayer, hasDepthAttachment, depthTextureId, depthLoadAction, depthStoreAction, clearDepth, depthReadOnly, hasStencilAttachment, stencilTextureId, stencilLoadAction, stencilStoreAction, clearStencil, stencilReadOnly) != 0
+}
+
+@Native
+function sokolApplyPipelineBindingsAndDrawFlat(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, vertexCount: I64, indexCount: I64, instanceCount: I64) -> Bool {
+    return kgApplyPipelineBindingsAndDraw(pipelineId, vertexBufferId, hasVertexBuffer, indexBufferId, hasIndexBuffer, vertexCount, indexCount, instanceCount) != 0
+}
+
+@Native
+function sokolEndPassAndCommitNative() {
+    kgEndPassAndCommit()
+    return
+}
+
+@Native
+function sokolRequestQuitNative() {
+    sapp_request_quit()
+    return
+}
+
+@Native
+function sokolLogSubmitState(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: Int, indexBufferId: U32, hasIndexBuffer: Int, vertexCount: Int, indexCount: Int, instanceCount: Int) {
+    let nativeHasVertexBuffer: I64 = hasVertexBuffer
+    let nativeHasIndexBuffer: I64 = hasIndexBuffer
+    let nativeVertexCount: I64 = vertexCount
+    let nativeIndexCount: I64 = indexCount
+    let nativeInstanceCount: I64 = instanceCount
+    kgLogSubmitState(pipelineId, vertexBufferId, nativeHasVertexBuffer, indexBufferId, nativeHasIndexBuffer, nativeVertexCount, nativeIndexCount, nativeInstanceCount)
     return
 }

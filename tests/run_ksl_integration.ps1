@@ -57,7 +57,8 @@ function Assert-SampleLifecycle {
     Assert-Contains -Output $source -Needle "app.onInit" -Context $Path
     Assert-Contains -Output $source -Needle "app.onFrame" -Context $Path
     Assert-Contains -Output $source -Needle "app.onCleanup" -Context $Path
-    Assert-Contains -Output $source -Needle "beginPass" -Context $Path
+    Assert-Contains -Output $source -Needle "renderPass" -Context $Path
+    Assert-Contains -Output $source -Needle "setVertexBuffer" -Context $Path
     Assert-Contains -Output $source -Needle "createRenderPipeline" -Context $Path
     Assert-Contains -Output $source -Needle "app.run(nativeUserData" -Context $Path
     Assert-NotContains -Output $source -Needle "KiraGraphics.sokol" -Context $Path
@@ -85,6 +86,7 @@ function Run-Kira {
 
 Run-Kira -Command "kira shader check examples\basic_triangle\Shaders\BasicTriangle.ksl" -Expected "shader check passed"
 Run-Kira -Command "kira shader check examples\ksl_triangle\Shaders\BasicTriangle.ksl" -Expected "shader check passed"
+Run-Kira -Command "kira shader check examples\basic_3d_cube\Shaders\BasicCube.ksl" -Expected "shader check passed"
 
 Assert-FileContains -Path "examples/basic_triangle/generated/Shaders/BasicTriangle.vert.glsl" -Needle "layout(location = 0) in vec2 kira_attr_position"
 Assert-FileContains -Path "examples/basic_triangle/generated/Shaders/BasicTriangle.frag.glsl" -Needle "layout(location = 0) out vec4 kira_frag_color"
@@ -99,6 +101,7 @@ Assert-FileNotContains -Path "examples/ksl_triangle/generated/shaders/BasicTrian
 Run-Kira -Command "kira build --backend hybrid examples\ksl_triangle" -Expected "wrote"
 Run-Kira -Command "kira check --backend hybrid examples\frame_api_triangle" -Expected "check passed"
 Run-Kira -Command "kira check --backend hybrid examples\clear_color" -Expected "check passed"
+Run-Kira -Command "kira check --backend hybrid examples\basic_3d_cube" -Expected "check passed"
 
 Assert-SampleLifecycle -Path "examples/basic_triangle/app/main.kira"
 Assert-SampleLifecycle -Path "examples/ksl_triangle/app/main.kira"

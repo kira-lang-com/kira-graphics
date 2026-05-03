@@ -1,9 +1,20 @@
 #define SOKOL_IMPL
 #define SOKOL_NO_ENTRY
 #define SOKOL_GLCORE
+#include <stdbool.h>
+#include <stdint.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#elif defined(__linux__)
+#include <unistd.h>
+#endif
+
 #include "sokol_app.h"
 #include "sokol_gfx.h"
 #include "sokol_glue.h"
@@ -11,6 +22,9 @@
 static sg_buffer kg_triangle_vertex_buffer = {0};
 static sg_buffer kg_ui_demo_vertex_buffer = {0};
 static uint32_t kg_ui_demo_pipeline_id = 0;
+#ifndef KG_PATH_BUFFER_SIZE
+#define KG_PATH_BUFFER_SIZE 4096
+#endif
 
 typedef struct {
     uint32_t id;
@@ -18,14 +32,67 @@ typedef struct {
 } kg_shader_record;
 
 typedef struct {
-    uint32_t id;
+    uint32_t public_id;
+    uint32_t draw_pipeline_id;
+    uint32_t indexed_pipeline_id;
     bool has_position_attribute;
 } kg_pipeline_record;
+
+typedef struct {
+    bool active;
+    bool is_index_buffer;
+    int64_t usage;
+    int64_t stride;
+    int64_t float_count;
+    int64_t int_count;
+    float* float_values;
+    uint32_t* int_values;
+    char* label;
+} kg_buffer_upload_record;
+
+typedef struct {
+    uint32_t image_id;
+    uint32_t color_view_id;
+    uint32_t depth_view_id;
+    int64_t width;
+    int64_t height;
+    int64_t sample_count;
+    int64_t format;
+    int64_t usage;
+} kg_texture_record;
 
 static kg_shader_record kg_shader_records[64];
 static int kg_shader_record_count = 0;
 static kg_pipeline_record kg_pipeline_records[64];
 static int kg_pipeline_record_count = 0;
+static uint32_t kg_next_public_pipeline_id = 1;
+static kg_buffer_upload_record kg_buffer_upload_records[64];
+static kg_texture_record kg_texture_records[64];
+static int kg_texture_record_count = 0;
+static int kg_current_pass_width = 0;
+static int kg_current_pass_height = 0;
+
+static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* message, uint32_t line, const char* filename, void* user_data) {
+    (void)user_data;
+    const char* level = "info";
+    if (log_level == 0) {
+        level = "panic";
+    } else if (log_level == 1) {
+        level = "error";
+    } else if (log_level == 2) {
+        level = "warning";
+    }
+    printf("Kira Graphics: %s[%u] %s:%u: %s: %s\n",
+        tag ? tag : "sokol",
+        log_item_id,
+        filename ? filename : "sokol_gfx.h",
+        line,
+        level,
+        message ? message : "");
+    if (log_level == 0) {
+        abort();
+    }
+}
 
 static void kg_record_shader(uint32_t id, bool has_position_attribute) {
     if (kg_shader_record_count >= 64) {
@@ -42,54 +109,48 @@ static bool kg_shader_has_position_attribute(uint32_t id) {
             return kg_shader_records[i].has_position_attribute;
         }
     }
-    return true;
+    return false;
 }
 
-static void kg_record_pipeline(uint32_t id, bool has_position_attribute) {
-    if (kg_pipeline_record_count >= 64) {
-        return;
-    }
-    kg_pipeline_records[kg_pipeline_record_count].id = id;
-    kg_pipeline_records[kg_pipeline_record_count].has_position_attribute = has_position_attribute;
-    kg_pipeline_record_count += 1;
-}
-
-static bool kg_pipeline_has_position_attribute(uint32_t id) {
+static kg_pipeline_record* kg_find_pipeline_record(uint32_t public_id) {
     for (int i = 0; i < kg_pipeline_record_count; i += 1) {
-        if (kg_pipeline_records[i].id == id) {
-            return kg_pipeline_records[i].has_position_attribute;
+        if (kg_pipeline_records[i].public_id == public_id) {
+            return &kg_pipeline_records[i];
         }
     }
+    return NULL;
+}
+
+static uint32_t kg_record_pipeline(uint32_t draw_pipeline_id, uint32_t indexed_pipeline_id, bool has_position_attribute) {
+    if (kg_pipeline_record_count >= 64) {
+        return 0;
+    }
+    uint32_t public_id = kg_next_public_pipeline_id;
+    kg_next_public_pipeline_id += 1;
+    kg_pipeline_records[kg_pipeline_record_count].public_id = public_id;
+    kg_pipeline_records[kg_pipeline_record_count].draw_pipeline_id = draw_pipeline_id;
+    kg_pipeline_records[kg_pipeline_record_count].indexed_pipeline_id = indexed_pipeline_id;
+    kg_pipeline_records[kg_pipeline_record_count].has_position_attribute = has_position_attribute;
+    kg_pipeline_record_count += 1;
+    return public_id;
+}
+
+static bool kg_pipeline_has_position_attribute(uint32_t public_id) {
+    kg_pipeline_record* record = kg_find_pipeline_record(public_id);
+    if (record != NULL) {
+        return record->has_position_attribute;
+    }
     return true;
 }
 
-static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* message, uint32_t line, const char* filename, void* user_data) {
-    (void)user_data;
-    const char* level = "info";
-    if (log_level == 0) {
-        level = "panic";
-    } else if (log_level == 1) {
-        level = "error";
-    } else if (log_level == 2) {
-        level = "warning";
+static void kg_remove_pipeline_record(uint32_t public_id) {
+    for (int i = 0; i < kg_pipeline_record_count; i += 1) {
+        if (kg_pipeline_records[i].public_id == public_id) {
+            kg_pipeline_records[i] = kg_pipeline_records[kg_pipeline_record_count - 1];
+            kg_pipeline_record_count -= 1;
+            return;
+        }
     }
-    fprintf(stderr, "Kira Graphics: %s[%u] %s:%u: %s: %s\n",
-        tag ? tag : "sokol",
-        log_item_id,
-        filename ? filename : "sokol_gfx.h",
-        line,
-        level,
-        message ? message : "");
-    if (log_level == 0) {
-        abort();
-    }
-}
-
-void kg_setup(void) {
-    sg_desc desc = {0};
-    desc.environment = sglue_environment();
-    desc.logger.func = kg_sokol_log;
-    sg_setup(&desc);
 }
 
 static void kg_ensure_triangle_vertex_buffer(void) {
@@ -143,27 +204,368 @@ static void kg_ensure_ui_demo_vertex_buffer(void) {
     kg_ui_demo_vertex_buffer = sg_make_buffer(&desc);
 }
 
+static sg_pixel_format kg_pixel_format(int64_t format) {
+    switch (format) {
+        case 2:
+            return SG_PIXELFORMAT_RGBA16F;
+        case 3:
+            return SG_PIXELFORMAT_DEPTH_STENCIL;
+        case 1:
+        default:
+            return SG_PIXELFORMAT_RGBA8;
+    }
+}
+
+static sg_load_action kg_load_action(int64_t action) {
+    switch (action) {
+        case 2:
+            return SG_LOADACTION_LOAD;
+        case 3:
+            return SG_LOADACTION_DONTCARE;
+        case 1:
+        default:
+            return SG_LOADACTION_CLEAR;
+    }
+}
+
+static sg_store_action kg_store_action(int64_t action) {
+    switch (action) {
+        case 2:
+            return SG_STOREACTION_DONTCARE;
+        case 1:
+        default:
+            return SG_STOREACTION_STORE;
+    }
+}
+
+static sg_vertex_format kg_vertex_format(int64_t format) {
+    switch (format) {
+        case 2:
+            return SG_VERTEXFORMAT_FLOAT3;
+        case 3:
+            return SG_VERTEXFORMAT_FLOAT4;
+        case 1:
+        default:
+            return SG_VERTEXFORMAT_FLOAT2;
+    }
+}
+
+static sg_primitive_type kg_primitive_type(int64_t topology) {
+    switch (topology) {
+        case 2:
+            return SG_PRIMITIVETYPE_TRIANGLE_STRIP;
+        case 3:
+            return SG_PRIMITIVETYPE_LINES;
+        case 1:
+        default:
+            return SG_PRIMITIVETYPE_TRIANGLES;
+    }
+}
+
+static sg_cull_mode kg_cull_mode(int64_t cull_mode) {
+    switch (cull_mode) {
+        case 1:
+            return SG_CULLMODE_FRONT;
+        case 2:
+            return SG_CULLMODE_BACK;
+        case 0:
+        default:
+            return SG_CULLMODE_NONE;
+    }
+}
+
+static sg_face_winding kg_face_winding(int64_t front_face) {
+    switch (front_face) {
+        case 1:
+            return SG_FACEWINDING_CCW;
+        case 2:
+        default:
+            return SG_FACEWINDING_CW;
+    }
+}
+
+static sg_compare_func kg_compare_func(int64_t compare) {
+    switch (compare) {
+        case 0:
+            return SG_COMPAREFUNC_NEVER;
+        case 1:
+            return SG_COMPAREFUNC_LESS;
+        case 2:
+            return SG_COMPAREFUNC_LESS_EQUAL;
+        case 3:
+            return SG_COMPAREFUNC_EQUAL;
+        case 4:
+            return SG_COMPAREFUNC_GREATER_EQUAL;
+        case 5:
+            return SG_COMPAREFUNC_GREATER;
+        case 6:
+        default:
+            return SG_COMPAREFUNC_ALWAYS;
+    }
+}
+
+static sg_blend_state kg_blend_state(bool enabled, int64_t preset) {
+    sg_blend_state blend = {0};
+    blend.enabled = enabled;
+
+    if (!enabled || preset == 1) {
+        return blend;
+    }
+
+    switch (preset) {
+        case 2:
+            blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+            blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.op_rgb = SG_BLENDOP_ADD;
+            blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+            blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.op_alpha = SG_BLENDOP_ADD;
+            break;
+        case 3:
+            blend.src_factor_rgb = SG_BLENDFACTOR_ONE;
+            blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.op_rgb = SG_BLENDOP_ADD;
+            blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+            blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            blend.op_alpha = SG_BLENDOP_ADD;
+            break;
+        case 4:
+            blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+            blend.dst_factor_rgb = SG_BLENDFACTOR_ONE;
+            blend.op_rgb = SG_BLENDOP_ADD;
+            blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+            blend.dst_factor_alpha = SG_BLENDFACTOR_ONE;
+            blend.op_alpha = SG_BLENDOP_ADD;
+            break;
+        default:
+            break;
+    }
+    return blend;
+}
+
+static sg_buffer_usage kg_buffer_usage(int64_t usage) {
+    sg_buffer_usage result = {0};
+    result.immutable = true;
+    if (usage == 2) {
+        result.index_buffer = true;
+    } else if (usage == 4) {
+        result.storage_buffer = true;
+    } else {
+        result.vertex_buffer = true;
+    }
+    return result;
+}
+
+static sg_image_usage kg_image_usage(int64_t usage) {
+    sg_image_usage result = {0};
+    result.immutable = true;
+    if (usage == 2 || usage == 3) {
+        result.color_attachment = true;
+    }
+    if (usage == 4) {
+        result.depth_stencil_attachment = true;
+    }
+    return result;
+}
+
+static char* kg_copy_string(const char* source) {
+    if (source == NULL) {
+        source = "";
+    }
+    const size_t length = strlen(source);
+    char* copy = (char*)malloc(length + 1);
+    if (copy == NULL) {
+        return NULL;
+    }
+    memcpy(copy, source, length + 1);
+    return copy;
+}
+
+static char* kg_join_shader_path(const char* directory, const char* asset, const char* suffix) {
+    const char* safe_directory = (directory == NULL) ? "" : directory;
+    const char* safe_asset = (asset == NULL) ? "" : asset;
+    const char* safe_suffix = (suffix == NULL) ? "" : suffix;
+    size_t directory_length = strlen(safe_directory);
+    size_t asset_length = strlen(safe_asset);
+    size_t suffix_length = strlen(safe_suffix);
+    char separator = '/';
+    bool needs_separator = directory_length > 0 && safe_directory[directory_length - 1] != '/' && safe_directory[directory_length - 1] != '\\';
+    size_t total = directory_length + (needs_separator ? 1 : 0) + asset_length + suffix_length + 1;
+    char* path = (char*)malloc(total);
+    if (path == NULL) {
+        return NULL;
+    }
+    path[0] = '\0';
+    strcat(path, safe_directory);
+    if (needs_separator) {
+        size_t offset = strlen(path);
+        path[offset] = separator;
+        path[offset + 1] = '\0';
+    }
+    strcat(path, safe_asset);
+    strcat(path, safe_suffix);
+    return path;
+}
+
+static void kg_strip_last_path_component(char* path) {
+    if (path == NULL) {
+        return;
+    }
+    size_t length = strlen(path);
+    while (length > 0) {
+        char ch = path[length - 1];
+        if (ch == '/' || ch == '\\') {
+            path[length - 1] = '\0';
+            break;
+        }
+        length -= 1;
+    }
+}
+
+static bool kg_executable_directory(char* buffer, size_t buffer_size) {
+    if (buffer == NULL || buffer_size == 0) {
+        return false;
+    }
+#if defined(_WIN32)
+    DWORD length = GetModuleFileNameA(NULL, buffer, (DWORD)buffer_size);
+    if (length == 0 || length >= buffer_size) {
+        return false;
+    }
+    buffer[length] = '\0';
+    kg_strip_last_path_component(buffer);
+    return true;
+#elif defined(__APPLE__)
+    uint32_t size = (uint32_t)buffer_size;
+    if (_NSGetExecutablePath(buffer, &size) != 0) {
+        return false;
+    }
+    kg_strip_last_path_component(buffer);
+    return true;
+#elif defined(__linux__)
+    ssize_t length = readlink("/proc/self/exe", buffer, buffer_size - 1);
+    if (length <= 0 || (size_t)length >= buffer_size) {
+        return false;
+    }
+    buffer[length] = '\0';
+    kg_strip_last_path_component(buffer);
+    return true;
+#else
+    return false;
+#endif
+}
+
+static char* kg_project_relative_shader_path(const char* path) {
+    char executable_directory[KG_PATH_BUFFER_SIZE];
+    if (!kg_executable_directory(executable_directory, sizeof(executable_directory))) {
+        return NULL;
+    }
+    kg_strip_last_path_component(executable_directory);
+    if (executable_directory[0] == '\0') {
+        return NULL;
+    }
+    const size_t directory_length = strlen(executable_directory);
+    const size_t path_length = strlen(path);
+    const size_t total = directory_length + 1 + path_length + 1;
+    char* resolved_path = (char*)malloc(total);
+    if (resolved_path == NULL) {
+        return NULL;
+    }
+    memcpy(resolved_path, executable_directory, directory_length);
+    resolved_path[directory_length] = '/';
+    memcpy(resolved_path + directory_length + 1, path, path_length + 1);
+    return resolved_path;
+}
+
+static kg_buffer_upload_record* kg_alloc_buffer_upload(bool is_index_buffer) {
+    for (int i = 0; i < 64; i += 1) {
+        if (!kg_buffer_upload_records[i].active) {
+            kg_buffer_upload_records[i].active = true;
+            kg_buffer_upload_records[i].is_index_buffer = is_index_buffer;
+            kg_buffer_upload_records[i].usage = 0;
+            kg_buffer_upload_records[i].stride = 0;
+            kg_buffer_upload_records[i].float_count = 0;
+            kg_buffer_upload_records[i].int_count = 0;
+            kg_buffer_upload_records[i].float_values = NULL;
+            kg_buffer_upload_records[i].int_values = NULL;
+            kg_buffer_upload_records[i].label = NULL;
+            return &kg_buffer_upload_records[i];
+        }
+    }
+    return NULL;
+}
+
+static kg_buffer_upload_record* kg_find_buffer_upload(uint32_t upload_id) {
+    if (upload_id == 0 || upload_id > 64) {
+        return NULL;
+    }
+    kg_buffer_upload_record* record = &kg_buffer_upload_records[upload_id - 1];
+    return record->active ? record : NULL;
+}
+
+static void kg_release_buffer_upload(kg_buffer_upload_record* record) {
+    if (record == NULL) {
+        return;
+    }
+    free(record->float_values);
+    free(record->int_values);
+    free(record->label);
+    memset(record, 0, sizeof(*record));
+}
+
+static kg_texture_record* kg_find_texture(uint32_t texture_id) {
+    for (int i = 0; i < kg_texture_record_count; i += 1) {
+        if (kg_texture_records[i].image_id == texture_id) {
+            return &kg_texture_records[i];
+        }
+    }
+    return NULL;
+}
+
+static void kg_remove_texture(uint32_t texture_id) {
+    for (int i = 0; i < kg_texture_record_count; i += 1) {
+        if (kg_texture_records[i].image_id == texture_id) {
+            kg_texture_records[i] = kg_texture_records[kg_texture_record_count - 1];
+            kg_texture_record_count -= 1;
+            return;
+        }
+    }
+}
+
 const char* kg_shader_source(const char* inline_source, const char* path) {
     if (path == NULL || path[0] == '\0') {
         return inline_source == NULL ? "" : inline_source;
     }
 
+    const char* opened_path = path;
+    char* fallback_path = NULL;
     FILE* file = fopen(path, "rb");
     if (file == NULL) {
-        fprintf(stderr, "Kira Graphics: could not open shader source '%s'\n", path);
+        fallback_path = kg_project_relative_shader_path(path);
+        if (fallback_path != NULL) {
+            file = fopen(fallback_path, "rb");
+            if (file != NULL) {
+                opened_path = fallback_path;
+            }
+        }
+    }
+    if (file == NULL) {
+        printf("Kira Graphics: could not open shader source '%s'\n", path);
+        free(fallback_path);
         return "";
     }
 
     if (fseek(file, 0, SEEK_END) != 0) {
         fclose(file);
-        fprintf(stderr, "Kira Graphics: could not seek shader source '%s'\n", path);
+        printf("Kira Graphics: could not seek shader source '%s'\n", opened_path);
+        free(fallback_path);
         return "";
     }
 
     long length = ftell(file);
     if (length < 0) {
         fclose(file);
-        fprintf(stderr, "Kira Graphics: could not measure shader source '%s'\n", path);
+        printf("Kira Graphics: could not measure shader source '%s'\n", opened_path);
+        free(fallback_path);
         return "";
     }
 
@@ -172,23 +574,212 @@ const char* kg_shader_source(const char* inline_source, const char* path) {
     char* buffer = (char*)malloc((size_t)length + 1);
     if (buffer == NULL) {
         fclose(file);
-        fprintf(stderr, "Kira Graphics: could not allocate shader source '%s'\n", path);
+        printf("Kira Graphics: could not allocate shader source '%s'\n", opened_path);
+        free(fallback_path);
         return "";
     }
 
     size_t read_count = fread(buffer, 1, (size_t)length, file);
     fclose(file);
     buffer[read_count] = '\0';
+    free(fallback_path);
     return buffer;
 }
 
-void kg_begin_swapchain_pass(float r, float g, float b, float a) {
-    sg_pass pass = {0};
-    pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
-    pass.action.colors[0].store_action = SG_STOREACTION_STORE;
-    pass.action.colors[0].clear_value = (sg_color){ r, g, b, a };
-    pass.swapchain = sglue_swapchain();
-    sg_begin_pass(&pass);
+void kg_setup(void) {
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+    sg_desc desc = {0};
+    desc.environment = sglue_environment();
+    desc.logger.func = kg_sokol_log;
+    sg_setup(&desc);
+}
+
+uint32_t kg_begin_float_buffer_upload(const char* label, int64_t usage, int64_t stride, int64_t count) {
+    if (count < 0) {
+        return 0;
+    }
+    kg_buffer_upload_record* record = kg_alloc_buffer_upload(false);
+    if (record == NULL) {
+        return 0;
+    }
+    record->usage = usage;
+    record->stride = stride;
+    record->float_count = count;
+    record->float_values = (count > 0) ? (float*)calloc((size_t)count, sizeof(float)) : NULL;
+    record->label = kg_copy_string(label);
+    return (uint32_t)((record - kg_buffer_upload_records) + 1);
+}
+
+void kg_set_float_buffer_upload_value(uint32_t upload_id, int64_t index, double value) {
+    kg_buffer_upload_record* record = kg_find_buffer_upload(upload_id);
+    if (record == NULL || record->float_values == NULL) {
+        return;
+    }
+    if (index < 0 || index >= record->float_count) {
+        return;
+    }
+    record->float_values[index] = (float)value;
+}
+
+uint32_t kg_finalize_float_buffer_upload(uint32_t upload_id) {
+    kg_buffer_upload_record* record = kg_find_buffer_upload(upload_id);
+    if (record == NULL) {
+        return 0;
+    }
+
+    sg_buffer_desc desc = {0};
+    desc.label = record->label;
+    desc.usage = kg_buffer_usage(record->usage);
+    desc.size = (uint64_t)(record->float_count * (int64_t)sizeof(float));
+    desc.data.ptr = record->float_values;
+    desc.data.size = (size_t)desc.size;
+
+    sg_buffer buffer = sg_make_buffer(&desc);
+    uint32_t buffer_id = buffer.id;
+    fprintf(stderr, "KG BUFFER float label=%s usage=%lld stride=%lld count=%lld id=%u\n",
+        record->label ? record->label : "",
+        (long long)record->usage,
+        (long long)record->stride,
+        (long long)record->float_count,
+        buffer_id);
+    if (record->float_values != NULL) {
+        const int64_t sample_count = (record->float_count < 8) ? record->float_count : 8;
+        fprintf(stderr, "KG BUFFER float values");
+        for (int64_t i = 0; i < sample_count; i += 1) {
+            fprintf(stderr, " %.3f", record->float_values[i]);
+        }
+        fprintf(stderr, "\n");
+    }
+    kg_release_buffer_upload(record);
+    return buffer_id;
+}
+
+uint32_t kg_begin_index_buffer_upload(const char* label, int64_t usage, int64_t count) {
+    if (count < 0) {
+        return 0;
+    }
+    kg_buffer_upload_record* record = kg_alloc_buffer_upload(true);
+    if (record == NULL) {
+        return 0;
+    }
+    record->usage = usage;
+    record->int_count = count;
+    record->int_values = (count > 0) ? (uint32_t*)calloc((size_t)count, sizeof(uint32_t)) : NULL;
+    record->label = kg_copy_string(label);
+    return (uint32_t)((record - kg_buffer_upload_records) + 1);
+}
+
+void kg_set_index_buffer_upload_value(uint32_t upload_id, int64_t index, int64_t value) {
+    kg_buffer_upload_record* record = kg_find_buffer_upload(upload_id);
+    if (record == NULL || record->int_values == NULL) {
+        return;
+    }
+    if (index < 0 || index >= record->int_count) {
+        return;
+    }
+    record->int_values[index] = (uint32_t)value;
+}
+
+uint32_t kg_finalize_index_buffer_upload(uint32_t upload_id) {
+    kg_buffer_upload_record* record = kg_find_buffer_upload(upload_id);
+    if (record == NULL) {
+        return 0;
+    }
+
+    sg_buffer_desc desc = {0};
+    desc.label = record->label;
+    desc.usage = kg_buffer_usage(record->usage == 0 ? 2 : record->usage);
+    desc.size = (uint64_t)(record->int_count * (int64_t)sizeof(uint32_t));
+    desc.data.ptr = record->int_values;
+    desc.data.size = (size_t)desc.size;
+
+    sg_buffer buffer = sg_make_buffer(&desc);
+    uint32_t buffer_id = buffer.id;
+    fprintf(stderr, "KG BUFFER index label=%s usage=%lld count=%lld id=%u\n",
+        record->label ? record->label : "",
+        (long long)record->usage,
+        (long long)record->int_count,
+        buffer_id);
+    kg_release_buffer_upload(record);
+    return buffer_id;
+}
+
+void kg_destroy_buffer_id(uint32_t buffer_id) {
+    if (buffer_id == 0) {
+        return;
+    }
+    sg_buffer buffer = { buffer_id };
+    sg_destroy_buffer(buffer);
+}
+
+uint32_t kg_create_texture_id(const char* label, int64_t width, int64_t height, int64_t format, int64_t usage, int64_t sample_count, int64_t storage_mode) {
+    (void)storage_mode;
+
+    sg_image_desc desc = {0};
+    desc.type = SG_IMAGETYPE_2D;
+    desc.usage = kg_image_usage(usage);
+    desc.width = (int)width;
+    desc.height = (int)height;
+    desc.num_slices = 1;
+    desc.num_mipmaps = 1;
+    desc.pixel_format = kg_pixel_format(format);
+    desc.sample_count = (int)((sample_count > 0) ? sample_count : 1);
+    desc.label = label;
+
+    sg_image image = sg_make_image(&desc);
+    if (image.id == 0) {
+        return 0;
+    }
+
+    uint32_t color_view_id = 0;
+    uint32_t depth_view_id = 0;
+    if (usage == 2 || usage == 3) {
+        sg_view_desc color_view_desc = {0};
+        color_view_desc.color_attachment.image = image;
+        color_view_desc.label = label;
+        color_view_id = sg_make_view(&color_view_desc).id;
+    }
+    if (usage == 4) {
+        sg_view_desc depth_view_desc = {0};
+        depth_view_desc.depth_stencil_attachment.image = image;
+        depth_view_desc.label = label;
+        depth_view_id = sg_make_view(&depth_view_desc).id;
+    }
+
+    if (kg_texture_record_count < 64) {
+        kg_texture_record* record = &kg_texture_records[kg_texture_record_count];
+        record->image_id = image.id;
+        record->color_view_id = color_view_id;
+        record->depth_view_id = depth_view_id;
+        record->width = width;
+        record->height = height;
+        record->sample_count = sample_count;
+        record->format = format;
+        record->usage = usage;
+        kg_texture_record_count += 1;
+    }
+    return image.id;
+}
+
+void kg_destroy_texture_id(uint32_t texture_id) {
+    if (texture_id == 0) {
+        return;
+    }
+    kg_texture_record* record = kg_find_texture(texture_id);
+    if (record != NULL) {
+        if (record->color_view_id != 0) {
+            sg_view color_view = { record->color_view_id };
+            sg_destroy_view(color_view);
+        }
+        if (record->depth_view_id != 0) {
+            sg_view depth_view = { record->depth_view_id };
+            sg_destroy_view(depth_view);
+        }
+    }
+    sg_image image = { texture_id };
+    sg_destroy_image(image);
+    kg_remove_texture(texture_id);
 }
 
 uint32_t kg_make_shader(const char* label, const char* vertex_source, const char* fragment_source, const char* vertex_path, const char* fragment_path) {
@@ -202,44 +793,288 @@ uint32_t kg_make_shader(const char* label, const char* vertex_source, const char
     }
     desc.label = label;
     uint32_t shader_id = sg_make_shader(&desc).id;
+    fprintf(stderr, "KG SHADER label=%s id=%u hasPos=%d vpath=%s fpath=%s\n",
+        label ? label : "",
+        shader_id,
+        has_position_attribute ? 1 : 0,
+        vertex_path ? vertex_path : "",
+        fragment_path ? fragment_path : "");
     kg_record_shader(shader_id, has_position_attribute);
     return shader_id;
 }
 
-uint32_t kg_make_pipeline(uint32_t shader_id, const char* label) {
-    bool has_position_attribute = kg_shader_has_position_attribute(shader_id);
-    if (has_position_attribute) {
-        kg_ensure_triangle_vertex_buffer();
-    }
+uint32_t kg_make_ksl_shader(const char* label, const char* asset, const char* directory) {
+    char* vertex_path = kg_join_shader_path(directory, asset, ".vert.glsl");
+    char* fragment_path = kg_join_shader_path(directory, asset, ".frag.glsl");
+    uint32_t shader_id = kg_make_shader(label, "", "", vertex_path ? vertex_path : "", fragment_path ? fragment_path : "");
+    free(vertex_path);
+    free(fragment_path);
+    return shader_id;
+}
 
+uint32_t kg_make_pipeline_detailed(
+    uint32_t shader_id,
+    const char* label,
+    int64_t vertex_stride,
+    int64_t attribute_count,
+    int64_t attr0_location,
+    int64_t attr0_format,
+    int64_t attr0_offset,
+    int64_t attr1_location,
+    int64_t attr1_format,
+    int64_t attr1_offset,
+    int64_t attr2_location,
+    int64_t attr2_format,
+    int64_t attr2_offset,
+    int64_t attr3_location,
+    int64_t attr3_format,
+    int64_t attr3_offset,
+    int64_t color_target_count,
+    int64_t color_format,
+    int64_t blend_enabled,
+    int64_t blend_preset,
+    int64_t depth_enabled,
+    int64_t depth_write_enabled,
+    int64_t depth_compare,
+    int64_t depth_format,
+    int64_t cull_mode,
+    int64_t front_face,
+    int64_t topology
+) {
     sg_swapchain swapchain = sglue_swapchain();
     sg_pipeline_desc desc = {0};
     desc.shader.id = shader_id;
-    if (has_position_attribute) {
-        desc.layout.buffers[0].stride = sizeof(float) * 2;
-        desc.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
-        desc.layout.buffers[0].step_rate = 1;
+    desc.layout.buffers[0].stride = (int)vertex_stride;
+    desc.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
+    desc.layout.buffers[0].step_rate = 1;
+
+    if (attribute_count > 0) {
         desc.layout.attrs[0].buffer_index = 0;
-        desc.layout.attrs[0].offset = 0;
-        desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
+        desc.layout.attrs[0].offset = (int)attr0_offset;
+        desc.layout.attrs[0].format = kg_vertex_format(attr0_format);
     }
-    desc.color_count = 1;
-    desc.colors[0].pixel_format = swapchain.color_format;
+    if (attribute_count > 1) {
+        desc.layout.attrs[1].buffer_index = 0;
+        desc.layout.attrs[1].offset = (int)attr1_offset;
+        desc.layout.attrs[1].format = kg_vertex_format(attr1_format);
+    }
+    if (attribute_count > 2) {
+        desc.layout.attrs[2].buffer_index = 0;
+        desc.layout.attrs[2].offset = (int)attr2_offset;
+        desc.layout.attrs[2].format = kg_vertex_format(attr2_format);
+    }
+    if (attribute_count > 3) {
+        desc.layout.attrs[3].buffer_index = 0;
+        desc.layout.attrs[3].offset = (int)attr3_offset;
+        desc.layout.attrs[3].format = kg_vertex_format(attr3_format);
+    }
+
+    (void)attr0_location;
+    (void)attr1_location;
+    (void)attr2_location;
+    (void)attr3_location;
+
+    desc.color_count = (color_target_count > 0) ? 1 : 1;
+    desc.colors[0].pixel_format = (color_format == 1) ? swapchain.color_format : kg_pixel_format(color_format);
+    desc.colors[0].write_mask = SG_COLORMASK_RGBA;
+    desc.colors[0].blend = kg_blend_state(blend_enabled != 0, blend_preset);
+    desc.primitive_type = kg_primitive_type(topology);
+    desc.cull_mode = kg_cull_mode(cull_mode);
+    desc.face_winding = kg_face_winding(front_face);
     desc.sample_count = swapchain.sample_count;
     desc.label = label;
-    uint32_t pipeline_id = sg_make_pipeline(&desc).id;
+
+    if (depth_enabled != 0) {
+        desc.depth.pixel_format = (depth_format == 3) ? swapchain.depth_format : kg_pixel_format(depth_format);
+        desc.depth.compare = kg_compare_func(depth_compare);
+        desc.depth.write_enabled = depth_write_enabled != 0;
+    }
+
+    sg_pipeline_desc draw_desc = desc;
+    draw_desc.index_type = SG_INDEXTYPE_NONE;
+    uint32_t draw_pipeline_id = sg_make_pipeline(&draw_desc).id;
+
+    sg_pipeline_desc indexed_desc = desc;
+    indexed_desc.index_type = SG_INDEXTYPE_UINT32;
+    uint32_t indexed_pipeline_id = sg_make_pipeline(&indexed_desc).id;
+
+    uint32_t pipeline_id = kg_record_pipeline(draw_pipeline_id, indexed_pipeline_id, attribute_count > 0 || kg_shader_has_position_attribute(shader_id));
+    fprintf(stderr, "KG PIPELINE label=%s public=%u draw=%u indexed=%u shader=%u attrCount=%lld stride=%lld colorFormat=%lld blend=%lld depth=%lld topo=%lld\n",
+        label ? label : "",
+        pipeline_id,
+        draw_pipeline_id,
+        indexed_pipeline_id,
+        shader_id,
+        (long long)attribute_count,
+        (long long)vertex_stride,
+        (long long)color_format,
+        (long long)blend_preset,
+        (long long)depth_enabled,
+        (long long)topology);
     if (label != NULL && strstr(label, "ui-demo") != NULL) {
         kg_ui_demo_pipeline_id = pipeline_id;
     }
-    kg_record_pipeline(pipeline_id, has_position_attribute);
     return pipeline_id;
 }
 
-void kg_apply_pipeline_and_draw(uint32_t pipeline_id, int vertex_count, int instance_count) {
-    sg_pipeline pipeline = { pipeline_id };
+uint32_t kg_make_pipeline(uint32_t shader_id, const char* label) {
+    return kg_make_pipeline_detailed(shader_id, label, sizeof(float) * 2, 1, 0, 1, 0, 1, 1, 0, 2, 1, 0, 3, 1, 0, 1, 1, 0, 1, 0, 0, 6, 3, 0, 2, 1);
+}
+
+uint32_t kg_begin_render_pass(
+    const char* label,
+    int64_t color_target_kind,
+    uint32_t color_texture_id,
+    int64_t color_mip_level,
+    int64_t color_array_layer,
+    int64_t color_load_action,
+    int64_t color_store_action,
+    double clear_r,
+    double clear_g,
+    double clear_b,
+    double clear_a,
+    int64_t has_resolve_target,
+    uint32_t resolve_texture_id,
+    int64_t resolve_mip_level,
+    int64_t resolve_array_layer,
+    int64_t has_depth_attachment,
+    uint32_t depth_texture_id,
+    int64_t depth_load_action,
+    int64_t depth_store_action,
+    double clear_depth,
+    int64_t depth_read_only,
+    int64_t has_stencil_attachment,
+    uint32_t stencil_texture_id,
+    int64_t stencil_load_action,
+    int64_t stencil_store_action,
+    int64_t clear_stencil,
+    int64_t stencil_read_only
+) {
+    (void)color_mip_level;
+    (void)color_array_layer;
+    (void)resolve_mip_level;
+    (void)resolve_array_layer;
+    (void)depth_read_only;
+    (void)stencil_read_only;
+
+    fprintf(stderr, "KG PASS kind=%lld colorTex=%u load=%lld store=%lld clear=(%.3f,%.3f,%.3f,%.3f) depth=%lld depthTex=%u\n",
+        (long long)color_target_kind,
+        color_texture_id,
+        (long long)color_load_action,
+        (long long)color_store_action,
+        clear_r,
+        clear_g,
+        clear_b,
+        clear_a,
+        (long long)has_depth_attachment,
+        depth_texture_id);
+
+    sg_pass pass = {0};
+    pass.label = label;
+    pass.action.colors[0].load_action = kg_load_action(color_load_action);
+    pass.action.colors[0].store_action = kg_store_action(color_store_action);
+    pass.action.colors[0].clear_value = (sg_color){ (float)clear_r, (float)clear_g, (float)clear_b, (float)clear_a };
+
+    if (color_target_kind == 1) {
+        pass.swapchain = sglue_swapchain();
+        kg_current_pass_width = pass.swapchain.width;
+        kg_current_pass_height = pass.swapchain.height;
+        fprintf(stderr, "KG SWAPCHAIN sapp=%dx%d swapchain=%dx%d dpi=%.3f\n",
+            sapp_width(),
+            sapp_height(),
+            pass.swapchain.width,
+            pass.swapchain.height,
+            (double)sapp_dpi_scale());
+    } else if (color_target_kind == 2) {
+        kg_texture_record* color_record = kg_find_texture(color_texture_id);
+        if (color_record == NULL || color_record->color_view_id == 0) {
+            return 0;
+        }
+        pass.attachments.colors[0].id = color_record->color_view_id;
+        kg_current_pass_width = (int)color_record->width;
+        kg_current_pass_height = (int)color_record->height;
+    } else {
+        return 0;
+    }
+
+    if (has_resolve_target != 0) {
+        kg_texture_record* resolve_record = kg_find_texture(resolve_texture_id);
+        if (resolve_record != NULL && resolve_record->color_view_id != 0) {
+            pass.attachments.resolves[0].id = resolve_record->color_view_id;
+        }
+    }
+
+    if (has_depth_attachment != 0) {
+        kg_texture_record* depth_record = kg_find_texture(depth_texture_id);
+        if (depth_record == NULL || depth_record->depth_view_id == 0) {
+            return 0;
+        }
+        pass.attachments.depth_stencil.id = depth_record->depth_view_id;
+        pass.action.depth.load_action = kg_load_action(depth_load_action);
+        pass.action.depth.store_action = kg_store_action(depth_store_action);
+        pass.action.depth.clear_value = (float)clear_depth;
+    }
+
+    if (has_stencil_attachment != 0) {
+        kg_texture_record* stencil_record = kg_find_texture(stencil_texture_id);
+        if (stencil_record != NULL && stencil_record->depth_view_id != 0) {
+            pass.attachments.depth_stencil.id = stencil_record->depth_view_id;
+            pass.action.stencil.load_action = kg_load_action(stencil_load_action);
+            pass.action.stencil.store_action = kg_store_action(stencil_store_action);
+            pass.action.stencil.clear_value = (uint8_t)clear_stencil;
+        }
+    }
+
+    sg_begin_pass(&pass);
+    return 1;
+}
+
+uint32_t kg_apply_pipeline_bindings_and_draw(
+    uint32_t pipeline_id,
+    uint32_t vertex_buffer_id,
+    int64_t has_vertex_buffer,
+    uint32_t index_buffer_id,
+    int64_t has_index_buffer,
+    int64_t vertex_count,
+    int64_t index_count,
+    int64_t instance_count
+) {
+    kg_pipeline_record* pipeline_record = kg_find_pipeline_record(pipeline_id);
+    if (pipeline_record == NULL) {
+        printf("Kira Graphics: draw skipped because pipeline public id %u was not registered\n", pipeline_id);
+        return 0;
+    }
+
+    const bool wants_indexed = (index_count > 0) && (has_index_buffer != 0);
+    uint32_t active_pipeline_id = wants_indexed ? pipeline_record->indexed_pipeline_id : pipeline_record->draw_pipeline_id;
+    if (active_pipeline_id == 0) {
+        printf("Kira Graphics: draw skipped because active pipeline id resolved to 0 (public=%u indexed=%d)\n", pipeline_id, wants_indexed ? 1 : 0);
+        return 0;
+    }
+
+    fprintf(stderr, "KG DRAW pipeline=%u active=%u vertexBuf=%u hasVB=%lld indexBuf=%u hasIB=%lld vtx=%lld idx=%lld inst=%lld\n",
+        pipeline_id,
+        active_pipeline_id,
+        vertex_buffer_id,
+        has_vertex_buffer,
+        index_buffer_id,
+        has_index_buffer,
+        vertex_count,
+        index_count,
+        instance_count);
+
+    if (kg_current_pass_width > 0 && kg_current_pass_height > 0) {
+        sg_apply_viewport(0, 0, kg_current_pass_width, kg_current_pass_height, false);
+        sg_apply_scissor_rect(0, 0, kg_current_pass_width, kg_current_pass_height, false);
+    }
+
+    sg_pipeline pipeline = { active_pipeline_id };
     sg_apply_pipeline(pipeline);
-    if (kg_pipeline_has_position_attribute(pipeline_id)) {
-        sg_bindings bindings = {0};
+
+    sg_bindings bindings = {0};
+    if (has_vertex_buffer != 0) {
+        bindings.vertex_buffers[0].id = vertex_buffer_id;
+    } else if (kg_pipeline_has_position_attribute(pipeline_id)) {
         if (pipeline_id == kg_ui_demo_pipeline_id) {
             kg_ensure_ui_demo_vertex_buffer();
             bindings.vertex_buffers[0] = kg_ui_demo_vertex_buffer;
@@ -247,9 +1082,52 @@ void kg_apply_pipeline_and_draw(uint32_t pipeline_id, int vertex_count, int inst
             kg_ensure_triangle_vertex_buffer();
             bindings.vertex_buffers[0] = kg_triangle_vertex_buffer;
         }
-        sg_apply_bindings(&bindings);
     }
-    sg_draw(0, vertex_count, instance_count);
+    if (has_index_buffer != 0) {
+        bindings.index_buffer.id = index_buffer_id;
+    }
+    sg_apply_bindings(&bindings);
+
+    if (index_count > 0) {
+        sg_draw(0, (int)index_count, (int)instance_count);
+    } else if (vertex_count > 0) {
+        sg_draw(0, (int)vertex_count, (int)instance_count);
+    }
+    return 1;
+}
+
+void kg_apply_pipeline_and_draw(uint32_t pipeline_id, int vertex_count, int instance_count) {
+    kg_apply_pipeline_bindings_and_draw(pipeline_id, 0, 0, 0, 0, vertex_count, 0, instance_count);
+}
+
+void kg_log_submit_state(
+    uint32_t pipeline_id,
+    uint32_t vertex_buffer_id,
+    int64_t has_vertex_buffer,
+    uint32_t index_buffer_id,
+    int64_t has_index_buffer,
+    int64_t vertex_count,
+    int64_t index_count,
+    int64_t instance_count
+) {
+    fprintf(stderr, "KG SUBMIT pipeline=%u vertexBuf=%u hasVB=%lld indexBuf=%u hasIB=%lld vtx=%lld idx=%lld inst=%lld\n",
+        pipeline_id,
+        vertex_buffer_id,
+        (long long)has_vertex_buffer,
+        index_buffer_id,
+        (long long)has_index_buffer,
+        (long long)vertex_count,
+        (long long)index_count,
+        (long long)instance_count);
+}
+
+void kg_end_pass_and_commit(void) {
+    sg_end_pass();
+    sg_commit();
+}
+
+void kg_begin_swapchain_pass(float r, float g, float b, float a) {
+    kg_begin_render_pass("compat-swapchain-pass", 1, 0, 0, 0, 1, 1, r, g, b, a, 0, 0, 0, 0, 0, 0, 1, 1, 1.0, 0, 0, 0, 1, 1, 0, 0);
 }
 
 void kg_destroy_shader_id(uint32_t shader_id) {
@@ -258,8 +1136,19 @@ void kg_destroy_shader_id(uint32_t shader_id) {
 }
 
 void kg_destroy_pipeline_id(uint32_t pipeline_id) {
-    sg_pipeline pipeline = { pipeline_id };
-    sg_destroy_pipeline(pipeline);
+    kg_pipeline_record* record = kg_find_pipeline_record(pipeline_id);
+    if (record == NULL) {
+        return;
+    }
+    if (record->draw_pipeline_id != 0) {
+        sg_pipeline draw_pipeline = { record->draw_pipeline_id };
+        sg_destroy_pipeline(draw_pipeline);
+    }
+    if (record->indexed_pipeline_id != 0) {
+        sg_pipeline indexed_pipeline = { record->indexed_pipeline_id };
+        sg_destroy_pipeline(indexed_pipeline);
+    }
+    kg_remove_pipeline_record(pipeline_id);
 }
 
 void kg_destroy_default_resources(void) {

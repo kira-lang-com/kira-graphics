@@ -3,6 +3,68 @@ import KiraGraphics
 struct TriangleState {
     var shader: GraphicsShader
     var pipeline: RenderPipeline
+    var vertices: GraphicsBuffer
+}
+
+function triangleVertices() -> [Float] {
+    return [
+        0.0, 0.55,
+        0.55, -0.55,
+        -0.55, -0.55
+    ]
+}
+
+function triangleVertexLayout() -> VertexLayout {
+    return VertexLayout {
+        stride: 8
+        attributes: [
+            VertexAttribute {
+                name: "position"
+                location: 0
+                format: vertexFormatFloat2()
+                offset: 0
+            }
+        ]
+    }
+}
+
+function trianglePass() -> RenderPassDescriptor {
+    return RenderPassDescriptor {
+        label: "basic-triangle-pass"
+        colorAttachments: [
+            ColorAttachment {
+                target: swapchainRenderTarget()
+                loadAction: loadActionClear()
+                storeAction: storeActionStore()
+                clearColor: Color {
+                    r: 0.04
+                    g: 0.05
+                    b: 0.08
+                    a: 1.0
+                }
+                resolveTarget: emptyRenderTarget()
+                hasResolveTarget: false
+            }
+        ]
+        primaryColorAttachment: ColorAttachment {
+            target: swapchainRenderTarget()
+            loadAction: loadActionClear()
+            storeAction: storeActionStore()
+            clearColor: Color {
+                r: 0.04
+                g: 0.05
+                b: 0.08
+                a: 1.0
+            }
+            resolveTarget: emptyRenderTarget()
+            hasResolveTarget: false
+        }
+        hasPrimaryColorAttachment: true
+        depthAttachment: emptyDepthAttachment()
+        hasDepthAttachment: false
+        stencilAttachment: emptyStencilAttachment()
+        hasStencilAttachment: false
+    }
 }
 
 @Main
@@ -15,16 +77,9 @@ function main() {
         sampleCount: 1
     }
     let state = nativeState(TriangleState {
-        shader: GraphicsShader {
-            handle: BackendShaderHandle {
-                id: 0
-            }
-        }
-        pipeline: RenderPipeline {
-            handle: BackendPipelineHandle {
-                id: 0
-            }
-        }
+        shader: emptyGraphicsShader()
+        pipeline: emptyRenderPipeline()
+        vertices: emptyGraphicsBuffer()
     })
 
     app.onInit { graphics in
@@ -38,32 +93,61 @@ function main() {
             fragmentPath: "generated/Shaders/BasicTriangle.frag.glsl"
         })
 
+        triangleState.vertices = graphics.createBuffer(BufferDescriptor {
+            label: "basic-triangle-vertices"
+            usage: bufferUsageVertex()
+            stride: 8
+            data: triangleVertices()
+        })
+
         triangleState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
             label: "basic-triangle-pipeline"
             shader: triangleState.shader
+            vertexLayout: triangleVertexLayout()
+            colorTargets: [
+                ColorTargetDescriptor {
+                    format: textureFormatRgba8Unorm()
+                    blend: BlendState {
+                        enabled: false
+                        preset: blendPresetReplace()
+                    }
+                }
+            ]
+            depthStencil: DepthStencilDescriptor {
+                depthEnabled: false
+                depthWriteEnabled: false
+                depthCompare: compareFunctionAlways()
+                format: textureFormatDepth24Stencil8()
+            }
+            rasterization: RasterizationDescriptor {
+                cullMode: cullModeNone()
+                frontFace: frontFaceCounterClockwise()
+            }
+            primitive: PrimitiveDescriptor {
+                topology: primitiveTopologyTriangleList()
+            }
         })
         return
     }
 
     app.onFrame { frame in
         var triangleState = nativeRecover<TriangleState>(frame.userData)
-        let encoder = frame.beginPass(Color {
-            r: 0.04
-            g: 0.05
-            b: 0.08
-            a: 1.0
-        })
+        let pass = trianglePass()
+        let pipeline = triangleState.pipeline
+        let vertices = triangleState.vertices
 
-        encoder.setPipeline(triangleState.pipeline)
-        encoder.draw(3)
-        frame.endPass(encoder)
-        // frame.requestQuit()
+        frame.renderPass(pass) { encoder in
+            encoder.setPipeline(pipeline)
+            encoder.setVertexBuffer(vertices)
+            encoder.draw(3)
+        }
         return
     }
 
     app.onCleanup { graphics in
         var triangleState = nativeRecover<TriangleState>(graphics.userData)
-        graphics.destroyPipeline(triangleState.pipeline)
+        graphics.destroyBuffer(triangleState.vertices)
+        graphics.destroyRenderPipeline(triangleState.pipeline)
         graphics.destroyShader(triangleState.shader)
         return
     }

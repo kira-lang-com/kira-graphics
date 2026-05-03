@@ -1,0 +1,74 @@
+type VertexIn {
+    let position: Float3
+    let normal: Float3
+}
+
+type VertexOut {
+    @builtin(position)
+    let clip_position: Float4
+
+    let color: Float4
+}
+
+type FragmentOut {
+    let color: Float4
+}
+
+function rotateY(position: Float3) -> Float3 {
+    let c = 0.707107
+    let s = 0.707107
+    return Float3(
+        position.x * c + position.z * s,
+        position.y,
+        -position.x * s + position.z * c
+    )
+}
+
+function rotateX(position: Float3) -> Float3 {
+    let s = 0.5
+    let c = 0.866025
+    return Float3(
+        position.x,
+        position.y * c - position.z * s,
+        position.y * s + position.z * c
+    )
+}
+
+function cubeColor(normal: Float3) -> Float4 {
+    return Float4(
+        normal.x * 0.5 + 0.5,
+        normal.y * 0.5 + 0.5,
+        normal.z * 0.5 + 0.5,
+        1.0
+    )
+}
+
+shader BasicCube {
+    vertex {
+        input VertexIn
+        output VertexOut
+
+        function entry(input: VertexIn) -> VertexOut {
+            let result: VertexOut
+            let pos = rotateY(input.position)
+            let pos2 = rotateX(pos)
+            let clipX = pos2.x * 0.45 + pos2.z * 0.18
+            let clipY = pos2.y * 0.45 - pos2.z * 0.18
+            let clipZ = pos2.z * 0.25
+            result.clip_position = Float4(clipX, clipY, clipZ, 1.0)
+            result.color = cubeColor(input.normal)
+            return result
+        }
+    }
+
+    fragment {
+        input VertexOut
+        output FragmentOut
+
+        function entry(input: VertexOut) -> FragmentOut {
+            let result: FragmentOut
+            result.color = input.color
+            return result
+        }
+    }
+}
