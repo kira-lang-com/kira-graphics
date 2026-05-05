@@ -14,31 +14,14 @@ type FragmentOut {
     let color: Float4
 }
 
-function rotateY(position: Float3) -> Float3 {
-    let c = 0.707107
-    let s = 0.707107
-    return Float3(
-        position.x * c + position.z * s,
-        position.y,
-        -position.x * s + position.z * c
-    )
-}
-
-function rotateX(position: Float3) -> Float3 {
-    let s = 0.5
-    let c = 0.866025
-    return Float3(
-        position.x,
-        position.y * c - position.z * s,
-        position.y * s + position.z * c
-    )
-}
-
 function cubeColor(normal: Float3) -> Float4 {
+    let rightFactor = normal.x
+    let topFactor = normal.y
+    let frontFactor = 1.0 - rightFactor - topFactor
     return Float4(
-        normal.x * 0.5 + 0.5,
-        normal.y * 0.5 + 0.5,
-        normal.z * 0.5 + 0.5,
+        frontFactor * 0.30 + rightFactor * 1.00 + topFactor * 0.75,
+        frontFactor * 0.55 + rightFactor * 0.82 + topFactor * 1.00,
+        frontFactor * 1.00 + rightFactor * 0.35 + topFactor * 0.35,
         1.0
     )
 }
@@ -50,11 +33,23 @@ shader BasicCube {
 
         function entry(input: VertexIn) -> VertexOut {
             let result: VertexOut
-            let pos = rotateY(input.position)
-            let pos2 = rotateX(pos)
-            let clipX = pos2.x * 0.45 + pos2.z * 0.18
-            let clipY = pos2.y * 0.45 - pos2.z * 0.18
-            let clipZ = pos2.z * 0.25
+            let rightFactor = input.normal.x
+            let topFactor = input.normal.y
+            let frontFactor = 1.0 - rightFactor - topFactor
+
+            let frontX = input.position.x * 0.13 - 0.15
+            let frontY = input.position.y * 0.13 - 0.07
+
+            let rightX = 0.08 - input.position.z * 0.10
+            let rightY = input.position.y * 0.13 - input.position.z * 0.03 - 0.04
+
+            let topX = input.position.x * 0.13 - input.position.z * 0.10 - 0.05
+            let topY = input.position.z * -0.05 + 0.11
+
+            let clipX = frontFactor * frontX + rightFactor * rightX + topFactor * topX
+            let clipY = frontFactor * frontY + rightFactor * rightY + topFactor * topY
+            let clipZ = frontFactor * 0.05 + topFactor * 0.10 + rightFactor * 0.15
+
             result.clip_position = Float4(clipX, clipY, clipZ, 1.0)
             result.color = cubeColor(input.normal)
             return result

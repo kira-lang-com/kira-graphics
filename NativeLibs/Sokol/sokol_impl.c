@@ -29,6 +29,7 @@ static uint32_t kg_ui_demo_pipeline_id = 0;
 typedef struct {
     uint32_t id;
     bool has_position_attribute;
+    bool has_normal_attribute;
 } kg_shader_record;
 
 typedef struct {
@@ -94,12 +95,13 @@ static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_
     }
 }
 
-static void kg_record_shader(uint32_t id, bool has_position_attribute) {
+static void kg_record_shader(uint32_t id, bool has_position_attribute, bool has_normal_attribute) {
     if (kg_shader_record_count >= 64) {
         return;
     }
     kg_shader_records[kg_shader_record_count].id = id;
     kg_shader_records[kg_shader_record_count].has_position_attribute = has_position_attribute;
+    kg_shader_records[kg_shader_record_count].has_normal_attribute = has_normal_attribute;
     kg_shader_record_count += 1;
 }
 
@@ -650,6 +652,18 @@ uint32_t kg_finalize_float_buffer_upload(uint32_t upload_id) {
             fprintf(stderr, " %.3f", record->float_values[i]);
         }
         fprintf(stderr, "\n");
+        if (record->stride == 24 && record->float_count >= 24 * 6) {
+            fprintf(stderr, "KG BUFFER float faceSamples");
+            for (int face = 0; face < 6; face += 1) {
+                const int base = face * 24;
+                fprintf(stderr, " [%d:(%.3f,%.3f,%.3f)]",
+                    face,
+                    record->float_values[base + 0],
+                    record->float_values[base + 1],
+                    record->float_values[base + 2]);
+            }
+            fprintf(stderr, "\n");
+        }
     }
     kg_release_buffer_upload(record);
     return buffer_id;
@@ -701,6 +715,14 @@ uint32_t kg_finalize_index_buffer_upload(uint32_t upload_id) {
         (long long)record->usage,
         (long long)record->int_count,
         buffer_id);
+    if (record->int_values != NULL) {
+        const int64_t sample_count = (record->int_count < 36) ? record->int_count : 36;
+        fprintf(stderr, "KG BUFFER index values");
+        for (int64_t i = 0; i < sample_count; i += 1) {
+            fprintf(stderr, " %u", record->int_values[i]);
+        }
+        fprintf(stderr, "\n");
+    }
     kg_release_buffer_upload(record);
     return buffer_id;
 }
@@ -787,19 +809,25 @@ uint32_t kg_make_shader(const char* label, const char* vertex_source, const char
     desc.vertex_func.source = kg_shader_source(vertex_source, vertex_path);
     desc.fragment_func.source = kg_shader_source(fragment_source, fragment_path);
     bool has_position_attribute = strstr(desc.vertex_func.source, "kira_attr_position") != NULL;
+    bool has_normal_attribute = strstr(desc.vertex_func.source, "kira_attr_normal") != NULL;
     if (has_position_attribute) {
         desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
         desc.attrs[0].glsl_name = "kira_attr_position";
     }
+    if (has_normal_attribute) {
+        desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        desc.attrs[1].glsl_name = "kira_attr_normal";
+    }
     desc.label = label;
     uint32_t shader_id = sg_make_shader(&desc).id;
-    fprintf(stderr, "KG SHADER label=%s id=%u hasPos=%d vpath=%s fpath=%s\n",
+    fprintf(stderr, "KG SHADER label=%s id=%u hasPos=%d hasNormal=%d vpath=%s fpath=%s\n",
         label ? label : "",
         shader_id,
         has_position_attribute ? 1 : 0,
+        has_normal_attribute ? 1 : 0,
         vertex_path ? vertex_path : "",
         fragment_path ? fragment_path : "");
-    kg_record_shader(shader_id, has_position_attribute);
+    kg_record_shader(shader_id, has_position_attribute, has_normal_attribute);
     return shader_id;
 }
 
@@ -874,10 +902,12 @@ uint32_t kg_make_pipeline_detailed(
     (void)attr2_location;
     (void)attr3_location;
 
-    desc.color_count = (color_target_count > 0) ? 1 : 1;
-    desc.colors[0].pixel_format = (color_format == 1) ? swapchain.color_format : kg_pixel_format(color_format);
-    desc.colors[0].write_mask = SG_COLORMASK_RGBA;
-    desc.colors[0].blend = kg_blend_state(blend_enabled != 0, blend_preset);
+    desc.color_count = (color_target_count > 0) ? (int)color_target_count : 1;
+    if (desc.color_count > 0) {
+        desc.colors[0].pixel_format = (color_format == 1) ? swapchain.color_format : kg_pixel_format(color_format);
+        desc.colors[0].write_mask = SG_COLORMASK_RGBA;
+        desc.colors[0].blend = kg_blend_state(blend_enabled != 0, blend_preset);
+    }
     desc.primitive_type = kg_primitive_type(topology);
     desc.cull_mode = kg_cull_mode(cull_mode);
     desc.face_winding = kg_face_winding(front_face);
@@ -976,15 +1006,19 @@ uint32_t kg_begin_render_pass(
     pass.action.colors[0].clear_value = (sg_color){ (float)clear_r, (float)clear_g, (float)clear_b, (float)clear_a };
 
     if (color_target_kind == 1) {
-        pass.swapchain = sglue_swapchain();
-        kg_current_pass_width = pass.swapchain.width;
-        kg_current_pass_height = pass.swapchain.height;
-        fprintf(stderr, "KG SWAPCHAIN sapp=%dx%d swapchain=%dx%d dpi=%.3f\n",
+        sg_swapchain sw = sglue_swapchain();
+        int w = sw.width;
+        int h = sw.height;
+        pass.swapchain = sw;
+        kg_current_pass_width = w;
+        kg_current_pass_height = h;
+        fprintf(stderr, "KG SWAPCHAIN sapp=%dx%d swapchain=%dx%d dpi=%.3f depthFmt=%d\n",
             sapp_width(),
             sapp_height(),
-            pass.swapchain.width,
-            pass.swapchain.height,
-            (double)sapp_dpi_scale());
+            w,
+            h,
+            (double)sapp_dpi_scale(),
+            (int)sw.depth_format);
     } else if (color_target_kind == 2) {
         kg_texture_record* color_record = kg_find_texture(color_texture_id);
         if (color_record == NULL || color_record->color_view_id == 0) {
@@ -1013,6 +1047,10 @@ uint32_t kg_begin_render_pass(
         pass.action.depth.load_action = kg_load_action(depth_load_action);
         pass.action.depth.store_action = kg_store_action(depth_store_action);
         pass.action.depth.clear_value = (float)clear_depth;
+    } else if ((color_target_kind == 1) && (pass.swapchain.depth_format != SG_PIXELFORMAT_NONE)) {
+        pass.action.depth.load_action = kg_load_action(depth_load_action);
+        pass.action.depth.store_action = kg_store_action(depth_store_action);
+        pass.action.depth.clear_value = (float)clear_depth;
     }
 
     if (has_stencil_attachment != 0) {
@@ -1023,6 +1061,10 @@ uint32_t kg_begin_render_pass(
             pass.action.stencil.store_action = kg_store_action(stencil_store_action);
             pass.action.stencil.clear_value = (uint8_t)clear_stencil;
         }
+    } else if ((color_target_kind == 1) && (pass.swapchain.depth_format != SG_PIXELFORMAT_NONE)) {
+        pass.action.stencil.load_action = kg_load_action(stencil_load_action);
+        pass.action.stencil.store_action = kg_store_action(stencil_store_action);
+        pass.action.stencil.clear_value = (uint8_t)clear_stencil;
     }
 
     sg_begin_pass(&pass);
@@ -1074,6 +1116,7 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
     sg_bindings bindings = {0};
     if (has_vertex_buffer != 0) {
         bindings.vertex_buffers[0].id = vertex_buffer_id;
+        bindings.vertex_buffer_offsets[0] = 0;
     } else if (kg_pipeline_has_position_attribute(pipeline_id)) {
         if (pipeline_id == kg_ui_demo_pipeline_id) {
             kg_ensure_ui_demo_vertex_buffer();
@@ -1082,9 +1125,11 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
             kg_ensure_triangle_vertex_buffer();
             bindings.vertex_buffers[0] = kg_triangle_vertex_buffer;
         }
+        bindings.vertex_buffer_offsets[0] = 0;
     }
     if (has_index_buffer != 0) {
         bindings.index_buffer.id = index_buffer_id;
+        bindings.index_buffer_offset = 0;
     }
     sg_apply_bindings(&bindings);
 

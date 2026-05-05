@@ -5,7 +5,6 @@ struct CubeState {
     var pipeline: RenderPipeline
     var vertices: GraphicsBuffer
     var indices: GraphicsBuffer
-    var depthTexture: GraphicsTexture
     var indexCount: Int
 }
 
@@ -47,16 +46,12 @@ function cubeIndices() -> [Int] {
     return [
         0, 1, 2,
         0, 2, 3,
-        4, 5, 6,
-        4, 6, 7,
-        8, 9, 10,
-        8, 10, 11,
         12, 13, 14,
         12, 14, 15,
         16, 17, 18,
         16, 18, 19,
-        20, 21, 22,
-        20, 22, 23
+        0, 1, 2,
+        0, 2, 3
     ]
 }
 
@@ -80,7 +75,7 @@ function cubeVertexLayout() -> VertexLayout {
     }
 }
 
-function cubeRenderPass(depthTexture: GraphicsTexture) -> RenderPassDescriptor {
+function cubeRenderPass() -> RenderPassDescriptor {
     return RenderPassDescriptor {
         label: "basic-3d-cube-pass"
         colorAttachments: [
@@ -89,9 +84,9 @@ function cubeRenderPass(depthTexture: GraphicsTexture) -> RenderPassDescriptor {
                 loadAction: loadActionClear()
                 storeAction: storeActionStore()
                 clearColor: Color {
-                    r: 0.02
-                    g: 0.025
-                    b: 0.04
+                    r: 1.0
+                    g: 1.0
+                    b: 1.0
                     a: 1.0
                 }
                 resolveTarget: emptyRenderTarget()
@@ -103,22 +98,16 @@ function cubeRenderPass(depthTexture: GraphicsTexture) -> RenderPassDescriptor {
             loadAction: loadActionClear()
             storeAction: storeActionStore()
             clearColor: Color {
-                r: 0.02
-                g: 0.025
-                b: 0.04
+                r: 1.0
+                g: 1.0
+                b: 1.0
                 a: 1.0
             }
             resolveTarget: emptyRenderTarget()
             hasResolveTarget: false
         }
         hasPrimaryColorAttachment: true
-        depthAttachment: DepthAttachment {
-            texture: depthTexture
-            loadAction: loadActionClear()
-            storeAction: storeActionStore()
-            clearDepth: 1.0
-            readOnly: false
-        }
+        depthAttachment: emptyDepthAttachment()
         hasDepthAttachment: false
         stencilAttachment: emptyStencilAttachment()
         hasStencilAttachment: false
@@ -139,7 +128,6 @@ function main() {
         pipeline: emptyRenderPipeline()
         vertices: emptyGraphicsBuffer()
         indices: emptyGraphicsBuffer()
-        depthTexture: emptyGraphicsTexture()
         indexCount: 0
     })
 
@@ -181,27 +169,27 @@ function main() {
                 }
             ]
             depthStencil: DepthStencilDescriptor {
-                depthEnabled: false
-                depthWriteEnabled: false
-                depthCompare: compareFunctionAlways()
+                depthEnabled: true
+                depthWriteEnabled: true
+                depthCompare: compareFunctionLessEqual()
                 format: textureFormatDepth24Stencil8()
             }
             rasterization: RasterizationDescriptor {
-                cullMode: cullModeBack()
-                frontFace: frontFaceCounterClockwise()
+                cullMode: cullModeNone()
+                frontFace: frontFaceClockwise()
             }
             primitive: PrimitiveDescriptor {
                 topology: primitiveTopologyTriangleList()
             }
         })
 
-        cubeState.indexCount = 36
+        cubeState.indexCount = 24
         return
     }
 
     app.onFrame { frame in
         var cubeState = nativeRecover<CubeState>(frame.userData)
-        let pass = cubeRenderPass(cubeState.depthTexture)
+        let pass = cubeRenderPass()
         let pipeline = cubeState.pipeline
         let vertices = cubeState.vertices
         let indices = cubeState.indices
@@ -218,7 +206,6 @@ function main() {
 
     app.onCleanup { graphics in
         var cubeState = nativeRecover<CubeState>(graphics.userData)
-        graphics.destroyTexture(cubeState.depthTexture)
         graphics.destroyBuffer(cubeState.indices)
         graphics.destroyBuffer(cubeState.vertices)
         graphics.destroyRenderPipeline(cubeState.pipeline)
