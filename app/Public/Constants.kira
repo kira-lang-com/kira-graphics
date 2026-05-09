@@ -19,6 +19,16 @@ function bufferUsageStorage() -> Int {
 }
 
 @Native
+function uniformSlotScene() -> Int {
+    return 0
+}
+
+@Native
+function uniformSlotObject() -> Int {
+    return 1
+}
+
+@Native
 function vertexFormatFloat2() -> Int {
     return 1
 }

@@ -25,6 +25,27 @@ function kgFinalizeIndexBufferUpload(uploadId: U32): U32;
 @FFI.Extern { library: sokol; symbol: kg_destroy_buffer_id; abi: c; }
 function kgDestroyBufferId(bufferId: U32): Void;
 
+@FFI.Extern { library: sokol; symbol: kg_create_uniform_id; abi: c; }
+function kgCreateUniformId(label: CString, expectedFloatCount: I64): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_set_uniform_float; abi: c; }
+function kgSetUniformFloat(uniformId: U32, index: I64, value: Float): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_finish_uniform_update; abi: c; }
+function kgFinishUniformUpdate(uniformId: U32, floatCount: I64): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_destroy_uniform_id; abi: c; }
+function kgDestroyUniformId(uniformId: U32): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_create_bind_group_id; abi: c; }
+function kgCreateBindGroupId(label: CString): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_set_bind_group_uniform; abi: c; }
+function kgSetBindGroupUniform(bindGroupId: U32, entryIndex: I64, uniformSlot: I64, uniformId: U32): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_destroy_bind_group_id; abi: c; }
+function kgDestroyBindGroupId(bindGroupId: U32): Void;
+
 @FFI.Extern { library: sokol; symbol: kg_create_texture_id; abi: c; }
 function kgCreateTextureId(label: CString, width: I64, height: I64, format: I64, usage: I64, sampleCount: I64, storageMode: I64): U32;
 
@@ -35,7 +56,7 @@ function kgDestroyTextureId(textureId: U32): Void;
 function kgBeginRenderPass(label: CString, colorTargetKind: I64, colorTextureId: U32, colorMipLevel: I64, colorArrayLayer: I64, colorLoadAction: I64, colorStoreAction: I64, clearR: Float, clearG: Float, clearB: Float, clearA: Float, hasResolveTarget: I64, resolveTextureId: U32, resolveMipLevel: I64, resolveArrayLayer: I64, hasDepthAttachment: I64, depthTextureId: U32, depthLoadAction: I64, depthStoreAction: I64, clearDepth: Float, depthReadOnly: I64, hasStencilAttachment: I64, stencilTextureId: U32, stencilLoadAction: I64, stencilStoreAction: I64, clearStencil: I64, stencilReadOnly: I64): U32;
 
 @FFI.Extern { library: sokol; symbol: kg_apply_pipeline_bindings_and_draw; abi: c; }
-function kgApplyPipelineBindingsAndDraw(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, vertexCount: I64, indexCount: I64, instanceCount: I64): U32;
+function kgApplyPipelineBindingsAndDraw(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, bindGroup0Id: U32, hasBindGroup0: I64, bindGroup1Id: U32, hasBindGroup1: I64, bindGroup2Id: U32, hasBindGroup2: I64, bindGroup3Id: U32, hasBindGroup3: I64, vertexCount: I64, indexCount: I64, instanceCount: I64): U32;
 
 @FFI.Extern { library: sokol; symbol: kg_log_submit_state; abi: c; }
 function kgLogSubmitState(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, vertexCount: I64, indexCount: I64, instanceCount: I64): Void;
@@ -75,3 +96,15 @@ function kgMakeShader(label: CString, vertexSource: CString, fragmentSource: CSt
 
 @FFI.Extern { library: sokol; symbol: kg_make_ksl_shader; abi: c; }
 function kgMakeKslShader(label: CString, asset: CString, directory: CString): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_math_sqrt; abi: c; }
+function kgMathSqrt(value: Float): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_math_sin; abi: c; }
+function kgMathSin(value: Float): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_math_cos; abi: c; }
+function kgMathCos(value: Float): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_math_tan; abi: c; }
+function kgMathTan(value: Float): Float;

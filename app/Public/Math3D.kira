@@ -1,0 +1,212 @@
+struct Float3 {
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var z: Float = 0.0
+}
+
+struct Float4 {
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var z: Float = 0.0
+    var w: Float = 0.0
+}
+
+struct Float4x4 {
+    var m00: Float = 1.0
+    var m01: Float = 0.0
+    var m02: Float = 0.0
+    var m03: Float = 0.0
+    var m10: Float = 0.0
+    var m11: Float = 1.0
+    var m12: Float = 0.0
+    var m13: Float = 0.0
+    var m20: Float = 0.0
+    var m21: Float = 0.0
+    var m22: Float = 1.0
+    var m23: Float = 0.0
+    var m30: Float = 0.0
+    var m31: Float = 0.0
+    var m32: Float = 0.0
+    var m33: Float = 1.0
+}
+
+@Native
+function graphicsMathSqrt(value: Float) -> Float {
+    return kgMathSqrt(value)
+}
+
+@Native
+function graphicsMathSin(value: Float) -> Float {
+    return kgMathSin(value)
+}
+
+@Native
+function graphicsMathCos(value: Float) -> Float {
+    return kgMathCos(value)
+}
+
+@Native
+function graphicsMathTan(value: Float) -> Float {
+    return kgMathTan(value)
+}
+
+function float3(x: Float, y: Float, z: Float) -> Float3 {
+    return Float3 { x: x y: y z: z }
+}
+
+function float4(x: Float, y: Float, z: Float, w: Float) -> Float4 {
+    return Float4 { x: x y: y z: z w: w }
+}
+
+function dot3(a: Float3, b: Float3) -> Float {
+    return a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+function cross3(a: Float3, b: Float3) -> Float3 {
+    return Float3 {
+        x: a.y * b.z - a.z * b.y
+        y: a.z * b.x - a.x * b.z
+        z: a.x * b.y - a.y * b.x
+    }
+}
+
+function subtract3(a: Float3, b: Float3) -> Float3 {
+    return Float3 {
+        x: a.x - b.x
+        y: a.y - b.y
+        z: a.z - b.z
+    }
+}
+
+function length3(v: Float3) -> Float {
+    return graphicsMathSqrt(dot3(v, v))
+}
+
+function normalize3(v: Float3) -> Float3 {
+    let length = length3(v)
+    if (length <= 0.000001) {
+        return Float3 { x: 0.0 y: 0.0 z: 0.0 }
+    }
+    return Float3 {
+        x: v.x / length
+        y: v.y / length
+        z: v.z / length
+    }
+}
+
+function matrixIdentity4x4() -> Float4x4 {
+    return Float4x4 {}
+}
+
+function matrixTranslation(position: Float3) -> Float4x4 {
+    return Float4x4 {
+        m03: position.x
+        m13: position.y
+        m23: position.z
+    }
+}
+
+function matrixScale(scale: Float3) -> Float4x4 {
+    return Float4x4 {
+        m00: scale.x
+        m11: scale.y
+        m22: scale.z
+    }
+}
+
+function matrixRotationX(radians: Float) -> Float4x4 {
+    let c = graphicsMathCos(radians)
+    let s = graphicsMathSin(radians)
+    return Float4x4 {
+        m11: c
+        m12: 0.0 - s
+        m21: s
+        m22: c
+    }
+}
+
+function matrixRotationY(radians: Float) -> Float4x4 {
+    let c = graphicsMathCos(radians)
+    let s = graphicsMathSin(radians)
+    return Float4x4 {
+        m00: c
+        m02: s
+        m20: 0.0 - s
+        m22: c
+    }
+}
+
+function matrixRotationZ(radians: Float) -> Float4x4 {
+    let c = graphicsMathCos(radians)
+    let s = graphicsMathSin(radians)
+    return Float4x4 {
+        m00: c
+        m01: 0.0 - s
+        m10: s
+        m11: c
+    }
+}
+
+function matrixMultiply(a: Float4x4, b: Float4x4) -> Float4x4 {
+    return Float4x4 {
+        m00: a.m00 * b.m00 + a.m01 * b.m10 + a.m02 * b.m20 + a.m03 * b.m30
+        m01: a.m00 * b.m01 + a.m01 * b.m11 + a.m02 * b.m21 + a.m03 * b.m31
+        m02: a.m00 * b.m02 + a.m01 * b.m12 + a.m02 * b.m22 + a.m03 * b.m32
+        m03: a.m00 * b.m03 + a.m01 * b.m13 + a.m02 * b.m23 + a.m03 * b.m33
+
+        m10: a.m10 * b.m00 + a.m11 * b.m10 + a.m12 * b.m20 + a.m13 * b.m30
+        m11: a.m10 * b.m01 + a.m11 * b.m11 + a.m12 * b.m21 + a.m13 * b.m31
+        m12: a.m10 * b.m02 + a.m11 * b.m12 + a.m12 * b.m22 + a.m13 * b.m32
+        m13: a.m10 * b.m03 + a.m11 * b.m13 + a.m12 * b.m23 + a.m13 * b.m33
+
+        m20: a.m20 * b.m00 + a.m21 * b.m10 + a.m22 * b.m20 + a.m23 * b.m30
+        m21: a.m20 * b.m01 + a.m21 * b.m11 + a.m22 * b.m21 + a.m23 * b.m31
+        m22: a.m20 * b.m02 + a.m21 * b.m12 + a.m22 * b.m22 + a.m23 * b.m32
+        m23: a.m20 * b.m03 + a.m21 * b.m13 + a.m22 * b.m23 + a.m23 * b.m33
+
+        m30: a.m30 * b.m00 + a.m31 * b.m10 + a.m32 * b.m20 + a.m33 * b.m30
+        m31: a.m30 * b.m01 + a.m31 * b.m11 + a.m32 * b.m21 + a.m33 * b.m31
+        m32: a.m30 * b.m02 + a.m31 * b.m12 + a.m32 * b.m22 + a.m33 * b.m32
+        m33: a.m30 * b.m03 + a.m31 * b.m13 + a.m32 * b.m23 + a.m33 * b.m33
+    }
+}
+
+function matrixPerspectiveRightHanded(fovYRadians: Float, aspect: Float, nearPlane: Float, farPlane: Float) -> Float4x4 {
+    let f = 1.0 / graphicsMathTan(fovYRadians * 0.5)
+    return Float4x4 {
+        m00: f / aspect
+        m11: f
+        m22: (farPlane + nearPlane) / (nearPlane - farPlane)
+        m23: (2.0 * farPlane * nearPlane) / (nearPlane - farPlane)
+        m32: 0.0 - 1.0
+        m33: 0.0
+    }
+}
+
+function matrixLookAtRightHanded(eye: Float3, target: Float3, up: Float3) -> Float4x4 {
+    let f = normalize3(subtract3(target, eye))
+    let s = normalize3(cross3(f, up))
+    let u = cross3(s, f)
+
+    return Float4x4 {
+        m00: s.x
+        m01: s.y
+        m02: s.z
+        m03: 0.0 - dot3(s, eye)
+
+        m10: u.x
+        m11: u.y
+        m12: u.z
+        m13: 0.0 - dot3(u, eye)
+
+        m20: 0.0 - f.x
+        m21: 0.0 - f.y
+        m22: 0.0 - f.z
+        m23: dot3(f, eye)
+
+        m30: 0.0
+        m31: 0.0
+        m32: 0.0
+        m33: 1.0
+    }
+}

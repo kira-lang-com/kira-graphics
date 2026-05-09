@@ -82,6 +82,60 @@ class Graphics {
         return
     }
 
+    function createUniform(descriptor: UniformDescriptor) -> GraphicsUniform {
+        let uniformId = sokolCreateUniformId(descriptor.label, descriptor.expectedFloatCount)
+        let uniform = GraphicsUniform {
+            handle: BackendUniformHandle {
+                id: uniformId
+            }
+            id: uniformId
+        }
+        updateUniform(uniform, descriptor.data)
+        return uniform
+    }
+
+    function updateUniform(uniform: GraphicsUniform, data: [Float]) {
+        updateGraphicsUniform(uniform, data)
+        return
+    }
+
+    function destroyUniform(uniform: GraphicsUniform) {
+        sokolDestroyUniformId(uniform.id)
+        return
+    }
+
+    function createBindGroup(descriptor: BindGroupDescriptor) -> BindGroup {
+        let bindGroupId = sokolCreateBindGroupId(descriptor.label)
+        var index = 0
+        while index < descriptor.uniformEntries.count {
+            let entry = descriptor.uniformEntries[index]
+            sokolSetBindGroupUniform(bindGroupId, index, entry.uniformSlot, entry.uniform.id)
+            index = index + 1
+        }
+        return BindGroup {
+            handle: BackendBindGroupHandle {
+                id: bindGroupId
+            }
+            id: bindGroupId
+        }
+    }
+
+    function createUniformBindGroup(label: String, uniformSlot: Int, uniform: GraphicsUniform) -> BindGroup {
+        let bindGroupId = sokolCreateBindGroupId(label)
+        sokolSetBindGroupUniform(bindGroupId, 0, uniformSlot, uniform.id)
+        return BindGroup {
+            handle: BackendBindGroupHandle {
+                id: bindGroupId
+            }
+            id: bindGroupId
+        }
+    }
+
+    function destroyBindGroup(bindGroup: BindGroup) {
+        sokolDestroyBindGroupId(bindGroup.id)
+        return
+    }
+
     function createTexture(descriptor: TextureDescriptor) -> GraphicsTexture {
         let textureId = sokolCreateTextureId(
             descriptor.label,

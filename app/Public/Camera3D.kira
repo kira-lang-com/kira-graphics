@@ -1,0 +1,21 @@
+struct PerspectiveCamera {
+    var position: Float3 = Float3 { x: 0.0 y: 0.0 z: 5.0 }
+    var target: Float3 = Float3 { x: 0.0 y: 0.0 z: 0.0 }
+    var up: Float3 = Float3 { x: 0.0 y: 1.0 z: 0.0 }
+    var fovYRadians: Float = 0.7853982
+    var aspect: Float = 1.3333333
+    var nearPlane: Float = 0.1
+    var farPlane: Float = 100.0
+}
+
+function cameraViewMatrix(camera: PerspectiveCamera) -> Float4x4 {
+    return matrixLookAtRightHanded(camera.position, camera.target, camera.up)
+}
+
+function cameraProjectionMatrix(camera: PerspectiveCamera) -> Float4x4 {
+    return matrixPerspectiveRightHanded(camera.fovYRadians, camera.aspect, camera.nearPlane, camera.farPlane)
+}
+
+function cameraViewProjectionMatrix(camera: PerspectiveCamera) -> Float4x4 {
+    return matrixMultiply(cameraProjectionMatrix(camera), cameraViewMatrix(camera))
+}

@@ -12,3 +12,47 @@ function emptyGraphicsUniform() -> GraphicsUniform {
         id: 0
     }
 }
+
+@Native
+function sokolCreateUniformId(label: String, expectedFloatCount: Int) -> U32 {
+    let nativeExpectedFloatCount: I64 = expectedFloatCount
+    return kgCreateUniformId(label, nativeExpectedFloatCount)
+}
+
+@Native
+function updateGraphicsUniform(uniform: GraphicsUniform, data: [Float]) {
+    var index = 0
+    while index < data.count {
+        let nativeIndex: I64 = index
+        kgSetUniformFloat(uniform.id, nativeIndex, data[index])
+        index = index + 1
+    }
+    let nativeCount: I64 = data.count
+    kgFinishUniformUpdate(uniform.id, nativeCount)
+    return
+}
+
+@Native
+function sokolDestroyUniformId(uniformId: U32) {
+    kgDestroyUniformId(uniformId)
+    return
+}
+
+@Native
+function sokolCreateBindGroupId(label: String) -> U32 {
+    return kgCreateBindGroupId(label)
+}
+
+@Native
+function sokolSetBindGroupUniform(bindGroupId: U32, entryIndex: Int, uniformSlot: Int, uniformId: U32) {
+    let nativeEntryIndex: I64 = entryIndex
+    let nativeUniformSlot: I64 = uniformSlot
+    kgSetBindGroupUniform(bindGroupId, nativeEntryIndex, nativeUniformSlot, uniformId)
+    return
+}
+
+@Native
+function sokolDestroyBindGroupId(bindGroupId: U32) {
+    kgDestroyBindGroupId(bindGroupId)
+    return
+}

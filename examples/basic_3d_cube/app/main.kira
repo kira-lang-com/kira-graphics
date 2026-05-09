@@ -5,6 +5,10 @@ struct CubeState {
     var pipeline: RenderPipeline
     var vertices: GraphicsBuffer
     var indices: GraphicsBuffer
+    var sceneUniform: GraphicsUniform
+    var objectUniform: GraphicsUniform
+    var sceneBindGroup: BindGroup
+    var objectBindGroup: BindGroup
     var indexCount: Int
 }
 
@@ -84,6 +88,44 @@ function cubeVertexLayout() -> VertexLayout {
     }
 }
 
+function cubeCamera() -> PerspectiveCamera {
+    return PerspectiveCamera {
+        position: Float3 { x: 0.0 y: 1.2 z: 5.0 }
+        target: Float3 { x: 0.0 y: 0.0 z: 0.0 }
+        up: Float3 { x: 0.0 y: 1.0 z: 0.0 }
+        fovYRadians: 0.7853982
+        aspect: 1.3333333
+        nearPlane: 0.1
+        farPlane: 100.0
+    }
+}
+
+function cubeLight() -> DirectionalLight {
+    return DirectionalLight {
+        direction: Float3 { x: -0.35 y: -0.70 z: -0.55 }
+        color: Float3 { x: 1.0 y: 0.96 z: 0.88 }
+        intensity: 0.85
+    }
+}
+
+function cubeModelMatrix() -> Float4x4 {
+    let scale = matrixScale(Float3 { x: 0.72 y: 0.72 z: 0.72 })
+    let rotationY = matrixRotationY(0.55)
+    let rotationX = matrixRotationX(0.32)
+    return matrixMultiply(rotationY, matrixMultiply(rotationX, scale))
+}
+
+function cubeSceneUniformData() -> [Float] {
+    return sceneUniformData(sceneUniforms(cubeCamera(), cubeLight(), 0.25))
+}
+
+function cubeObjectUniformData() -> [Float] {
+    return objectUniformData(objectUniforms(
+        cubeModelMatrix(),
+        Float4 { x: 0.42 y: 0.62 z: 0.95 w: 1.0 }
+    ))
+}
+
 function cubeRenderPass() -> RenderPassDescriptor {
     return RenderPassDescriptor {
         label: "basic-3d-cube-pass"
@@ -143,6 +185,10 @@ function main() {
         pipeline: emptyRenderPipeline()
         vertices: emptyGraphicsBuffer()
         indices: emptyGraphicsBuffer()
+        sceneUniform: emptyGraphicsUniform()
+        objectUniform: emptyGraphicsUniform()
+        sceneBindGroup: emptyBindGroup()
+        objectBindGroup: emptyBindGroup()
         indexCount: 0
     })
 
@@ -169,6 +215,30 @@ function main() {
             usage: bufferUsageIndex()
             data: cubeIndices()
         })
+
+        cubeState.sceneUniform = graphics.createUniform(UniformDescriptor {
+            label: "SceneUniforms"
+            expectedFloatCount: sceneUniformFloatCount()
+            data: cubeSceneUniformData()
+        })
+
+        cubeState.objectUniform = graphics.createUniform(UniformDescriptor {
+            label: "ObjectUniforms"
+            expectedFloatCount: objectUniformFloatCount()
+            data: cubeObjectUniformData()
+        })
+
+        cubeState.sceneBindGroup = graphics.createUniformBindGroup(
+            "basic-3d-cube-scene-bindings",
+            uniformSlotScene(),
+            cubeState.sceneUniform
+        )
+
+        cubeState.objectBindGroup = graphics.createUniformBindGroup(
+            "basic-3d-cube-object-bindings",
+            uniformSlotObject(),
+            cubeState.objectUniform
+        )
 
         cubeState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
             label: "basic-3d-cube-pipeline"
@@ -213,12 +283,19 @@ function main() {
         let pipeline = cubeState.pipeline
         let vertices = cubeState.vertices
         let indices = cubeState.indices
+        let sceneBindGroup = cubeState.sceneBindGroup
+        let objectBindGroup = cubeState.objectBindGroup
         let indexCount = cubeState.indexCount
+
+        updateGraphicsUniform(cubeState.sceneUniform, cubeSceneUniformData())
+        updateGraphicsUniform(cubeState.objectUniform, cubeObjectUniformData())
 
         frame.renderPass(pass) { encoder in
             encoder.setPipeline(pipeline)
             encoder.setVertexBuffer(vertices)
             encoder.setIndexBuffer(indices, indexFormatUint32())
+            encoder.setBindGroup(0, sceneBindGroup)
+            encoder.setBindGroup(1, objectBindGroup)
             encoder.drawIndexed(indexCount)
         }
 
@@ -228,6 +305,10 @@ function main() {
     app.onCleanup { graphics in
         var cubeState = nativeRecover<CubeState>(graphics.userData)
 
+        graphics.destroyBindGroup(cubeState.objectBindGroup)
+        graphics.destroyBindGroup(cubeState.sceneBindGroup)
+        graphics.destroyUniform(cubeState.objectUniform)
+        graphics.destroyUniform(cubeState.sceneUniform)
         graphics.destroyBuffer(cubeState.indices)
         graphics.destroyBuffer(cubeState.vertices)
         graphics.destroyRenderPipeline(cubeState.pipeline)

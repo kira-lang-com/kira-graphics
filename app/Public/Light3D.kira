@@ -1,0 +1,81 @@
+struct DirectionalLight {
+    var direction: Float3 = Float3 { x: -0.35 y: -0.70 z: -0.55 }
+    var color: Float3 = Float3 { x: 1.0 y: 0.96 z: 0.88 }
+    var intensity: Float = 0.85
+}
+
+struct SceneUniforms {
+    var viewProjection: Float4x4
+    var lightDirection: Float4
+    var lightColor: Float4
+}
+
+struct ObjectUniforms {
+    var model: Float4x4
+    var baseColor: Float4
+}
+
+function sceneUniformFloatCount() -> Int {
+    return 24
+}
+
+function objectUniformFloatCount() -> Int {
+    return 20
+}
+
+function sceneUniforms(camera: PerspectiveCamera, light: DirectionalLight, ambient: Float) -> SceneUniforms {
+    return SceneUniforms {
+        viewProjection: cameraViewProjectionMatrix(camera)
+        lightDirection: Float4 {
+            x: light.direction.x
+            y: light.direction.y
+            z: light.direction.z
+            w: light.intensity
+        }
+        lightColor: Float4 {
+            x: light.color.x
+            y: light.color.y
+            z: light.color.z
+            w: ambient
+        }
+    }
+}
+
+function objectUniforms(model: Float4x4, baseColor: Float4) -> ObjectUniforms {
+    return ObjectUniforms {
+        model: model
+        baseColor: baseColor
+    }
+}
+
+function sceneUniformData(uniforms: SceneUniforms) -> [Float] {
+    let m = uniforms.viewProjection
+    let lightDirection = uniforms.lightDirection
+    let lightColor = uniforms.lightColor
+
+    // Kira Graphics stores matrices as row/column fields for column-vector math.
+    // GLSL receives mat4 values in column-major float order through sg_apply_uniforms.
+    return [
+        m.m00, m.m10, m.m20, m.m30,
+        m.m01, m.m11, m.m21, m.m31,
+        m.m02, m.m12, m.m22, m.m32,
+        m.m03, m.m13, m.m23, m.m33,
+        lightDirection.x, lightDirection.y, lightDirection.z, lightDirection.w,
+        lightColor.x, lightColor.y, lightColor.z, lightColor.w
+    ]
+}
+
+function objectUniformData(uniforms: ObjectUniforms) -> [Float] {
+    let m = uniforms.model
+    let baseColor = uniforms.baseColor
+
+    // Kira Graphics stores matrices as row/column fields for column-vector math.
+    // GLSL receives mat4 values in column-major float order through sg_apply_uniforms.
+    return [
+        m.m00, m.m10, m.m20, m.m30,
+        m.m01, m.m11, m.m21, m.m31,
+        m.m02, m.m12, m.m22, m.m32,
+        m.m03, m.m13, m.m23, m.m33,
+        baseColor.x, baseColor.y, baseColor.z, baseColor.w
+    ]
+}

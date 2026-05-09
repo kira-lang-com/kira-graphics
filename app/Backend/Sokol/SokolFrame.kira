@@ -95,6 +95,14 @@ function sokolSubmitFrame(frame: GraphicsFrame): Void {
                 frame.encoderHasVertexBuffer ? 1 : 0,
                 frame.encoderIndexBufferId,
                 frame.encoderHasIndexBuffer ? 1 : 0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
                 frame.encoderVertexCount,
                 frame.encoderIndexCount,
                 frame.encoderInstanceCount
@@ -118,8 +126,8 @@ function sokolBeginRenderPassFlat(label: String, colorTargetKind: I64, colorText
 }
 
 @Native
-function sokolApplyPipelineBindingsAndDrawFlat(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, vertexCount: I64, indexCount: I64, instanceCount: I64) -> Bool {
-    return kgApplyPipelineBindingsAndDraw(pipelineId, vertexBufferId, hasVertexBuffer, indexBufferId, hasIndexBuffer, vertexCount, indexCount, instanceCount) != 0
+function sokolApplyPipelineBindingsAndDrawFlat(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, bindGroup0Id: U32, hasBindGroup0: I64, bindGroup1Id: U32, hasBindGroup1: I64, bindGroup2Id: U32, hasBindGroup2: I64, bindGroup3Id: U32, hasBindGroup3: I64, vertexCount: I64, indexCount: I64, instanceCount: I64) -> Bool {
+    return kgApplyPipelineBindingsAndDraw(pipelineId, vertexBufferId, hasVertexBuffer, indexBufferId, hasIndexBuffer, bindGroup0Id, hasBindGroup0, bindGroup1Id, hasBindGroup1, bindGroup2Id, hasBindGroup2, bindGroup3Id, hasBindGroup3, vertexCount, indexCount, instanceCount) != 0
 }
 
 @Native

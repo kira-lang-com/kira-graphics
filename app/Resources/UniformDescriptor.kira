@@ -1,0 +1,15 @@
+struct UniformDescriptor {
+    var label: String = ""
+    var expectedFloatCount: Int = 0
+    var data: [Float]
+}
+
+struct UniformBindEntry {
+    var uniformSlot: Int = 0
+    var uniform: GraphicsUniform
+}
+
+struct BindGroupDescriptor {
+    var label: String = ""
+    var uniformEntries: [UniformBindEntry]
+}
