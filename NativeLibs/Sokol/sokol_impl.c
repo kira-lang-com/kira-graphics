@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <limits.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,6 +73,20 @@ static kg_texture_record kg_texture_records[64];
 static int kg_texture_record_count = 0;
 static int kg_current_pass_width = 0;
 static int kg_current_pass_height = 0;
+static bool kg_current_pass_active = false;
+static sg_shader kg_ui_shader = {0};
+static sg_pipeline kg_ui_pipeline = {0};
+static sg_buffer kg_ui_vertex_buffer = {0};
+static int kg_ui_clip_depth = 0;
+
+typedef struct {
+    float x;
+    float y;
+    float w;
+    float h;
+} kg_ui_clip_rect;
+
+static kg_ui_clip_rect kg_ui_clip_stack[32];
 
 static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* message, uint32_t line, const char* filename, void* user_data) {
     (void)user_data;
@@ -170,6 +185,207 @@ static void kg_ensure_triangle_vertex_buffer(void) {
     desc.data.size = sizeof(vertices);
     desc.label = "kira-graphics-default-triangle-vertices";
     kg_triangle_vertex_buffer = sg_make_buffer(&desc);
+}
+
+typedef struct {
+    float x;
+    float y;
+    float r;
+    float g;
+    float b;
+    float a;
+} kg_ui_vertex;
+
+static float kg_ui_ndc_x(float x) {
+    if (kg_current_pass_width <= 0) {
+        return 0.0f;
+    }
+    return (x / (float)kg_current_pass_width) * 2.0f - 1.0f;
+}
+
+static float kg_ui_ndc_y(float y) {
+    if (kg_current_pass_height <= 0) {
+        return 0.0f;
+    }
+    return 1.0f - (y / (float)kg_current_pass_height) * 2.0f;
+}
+
+static void kg_ui_ensure_pipeline(void) {
+    if (kg_ui_pipeline.id != 0 && kg_ui_vertex_buffer.id != 0) {
+        return;
+    }
+
+    if (kg_ui_shader.id == 0) {
+        sg_shader_desc shader_desc = {0};
+        shader_desc.vertex_func.source =
+            "#version 330 core\n"
+            "layout(location=0) in vec2 kira_attr_position;\n"
+            "layout(location=1) in vec4 kira_attr_color;\n"
+            "out vec4 v_color;\n"
+            "void main() {\n"
+            "  gl_Position = vec4(kira_attr_position, 0.0, 1.0);\n"
+            "  v_color = kira_attr_color;\n"
+            "}\n";
+        shader_desc.fragment_func.source =
+            "#version 330 core\n"
+            "in vec4 v_color;\n"
+            "out vec4 frag_color;\n"
+            "void main() {\n"
+            "  frag_color = v_color;\n"
+            "}\n";
+        shader_desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        shader_desc.attrs[0].glsl_name = "kira_attr_position";
+        shader_desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        shader_desc.attrs[1].glsl_name = "kira_attr_color";
+        shader_desc.label = "kira-graphics-immediate-2d-shader";
+        kg_ui_shader = sg_make_shader(&shader_desc);
+    }
+
+    if (kg_ui_pipeline.id == 0) {
+        sg_swapchain swapchain = sglue_swapchain();
+        sg_pipeline_desc pipeline_desc = {0};
+        pipeline_desc.shader = kg_ui_shader;
+        pipeline_desc.layout.buffers[0].stride = sizeof(kg_ui_vertex);
+        pipeline_desc.layout.attrs[0].buffer_index = 0;
+        pipeline_desc.layout.attrs[0].offset = offsetof(kg_ui_vertex, x);
+        pipeline_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
+        pipeline_desc.layout.attrs[1].buffer_index = 0;
+        pipeline_desc.layout.attrs[1].offset = offsetof(kg_ui_vertex, r);
+        pipeline_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT4;
+        pipeline_desc.colors[0].pixel_format = swapchain.color_format;
+        pipeline_desc.colors[0].blend.enabled = true;
+        pipeline_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+        pipeline_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pipeline_desc.colors[0].blend.op_rgb = SG_BLENDOP_ADD;
+        pipeline_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+        pipeline_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pipeline_desc.colors[0].blend.op_alpha = SG_BLENDOP_ADD;
+        pipeline_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+        pipeline_desc.cull_mode = SG_CULLMODE_NONE;
+        pipeline_desc.face_winding = SG_FACEWINDING_CCW;
+        pipeline_desc.sample_count = swapchain.sample_count;
+        pipeline_desc.label = "kira-graphics-immediate-2d-pipeline";
+        kg_ui_pipeline = sg_make_pipeline(&pipeline_desc);
+    }
+
+    if (kg_ui_vertex_buffer.id == 0) {
+        sg_buffer_desc buffer_desc = {0};
+        buffer_desc.usage.vertex_buffer = true;
+        buffer_desc.usage.stream_update = true;
+        buffer_desc.size = sizeof(kg_ui_vertex) * 4096;
+        buffer_desc.label = "kira-graphics-immediate-2d-vertices";
+        kg_ui_vertex_buffer = sg_make_buffer(&buffer_desc);
+    }
+}
+
+static void kg_ui_draw_vertices(const kg_ui_vertex* vertices, int count) {
+    if (count <= 0) {
+        return;
+    }
+    kg_ui_ensure_pipeline();
+    sg_range data = { vertices, (size_t)count * sizeof(kg_ui_vertex) };
+    sg_update_buffer(kg_ui_vertex_buffer, &data);
+    sg_apply_pipeline(kg_ui_pipeline);
+    sg_bindings bindings = {0};
+    bindings.vertex_buffers[0] = kg_ui_vertex_buffer;
+    sg_apply_bindings(&bindings);
+    sg_draw(0, count, 1);
+}
+
+static kg_ui_clip_rect kg_ui_intersect_clip(kg_ui_clip_rect a, kg_ui_clip_rect b) {
+    float left = a.x > b.x ? a.x : b.x;
+    float top = a.y > b.y ? a.y : b.y;
+    float right_a = a.x + a.w;
+    float right_b = b.x + b.w;
+    float bottom_a = a.y + a.h;
+    float bottom_b = b.y + b.h;
+    float right = right_a < right_b ? right_a : right_b;
+    float bottom = bottom_a < bottom_b ? bottom_a : bottom_b;
+    kg_ui_clip_rect result = { left, top, right > left ? right - left : 0.0f, bottom > top ? bottom - top : 0.0f };
+    return result;
+}
+
+void kg_ui_push_clip(float x, float y, float w, float h, float radius) {
+    (void)radius;
+    if (kg_ui_clip_depth >= 32) {
+        return;
+    }
+    kg_ui_clip_rect clip = { x, y, w, h };
+    if (kg_ui_clip_depth > 0) {
+        clip = kg_ui_intersect_clip(kg_ui_clip_stack[kg_ui_clip_depth - 1], clip);
+    }
+    kg_ui_clip_stack[kg_ui_clip_depth] = clip;
+    kg_ui_clip_depth += 1;
+    sg_apply_scissor_rect((int)clip.x, (int)clip.y, (int)clip.w, (int)clip.h, true);
+}
+
+void kg_ui_pop_clip(void) {
+    if (kg_ui_clip_depth <= 0) {
+        sg_apply_scissor_rect(0, 0, kg_current_pass_width, kg_current_pass_height, true);
+        return;
+    }
+    kg_ui_clip_depth -= 1;
+    if (kg_ui_clip_depth == 0) {
+        sg_apply_scissor_rect(0, 0, kg_current_pass_width, kg_current_pass_height, true);
+    } else {
+        kg_ui_clip_rect clip = kg_ui_clip_stack[kg_ui_clip_depth - 1];
+        sg_apply_scissor_rect((int)clip.x, (int)clip.y, (int)clip.w, (int)clip.h, true);
+    }
+}
+
+void kg_ui_draw_surface(float x, float y, float w, float h, float r, float g, float b, float a, float border_r, float border_g, float border_b, float border_a, float border_width, float radius) {
+    (void)radius;
+    if (w <= 0.0f || h <= 0.0f) {
+        return;
+    }
+    kg_ui_vertex fill[6] = {
+        { kg_ui_ndc_x(x), kg_ui_ndc_y(y), r, g, b, a },
+        { kg_ui_ndc_x(x + w), kg_ui_ndc_y(y), r, g, b, a },
+        { kg_ui_ndc_x(x + w), kg_ui_ndc_y(y + h), r, g, b, a },
+        { kg_ui_ndc_x(x), kg_ui_ndc_y(y), r, g, b, a },
+        { kg_ui_ndc_x(x + w), kg_ui_ndc_y(y + h), r, g, b, a },
+        { kg_ui_ndc_x(x), kg_ui_ndc_y(y + h), r, g, b, a },
+    };
+    kg_ui_draw_vertices(fill, 6);
+
+    if (border_width > 0.0f && border_a > 0.0f) {
+        float bw = border_width;
+        kg_ui_draw_surface(x, y, w, bw, border_r, border_g, border_b, border_a, 0, 0, 0, 0, 0, 0);
+        kg_ui_draw_surface(x, y + h - bw, w, bw, border_r, border_g, border_b, border_a, 0, 0, 0, 0, 0, 0);
+        kg_ui_draw_surface(x, y, bw, h, border_r, border_g, border_b, border_a, 0, 0, 0, 0, 0, 0);
+        kg_ui_draw_surface(x + w - bw, y, bw, h, border_r, border_g, border_b, border_a, 0, 0, 0, 0, 0, 0);
+    }
+}
+
+void kg_ui_draw_glow(float x, float y, float w, float h, float r, float g, float b, float a, float radius, float intensity) {
+    float spread = radius > 1.0f ? radius : 1.0f;
+    float alpha = a * intensity * 0.25f;
+    kg_ui_draw_surface(x - spread, y - spread, w + spread * 2.0f, h + spread * 2.0f, r, g, b, alpha, 0, 0, 0, 0, 0, 0);
+}
+
+void kg_ui_draw_text(const char* text, float x, float y, float w, float h, float r, float g, float b, float a, float size) {
+    if (text == NULL || text[0] == '\0') {
+        return;
+    }
+    int len = (int)strlen(text);
+    if (len > 64) {
+        len = 64;
+    }
+    float glyph_w = size * 0.38f;
+    float glyph_h = size * 0.72f;
+    float gap = size * 0.18f;
+    float cursor = x;
+    for (int i = 0; i < len; i += 1) {
+        if (text[i] == ' ') {
+            cursor += glyph_w + gap;
+            continue;
+        }
+        if (cursor + glyph_w > x + w) {
+            break;
+        }
+        kg_ui_draw_surface(cursor, y + (h - glyph_h) * 0.5f, glyph_w, glyph_h, r, g, b, a, 0, 0, 0, 0, 0, 0);
+        cursor += glyph_w + gap;
+    }
 }
 
 static void kg_ensure_ui_demo_vertex_buffer(void) {
@@ -987,6 +1203,10 @@ uint32_t kg_begin_render_pass(
     (void)depth_read_only;
     (void)stencil_read_only;
 
+    kg_current_pass_active = false;
+    kg_current_pass_width = 0;
+    kg_current_pass_height = 0;
+
     fprintf(stderr, "KG PASS kind=%lld colorTex=%u load=%lld store=%lld clear=(%.3f,%.3f,%.3f,%.3f) depth=%lld depthTex=%u\n",
         (long long)color_target_kind,
         color_texture_id,
@@ -1006,12 +1226,30 @@ uint32_t kg_begin_render_pass(
     pass.action.colors[0].clear_value = (sg_color){ (float)clear_r, (float)clear_g, (float)clear_b, (float)clear_a };
 
     if (color_target_kind == 1) {
+        if (color_texture_id != 0) {
+            printf("Kira Graphics: swapchain render pass cannot use an explicit color texture\n");
+            return 0;
+        }
+        if (has_resolve_target != 0) {
+            printf("Kira Graphics: swapchain render pass does not support resolve attachments\n");
+            return 0;
+        }
+        if (has_depth_attachment != 0 && depth_texture_id != 0) {
+            printf("Kira Graphics: render pass mixes swapchain color with explicit depth texture; use swapchain/default depth or render to an offscreen color texture\n");
+            return 0;
+        }
+        if (has_stencil_attachment != 0 && stencil_texture_id != 0) {
+            printf("Kira Graphics: swapchain render pass does not support an explicit stencil texture\n");
+            return 0;
+        }
         sg_swapchain sw = sglue_swapchain();
+        if (has_depth_attachment != 0 && sw.depth_format == SG_PIXELFORMAT_NONE) {
+            printf("Kira Graphics: swapchain render pass requested depth, but the swapchain has no depth buffer\n");
+            return 0;
+        }
         int w = sw.width;
         int h = sw.height;
         pass.swapchain = sw;
-        kg_current_pass_width = w;
-        kg_current_pass_height = h;
         fprintf(stderr, "KG SWAPCHAIN sapp=%dx%d swapchain=%dx%d dpi=%.3f depthFmt=%d\n",
             sapp_width(),
             sapp_height(),
@@ -1019,56 +1257,91 @@ uint32_t kg_begin_render_pass(
             h,
             (double)sapp_dpi_scale(),
             (int)sw.depth_format);
+        if (has_depth_attachment != 0) {
+            pass.action.depth.load_action = kg_load_action(depth_load_action);
+            pass.action.depth.store_action = kg_store_action(depth_store_action);
+            pass.action.depth.clear_value = (float)clear_depth;
+        }
+        if (has_stencil_attachment != 0) {
+            pass.action.stencil.load_action = kg_load_action(stencil_load_action);
+            pass.action.stencil.store_action = kg_store_action(stencil_store_action);
+            pass.action.stencil.clear_value = (uint8_t)clear_stencil;
+        }
+        sg_begin_pass(&pass);
+        kg_current_pass_active = _sg.cur_pass.in_pass && _sg.cur_pass.valid;
+        if (!kg_current_pass_active) {
+            printf("Kira Graphics: swapchain render pass could not be activated in Sokol\n");
+            return 0;
+        }
+        kg_current_pass_width = w;
+        kg_current_pass_height = h;
+        return 1;
     } else if (color_target_kind == 2) {
+        if (color_texture_id == 0) {
+            printf("Kira Graphics: offscreen render pass needs an explicit color texture\n");
+            return 0;
+        }
         kg_texture_record* color_record = kg_find_texture(color_texture_id);
         if (color_record == NULL || color_record->color_view_id == 0) {
+            printf("Kira Graphics: offscreen render pass color texture %u is not available as a color attachment\n", color_texture_id);
             return 0;
         }
         pass.attachments.colors[0].id = color_record->color_view_id;
-        kg_current_pass_width = (int)color_record->width;
-        kg_current_pass_height = (int)color_record->height;
-    } else {
-        return 0;
-    }
-
-    if (has_resolve_target != 0) {
-        kg_texture_record* resolve_record = kg_find_texture(resolve_texture_id);
-        if (resolve_record != NULL && resolve_record->color_view_id != 0) {
+        if (has_resolve_target != 0) {
+            if (resolve_texture_id == 0) {
+                printf("Kira Graphics: offscreen render pass requested a resolve target, but no resolve texture was provided\n");
+                return 0;
+            }
+            kg_texture_record* resolve_record = kg_find_texture(resolve_texture_id);
+            if (resolve_record == NULL || resolve_record->color_view_id == 0) {
+                printf("Kira Graphics: offscreen render pass resolve texture %u is not available as a color attachment\n", resolve_texture_id);
+                return 0;
+            }
             pass.attachments.resolves[0].id = resolve_record->color_view_id;
         }
-    }
-
-    if (has_depth_attachment != 0) {
-        kg_texture_record* depth_record = kg_find_texture(depth_texture_id);
-        if (depth_record == NULL || depth_record->depth_view_id == 0) {
-            return 0;
+        if (has_depth_attachment != 0) {
+            if (depth_texture_id == 0) {
+                printf("Kira Graphics: offscreen render pass has depth enabled, but no depth texture was provided\n");
+                return 0;
+            }
+            kg_texture_record* depth_record = kg_find_texture(depth_texture_id);
+            if (depth_record == NULL || depth_record->depth_view_id == 0) {
+                printf("Kira Graphics: offscreen render pass depth texture %u is not available as a depth attachment\n", depth_texture_id);
+                return 0;
+            }
+            pass.attachments.depth_stencil.id = depth_record->depth_view_id;
+            pass.action.depth.load_action = kg_load_action(depth_load_action);
+            pass.action.depth.store_action = kg_store_action(depth_store_action);
+            pass.action.depth.clear_value = (float)clear_depth;
         }
-        pass.attachments.depth_stencil.id = depth_record->depth_view_id;
-        pass.action.depth.load_action = kg_load_action(depth_load_action);
-        pass.action.depth.store_action = kg_store_action(depth_store_action);
-        pass.action.depth.clear_value = (float)clear_depth;
-    } else if ((color_target_kind == 1) && (pass.swapchain.depth_format != SG_PIXELFORMAT_NONE)) {
-        pass.action.depth.load_action = kg_load_action(depth_load_action);
-        pass.action.depth.store_action = kg_store_action(depth_store_action);
-        pass.action.depth.clear_value = (float)clear_depth;
-    }
-
-    if (has_stencil_attachment != 0) {
-        kg_texture_record* stencil_record = kg_find_texture(stencil_texture_id);
-        if (stencil_record != NULL && stencil_record->depth_view_id != 0) {
+        if (has_stencil_attachment != 0) {
+            if (stencil_texture_id == 0) {
+                printf("Kira Graphics: offscreen render pass has stencil enabled, but no stencil texture was provided\n");
+                return 0;
+            }
+            kg_texture_record* stencil_record = kg_find_texture(stencil_texture_id);
+            if (stencil_record == NULL || stencil_record->depth_view_id == 0) {
+                printf("Kira Graphics: offscreen render pass stencil texture %u is not available as a stencil attachment\n", stencil_texture_id);
+                return 0;
+            }
             pass.attachments.depth_stencil.id = stencil_record->depth_view_id;
             pass.action.stencil.load_action = kg_load_action(stencil_load_action);
             pass.action.stencil.store_action = kg_store_action(stencil_store_action);
             pass.action.stencil.clear_value = (uint8_t)clear_stencil;
         }
-    } else if ((color_target_kind == 1) && (pass.swapchain.depth_format != SG_PIXELFORMAT_NONE)) {
-        pass.action.stencil.load_action = kg_load_action(stencil_load_action);
-        pass.action.stencil.store_action = kg_store_action(stencil_store_action);
-        pass.action.stencil.clear_value = (uint8_t)clear_stencil;
+        kg_current_pass_width = (int)color_record->width;
+        kg_current_pass_height = (int)color_record->height;
+        sg_begin_pass(&pass);
+        kg_current_pass_active = _sg.cur_pass.in_pass && _sg.cur_pass.valid;
+        if (!kg_current_pass_active) {
+            printf("Kira Graphics: offscreen render pass could not be activated in Sokol\n");
+            return 0;
+        }
+        return 1;
     }
 
-    sg_begin_pass(&pass);
-    return 1;
+    printf("Kira Graphics: render pass has unsupported color target kind %lld\n", (long long)color_target_kind);
+    return 0;
 }
 
 uint32_t kg_apply_pipeline_bindings_and_draw(
@@ -1081,6 +1354,11 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
     int64_t index_count,
     int64_t instance_count
 ) {
+    if (!kg_current_pass_active || !_sg.cur_pass.in_pass || !_sg.cur_pass.valid) {
+        printf("Kira Graphics: draw skipped because no render pass is currently active\n");
+        return 0;
+    }
+
     kg_pipeline_record* pipeline_record = kg_find_pipeline_record(pipeline_id);
     if (pipeline_record == NULL) {
         printf("Kira Graphics: draw skipped because pipeline public id %u was not registered\n", pipeline_id);
@@ -1167,8 +1445,18 @@ void kg_log_submit_state(
 }
 
 void kg_end_pass_and_commit(void) {
+    if (!_sg.cur_pass.in_pass) {
+        printf("Kira Graphics: end pass skipped because no render pass is currently active\n");
+        kg_current_pass_active = false;
+        kg_current_pass_width = 0;
+        kg_current_pass_height = 0;
+        return;
+    }
     sg_end_pass();
     sg_commit();
+    kg_current_pass_active = false;
+    kg_current_pass_width = 0;
+    kg_current_pass_height = 0;
 }
 
 void kg_begin_swapchain_pass(float r, float g, float b, float a) {

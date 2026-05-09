@@ -63,6 +63,17 @@ function emptyDepthAttachment() -> DepthAttachment {
 }
 
 @Native
+function swapchainDepthAttachment() -> DepthAttachment {
+    return DepthAttachment {
+        texture: emptyGraphicsTexture()
+        loadAction: loadActionClear()
+        storeAction: storeActionDontCare()
+        clearDepth: 1.0
+        readOnly: false
+    }
+}
+
+@Native
 function emptyStencilAttachment() -> StencilAttachment {
     return StencilAttachment {
         texture: emptyGraphicsTexture()

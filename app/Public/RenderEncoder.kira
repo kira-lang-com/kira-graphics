@@ -1,6 +1,7 @@
 struct RenderEncoderState {
     var pipelineId: U32 = 0
     var hasPipeline: Bool = false
+    var passActive: Bool = false
 
     var vertexBufferId: U32 = 0
     var hasVertexBuffer: Bool = false
@@ -74,6 +75,18 @@ class RenderEncoder {
         state.vertexCount = vertexCount
         state.indexCount = 0
         state.instanceCount = 1
+        if (state.passActive && state.hasPipeline && state.pipelineId != 0) {
+            sokolApplyPipelineBindingsAndDrawFlat(
+                state.pipelineId,
+                state.vertexBufferId,
+                state.hasVertexBuffer ? 1 : 0,
+                state.indexBufferId,
+                state.hasIndexBuffer ? 1 : 0,
+                state.vertexCount,
+                state.indexCount,
+                state.instanceCount
+            )
+        }
         return
     }
 
@@ -82,6 +95,18 @@ class RenderEncoder {
         state.indexCount = indexCount
         state.vertexCount = 0
         state.instanceCount = 1
+        if (state.passActive && state.hasPipeline && state.pipelineId != 0) {
+            sokolApplyPipelineBindingsAndDrawFlat(
+                state.pipelineId,
+                state.vertexBufferId,
+                state.hasVertexBuffer ? 1 : 0,
+                state.indexBufferId,
+                state.hasIndexBuffer ? 1 : 0,
+                state.vertexCount,
+                state.indexCount,
+                state.instanceCount
+            )
+        }
         return
     }
 
@@ -90,6 +115,18 @@ class RenderEncoder {
         state.vertexCount = vertexCount
         state.indexCount = 0
         state.instanceCount = instanceCount
+        if (state.passActive && state.hasPipeline && state.pipelineId != 0) {
+            sokolApplyPipelineBindingsAndDrawFlat(
+                state.pipelineId,
+                state.vertexBufferId,
+                state.hasVertexBuffer ? 1 : 0,
+                state.indexBufferId,
+                state.hasIndexBuffer ? 1 : 0,
+                state.vertexCount,
+                state.indexCount,
+                state.instanceCount
+            )
+        }
         return
     }
 
@@ -98,14 +135,101 @@ class RenderEncoder {
         state.indexCount = indexCount
         state.vertexCount = 0
         state.instanceCount = instanceCount
+        if (state.passActive && state.hasPipeline && state.pipelineId != 0) {
+            sokolApplyPipelineBindingsAndDrawFlat(
+                state.pipelineId,
+                state.vertexBufferId,
+                state.hasVertexBuffer ? 1 : 0,
+                state.indexBufferId,
+                state.hasIndexBuffer ? 1 : 0,
+                state.vertexCount,
+                state.indexCount,
+                state.instanceCount
+            )
+        }
+        return
+    }
+
+    function pushClip(frame: Rect, radius: Float) {
+        sokolUiPushClip(frame.x, frame.y, frame.width, frame.height, radius)
+        return
+    }
+
+    function popClip() {
+        sokolUiPopClip()
+        return
+    }
+
+    function drawSurface(frame: Rect, fill: Color, border: Color, borderWidth: Float, radius: Float) {
+        sokolUiDrawSurface(
+            frame.x,
+            frame.y,
+            frame.width,
+            frame.height,
+            fill.r,
+            fill.g,
+            fill.b,
+            fill.a,
+            border.r,
+            border.g,
+            border.b,
+            border.a,
+            borderWidth,
+            radius
+        )
+        return
+    }
+
+    function drawText(frame: Rect, content: String, color: Color, size: Float) {
+        sokolUiDrawText(content, frame.x, frame.y, frame.width, frame.height, color.r, color.g, color.b, color.a, size)
+        return
+    }
+
+    function drawGlow(frame: Rect, color: Color, radius: Float, intensity: Float) {
+        sokolUiDrawGlow(frame.x, frame.y, frame.width, frame.height, color.r, color.g, color.b, color.a, radius, intensity)
         return
     }
 }
 
+@Native
+function sokolUiPushClip(x: Float, y: Float, width: Float, height: Float, radius: Float) {
+    kgUiPushClip(x, y, width, height, radius)
+    return
+}
+
+@Native
+function sokolUiPopClip() {
+    kgUiPopClip()
+    return
+}
+
+@Native
+function sokolUiDrawSurface(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, borderR: Float, borderG: Float, borderB: Float, borderA: Float, borderWidth: Float, radius: Float) {
+    kgUiDrawSurface(x, y, width, height, r, g, b, a, borderR, borderG, borderB, borderA, borderWidth, radius)
+    return
+}
+
+@Native
+function sokolUiDrawGlow(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, radius: Float, intensity: Float) {
+    kgUiDrawGlow(x, y, width, height, r, g, b, a, radius, intensity)
+    return
+}
+
+@Native
+function sokolUiDrawText(content: String, x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, size: Float) {
+    kgUiDrawText(content, x, y, width, height, r, g, b, a, size)
+    return
+}
+
 function makeRenderEncoder() -> RenderEncoder {
+    return makeRenderEncoderWithPassActive(false)
+}
+
+function makeRenderEncoderWithPassActive(passActive: Bool) -> RenderEncoder {
     let state = nativeState(RenderEncoderState {
         pipelineId: 0
         hasPipeline: false
+        passActive: passActive
         vertexBufferId: 0
         hasVertexBuffer: false
         indexBufferId: 0

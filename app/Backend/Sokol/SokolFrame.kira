@@ -35,7 +35,18 @@ function sokolBeginRenderPass(frame: GraphicsFrame) -> Bool {
     )
 }
 
+function sokolBeginRenderPassFromFrame(frame: GraphicsFrame) -> Bool {
+    return sokolBeginRenderPass(frame)
+}
+
 function sokolSubmitFrame(frame: GraphicsFrame): Void {
+    if (frame.passSubmitted) {
+        if (frame.shouldQuit) {
+            sokolRequestQuitNative()
+        }
+        return
+    }
+
     if (!frame.hasRenderPass) {
         print("submit:no-pass")
         return

@@ -46,12 +46,21 @@ function cubeIndices() -> [Int] {
     return [
         0, 1, 2,
         0, 2, 3,
+
+        4, 5, 6,
+        4, 6, 7,
+
+        8, 9, 10,
+        8, 10, 11,
+
         12, 13, 14,
         12, 14, 15,
+
         16, 17, 18,
         16, 18, 19,
-        0, 1, 2,
-        0, 2, 3
+
+        20, 21, 22,
+        20, 22, 23
     ]
 }
 
@@ -78,6 +87,7 @@ function cubeVertexLayout() -> VertexLayout {
 function cubeRenderPass() -> RenderPassDescriptor {
     return RenderPassDescriptor {
         label: "basic-3d-cube-pass"
+
         colorAttachments: [
             ColorAttachment {
                 target: swapchainRenderTarget()
@@ -93,6 +103,7 @@ function cubeRenderPass() -> RenderPassDescriptor {
                 hasResolveTarget: false
             }
         ]
+
         primaryColorAttachment: ColorAttachment {
             target: swapchainRenderTarget()
             loadAction: loadActionClear()
@@ -106,9 +117,12 @@ function cubeRenderPass() -> RenderPassDescriptor {
             resolveTarget: emptyRenderTarget()
             hasResolveTarget: false
         }
+
         hasPrimaryColorAttachment: true
-        depthAttachment: emptyDepthAttachment()
-        hasDepthAttachment: false
+
+        depthAttachment: swapchainDepthAttachment()
+        hasDepthAttachment: true
+
         stencilAttachment: emptyStencilAttachment()
         hasStencilAttachment: false
     }
@@ -123,6 +137,7 @@ function main() {
         height: 480
         sampleCount: 1
     }
+
     let state = nativeState(CubeState {
         shader: emptyGraphicsShader()
         pipeline: emptyRenderPipeline()
@@ -159,6 +174,7 @@ function main() {
             label: "basic-3d-cube-pipeline"
             shader: cubeState.shader
             vertexLayout: cubeVertexLayout()
+
             colorTargets: [
                 ColorTargetDescriptor {
                     format: textureFormatRgba8Unorm()
@@ -168,27 +184,31 @@ function main() {
                     }
                 }
             ]
+
             depthStencil: DepthStencilDescriptor {
                 depthEnabled: true
                 depthWriteEnabled: true
                 depthCompare: compareFunctionLessEqual()
                 format: textureFormatDepth24Stencil8()
             }
+
             rasterization: RasterizationDescriptor {
                 cullMode: cullModeNone()
-                frontFace: frontFaceClockwise()
+                frontFace: frontFaceCounterClockwise()
             }
+
             primitive: PrimitiveDescriptor {
                 topology: primitiveTopologyTriangleList()
             }
         })
 
-        cubeState.indexCount = 24
+        cubeState.indexCount = 36
         return
     }
 
     app.onFrame { frame in
         var cubeState = nativeRecover<CubeState>(frame.userData)
+
         let pass = cubeRenderPass()
         let pipeline = cubeState.pipeline
         let vertices = cubeState.vertices
@@ -201,15 +221,18 @@ function main() {
             encoder.setIndexBuffer(indices, indexFormatUint32())
             encoder.drawIndexed(indexCount)
         }
+
         return
     }
 
     app.onCleanup { graphics in
         var cubeState = nativeRecover<CubeState>(graphics.userData)
+
         graphics.destroyBuffer(cubeState.indices)
         graphics.destroyBuffer(cubeState.vertices)
         graphics.destroyRenderPipeline(cubeState.pipeline)
         graphics.destroyShader(cubeState.shader)
+
         return
     }
 

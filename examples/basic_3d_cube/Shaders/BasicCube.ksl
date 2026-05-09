@@ -14,16 +14,13 @@ type FragmentOut {
     let color: Float4
 }
 
-function cubeColor(normal: Float3) -> Float4 {
-    let rightFactor = normal.x
-    let topFactor = normal.y
-    let frontFactor = 1.0 - rightFactor - topFactor
-    return Float4(
-        frontFactor * 0.30 + rightFactor * 1.00 + topFactor * 0.75,
-        frontFactor * 0.55 + rightFactor * 0.82 + topFactor * 1.00,
-        frontFactor * 1.00 + rightFactor * 0.35 + topFactor * 0.35,
-        1.0
-    )
+function cubeFaceColor(normal: Float3) -> Float4 {
+    // Signed normal colors so opposite faces do not collapse to the same color.
+    let red = 0.45 + normal.x * 0.35 + normal.y * 0.10
+    let green = 0.45 + normal.y * 0.35 + normal.z * 0.10
+    let blue = 0.55 + normal.z * 0.35 + normal.x * 0.10
+
+    return Float4(red, green, blue, 1.0)
 }
 
 shader BasicCube {
@@ -33,25 +30,76 @@ shader BasicCube {
 
         function entry(input: VertexIn) -> VertexOut {
             let result: VertexOut
-            let rightFactor = input.normal.x
-            let topFactor = input.normal.y
-            let frontFactor = 1.0 - rightFactor - topFactor
 
-            let frontX = input.position.x * 0.13 - 0.15
-            let frontY = input.position.y * 0.13 - 0.07
+            // Scale cube down so it sits comfortably in the viewport.
+            let px = input.position.x * 0.65
+            let py = input.position.y * 0.65
+            let pz = input.position.z * 0.65
 
-            let rightX = 0.08 - input.position.z * 0.10
-            let rightY = input.position.y * 0.13 - input.position.z * 0.03 - 0.04
+            // Y rotation, around 28 degrees.
+            // This should expose front + side without looking straight at one face.
+            let cy = 0.8829476
+            let sy = 0.4694716
 
-            let topX = input.position.x * 0.13 - input.position.z * 0.10 - 0.05
-            let topY = input.position.z * -0.05 + 0.11
+            let yx = cy * px + sy * pz
+            let yy = py
+            let yz = -sy * px + cy * pz
 
-            let clipX = frontFactor * frontX + rightFactor * rightX + topFactor * topX
-            let clipY = frontFactor * frontY + rightFactor * rightY + topFactor * topY
-            let clipZ = frontFactor * 0.05 + topFactor * 0.10 + rightFactor * 0.15
+            // X rotation, around 18 degrees.
+            // This tilts the cube so the top face becomes visible.
+            let cx = 0.9510565
+            let sx = 0.3090170
 
-            result.clip_position = Float4(clipX, clipY, clipZ, 1.0)
-            result.color = cubeColor(input.normal)
+            let rx = yx
+            let ry = cx * yy - sx * yz
+            let rz = sx * yy + cx * yz
+
+            // Move cube away from camera.
+            let vx = rx
+            let vy = ry
+            let vz = rz - 4.0
+
+            // Perspective projection.
+            let f = 2.4142135
+            let aspect = 1.3333333
+            let nearPlane = 0.1
+            let farPlane = 100.0
+
+            let clipX = (f / aspect) * vx
+            let clipY = f * vy
+            let clipZ = ((farPlane + nearPlane) / (nearPlane - farPlane)) * vz
+                + ((2.0 * farPlane * nearPlane) / (nearPlane - farPlane))
+            let clipW = -vz
+
+            result.clip_position = Float4(clipX, clipY, clipZ, clipW)
+
+            // Rotate normal with the same model transform for lighting.
+            let nyx = cy * input.normal.x + sy * input.normal.z
+            let nyy = input.normal.y
+            let nyz = -sy * input.normal.x + cy * input.normal.z
+
+            let nrx = nyx
+            let nry = cx * nyy - sx * nyz
+            let nrz = sx * nyy + cx * nyz
+
+            // Simple directional lighting.
+            let lightX = 0.35
+            let lightY = 0.70
+            let lightZ = 0.55
+
+            let diffuseRaw = nrx * lightX + nry * lightY + nrz * lightZ
+            let diffuse = diffuseRaw
+            let shade = 0.35 + diffuse * 0.65
+
+            let base = cubeFaceColor(input.normal)
+
+            result.color = Float4(
+                base.x * shade,
+                base.y * shade,
+                base.z * shade,
+                1.0
+            )
+
             return result
         }
     }

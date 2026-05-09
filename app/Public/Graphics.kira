@@ -146,7 +146,9 @@ class Graphics {
             encoderIndexCount: 0
             encoderInstanceCount: 1
             hasRenderPass: false
+            renderPassActive: false
             shouldPresent: false
+            passSubmitted: false
             shouldQuit: false
             userData: self.userData
         }

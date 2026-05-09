@@ -39,7 +39,9 @@ class GraphicsFrame {
     var encoderInstanceCount: Int = 1
 
     var hasRenderPass: Bool = false
+    var renderPassActive: Bool = false
     var shouldPresent: Bool = false
+    var passSubmitted: Bool = false
     var shouldQuit: Bool = false
     var userData: RawPtr
 
@@ -80,8 +82,14 @@ class GraphicsFrame {
         self.stencilReadOnly = descriptor.stencilAttachment.readOnly
         self.hasRenderPass = true
         self.shouldPresent = false
+        self.passSubmitted = false
+        self.renderPassActive = sokolBeginRenderPassFromFrame(self)
 
-        return makeRenderEncoder()
+        if (!self.renderPassActive) {
+            graphicsDiagnostic("Kira Graphics skipped render pass because the backend could not begin it")
+        }
+
+        return makeRenderEncoderWithPassActive(self.renderPassActive)
     }
 
     function endPass(encoder: RenderEncoder) {
@@ -96,13 +104,12 @@ class GraphicsFrame {
         self.encoderVertexCount = encoderState.vertexCount
         self.encoderIndexCount = encoderState.indexCount
         self.encoderInstanceCount = encoderState.instanceCount
-        print("endPass")
-        print(self.encoderPipelineId)
-        print(self.encoderVertexBufferId)
-        print(self.encoderIndexBufferId)
-        print(self.encoderVertexCount)
-        print(self.encoderIndexCount)
         self.shouldPresent = true
+        self.passSubmitted = true
+        if (self.renderPassActive) {
+            sokolEndPassAndCommitNative()
+        }
+        self.renderPassActive = false
         return
     }
 

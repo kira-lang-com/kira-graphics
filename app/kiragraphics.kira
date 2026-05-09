@@ -1,4 +1,5 @@
+import Foundation
+
 function kiraGraphicsApiName() -> String {
     return "Kira Graphics"
 }
-
