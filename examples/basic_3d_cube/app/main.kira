@@ -3,13 +3,17 @@ import KiraGraphics
 struct CubeState {
     var shader: GraphicsShader
     var pipeline: RenderPipeline
+    var edgePipeline: RenderPipeline
     var vertices: GraphicsBuffer
-    var indices: GraphicsBuffer
+    var edges: GraphicsBuffer
     var sceneUniform: GraphicsUniform
     var objectUniform: GraphicsUniform
+    var edgeUniform: GraphicsUniform
     var sceneBindGroup: BindGroup
     var objectBindGroup: BindGroup
+    var edgeBindGroup: BindGroup
     var indexCount: Int
+    var edgeVertexCount: Int
 }
 
 function cubeVertices() -> [Float] {
@@ -17,30 +21,42 @@ function cubeVertices() -> [Float] {
         -1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
         1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
         1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+        -1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
         -1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
 
         1.0, -1.0, -1.0, 0.0, 0.0, -1.0,
         -1.0, -1.0, -1.0, 0.0, 0.0, -1.0,
+        -1.0, 1.0, -1.0, 0.0, 0.0, -1.0,
+        1.0, -1.0, -1.0, 0.0, 0.0, -1.0,
         -1.0, 1.0, -1.0, 0.0, 0.0, -1.0,
         1.0, 1.0, -1.0, 0.0, 0.0, -1.0,
 
         -1.0, -1.0, -1.0, -1.0, 0.0, 0.0,
         -1.0, -1.0, 1.0, -1.0, 0.0, 0.0,
         -1.0, 1.0, 1.0, -1.0, 0.0, 0.0,
+        -1.0, -1.0, -1.0, -1.0, 0.0, 0.0,
+        -1.0, 1.0, 1.0, -1.0, 0.0, 0.0,
         -1.0, 1.0, -1.0, -1.0, 0.0, 0.0,
 
         1.0, -1.0, 1.0, 1.0, 0.0, 0.0,
         1.0, -1.0, -1.0, 1.0, 0.0, 0.0,
+        1.0, 1.0, -1.0, 1.0, 0.0, 0.0,
+        1.0, -1.0, 1.0, 1.0, 0.0, 0.0,
         1.0, 1.0, -1.0, 1.0, 0.0, 0.0,
         1.0, 1.0, 1.0, 1.0, 0.0, 0.0,
 
         -1.0, 1.0, 1.0, 0.0, 1.0, 0.0,
         1.0, 1.0, 1.0, 0.0, 1.0, 0.0,
         1.0, 1.0, -1.0, 0.0, 1.0, 0.0,
+        -1.0, 1.0, 1.0, 0.0, 1.0, 0.0,
+        1.0, 1.0, -1.0, 0.0, 1.0, 0.0,
         -1.0, 1.0, -1.0, 0.0, 1.0, 0.0,
 
         -1.0, -1.0, -1.0, 0.0, -1.0, 0.0,
         1.0, -1.0, -1.0, 0.0, -1.0, 0.0,
+        1.0, -1.0, 1.0, 0.0, -1.0, 0.0,
+        -1.0, -1.0, -1.0, 0.0, -1.0, 0.0,
         1.0, -1.0, 1.0, 0.0, -1.0, 0.0,
         -1.0, -1.0, 1.0, 0.0, -1.0, 0.0
     ]
@@ -68,6 +84,37 @@ function cubeIndices() -> [Int] {
     ]
 }
 
+function cubeEdgeVertices() -> [Float] {
+    return [
+        -1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+        -1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+        -1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+        -1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+
+        -1.0, -1.0, -1.0, 0.0, 0.0, 1.0,
+        1.0, -1.0, -1.0, 0.0, 0.0, 1.0,
+        1.0, -1.0, -1.0, 0.0, 0.0, 1.0,
+        1.0, 1.0, -1.0, 0.0, 0.0, 1.0,
+        1.0, 1.0, -1.0, 0.0, 0.0, 1.0,
+        -1.0, 1.0, -1.0, 0.0, 0.0, 1.0,
+        -1.0, 1.0, -1.0, 0.0, 0.0, 1.0,
+        -1.0, -1.0, -1.0, 0.0, 0.0, 1.0,
+
+        -1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+        -1.0, -1.0, -1.0, 0.0, 0.0, 1.0,
+        1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, -1.0, -1.0, 0.0, 0.0, 1.0,
+        1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+        1.0, 1.0, -1.0, 0.0, 0.0, 1.0,
+        -1.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+        -1.0, 1.0, -1.0, 0.0, 0.0, 1.0
+    ]
+}
+
 function cubeVertexLayout() -> VertexLayout {
     return VertexLayout {
         stride: 24
@@ -90,7 +137,7 @@ function cubeVertexLayout() -> VertexLayout {
 
 function cubeCamera() -> PerspectiveCamera {
     return PerspectiveCamera {
-        position: Float3 { x: 0.0 y: 1.2 z: 5.0 }
+        position: Float3 { x: 0.0 y: 0.0 z: 5.0 }
         target: Float3 { x: 0.0 y: 0.0 z: 0.0 }
         up: Float3 { x: 0.0 y: 1.0 z: 0.0 }
         fovYRadians: 0.7853982
@@ -109,10 +156,13 @@ function cubeLight() -> DirectionalLight {
 }
 
 function cubeModelMatrix() -> Float4x4 {
-    let scale = matrixScale(Float3 { x: 0.72 y: 0.72 z: 0.72 })
-    let rotationY = matrixRotationY(0.55)
-    let rotationX = matrixRotationX(0.32)
-    return matrixMultiply(rotationY, matrixMultiply(rotationX, scale))
+    return matrixMultiply(
+        matrixRotationY(0.72),
+        matrixMultiply(
+            matrixRotationX(0.52),
+            matrixScale(Float3 { x: 0.86 y: 0.86 z: 0.86 })
+        )
+    )
 }
 
 function cubeSceneUniformData() -> [Float] {
@@ -123,6 +173,13 @@ function cubeObjectUniformData() -> [Float] {
     return objectUniformData(objectUniforms(
         cubeModelMatrix(),
         Float4 { x: 0.42 y: 0.62 z: 0.95 w: 1.0 }
+    ))
+}
+
+function cubeEdgeUniformData() -> [Float] {
+    return objectUniformData(objectUniforms(
+        cubeModelMatrix(),
+        Float4 { x: 1.0 y: 1.0 z: 1.0 w: 1.0 }
     ))
 }
 
@@ -183,13 +240,17 @@ function main() {
     let state = nativeState(CubeState {
         shader: emptyGraphicsShader()
         pipeline: emptyRenderPipeline()
+        edgePipeline: emptyRenderPipeline()
         vertices: emptyGraphicsBuffer()
-        indices: emptyGraphicsBuffer()
+        edges: emptyGraphicsBuffer()
         sceneUniform: emptyGraphicsUniform()
         objectUniform: emptyGraphicsUniform()
+        edgeUniform: emptyGraphicsUniform()
         sceneBindGroup: emptyBindGroup()
         objectBindGroup: emptyBindGroup()
+        edgeBindGroup: emptyBindGroup()
         indexCount: 0
+        edgeVertexCount: 0
     })
 
     app.onInit { graphics in
@@ -210,10 +271,11 @@ function main() {
             data: cubeVertices()
         })
 
-        cubeState.indices = graphics.createIndexBuffer(IndexBufferDescriptor {
-            label: "basic-3d-cube-indices"
-            usage: bufferUsageIndex()
-            data: cubeIndices()
+        cubeState.edges = graphics.createBuffer(BufferDescriptor {
+            label: "basic-3d-cube-edges"
+            usage: bufferUsageVertex()
+            stride: 24
+            data: cubeEdgeVertices()
         })
 
         cubeState.sceneUniform = graphics.createUniform(UniformDescriptor {
@@ -228,6 +290,12 @@ function main() {
             data: cubeObjectUniformData()
         })
 
+        cubeState.edgeUniform = graphics.createUniform(UniformDescriptor {
+            label: "EdgeUniforms"
+            expectedFloatCount: objectUniformFloatCount()
+            data: cubeEdgeUniformData()
+        })
+
         cubeState.sceneBindGroup = graphics.createUniformBindGroup(
             "basic-3d-cube-scene-bindings",
             uniformSlotScene(),
@@ -238,6 +306,12 @@ function main() {
             "basic-3d-cube-object-bindings",
             uniformSlotObject(),
             cubeState.objectUniform
+        )
+
+        cubeState.edgeBindGroup = graphics.createUniformBindGroup(
+            "basic-3d-cube-edge-bindings",
+            uniformSlotObject(),
+            cubeState.edgeUniform
         )
 
         cubeState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
@@ -272,7 +346,40 @@ function main() {
             }
         })
 
+        cubeState.edgePipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+            label: "basic-3d-cube-edge-pipeline"
+            shader: cubeState.shader
+            vertexLayout: cubeVertexLayout()
+
+            colorTargets: [
+                ColorTargetDescriptor {
+                    format: textureFormatRgba8Unorm()
+                    blend: BlendState {
+                        enabled: false
+                        preset: blendPresetReplace()
+                    }
+                }
+            ]
+
+            depthStencil: DepthStencilDescriptor {
+                depthEnabled: true
+                depthWriteEnabled: false
+                depthCompare: compareFunctionLessEqual()
+                format: textureFormatDepth24Stencil8()
+            }
+
+            rasterization: RasterizationDescriptor {
+                cullMode: cullModeNone()
+                frontFace: frontFaceCounterClockwise()
+            }
+
+            primitive: PrimitiveDescriptor {
+                topology: primitiveTopologyLineList()
+            }
+        })
+
         cubeState.indexCount = 36
+        cubeState.edgeVertexCount = 24
         return
     }
 
@@ -281,11 +388,14 @@ function main() {
 
         let pass = cubeRenderPass()
         let pipeline = cubeState.pipeline
+        let edgePipeline = cubeState.edgePipeline
         let vertices = cubeState.vertices
-        let indices = cubeState.indices
+        let edges = cubeState.edges
         let sceneBindGroup = cubeState.sceneBindGroup
         let objectBindGroup = cubeState.objectBindGroup
+        let edgeBindGroup = cubeState.edgeBindGroup
         let indexCount = cubeState.indexCount
+        let edgeVertexCount = cubeState.edgeVertexCount
 
         updateGraphicsUniform(cubeState.sceneUniform, cubeSceneUniformData())
         updateGraphicsUniform(cubeState.objectUniform, cubeObjectUniformData())
@@ -293,10 +403,15 @@ function main() {
         frame.renderPass(pass) { encoder in
             encoder.setPipeline(pipeline)
             encoder.setVertexBuffer(vertices)
-            encoder.setIndexBuffer(indices, indexFormatUint32())
             encoder.setBindGroup(0, sceneBindGroup)
             encoder.setBindGroup(1, objectBindGroup)
-            encoder.drawIndexed(indexCount)
+            encoder.draw(indexCount)
+
+            encoder.setPipeline(edgePipeline)
+            encoder.setVertexBuffer(edges)
+            encoder.setBindGroup(0, sceneBindGroup)
+            encoder.setBindGroup(1, edgeBindGroup)
+            encoder.draw(edgeVertexCount)
         }
 
         return
@@ -306,11 +421,14 @@ function main() {
         var cubeState = nativeRecover<CubeState>(graphics.userData)
 
         graphics.destroyBindGroup(cubeState.objectBindGroup)
+        graphics.destroyBindGroup(cubeState.edgeBindGroup)
         graphics.destroyBindGroup(cubeState.sceneBindGroup)
+        graphics.destroyUniform(cubeState.edgeUniform)
         graphics.destroyUniform(cubeState.objectUniform)
         graphics.destroyUniform(cubeState.sceneUniform)
-        graphics.destroyBuffer(cubeState.indices)
+        graphics.destroyBuffer(cubeState.edges)
         graphics.destroyBuffer(cubeState.vertices)
+        graphics.destroyRenderPipeline(cubeState.edgePipeline)
         graphics.destroyRenderPipeline(cubeState.pipeline)
         graphics.destroyShader(cubeState.shader)
 

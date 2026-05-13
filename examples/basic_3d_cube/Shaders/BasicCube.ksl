@@ -8,6 +8,7 @@ type VertexOut {
     let clip_position: Float4
 
     let worldNormal: Float3
+    let worldPosition: Float3
     let color: Float4
 }
 
@@ -32,6 +33,11 @@ function saturate(value: Float) -> Float {
     return value
 }
 
+function absolute(value: Float) -> Float {
+    if value < 0.0 { return 0.0 - value }
+    return value
+}
+
 shader BasicCube {
     group Frame {
         uniform scene: SceneUniforms
@@ -50,6 +56,7 @@ shader BasicCube {
 
             let worldPosition = mul(object.model, Float4(input.position, 1.0))
             result.clip_position = mul(scene.viewProjection, worldPosition)
+            result.worldPosition = Float3(worldPosition.x, worldPosition.y, worldPosition.z)
 
             let normal4 = mul(object.model, Float4(input.normal, 0.0))
             result.worldNormal = normalize(Float3(normal4.x, normal4.y, normal4.z))
@@ -67,21 +74,7 @@ shader BasicCube {
             let result: FragmentOut
 
             let n = normalize(input.worldNormal)
-            let l = normalize(Float3(
-                0.0 - scene.lightDirection.x,
-                0.0 - scene.lightDirection.y,
-                0.0 - scene.lightDirection.z
-            ))
-
-            let diffuse = saturate(dot(n, l)) * scene.lightDirection.w
-            let shade = scene.lightColor.w + diffuse * (1.0 - scene.lightColor.w)
-
-            result.color = Float4(
-                input.color.x * scene.lightColor.x * shade,
-                input.color.y * scene.lightColor.y * shade,
-                input.color.z * scene.lightColor.z * shade,
-                input.color.w
-            )
+            result.color = Float4(absolute(n.x), absolute(n.y), absolute(n.z), input.color.w)
 
             return result
         }

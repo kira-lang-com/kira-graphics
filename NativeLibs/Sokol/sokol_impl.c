@@ -33,6 +33,7 @@ typedef struct {
     bool has_position_attribute;
     bool has_normal_attribute;
     uint32_t required_uniform_mask;
+    uint32_t available_uniform_mask;
 } kg_shader_record;
 
 typedef struct {
@@ -41,6 +42,7 @@ typedef struct {
     uint32_t indexed_pipeline_id;
     bool has_position_attribute;
     uint32_t required_uniform_mask;
+    uint32_t available_uniform_mask;
 } kg_pipeline_record;
 
 typedef struct {
@@ -135,7 +137,7 @@ static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_
     }
 }
 
-static void kg_record_shader(uint32_t id, bool has_position_attribute, bool has_normal_attribute, uint32_t required_uniform_mask) {
+static void kg_record_shader(uint32_t id, bool has_position_attribute, bool has_normal_attribute, uint32_t required_uniform_mask, uint32_t available_uniform_mask) {
     if (kg_shader_record_count >= 64) {
         return;
     }
@@ -143,6 +145,7 @@ static void kg_record_shader(uint32_t id, bool has_position_attribute, bool has_
     kg_shader_records[kg_shader_record_count].has_position_attribute = has_position_attribute;
     kg_shader_records[kg_shader_record_count].has_normal_attribute = has_normal_attribute;
     kg_shader_records[kg_shader_record_count].required_uniform_mask = required_uniform_mask;
+    kg_shader_records[kg_shader_record_count].available_uniform_mask = available_uniform_mask;
     kg_shader_record_count += 1;
 }
 
@@ -150,6 +153,15 @@ static bool kg_shader_has_position_attribute(uint32_t id) {
     for (int i = 0; i < kg_shader_record_count; i += 1) {
         if (kg_shader_records[i].id == id) {
             return kg_shader_records[i].has_position_attribute;
+        }
+    }
+    return false;
+}
+
+static bool kg_shader_has_normal_attribute(uint32_t id) {
+    for (int i = 0; i < kg_shader_record_count; i += 1) {
+        if (kg_shader_records[i].id == id) {
+            return kg_shader_records[i].has_normal_attribute;
         }
     }
     return false;
@@ -164,6 +176,15 @@ static uint32_t kg_shader_required_uniform_mask(uint32_t id) {
     return 0;
 }
 
+static uint32_t kg_shader_available_uniform_mask(uint32_t id) {
+    for (int i = 0; i < kg_shader_record_count; i += 1) {
+        if (kg_shader_records[i].id == id) {
+            return kg_shader_records[i].available_uniform_mask;
+        }
+    }
+    return 0;
+}
+
 static kg_pipeline_record* kg_find_pipeline_record(uint32_t public_id) {
     for (int i = 0; i < kg_pipeline_record_count; i += 1) {
         if (kg_pipeline_records[i].public_id == public_id) {
@@ -173,7 +194,7 @@ static kg_pipeline_record* kg_find_pipeline_record(uint32_t public_id) {
     return NULL;
 }
 
-static uint32_t kg_record_pipeline(uint32_t draw_pipeline_id, uint32_t indexed_pipeline_id, bool has_position_attribute, uint32_t required_uniform_mask) {
+static uint32_t kg_record_pipeline(uint32_t draw_pipeline_id, uint32_t indexed_pipeline_id, bool has_position_attribute, uint32_t required_uniform_mask, uint32_t available_uniform_mask) {
     if (kg_pipeline_record_count >= 64) {
         return 0;
     }
@@ -184,6 +205,7 @@ static uint32_t kg_record_pipeline(uint32_t draw_pipeline_id, uint32_t indexed_p
     kg_pipeline_records[kg_pipeline_record_count].indexed_pipeline_id = indexed_pipeline_id;
     kg_pipeline_records[kg_pipeline_record_count].has_position_attribute = has_position_attribute;
     kg_pipeline_records[kg_pipeline_record_count].required_uniform_mask = required_uniform_mask;
+    kg_pipeline_records[kg_pipeline_record_count].available_uniform_mask = available_uniform_mask;
     kg_pipeline_record_count += 1;
     return public_id;
 }
@@ -194,6 +216,26 @@ static bool kg_pipeline_has_position_attribute(uint32_t public_id) {
         return record->has_position_attribute;
     }
     return true;
+}
+
+static uint32_t kg_pipeline_uniform_target_mask(const kg_pipeline_record* record, int public_slot) {
+    if (record == NULL) {
+        return 0;
+    }
+
+    uint32_t target_mask = 0;
+    if (public_slot == 0) {
+        target_mask = record->available_uniform_mask & ((1u << 0) | (1u << 2));
+    } else if (public_slot == 1) {
+        target_mask = record->available_uniform_mask & ((1u << 1) | (1u << 3));
+    } else if (public_slot >= 0 && public_slot < 32) {
+        target_mask = record->available_uniform_mask & (1u << (uint32_t)public_slot);
+    }
+
+    if (target_mask == 0 && public_slot >= 0 && public_slot < 32) {
+        target_mask = 1u << (uint32_t)public_slot;
+    }
+    return target_mask;
 }
 
 static kg_uniform_record* kg_find_uniform(uint32_t id) {
@@ -603,6 +645,7 @@ static sg_compare_func kg_compare_func(int64_t compare) {
         case 5:
             return SG_COMPAREFUNC_GREATER;
         case 6:
+            return SG_COMPAREFUNC_ALWAYS;
         default:
             return SG_COMPAREFUNC_ALWAYS;
     }
@@ -1001,32 +1044,6 @@ uint32_t kg_finalize_float_buffer_upload(uint32_t upload_id) {
 
     sg_buffer buffer = sg_make_buffer(&desc);
     uint32_t buffer_id = buffer.id;
-    fprintf(stderr, "KG BUFFER float label=%s usage=%lld stride=%lld count=%lld id=%u\n",
-        record->label ? record->label : "",
-        (long long)record->usage,
-        (long long)record->stride,
-        (long long)record->float_count,
-        buffer_id);
-    if (record->float_values != NULL) {
-        const int64_t sample_count = (record->float_count < 8) ? record->float_count : 8;
-        fprintf(stderr, "KG BUFFER float values");
-        for (int64_t i = 0; i < sample_count; i += 1) {
-            fprintf(stderr, " %.3f", record->float_values[i]);
-        }
-        fprintf(stderr, "\n");
-        if (record->stride == 24 && record->float_count >= 24 * 6) {
-            fprintf(stderr, "KG BUFFER float faceSamples");
-            for (int face = 0; face < 6; face += 1) {
-                const int base = face * 24;
-                fprintf(stderr, " [%d:(%.3f,%.3f,%.3f)]",
-                    face,
-                    record->float_values[base + 0],
-                    record->float_values[base + 1],
-                    record->float_values[base + 2]);
-            }
-            fprintf(stderr, "\n");
-        }
-    }
     kg_release_buffer_upload(record);
     return buffer_id;
 }
@@ -1072,19 +1089,6 @@ uint32_t kg_finalize_index_buffer_upload(uint32_t upload_id) {
 
     sg_buffer buffer = sg_make_buffer(&desc);
     uint32_t buffer_id = buffer.id;
-    fprintf(stderr, "KG BUFFER index label=%s usage=%lld count=%lld id=%u\n",
-        record->label ? record->label : "",
-        (long long)record->usage,
-        (long long)record->int_count,
-        buffer_id);
-    if (record->int_values != NULL) {
-        const int64_t sample_count = (record->int_count < 36) ? record->int_count : 36;
-        fprintf(stderr, "KG BUFFER index values");
-        for (int64_t i = 0; i < sample_count; i += 1) {
-            fprintf(stderr, " %u", record->int_values[i]);
-        }
-        fprintf(stderr, "\n");
-    }
     kg_release_buffer_upload(record);
     return buffer_id;
 }
@@ -1118,11 +1122,6 @@ uint32_t kg_create_uniform_id(const char* label, int64_t expected_float_count) {
         record->label = NULL;
         return 0;
     }
-    fprintf(stderr, "KG UNIFORM create label=%s id=%u floats=%lld bytes=%lld\n",
-        record->label ? record->label : "",
-        record->id,
-        (long long)record->expected_float_count,
-        (long long)(record->expected_float_count * (int64_t)sizeof(float)));
     return record->id;
 }
 
@@ -1156,10 +1155,6 @@ uint32_t kg_finish_uniform_update(uint32_t uniform_id, int64_t float_count) {
         return 0;
     }
     record->float_count = float_count;
-    fprintf(stderr, "KG UNIFORM update label=%s id=%u floats=%lld\n",
-        record->label ? record->label : "",
-        record->id,
-        (long long)record->float_count);
     return 1;
 }
 
@@ -1180,9 +1175,6 @@ uint32_t kg_create_bind_group_id(const char* label) {
         return 0;
     }
     record->label = kg_copy_string(label);
-    fprintf(stderr, "KG BINDGROUP create label=%s id=%u\n",
-        record->label ? record->label : "",
-        record->id);
     return record->id;
 }
 
@@ -1215,10 +1207,6 @@ uint32_t kg_set_bind_group_uniform(uint32_t bind_group_id, int64_t entry_index, 
     if (entry_index + 1 > record->uniform_count) {
         record->uniform_count = (int)entry_index + 1;
     }
-    fprintf(stderr, "KG BINDGROUP uniform group=%u slot=%lld uniform=%u\n",
-        bind_group_id,
-        (long long)uniform_slot,
-        uniform_id);
     return 1;
 }
 
@@ -1306,15 +1294,23 @@ static void kg_uniform_member(sg_shader_uniform_block* block, int index, sg_unif
     block->glsl_uniforms[index].glsl_name = name;
 }
 
-static void kg_configure_uniform_blocks(sg_shader_desc* desc, const char* vertex_source, const char* fragment_source) {
-    const bool has_scene =
-        (vertex_source != NULL && (strstr(vertex_source, "uniform scene_Block") != NULL || strstr(vertex_source, "uniform SceneUniforms scene") != NULL)) ||
-        (fragment_source != NULL && (strstr(fragment_source, "uniform scene_Block") != NULL || strstr(fragment_source, "uniform SceneUniforms scene") != NULL));
-    const bool has_object =
-        (vertex_source != NULL && (strstr(vertex_source, "uniform object_Block") != NULL || strstr(vertex_source, "uniform ObjectUniforms object") != NULL)) ||
-        (fragment_source != NULL && (strstr(fragment_source, "uniform object_Block") != NULL || strstr(fragment_source, "uniform ObjectUniforms object") != NULL));
+static bool kg_shader_source_uses_resource(const char* source, const char* resource_name) {
+    if (source == NULL || resource_name == NULL) {
+        return false;
+    }
+    char needle[64];
+    snprintf(needle, sizeof(needle), "%s.", resource_name);
+    return strstr(source, needle) != NULL;
+}
 
-    if (has_scene) {
+static uint32_t kg_configure_uniform_blocks(sg_shader_desc* desc, const char* vertex_source, const char* fragment_source) {
+    uint32_t available_mask = 0;
+    const bool vertex_uses_scene = kg_shader_source_uses_resource(vertex_source, "scene");
+    const bool vertex_uses_object = kg_shader_source_uses_resource(vertex_source, "object");
+    const bool fragment_uses_scene = kg_shader_source_uses_resource(fragment_source, "scene");
+    const bool fragment_uses_object = kg_shader_source_uses_resource(fragment_source, "object");
+
+    if (vertex_uses_scene) {
         sg_shader_uniform_block* block = &desc->uniform_blocks[0];
         block->stage = SG_SHADERSTAGE_VERTEX;
         block->size = 96;
@@ -1322,26 +1318,47 @@ static void kg_configure_uniform_blocks(sg_shader_desc* desc, const char* vertex
         kg_uniform_member(block, 0, SG_UNIFORMTYPE_MAT4, "scene.viewProjection");
         kg_uniform_member(block, 1, SG_UNIFORMTYPE_FLOAT4, "scene.lightDirection");
         kg_uniform_member(block, 2, SG_UNIFORMTYPE_FLOAT4, "scene.lightColor");
+        available_mask |= 1u << 0;
     }
 
-    if (has_object) {
+    if (vertex_uses_object) {
         sg_shader_uniform_block* block = &desc->uniform_blocks[1];
         block->stage = SG_SHADERSTAGE_VERTEX;
         block->size = 80;
         block->layout = SG_UNIFORMLAYOUT_STD140;
         kg_uniform_member(block, 0, SG_UNIFORMTYPE_MAT4, "object.model");
         kg_uniform_member(block, 1, SG_UNIFORMTYPE_FLOAT4, "object.baseColor");
+        available_mask |= 1u << 1;
     }
+
+    if (fragment_uses_scene) {
+        sg_shader_uniform_block* block = &desc->uniform_blocks[2];
+        block->stage = SG_SHADERSTAGE_FRAGMENT;
+        block->size = 96;
+        block->layout = SG_UNIFORMLAYOUT_STD140;
+        kg_uniform_member(block, 0, SG_UNIFORMTYPE_MAT4, "scene.viewProjection");
+        kg_uniform_member(block, 1, SG_UNIFORMTYPE_FLOAT4, "scene.lightDirection");
+        kg_uniform_member(block, 2, SG_UNIFORMTYPE_FLOAT4, "scene.lightColor");
+        available_mask |= 1u << 2;
+    }
+
+    if (fragment_uses_object) {
+        sg_shader_uniform_block* block = &desc->uniform_blocks[3];
+        block->stage = SG_SHADERSTAGE_FRAGMENT;
+        block->size = 80;
+        block->layout = SG_UNIFORMLAYOUT_STD140;
+        kg_uniform_member(block, 0, SG_UNIFORMTYPE_MAT4, "object.model");
+        kg_uniform_member(block, 1, SG_UNIFORMTYPE_FLOAT4, "object.baseColor");
+        available_mask |= 1u << 3;
+    }
+
+    return available_mask;
 }
 
 static uint32_t kg_uniform_mask_from_shader_source(const char* vertex_source, const char* fragment_source) {
     uint32_t mask = 0;
-    const bool has_scene =
-        (vertex_source != NULL && (strstr(vertex_source, "uniform scene_Block") != NULL || strstr(vertex_source, "uniform SceneUniforms scene") != NULL)) ||
-        (fragment_source != NULL && (strstr(fragment_source, "uniform scene_Block") != NULL || strstr(fragment_source, "uniform SceneUniforms scene") != NULL));
-    const bool has_object =
-        (vertex_source != NULL && (strstr(vertex_source, "uniform object_Block") != NULL || strstr(vertex_source, "uniform ObjectUniforms object") != NULL)) ||
-        (fragment_source != NULL && (strstr(fragment_source, "uniform object_Block") != NULL || strstr(fragment_source, "uniform ObjectUniforms object") != NULL));
+    const bool has_scene = kg_shader_source_uses_resource(vertex_source, "scene") || kg_shader_source_uses_resource(fragment_source, "scene");
+    const bool has_object = kg_shader_source_uses_resource(vertex_source, "object") || kg_shader_source_uses_resource(fragment_source, "object");
     if (has_scene) {
         mask |= 1u << 0;
     }
@@ -1366,17 +1383,10 @@ uint32_t kg_make_shader(const char* label, const char* vertex_source, const char
         desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
         desc.attrs[1].glsl_name = "kira_attr_normal";
     }
-    kg_configure_uniform_blocks(&desc, desc.vertex_func.source, desc.fragment_func.source);
+    uint32_t available_uniform_mask = kg_configure_uniform_blocks(&desc, desc.vertex_func.source, desc.fragment_func.source);
     desc.label = label;
     uint32_t shader_id = sg_make_shader(&desc).id;
-    fprintf(stderr, "KG SHADER label=%s id=%u hasPos=%d hasNormal=%d vpath=%s fpath=%s\n",
-        label ? label : "",
-        shader_id,
-        has_position_attribute ? 1 : 0,
-        has_normal_attribute ? 1 : 0,
-        vertex_path ? vertex_path : "",
-        fragment_path ? fragment_path : "");
-    kg_record_shader(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask);
+    kg_record_shader(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask, available_uniform_mask);
     return shader_id;
 }
 
@@ -1425,6 +1435,17 @@ uint32_t kg_make_pipeline_detailed(
     desc.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
     desc.layout.buffers[0].step_rate = 1;
 
+    const bool shader_has_normal = kg_shader_has_normal_attribute(shader_id);
+    if (shader_has_normal && vertex_stride >= 24 && attribute_count >= 2) {
+        if (attr0_format <= 0) {
+            attr0_format = 2;
+        }
+        if (attr1_format <= 1 && attr1_offset == 0) {
+            attr1_format = 2;
+            attr1_offset = 12;
+        }
+    }
+
     if (attribute_count > 0) {
         desc.layout.attrs[0].buffer_index = 0;
         desc.layout.attrs[0].offset = (int)attr0_offset;
@@ -1464,7 +1485,7 @@ uint32_t kg_make_pipeline_detailed(
     desc.label = label;
 
     if (depth_enabled != 0) {
-        desc.depth.pixel_format = (depth_format == 3) ? swapchain.depth_format : kg_pixel_format(depth_format);
+        desc.depth.pixel_format = swapchain.depth_format;
         desc.depth.compare = kg_compare_func(depth_compare);
         desc.depth.write_enabled = depth_write_enabled != 0;
     }
@@ -1477,19 +1498,7 @@ uint32_t kg_make_pipeline_detailed(
     indexed_desc.index_type = SG_INDEXTYPE_UINT32;
     uint32_t indexed_pipeline_id = sg_make_pipeline(&indexed_desc).id;
 
-    uint32_t pipeline_id = kg_record_pipeline(draw_pipeline_id, indexed_pipeline_id, attribute_count > 0 || kg_shader_has_position_attribute(shader_id), kg_shader_required_uniform_mask(shader_id));
-    fprintf(stderr, "KG PIPELINE label=%s public=%u draw=%u indexed=%u shader=%u attrCount=%lld stride=%lld colorFormat=%lld blend=%lld depth=%lld topo=%lld\n",
-        label ? label : "",
-        pipeline_id,
-        draw_pipeline_id,
-        indexed_pipeline_id,
-        shader_id,
-        (long long)attribute_count,
-        (long long)vertex_stride,
-        (long long)color_format,
-        (long long)blend_preset,
-        (long long)depth_enabled,
-        (long long)topology);
+    uint32_t pipeline_id = kg_record_pipeline(draw_pipeline_id, indexed_pipeline_id, attribute_count > 0 || kg_shader_has_position_attribute(shader_id), kg_shader_required_uniform_mask(shader_id), kg_shader_available_uniform_mask(shader_id));
     if (label != NULL && strstr(label, "ui-demo") != NULL) {
         kg_ui_demo_pipeline_id = pipeline_id;
     }
@@ -1540,18 +1549,6 @@ uint32_t kg_begin_render_pass(
     kg_current_pass_width = 0;
     kg_current_pass_height = 0;
 
-    fprintf(stderr, "KG PASS kind=%lld colorTex=%u load=%lld store=%lld clear=(%.3f,%.3f,%.3f,%.3f) depth=%lld depthTex=%u\n",
-        (long long)color_target_kind,
-        color_texture_id,
-        (long long)color_load_action,
-        (long long)color_store_action,
-        clear_r,
-        clear_g,
-        clear_b,
-        clear_a,
-        (long long)has_depth_attachment,
-        depth_texture_id);
-
     sg_pass pass = {0};
     pass.label = label;
     pass.action.colors[0].load_action = kg_load_action(color_load_action);
@@ -1583,13 +1580,6 @@ uint32_t kg_begin_render_pass(
         int w = sw.width;
         int h = sw.height;
         pass.swapchain = sw;
-        fprintf(stderr, "KG SWAPCHAIN sapp=%dx%d swapchain=%dx%d dpi=%.3f depthFmt=%d\n",
-            sapp_width(),
-            sapp_height(),
-            w,
-            h,
-            (double)sapp_dpi_scale(),
-            (int)sw.depth_format);
         if (has_depth_attachment != 0) {
             pass.action.depth.load_action = kg_load_action(depth_load_action);
             pass.action.depth.store_action = kg_store_action(depth_store_action);
@@ -1713,17 +1703,6 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
         return 0;
     }
 
-    fprintf(stderr, "KG DRAW pipeline=%u active=%u vertexBuf=%u hasVB=%lld indexBuf=%u hasIB=%lld vtx=%lld idx=%lld inst=%lld\n",
-        pipeline_id,
-        active_pipeline_id,
-        vertex_buffer_id,
-        has_vertex_buffer,
-        index_buffer_id,
-        has_index_buffer,
-        vertex_count,
-        index_count,
-        instance_count);
-
     if (kg_current_pass_width > 0 && kg_current_pass_height > 0) {
         sg_apply_viewport(0, 0, kg_current_pass_width, kg_current_pass_height, false);
         sg_apply_scissor_rect(0, 0, kg_current_pass_width, kg_current_pass_height, false);
@@ -1797,13 +1776,13 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
                 return 0;
             }
             sg_range uniform_range = { uniform->values, byte_size };
-            fprintf(stderr, "KG UNIFORM apply group=%d entry=%d slot=%d uniform=%u bytes=%zu\n",
-                group_index,
-                entry_index,
-                group->uniform_slots[entry_index],
-                uniform_id,
-                byte_size);
-            sg_apply_uniforms(group->uniform_slots[entry_index], &uniform_range);
+            uint32_t target_mask = kg_pipeline_uniform_target_mask(pipeline_record, group->uniform_slots[entry_index]);
+            for (int target_slot = 0; target_slot < 32; target_slot += 1) {
+                if ((target_mask & (1u << (uint32_t)target_slot)) == 0) {
+                    continue;
+                }
+                sg_apply_uniforms(target_slot, &uniform_range);
+            }
             applied_uniform_mask |= 1u << group->uniform_slots[entry_index];
         }
     }
@@ -1838,15 +1817,14 @@ void kg_log_submit_state(
     int64_t index_count,
     int64_t instance_count
 ) {
-    fprintf(stderr, "KG SUBMIT pipeline=%u vertexBuf=%u hasVB=%lld indexBuf=%u hasIB=%lld vtx=%lld idx=%lld inst=%lld\n",
-        pipeline_id,
-        vertex_buffer_id,
-        (long long)has_vertex_buffer,
-        index_buffer_id,
-        (long long)has_index_buffer,
-        (long long)vertex_count,
-        (long long)index_count,
-        (long long)instance_count);
+    (void)pipeline_id;
+    (void)vertex_buffer_id;
+    (void)has_vertex_buffer;
+    (void)index_buffer_id;
+    (void)has_index_buffer;
+    (void)vertex_count;
+    (void)index_count;
+    (void)instance_count;
 }
 
 void kg_end_pass_and_commit(void) {
