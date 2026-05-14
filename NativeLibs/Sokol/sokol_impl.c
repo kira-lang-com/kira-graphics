@@ -86,6 +86,22 @@ typedef struct {
     char* label;
 } kg_bind_group_record;
 
+typedef struct {
+    const char* ptr;
+    bool owned;
+} kg_owned_text;
+
+typedef struct {
+    uint32_t buffers;
+    uint32_t images;
+    uint32_t samplers;
+    uint32_t views;
+    uint32_t shaders;
+    uint32_t pipelines;
+    int uniforms;
+    int bind_groups;
+} kg_lifetime_peak_counts;
+
 static kg_shader_record kg_shader_records[64];
 static int kg_shader_record_count = 0;
 static kg_pipeline_record kg_pipeline_records[64];
@@ -105,6 +121,8 @@ static sg_shader kg_ui_shader = {0};
 static sg_pipeline kg_ui_pipeline = {0};
 static sg_buffer kg_ui_vertex_buffer = {0};
 static int kg_ui_clip_depth = 0;
+static char* kg_shader_source_public_buffer = NULL;
+static kg_lifetime_peak_counts kg_lifetime_peaks = {0};
 
 typedef struct {
     float x;
@@ -138,6 +156,9 @@ static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_
 }
 
 static void kg_record_shader(uint32_t id, bool has_position_attribute, bool has_normal_attribute, uint32_t required_uniform_mask, uint32_t available_uniform_mask) {
+    if (id == 0) {
+        return;
+    }
     if (kg_shader_record_count >= 64) {
         return;
     }
@@ -147,6 +168,16 @@ static void kg_record_shader(uint32_t id, bool has_position_attribute, bool has_
     kg_shader_records[kg_shader_record_count].required_uniform_mask = required_uniform_mask;
     kg_shader_records[kg_shader_record_count].available_uniform_mask = available_uniform_mask;
     kg_shader_record_count += 1;
+}
+
+static void kg_remove_shader_record(uint32_t id) {
+    for (int i = 0; i < kg_shader_record_count; i += 1) {
+        if (kg_shader_records[i].id == id) {
+            kg_shader_records[i] = kg_shader_records[kg_shader_record_count - 1];
+            kg_shader_record_count -= 1;
+            return;
+        }
+    }
 }
 
 static bool kg_shader_has_position_attribute(uint32_t id) {
@@ -216,6 +247,85 @@ static bool kg_pipeline_has_position_attribute(uint32_t public_id) {
         return record->has_position_attribute;
     }
     return true;
+}
+
+static bool kg_lifetime_report_enabled(void) {
+    const char* value = getenv("KIRA_GRAPHICS_LIFETIME_REPORT");
+    return value != NULL && value[0] != '\0' && value[0] != '0';
+}
+
+static bool kg_lifetime_detail_enabled(void) {
+    const char* value = getenv("KIRA_GRAPHICS_LIFETIME_DETAIL");
+    return value != NULL && value[0] != '\0' && value[0] != '0';
+}
+
+static int kg_active_uniform_count(void) {
+    int count = 0;
+    for (int i = 0; i < 64; i += 1) {
+        if (kg_uniform_records[i].active) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+static int kg_active_bind_group_count(void) {
+    int count = 0;
+    for (int i = 0; i < 64; i += 1) {
+        if (kg_bind_group_records[i].active) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+static void kg_update_lifetime_peaks(void) {
+    const int uniform_count = kg_active_uniform_count();
+    const int bind_group_count = kg_active_bind_group_count();
+    if (uniform_count > kg_lifetime_peaks.uniforms) {
+        kg_lifetime_peaks.uniforms = uniform_count;
+    }
+    if (bind_group_count > kg_lifetime_peaks.bind_groups) {
+        kg_lifetime_peaks.bind_groups = bind_group_count;
+    }
+
+    if (!sg_isvalid()) {
+        return;
+    }
+
+    sg_stats stats = sg_query_stats();
+    if (stats.total.buffers.alive > kg_lifetime_peaks.buffers) {
+        kg_lifetime_peaks.buffers = stats.total.buffers.alive;
+    }
+    if (stats.total.images.alive > kg_lifetime_peaks.images) {
+        kg_lifetime_peaks.images = stats.total.images.alive;
+    }
+    if (stats.total.samplers.alive > kg_lifetime_peaks.samplers) {
+        kg_lifetime_peaks.samplers = stats.total.samplers.alive;
+    }
+    if (stats.total.views.alive > kg_lifetime_peaks.views) {
+        kg_lifetime_peaks.views = stats.total.views.alive;
+    }
+    if (stats.total.shaders.alive > kg_lifetime_peaks.shaders) {
+        kg_lifetime_peaks.shaders = stats.total.shaders.alive;
+    }
+    if (stats.total.pipelines.alive > kg_lifetime_peaks.pipelines) {
+        kg_lifetime_peaks.pipelines = stats.total.pipelines.alive;
+    }
+}
+
+static int kg_lifetime_outstanding_count(void) {
+    int total = kg_shader_record_count + kg_pipeline_record_count + kg_texture_record_count + kg_active_uniform_count() + kg_active_bind_group_count();
+    if (sg_isvalid()) {
+        sg_stats stats = sg_query_stats();
+        total += (int)stats.total.buffers.alive;
+        total += (int)stats.total.images.alive;
+        total += (int)stats.total.samplers.alive;
+        total += (int)stats.total.views.alive;
+        total += (int)stats.total.shaders.alive;
+        total += (int)stats.total.pipelines.alive;
+    }
+    return total;
 }
 
 static uint32_t kg_pipeline_uniform_target_mask(const kg_pipeline_record* record, int public_slot) {
@@ -313,6 +423,7 @@ static void kg_ensure_triangle_vertex_buffer(void) {
     desc.data.size = sizeof(vertices);
     desc.label = "kira-graphics-default-triangle-vertices";
     kg_triangle_vertex_buffer = sg_make_buffer(&desc);
+    kg_update_lifetime_peaks();
 }
 
 typedef struct {
@@ -367,6 +478,7 @@ static void kg_ui_ensure_pipeline(void) {
         shader_desc.attrs[1].glsl_name = "kira_attr_color";
         shader_desc.label = "kira-graphics-immediate-2d-shader";
         kg_ui_shader = sg_make_shader(&shader_desc);
+        kg_update_lifetime_peaks();
     }
 
     if (kg_ui_pipeline.id == 0) {
@@ -394,6 +506,7 @@ static void kg_ui_ensure_pipeline(void) {
         pipeline_desc.sample_count = swapchain.sample_count;
         pipeline_desc.label = "kira-graphics-immediate-2d-pipeline";
         kg_ui_pipeline = sg_make_pipeline(&pipeline_desc);
+        kg_update_lifetime_peaks();
     }
 
     if (kg_ui_vertex_buffer.id == 0) {
@@ -403,6 +516,7 @@ static void kg_ui_ensure_pipeline(void) {
         buffer_desc.size = sizeof(kg_ui_vertex) * 4096;
         buffer_desc.label = "kira-graphics-immediate-2d-vertices";
         kg_ui_vertex_buffer = sg_make_buffer(&buffer_desc);
+        kg_update_lifetime_peaks();
     }
 }
 
@@ -548,6 +662,7 @@ static void kg_ensure_ui_demo_vertex_buffer(void) {
     desc.data.size = sizeof(vertices);
     desc.label = "kira-graphics-ui-demo-vertices";
     kg_ui_demo_vertex_buffer = sg_make_buffer(&desc);
+    kg_update_lifetime_peaks();
 }
 
 static sg_pixel_format kg_pixel_format(int64_t format) {
@@ -690,6 +805,51 @@ static sg_blend_state kg_blend_state(bool enabled, int64_t preset) {
     return blend;
 }
 
+static bool kg_validate_pipeline_layout(
+    uint32_t shader_id,
+    int64_t vertex_stride,
+    int64_t attribute_count,
+    int64_t attr0_format,
+    int64_t attr0_offset,
+    int64_t attr1_format,
+    int64_t attr1_offset
+) {
+    if (kg_shader_has_position_attribute(shader_id) && attribute_count < 1) {
+        fprintf(stderr, "KiraGraphics pipeline validation failed: shader requires a position attribute but the descriptor has no vertex attributes.\n");
+        return false;
+    }
+
+    if (!kg_shader_has_normal_attribute(shader_id)) {
+        return true;
+    }
+
+    if (attribute_count < 2) {
+        fprintf(stderr, "KiraGraphics pipeline validation failed: shader requires a normal attribute but the descriptor has fewer than two vertex attributes.\n");
+        return false;
+    }
+    if (vertex_stride != 24) {
+        fprintf(stderr, "KiraGraphics pipeline validation failed: normal-mapped 3D shader expects vertex stride 24, got %lld.\n", (long long)vertex_stride);
+        return false;
+    }
+    if (attr0_format != 2) {
+        fprintf(stderr, "KiraGraphics pipeline validation failed: position attribute format must be float3, got %lld.\n", (long long)attr0_format);
+        return false;
+    }
+    if (attr0_offset != 0) {
+        fprintf(stderr, "KiraGraphics pipeline validation failed: position attribute offset must be 0, got %lld.\n", (long long)attr0_offset);
+        return false;
+    }
+    if (attr1_format != 2) {
+        fprintf(stderr, "KiraGraphics pipeline validation failed: normal attribute format must be float3, got %lld.\n", (long long)attr1_format);
+        return false;
+    }
+    if (attr1_offset != 12) {
+        fprintf(stderr, "KiraGraphics pipeline validation failed: normal attribute offset must be 12, got %lld.\n", (long long)attr1_offset);
+        return false;
+    }
+    return true;
+}
+
 static sg_buffer_usage kg_buffer_usage(int64_t usage) {
     sg_buffer_usage result = {0};
     result.immutable = true;
@@ -754,16 +914,27 @@ static char* kg_join_shader_path(const char* directory, const char* asset, const
     return path;
 }
 
-static const char* kg_replace_shader_text(const char* source, const char* needle, const char* replacement) {
-    if (source == NULL || needle == NULL || replacement == NULL) {
+static void kg_owned_text_deinit(kg_owned_text* text) {
+    if (text == NULL) {
+        return;
+    }
+    if (text->owned) {
+        free((void*)text->ptr);
+    }
+    text->ptr = NULL;
+    text->owned = false;
+}
+
+static kg_owned_text kg_replace_shader_text(kg_owned_text source, const char* needle, const char* replacement) {
+    if (source.ptr == NULL || needle == NULL || replacement == NULL) {
         return source;
     }
-    const char* found = strstr(source, needle);
+    const char* found = strstr(source.ptr, needle);
     if (found == NULL) {
         return source;
     }
 
-    const size_t prefix_len = (size_t)(found - source);
+    const size_t prefix_len = (size_t)(found - source.ptr);
     const size_t needle_len = strlen(needle);
     const size_t replacement_len = strlen(replacement);
     const size_t suffix_len = strlen(found + needle_len);
@@ -772,14 +943,15 @@ static const char* kg_replace_shader_text(const char* source, const char* needle
         return source;
     }
 
-    memcpy(result, source, prefix_len);
+    memcpy(result, source.ptr, prefix_len);
     memcpy(result + prefix_len, replacement, replacement_len);
     memcpy(result + prefix_len + replacement_len, found + needle_len, suffix_len + 1);
-    return result;
+    kg_owned_text_deinit(&source);
+    return (kg_owned_text){ result, true };
 }
 
-static const char* kg_prepare_shader_source_for_sokol(const char* source) {
-    const char* prepared = source;
+static kg_owned_text kg_prepare_shader_source_for_sokol(kg_owned_text source) {
+    kg_owned_text prepared = source;
     prepared = kg_replace_shader_text(
         prepared,
         "layout(std140) uniform scene_Block {\n"
@@ -922,9 +1094,9 @@ static void kg_remove_texture(uint32_t texture_id) {
     }
 }
 
-const char* kg_shader_source(const char* inline_source, const char* path) {
+static kg_owned_text kg_shader_source_owned(const char* inline_source, const char* path) {
     if (path == NULL || path[0] == '\0') {
-        return inline_source == NULL ? "" : inline_source;
+        return (kg_owned_text){ inline_source == NULL ? "" : inline_source, false };
     }
 
     const char* opened_path = path;
@@ -942,14 +1114,14 @@ const char* kg_shader_source(const char* inline_source, const char* path) {
     if (file == NULL) {
         printf("Kira Graphics: could not open shader source '%s'\n", path);
         free(fallback_path);
-        return "";
+        return (kg_owned_text){ "", false };
     }
 
     if (fseek(file, 0, SEEK_END) != 0) {
         fclose(file);
         printf("Kira Graphics: could not seek shader source '%s'\n", opened_path);
         free(fallback_path);
-        return "";
+        return (kg_owned_text){ "", false };
     }
 
     long length = ftell(file);
@@ -957,7 +1129,7 @@ const char* kg_shader_source(const char* inline_source, const char* path) {
         fclose(file);
         printf("Kira Graphics: could not measure shader source '%s'\n", opened_path);
         free(fallback_path);
-        return "";
+        return (kg_owned_text){ "", false };
     }
 
     rewind(file);
@@ -967,14 +1139,24 @@ const char* kg_shader_source(const char* inline_source, const char* path) {
         fclose(file);
         printf("Kira Graphics: could not allocate shader source '%s'\n", opened_path);
         free(fallback_path);
-        return "";
+        return (kg_owned_text){ "", false };
     }
 
     size_t read_count = fread(buffer, 1, (size_t)length, file);
     fclose(file);
     buffer[read_count] = '\0';
     free(fallback_path);
-    return buffer;
+    return (kg_owned_text){ buffer, true };
+}
+
+const char* kg_shader_source(const char* inline_source, const char* path) {
+    free(kg_shader_source_public_buffer);
+    kg_shader_source_public_buffer = NULL;
+    kg_owned_text source = kg_shader_source_owned(inline_source, path);
+    if (source.owned) {
+        kg_shader_source_public_buffer = (char*)source.ptr;
+    }
+    return source.ptr;
 }
 
 void kg_setup(void) {
@@ -1044,6 +1226,7 @@ uint32_t kg_finalize_float_buffer_upload(uint32_t upload_id) {
 
     sg_buffer buffer = sg_make_buffer(&desc);
     uint32_t buffer_id = buffer.id;
+    kg_update_lifetime_peaks();
     kg_release_buffer_upload(record);
     return buffer_id;
 }
@@ -1089,6 +1272,7 @@ uint32_t kg_finalize_index_buffer_upload(uint32_t upload_id) {
 
     sg_buffer buffer = sg_make_buffer(&desc);
     uint32_t buffer_id = buffer.id;
+    kg_update_lifetime_peaks();
     kg_release_buffer_upload(record);
     return buffer_id;
 }
@@ -1099,6 +1283,7 @@ void kg_destroy_buffer_id(uint32_t buffer_id) {
     }
     sg_buffer buffer = { buffer_id };
     sg_destroy_buffer(buffer);
+    kg_update_lifetime_peaks();
 }
 
 uint32_t kg_create_uniform_id(const char* label, int64_t expected_float_count) {
@@ -1122,6 +1307,7 @@ uint32_t kg_create_uniform_id(const char* label, int64_t expected_float_count) {
         record->label = NULL;
         return 0;
     }
+    kg_update_lifetime_peaks();
     return record->id;
 }
 
@@ -1166,6 +1352,7 @@ void kg_destroy_uniform_id(uint32_t uniform_id) {
     free(record->values);
     free(record->label);
     *record = (kg_uniform_record){0};
+    kg_update_lifetime_peaks();
 }
 
 uint32_t kg_create_bind_group_id(const char* label) {
@@ -1175,6 +1362,7 @@ uint32_t kg_create_bind_group_id(const char* label) {
         return 0;
     }
     record->label = kg_copy_string(label);
+    kg_update_lifetime_peaks();
     return record->id;
 }
 
@@ -1217,6 +1405,7 @@ void kg_destroy_bind_group_id(uint32_t bind_group_id) {
     }
     free(record->label);
     *record = (kg_bind_group_record){0};
+    kg_update_lifetime_peaks();
 }
 
 uint32_t kg_create_texture_id(const char* label, int64_t width, int64_t height, int64_t format, int64_t usage, int64_t sample_count, int64_t storage_mode) {
@@ -1237,6 +1426,7 @@ uint32_t kg_create_texture_id(const char* label, int64_t width, int64_t height, 
     if (image.id == 0) {
         return 0;
     }
+    kg_update_lifetime_peaks();
 
     uint32_t color_view_id = 0;
     uint32_t depth_view_id = 0;
@@ -1245,12 +1435,24 @@ uint32_t kg_create_texture_id(const char* label, int64_t width, int64_t height, 
         color_view_desc.color_attachment.image = image;
         color_view_desc.label = label;
         color_view_id = sg_make_view(&color_view_desc).id;
+        kg_update_lifetime_peaks();
+        if (color_view_id == 0) {
+            sg_destroy_image(image);
+            kg_update_lifetime_peaks();
+            return 0;
+        }
     }
     if (usage == 4) {
         sg_view_desc depth_view_desc = {0};
         depth_view_desc.depth_stencil_attachment.image = image;
         depth_view_desc.label = label;
         depth_view_id = sg_make_view(&depth_view_desc).id;
+        kg_update_lifetime_peaks();
+        if (depth_view_id == 0) {
+            sg_destroy_image(image);
+            kg_update_lifetime_peaks();
+            return 0;
+        }
     }
 
     if (kg_texture_record_count < 64) {
@@ -1264,8 +1466,21 @@ uint32_t kg_create_texture_id(const char* label, int64_t width, int64_t height, 
         record->format = format;
         record->usage = usage;
         kg_texture_record_count += 1;
+        kg_update_lifetime_peaks();
+        return image.id;
     }
-    return image.id;
+
+    if (color_view_id != 0) {
+        sg_view color_view = { color_view_id };
+        sg_destroy_view(color_view);
+    }
+    if (depth_view_id != 0) {
+        sg_view depth_view = { depth_view_id };
+        sg_destroy_view(depth_view);
+    }
+    sg_destroy_image(image);
+    kg_update_lifetime_peaks();
+    return 0;
 }
 
 void kg_destroy_texture_id(uint32_t texture_id) {
@@ -1286,6 +1501,7 @@ void kg_destroy_texture_id(uint32_t texture_id) {
     sg_image image = { texture_id };
     sg_destroy_image(image);
     kg_remove_texture(texture_id);
+    kg_update_lifetime_peaks();
 }
 
 static void kg_uniform_member(sg_shader_uniform_block* block, int index, sg_uniform_type type, const char* name) {
@@ -1370,8 +1586,10 @@ static uint32_t kg_uniform_mask_from_shader_source(const char* vertex_source, co
 
 uint32_t kg_make_shader(const char* label, const char* vertex_source, const char* fragment_source, const char* vertex_path, const char* fragment_path) {
     sg_shader_desc desc = {0};
-    desc.vertex_func.source = kg_prepare_shader_source_for_sokol(kg_shader_source(vertex_source, vertex_path));
-    desc.fragment_func.source = kg_prepare_shader_source_for_sokol(kg_shader_source(fragment_source, fragment_path));
+    kg_owned_text prepared_vertex_source = kg_prepare_shader_source_for_sokol(kg_shader_source_owned(vertex_source, vertex_path));
+    kg_owned_text prepared_fragment_source = kg_prepare_shader_source_for_sokol(kg_shader_source_owned(fragment_source, fragment_path));
+    desc.vertex_func.source = prepared_vertex_source.ptr;
+    desc.fragment_func.source = prepared_fragment_source.ptr;
     bool has_position_attribute = strstr(desc.vertex_func.source, "kira_attr_position") != NULL;
     bool has_normal_attribute = strstr(desc.vertex_func.source, "kira_attr_normal") != NULL;
     uint32_t required_uniform_mask = kg_uniform_mask_from_shader_source(desc.vertex_func.source, desc.fragment_func.source);
@@ -1387,6 +1605,9 @@ uint32_t kg_make_shader(const char* label, const char* vertex_source, const char
     desc.label = label;
     uint32_t shader_id = sg_make_shader(&desc).id;
     kg_record_shader(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask, available_uniform_mask);
+    kg_update_lifetime_peaks();
+    kg_owned_text_deinit(&prepared_vertex_source);
+    kg_owned_text_deinit(&prepared_fragment_source);
     return shader_id;
 }
 
@@ -1435,15 +1656,8 @@ uint32_t kg_make_pipeline_detailed(
     desc.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
     desc.layout.buffers[0].step_rate = 1;
 
-    const bool shader_has_normal = kg_shader_has_normal_attribute(shader_id);
-    if (shader_has_normal && vertex_stride >= 24 && attribute_count >= 2) {
-        if (attr0_format <= 0) {
-            attr0_format = 2;
-        }
-        if (attr1_format <= 1 && attr1_offset == 0) {
-            attr1_format = 2;
-            attr1_offset = 12;
-        }
+    if (!kg_validate_pipeline_layout(shader_id, vertex_stride, attribute_count, attr0_format, attr0_offset, attr1_format, attr1_offset)) {
+        return 0;
     }
 
     if (attribute_count > 0) {
@@ -1493,12 +1707,32 @@ uint32_t kg_make_pipeline_detailed(
     sg_pipeline_desc draw_desc = desc;
     draw_desc.index_type = SG_INDEXTYPE_NONE;
     uint32_t draw_pipeline_id = sg_make_pipeline(&draw_desc).id;
+    kg_update_lifetime_peaks();
+    if (draw_pipeline_id == 0) {
+        return 0;
+    }
 
     sg_pipeline_desc indexed_desc = desc;
     indexed_desc.index_type = SG_INDEXTYPE_UINT32;
     uint32_t indexed_pipeline_id = sg_make_pipeline(&indexed_desc).id;
+    kg_update_lifetime_peaks();
+    if (indexed_pipeline_id == 0) {
+        sg_pipeline draw_pipeline = { draw_pipeline_id };
+        sg_destroy_pipeline(draw_pipeline);
+        kg_update_lifetime_peaks();
+        return 0;
+    }
 
     uint32_t pipeline_id = kg_record_pipeline(draw_pipeline_id, indexed_pipeline_id, attribute_count > 0 || kg_shader_has_position_attribute(shader_id), kg_shader_required_uniform_mask(shader_id), kg_shader_available_uniform_mask(shader_id));
+    if (pipeline_id == 0) {
+        sg_pipeline draw_pipeline = { draw_pipeline_id };
+        sg_pipeline indexed_pipeline = { indexed_pipeline_id };
+        sg_destroy_pipeline(draw_pipeline);
+        sg_destroy_pipeline(indexed_pipeline);
+        kg_update_lifetime_peaks();
+        return 0;
+    }
+    kg_update_lifetime_peaks();
     if (label != NULL && strstr(label, "ui-demo") != NULL) {
         kg_ui_demo_pipeline_id = pipeline_id;
     }
@@ -1507,6 +1741,193 @@ uint32_t kg_make_pipeline_detailed(
 
 uint32_t kg_make_pipeline(uint32_t shader_id, const char* label) {
     return kg_make_pipeline_detailed(shader_id, label, sizeof(float) * 2, 1, 0, 1, 0, 1, 1, 0, 2, 1, 0, 3, 1, 0, 1, 1, 0, 1, 0, 0, 6, 3, 0, 2, 1);
+}
+
+uint32_t kg_begin_render_pass(
+    const char* label,
+    int64_t color_target_kind,
+    uint32_t color_texture_id,
+    int64_t color_mip_level,
+    int64_t color_array_layer,
+    int64_t color_load_action,
+    int64_t color_store_action,
+    double clear_r,
+    double clear_g,
+    double clear_b,
+    double clear_a,
+    int64_t has_resolve_target,
+    uint32_t resolve_texture_id,
+    int64_t resolve_mip_level,
+    int64_t resolve_array_layer,
+    int64_t has_depth_attachment,
+    uint32_t depth_texture_id,
+    int64_t depth_load_action,
+    int64_t depth_store_action,
+    double clear_depth,
+    int64_t depth_read_only,
+    int64_t has_stencil_attachment,
+    uint32_t stencil_texture_id,
+    int64_t stencil_load_action,
+    int64_t stencil_store_action,
+    int64_t clear_stencil,
+    int64_t stencil_read_only
+);
+void kg_end_pass_and_commit(void);
+void kg_destroy_shader_id(uint32_t shader_id);
+void kg_destroy_pipeline_id(uint32_t pipeline_id);
+
+static uint32_t kg_lifetime_stress_fail(const char* step, int64_t iteration) {
+    fprintf(stderr, "Kira Graphics lifetime stress failed at %s on iteration %lld\n", step ? step : "unknown", (long long)iteration);
+    return 0;
+}
+
+uint32_t kg_run_lifetime_stress(int64_t iterations, const char* shader_directory, const char* shader_asset) {
+    if (iterations <= 0) {
+        iterations = 1;
+    }
+
+    for (int64_t iteration = 0; iteration < iterations; iteration += 1) {
+        uint32_t vertex_buffer = 0;
+        uint32_t index_buffer = 0;
+        uint32_t texture = 0;
+        uint32_t uniform = 0;
+        uint32_t bind_group = 0;
+        uint32_t shader = 0;
+        uint32_t pipeline = 0;
+
+        uint32_t upload = kg_begin_float_buffer_upload("lifetime-stress-vertices", 1, 24, 18);
+        if (upload == 0) {
+            return kg_lifetime_stress_fail("begin vertex buffer upload", iteration);
+        }
+        for (int64_t index = 0; index < 18; index += 1) {
+            kg_set_float_buffer_upload_value(upload, index, (double)(index % 3));
+        }
+        vertex_buffer = kg_finalize_float_buffer_upload(upload);
+        if (vertex_buffer == 0) {
+            return kg_lifetime_stress_fail("finalize vertex buffer", iteration);
+        }
+
+        upload = kg_begin_index_buffer_upload("lifetime-stress-indices", 2, 3);
+        if (upload == 0) {
+            kg_destroy_buffer_id(vertex_buffer);
+            return kg_lifetime_stress_fail("begin index buffer upload", iteration);
+        }
+        kg_set_index_buffer_upload_value(upload, 0, 0);
+        kg_set_index_buffer_upload_value(upload, 1, 1);
+        kg_set_index_buffer_upload_value(upload, 2, 2);
+        index_buffer = kg_finalize_index_buffer_upload(upload);
+        if (index_buffer == 0) {
+            kg_destroy_buffer_id(vertex_buffer);
+            return kg_lifetime_stress_fail("finalize index buffer", iteration);
+        }
+
+        texture = kg_create_texture_id("lifetime-stress-color", 16, 16, 1, 2, 1, 1);
+        if (texture == 0) {
+            kg_destroy_buffer_id(index_buffer);
+            kg_destroy_buffer_id(vertex_buffer);
+            return kg_lifetime_stress_fail("create texture", iteration);
+        }
+        if (kg_begin_render_pass("lifetime-stress-pass", 2, texture, 0, 0, 1, 1, 0.0, 0.0, 0.0, 1.0, 0, 0, 0, 0, 0, 0, 1, 1, 1.0, 0, 0, 0, 1, 1, 0, 0) == 0) {
+            kg_destroy_texture_id(texture);
+            kg_destroy_buffer_id(index_buffer);
+            kg_destroy_buffer_id(vertex_buffer);
+            return kg_lifetime_stress_fail("begin offscreen render pass", iteration);
+        }
+        kg_end_pass_and_commit();
+
+        uniform = kg_create_uniform_id("lifetime-stress-uniform", 4);
+        if (uniform == 0) {
+            kg_destroy_texture_id(texture);
+            kg_destroy_buffer_id(index_buffer);
+            kg_destroy_buffer_id(vertex_buffer);
+            return kg_lifetime_stress_fail("create uniform", iteration);
+        }
+        for (int64_t index = 0; index < 4; index += 1) {
+            kg_set_uniform_float(uniform, index, 1.0);
+        }
+        if (kg_finish_uniform_update(uniform, 4) == 0) {
+            kg_destroy_uniform_id(uniform);
+            kg_destroy_texture_id(texture);
+            kg_destroy_buffer_id(index_buffer);
+            kg_destroy_buffer_id(vertex_buffer);
+            return kg_lifetime_stress_fail("finish uniform", iteration);
+        }
+        bind_group = kg_create_bind_group_id("lifetime-stress-bind-group");
+        if (bind_group == 0) {
+            kg_destroy_uniform_id(uniform);
+            kg_destroy_texture_id(texture);
+            kg_destroy_buffer_id(index_buffer);
+            kg_destroy_buffer_id(vertex_buffer);
+            return kg_lifetime_stress_fail("create bind group", iteration);
+        }
+        if (kg_set_bind_group_uniform(bind_group, 0, 2, uniform) == 0) {
+            kg_destroy_bind_group_id(bind_group);
+            kg_destroy_uniform_id(uniform);
+            kg_destroy_texture_id(texture);
+            kg_destroy_buffer_id(index_buffer);
+            kg_destroy_buffer_id(vertex_buffer);
+            return kg_lifetime_stress_fail("bind uniform", iteration);
+        }
+
+        shader = kg_make_ksl_shader("lifetime-stress-ksl-shader", shader_asset ? shader_asset : "LifetimeStress", shader_directory ? shader_directory : "generated/shaders");
+        if (shader == 0) {
+            kg_destroy_bind_group_id(bind_group);
+            kg_destroy_uniform_id(uniform);
+            kg_destroy_texture_id(texture);
+            kg_destroy_buffer_id(index_buffer);
+            kg_destroy_buffer_id(vertex_buffer);
+            return kg_lifetime_stress_fail("create KSL shader", iteration);
+        }
+        pipeline = kg_make_pipeline_detailed(shader, "lifetime-stress-pipeline", 24, 2, 0, 2, 0, 1, 2, 12, 2, 1, 0, 3, 1, 0, 1, 1, 0, 1, 0, 0, 6, 3, 0, 1, 1);
+        if (pipeline == 0) {
+            kg_destroy_shader_id(shader);
+            kg_destroy_bind_group_id(bind_group);
+            kg_destroy_uniform_id(uniform);
+            kg_destroy_texture_id(texture);
+            kg_destroy_buffer_id(index_buffer);
+            kg_destroy_buffer_id(vertex_buffer);
+            return kg_lifetime_stress_fail("create pipeline", iteration);
+        }
+
+        kg_destroy_pipeline_id(pipeline);
+        kg_destroy_shader_id(shader);
+        kg_destroy_bind_group_id(bind_group);
+        kg_destroy_uniform_id(uniform);
+        kg_destroy_texture_id(texture);
+        kg_destroy_buffer_id(index_buffer);
+        kg_destroy_buffer_id(vertex_buffer);
+
+        kg_update_lifetime_peaks();
+    }
+
+    kg_owned_text missing = kg_prepare_shader_source_for_sokol(kg_shader_source_owned("", "__missing_lifetime_stress_shader__.glsl"));
+    kg_owned_text_deinit(&missing);
+    kg_owned_text rewrite_probe = {
+        kg_copy_string(
+            "layout(std140) uniform scene_Block {\n"
+            "    mat4 viewProjection;\n"
+            "    vec4 lightDirection;\n"
+            "    vec4 lightColor;\n"
+            "} scene;\n"
+            "layout(std140) uniform object_Block {\n"
+            "    mat4 model;\n"
+            "    vec4 baseColor;\n"
+            "} object;"
+        ),
+        true,
+    };
+    if (rewrite_probe.ptr != NULL) {
+        rewrite_probe = kg_prepare_shader_source_for_sokol(rewrite_probe);
+        kg_owned_text_deinit(&rewrite_probe);
+    }
+    kg_update_lifetime_peaks();
+
+    if (kg_lifetime_outstanding_count() != 0) {
+        fprintf(stderr, "Kira Graphics lifetime stress left %d outstanding resources\n", kg_lifetime_outstanding_count());
+        return 0;
+    }
+    fprintf(stderr, "Kira Graphics lifetime stress: pass iterations=%lld\n", (long long)iterations);
+    return 1;
 }
 
 uint32_t kg_begin_render_pass(
@@ -1849,6 +2270,8 @@ void kg_begin_swapchain_pass(float r, float g, float b, float a) {
 void kg_destroy_shader_id(uint32_t shader_id) {
     sg_shader shader = { shader_id };
     sg_destroy_shader(shader);
+    kg_remove_shader_record(shader_id);
+    kg_update_lifetime_peaks();
 }
 
 void kg_destroy_pipeline_id(uint32_t pipeline_id) {
@@ -1865,9 +2288,12 @@ void kg_destroy_pipeline_id(uint32_t pipeline_id) {
         sg_destroy_pipeline(indexed_pipeline);
     }
     kg_remove_pipeline_record(pipeline_id);
+    kg_update_lifetime_peaks();
 }
 
 void kg_destroy_default_resources(void) {
+    free(kg_shader_source_public_buffer);
+    kg_shader_source_public_buffer = NULL;
     if (kg_triangle_vertex_buffer.id != 0) {
         sg_destroy_buffer(kg_triangle_vertex_buffer);
         kg_triangle_vertex_buffer.id = 0;
@@ -1875,5 +2301,60 @@ void kg_destroy_default_resources(void) {
     if (kg_ui_demo_vertex_buffer.id != 0) {
         sg_destroy_buffer(kg_ui_demo_vertex_buffer);
         kg_ui_demo_vertex_buffer.id = 0;
+    }
+    if (kg_ui_vertex_buffer.id != 0) {
+        sg_destroy_buffer(kg_ui_vertex_buffer);
+        kg_ui_vertex_buffer.id = 0;
+    }
+    if (kg_ui_pipeline.id != 0) {
+        sg_destroy_pipeline(kg_ui_pipeline);
+        kg_ui_pipeline.id = 0;
+    }
+    if (kg_ui_shader.id != 0) {
+        sg_destroy_shader(kg_ui_shader);
+        kg_ui_shader.id = 0;
+    }
+    kg_update_lifetime_peaks();
+}
+
+void kg_report_lifetime(void) {
+    if (!kg_lifetime_report_enabled()) {
+        return;
+    }
+    kg_update_lifetime_peaks();
+    fprintf(stderr,
+        "Kira Graphics lifetime report: shaders=%d pipelines=%d textures=%d uniforms=%d bindGroups=%d\n",
+        kg_shader_record_count,
+        kg_pipeline_record_count,
+        kg_texture_record_count,
+        kg_active_uniform_count(),
+        kg_active_bind_group_count());
+    if (kg_lifetime_detail_enabled() && sg_isvalid()) {
+        sg_stats stats = sg_query_stats();
+        fprintf(stderr,
+            "Kira Graphics lifetime detail: buffers current=%u peak=%u allocated=%u deallocated=%u images current=%u peak=%u allocated=%u deallocated=%u samplers current=%u peak=%u allocated=%u deallocated=%u views current=%u peak=%u allocated=%u deallocated=%u shaders current=%u peak=%u allocated=%u deallocated=%u pipelines current=%u peak=%u allocated=%u deallocated=%u uniforms current=%d peak=%d bindGroups current=%d peak=%d\n",
+            stats.total.buffers.alive, kg_lifetime_peaks.buffers, stats.total.buffers.allocated, stats.total.buffers.deallocated,
+            stats.total.images.alive, kg_lifetime_peaks.images, stats.total.images.allocated, stats.total.images.deallocated,
+            stats.total.samplers.alive, kg_lifetime_peaks.samplers, stats.total.samplers.allocated, stats.total.samplers.deallocated,
+            stats.total.views.alive, kg_lifetime_peaks.views, stats.total.views.allocated, stats.total.views.deallocated,
+            stats.total.shaders.alive, kg_lifetime_peaks.shaders, stats.total.shaders.allocated, stats.total.shaders.deallocated,
+            stats.total.pipelines.alive, kg_lifetime_peaks.pipelines, stats.total.pipelines.allocated, stats.total.pipelines.deallocated,
+            kg_active_uniform_count(), kg_lifetime_peaks.uniforms,
+            kg_active_bind_group_count(), kg_lifetime_peaks.bind_groups);
+    }
+}
+
+void kg_sample_lifetime_frame(void) {
+    kg_update_lifetime_peaks();
+}
+
+void kg_maybe_request_quit_after_frame(int64_t frame_index) {
+    const char* value = getenv("KIRA_GRAPHICS_QUIT_AFTER_FRAMES");
+    if (value == NULL || value[0] == '\0' || value[0] == '0') {
+        return;
+    }
+    const long long limit = atoll(value);
+    if (limit > 0 && frame_index >= limit) {
+        sapp_request_quit();
     }
 }

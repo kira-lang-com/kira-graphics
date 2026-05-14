@@ -1,0 +1,51 @@
+import KiraGraphics
+
+struct LifetimeStressState {
+    var didRun: Bool
+    var success: Bool
+}
+
+@Main
+@Native
+function main() {
+    var app = GraphicsApplication {
+        title: "Kira Graphics Lifetime Stress"
+        width: 64
+        height: 64
+        sampleCount: 1
+    }
+
+    let state = nativeState(LifetimeStressState {
+        didRun: false
+        success: false
+    })
+
+    app.onFrame { frame in
+        var stressState = nativeRecover<LifetimeStressState>(frame.userData)
+        if (!stressState.didRun) {
+            let graphics = Graphics {
+                userData: frame.userData
+            }
+            stressState.success = graphics.runLifetimeStress(200, "generated/shaders", "LifetimeStress")
+            stressState.didRun = true
+        }
+        frame.pass(Color { r: 0.0 g: 0.0 b: 0.0 a: 1.0 }) { encoder in
+            return
+        }
+        frame.requestQuit()
+        return
+    }
+
+    app.onCleanup { graphics in
+        var stressState = nativeRecover<LifetimeStressState>(graphics.userData)
+        if (stressState.success) {
+            print("lifetime stress app passed")
+        } else {
+            print("lifetime stress app failed")
+        }
+        return
+    }
+
+    app.run(nativeUserData(state))
+    return
+}

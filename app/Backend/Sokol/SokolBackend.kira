@@ -85,6 +85,18 @@ function kgDestroyPipelineId(pipelineId: U32): Void;
 @FFI.Extern { library: sokol; symbol: kg_destroy_default_resources; abi: c; }
 function kgDestroyDefaultResources(): Void;
 
+@FFI.Extern { library: sokol; symbol: kg_report_lifetime; abi: c; }
+function kgReportLifetime(): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_sample_lifetime_frame; abi: c; }
+function kgSampleLifetimeFrame(): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_maybe_request_quit_after_frame; abi: c; }
+function kgMaybeRequestQuitAfterFrame(frameIndex: I64): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_run_lifetime_stress; abi: c; }
+function kgRunLifetimeStress(iterations: I64, shaderDirectory: CString, shaderAsset: CString): U32;
+
 @FFI.Extern { library: sokol; symbol: kg_destroy_shader_id; abi: c; }
 function kgDestroyShaderId(shaderId: U32): Void;
 

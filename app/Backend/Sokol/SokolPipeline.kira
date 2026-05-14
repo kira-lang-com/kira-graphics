@@ -1,58 +1,4 @@
 @Native
-function pipelineVertexAttributeLocation(layout: VertexLayout, index: Int) -> Int {
-    if (index < layout.attributes.count) {
-        let attribute = layout.attributes[index]
-        return attribute.location
-    }
-    return index
-}
-
-@Native
-function pipelineVertexAttributeFormat(layout: VertexLayout, index: Int) -> Int {
-    if (index < layout.attributes.count) {
-        let attribute = layout.attributes[index]
-        return attribute.format
-    }
-    return vertexFormatFloat2()
-}
-
-@Native
-function pipelineVertexAttributeOffset(layout: VertexLayout, index: Int) -> Int {
-    if (index < layout.attributes.count) {
-        let attribute = layout.attributes[index]
-        return attribute.offset
-    }
-    return 0
-}
-
-@Native
-function pipelineColorFormat(descriptor: RenderPipelineDescriptor, index: Int) -> Int {
-    if (index < descriptor.colorTargets.count) {
-        let target = descriptor.colorTargets[index]
-        return target.format
-    }
-    return textureFormatRgba8Unorm()
-}
-
-@Native
-function pipelineBlendEnabled(descriptor: RenderPipelineDescriptor, index: Int) -> Bool {
-    if (index < descriptor.colorTargets.count) {
-        let target = descriptor.colorTargets[index]
-        return target.blend.enabled
-    }
-    return false
-}
-
-@Native
-function pipelineBlendPreset(descriptor: RenderPipelineDescriptor, index: Int) -> Int {
-    if (index < descriptor.colorTargets.count) {
-        let target = descriptor.colorTargets[index]
-        return target.blend.preset
-    }
-    return blendPresetReplace()
-}
-
-@Native
 function sokolCreateRenderPipelineId(shaderId: U32, label: String, stride: I64, attributeCount: I64, attr0Location: I64, attr0Format: I64, attr0Offset: I64, attr1Location: I64, attr1Format: I64, attr1Offset: I64, attr2Location: I64, attr2Format: I64, attr2Offset: I64, attr3Location: I64, attr3Format: I64, attr3Offset: I64, colorTargetCount: I64, colorFormat: I64, blendEnabled: I64, blendPreset: I64, depthEnabled: I64, depthWriteEnabled: I64, depthCompare: I64, depthFormat: I64, cullMode: I64, frontFace: I64, topology: I64) -> U32 {
     return kgMakePipelineDetailed(
         shaderId,
@@ -85,7 +31,6 @@ function sokolCreateRenderPipelineId(shaderId: U32, label: String, stride: I64, 
     )
 }
 
-@Native
 function sokolCreateRenderPipeline(descriptor: RenderPipelineDescriptor) -> RenderPipeline {
     let attributeCount: I64 = descriptor.vertexLayout.attributes.count
     let colorTargetCount: I64 = descriptor.colorTargets.count
@@ -105,31 +50,31 @@ function sokolCreateRenderPipeline(descriptor: RenderPipelineDescriptor) -> Rend
     var attr3Offset: I64 = 0
 
     if (attributeCount > 0) {
-        attr0Location = pipelineVertexAttributeLocation(descriptor.vertexLayout, 0)
-        attr0Format = pipelineVertexAttributeFormat(descriptor.vertexLayout, 0)
-        attr0Offset = pipelineVertexAttributeOffset(descriptor.vertexLayout, 0)
+        attr0Location = descriptor.vertexLayout.attributes[0].location
+        attr0Format = descriptor.vertexLayout.attributes[0].format
+        attr0Offset = descriptor.vertexLayout.attributes[0].offset
     }
 
     if (attributeCount > 1) {
-        attr1Location = pipelineVertexAttributeLocation(descriptor.vertexLayout, 1)
-        attr1Format = pipelineVertexAttributeFormat(descriptor.vertexLayout, 1)
-        attr1Offset = pipelineVertexAttributeOffset(descriptor.vertexLayout, 1)
+        attr1Location = descriptor.vertexLayout.attributes[1].location
+        attr1Format = descriptor.vertexLayout.attributes[1].format
+        attr1Offset = descriptor.vertexLayout.attributes[1].offset
     }
 
     if (attributeCount > 2) {
-        attr2Location = pipelineVertexAttributeLocation(descriptor.vertexLayout, 2)
-        attr2Format = pipelineVertexAttributeFormat(descriptor.vertexLayout, 2)
-        attr2Offset = pipelineVertexAttributeOffset(descriptor.vertexLayout, 2)
+        attr2Location = descriptor.vertexLayout.attributes[2].location
+        attr2Format = descriptor.vertexLayout.attributes[2].format
+        attr2Offset = descriptor.vertexLayout.attributes[2].offset
     }
 
     if (attributeCount > 3) {
-        attr3Location = pipelineVertexAttributeLocation(descriptor.vertexLayout, 3)
-        attr3Format = pipelineVertexAttributeFormat(descriptor.vertexLayout, 3)
-        attr3Offset = pipelineVertexAttributeOffset(descriptor.vertexLayout, 3)
+        attr3Location = descriptor.vertexLayout.attributes[3].location
+        attr3Format = descriptor.vertexLayout.attributes[3].format
+        attr3Offset = descriptor.vertexLayout.attributes[3].offset
     }
-    let colorFormat: I64 = pipelineColorFormat(descriptor, 0)
-    let blendEnabled: I64 = pipelineBlendEnabled(descriptor, 0) ? 1 : 0
-    let blendPreset: I64 = pipelineBlendPreset(descriptor, 0)
+    let colorFormat: I64 = descriptor.colorTargets[0].format
+    let blendEnabled: I64 = descriptor.colorTargets[0].blend.enabled ? 1 : 0
+    let blendPreset: I64 = descriptor.colorTargets[0].blend.preset
     let depthEnabled: I64 = descriptor.depthStencil.depthEnabled ? 1 : 0
     let depthWriteEnabled: I64 = descriptor.depthStencil.depthWriteEnabled ? 1 : 0
     let depthCompare: I64 = descriptor.depthStencil.depthCompare

@@ -26,7 +26,6 @@ class Graphics {
         return
     }
 
-    @Native
     function createRenderPipeline(descriptor: RenderPipelineDescriptor) -> RenderPipeline {
         return sokolCreateRenderPipeline(descriptor)
     }
@@ -157,6 +156,12 @@ class Graphics {
     function destroyTexture(texture: GraphicsTexture) {
         sokolDestroyTextureId(texture.id)
         return
+    }
+
+    @Native
+    function runLifetimeStress(iterations: Int, shaderDirectory: String, shaderAsset: String) -> Bool {
+        let nativeIterations: I64 = iterations
+        return kgRunLifetimeStress(nativeIterations, shaderDirectory, shaderAsset) != 0
     }
 
     @Native

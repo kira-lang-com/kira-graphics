@@ -1,0 +1,40 @@
+type VertexIn {
+    let position: Float3
+    let normal: Float3
+}
+
+type VertexOut {
+    @builtin(position)
+    let clip_position: Float4
+
+    let color: Float4
+}
+
+type FragmentOut {
+    let color: Float4
+}
+
+shader LifetimeStress {
+    vertex {
+        input VertexIn
+        output VertexOut
+
+        function entry(input: VertexIn) -> VertexOut {
+            let result: VertexOut
+            result.clip_position = Float4(input.position, 1.0)
+            result.color = Float4(input.normal.x, input.normal.y, input.normal.z, 1.0)
+            return result
+        }
+    }
+
+    fragment {
+        input VertexOut
+        output FragmentOut
+
+        function entry(input: VertexOut) -> FragmentOut {
+            let result: FragmentOut
+            result.color = input.color
+            return result
+        }
+    }
+}

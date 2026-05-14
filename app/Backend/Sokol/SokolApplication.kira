@@ -42,6 +42,8 @@ function kiraGraphicsSokolFrame(runtimeUserData: RawPtr): Void {
     state.frameIndex = state.frameIndex + 1
     onFrame(frame)
     graphicsSubmitFrame(frame)
+    kgSampleLifetimeFrame()
+    kgMaybeRequestQuitAfterFrame(state.frameIndex)
     return
 }
 
@@ -56,6 +58,7 @@ function kiraGraphicsSokolCleanup(runtimeUserData: RawPtr): Void {
 
     onCleanup(graphics)
     kgDestroyDefaultResources()
+    kgReportLifetime()
     sg_shutdown()
     return
 }
