@@ -6,7 +6,7 @@ kira = "0.1.0"
 native_libraries = ["../../NativeLibs/Sokol.toml"]
 
 [defaults]
-execution_mode = "hybrid"
+execution_mode = "llvm"
 build_target = "host"
 
 [dependencies]
