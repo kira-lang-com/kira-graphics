@@ -23,7 +23,7 @@ function objectUniformFloatCount() -> Int {
     return 20
 }
 
-function sceneUniforms(camera: PerspectiveCamera, light: DirectionalLight, ambient: Float) -> SceneUniforms {
+function sceneUniforms(camera: borrow PerspectiveCamera, light: borrow DirectionalLight, ambient: Float) -> SceneUniforms {
     return SceneUniforms {
         viewProjection: cameraViewProjectionMatrix(camera)
         lightDirection: Float4 {
@@ -41,14 +41,14 @@ function sceneUniforms(camera: PerspectiveCamera, light: DirectionalLight, ambie
     }
 }
 
-function objectUniforms(model: Float4x4, baseColor: Float4) -> ObjectUniforms {
+function objectUniforms(model: borrow Float4x4, baseColor: borrow Float4) -> ObjectUniforms {
     return ObjectUniforms {
         model: model
         baseColor: baseColor
     }
 }
 
-function sceneUniformData(uniforms: SceneUniforms) -> [Float] {
+function sceneUniformData(uniforms: borrow SceneUniforms) -> [Float] {
     let m = uniforms.viewProjection
     let lightDirection = uniforms.lightDirection
     let lightColor = uniforms.lightColor
@@ -65,7 +65,7 @@ function sceneUniformData(uniforms: SceneUniforms) -> [Float] {
     ]
 }
 
-function objectUniformData(uniforms: ObjectUniforms) -> [Float] {
+function objectUniformData(uniforms: borrow ObjectUniforms) -> [Float] {
     let m = uniforms.model
     let baseColor = uniforms.baseColor
 

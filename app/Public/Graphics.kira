@@ -1,7 +1,7 @@
 class Graphics {
     var userData: RawPtr
 
-    function createShader(descriptor: ShaderDescriptor) -> GraphicsShader {
+    function createShader(descriptor: borrow ShaderDescriptor) -> GraphicsShader {
         let shaderId = sokolCreateShaderId(descriptor.label, descriptor.vertexSource, descriptor.fragmentSource, descriptor.vertexPath, descriptor.fragmentPath)
         return GraphicsShader {
             handle: BackendShaderHandle {
@@ -11,7 +11,7 @@ class Graphics {
         }
     }
 
-    function createShaderFromKsl(descriptor: KslShaderDescriptor) -> GraphicsShader {
+    function createShaderFromKsl(descriptor: borrow KslShaderDescriptor) -> GraphicsShader {
         let shaderId = sokolCreateShaderFromKslId(descriptor.label, descriptor.asset, descriptor.directory)
         return GraphicsShader {
             handle: BackendShaderHandle {
@@ -26,21 +26,21 @@ class Graphics {
         return
     }
 
-    function createRenderPipeline(descriptor: RenderPipelineDescriptor) -> RenderPipeline {
+    function createRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> RenderPipeline {
         return sokolCreateRenderPipeline(descriptor)
     }
 
-    function destroyPipeline(pipeline: RenderPipeline) {
+    function destroyPipeline(pipeline: borrow RenderPipeline) {
         sokolDestroyRenderPipelineId(pipeline.id)
         return
     }
 
-    function destroyRenderPipeline(pipeline: RenderPipeline) {
+    function destroyRenderPipeline(pipeline: borrow RenderPipeline) {
         destroyPipeline(pipeline)
         return
     }
 
-    function createBuffer(descriptor: BufferDescriptor) -> GraphicsBuffer {
+    function createBuffer(descriptor: borrow BufferDescriptor) -> GraphicsBuffer {
         let uploadId = sokolBeginFloatBufferUpload(descriptor.label, descriptor.usage, descriptor.stride, descriptor.data.count)
         var index = 0
 
@@ -58,7 +58,7 @@ class Graphics {
         }
     }
 
-    function createIndexBuffer(descriptor: IndexBufferDescriptor) -> GraphicsBuffer {
+    function createIndexBuffer(descriptor: borrow IndexBufferDescriptor) -> GraphicsBuffer {
         let uploadId = sokolBeginIndexBufferUpload(descriptor.label, descriptor.usage, descriptor.data.count)
         var index = 0
 
@@ -76,12 +76,12 @@ class Graphics {
         }
     }
 
-    function destroyBuffer(buffer: GraphicsBuffer) {
+    function destroyBuffer(buffer: borrow GraphicsBuffer) {
         sokolDestroyBufferId(buffer.id)
         return
     }
 
-    function createUniform(descriptor: UniformDescriptor) -> GraphicsUniform {
+    function createUniform(descriptor: borrow UniformDescriptor) -> GraphicsUniform {
         let uniformId = sokolCreateUniformId(descriptor.label, descriptor.expectedFloatCount)
         let uniform = GraphicsUniform {
             handle: BackendUniformHandle {
@@ -93,17 +93,17 @@ class Graphics {
         return uniform
     }
 
-    function updateUniform(uniform: GraphicsUniform, data: [Float]) {
+    function updateUniform(uniform: borrow GraphicsUniform, data: borrow [Float]) {
         updateGraphicsUniform(uniform, data)
         return
     }
 
-    function destroyUniform(uniform: GraphicsUniform) {
+    function destroyUniform(uniform: borrow GraphicsUniform) {
         sokolDestroyUniformId(uniform.id)
         return
     }
 
-    function createBindGroup(descriptor: BindGroupDescriptor) -> BindGroup {
+    function createBindGroup(descriptor: borrow BindGroupDescriptor) -> BindGroup {
         let bindGroupId = sokolCreateBindGroupId(descriptor.label)
         var index = 0
         while index < descriptor.uniformEntries.count {
@@ -119,7 +119,7 @@ class Graphics {
         }
     }
 
-    function createUniformBindGroup(label: String, uniformSlot: Int, uniform: GraphicsUniform) -> BindGroup {
+    function createUniformBindGroup(label: borrow String, uniformSlot: Int, uniform: borrow GraphicsUniform) -> BindGroup {
         let bindGroupId = sokolCreateBindGroupId(label)
         sokolSetBindGroupUniform(bindGroupId, 0, uniformSlot, uniform.id)
         return BindGroup {
@@ -130,12 +130,12 @@ class Graphics {
         }
     }
 
-    function destroyBindGroup(bindGroup: BindGroup) {
+    function destroyBindGroup(bindGroup: borrow BindGroup) {
         sokolDestroyBindGroupId(bindGroup.id)
         return
     }
 
-    function createTexture(descriptor: TextureDescriptor) -> GraphicsTexture {
+    function createTexture(descriptor: borrow TextureDescriptor) -> GraphicsTexture {
         let textureId = sokolCreateTextureId(
             descriptor.label,
             descriptor.width,
@@ -153,13 +153,13 @@ class Graphics {
         }
     }
 
-    function destroyTexture(texture: GraphicsTexture) {
+    function destroyTexture(texture: borrow GraphicsTexture) {
         sokolDestroyTextureId(texture.id)
         return
     }
 
     @Native
-    function runLifetimeStress(iterations: Int, shaderDirectory: String, shaderAsset: String) -> Bool {
+    function runLifetimeStress(iterations: Int, shaderDirectory: borrow String, shaderAsset: borrow String) -> Bool {
         let nativeIterations: I64 = iterations
         return kgRunLifetimeStress(nativeIterations, shaderDirectory, shaderAsset) != 0
     }
@@ -206,6 +206,7 @@ class Graphics {
             encoderInstanceCount: 1
             hasRenderPass: false
             renderPassActive: false
+            currentEncoder: makeRenderEncoder()
             shouldPresent: false
             passSubmitted: false
             shouldQuit: false

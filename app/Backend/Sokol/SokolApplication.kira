@@ -1,5 +1,5 @@
 @Native
-function sokolRunApplication(app: GraphicsApplication, runtimeUserData: RawPtr): Void {
+function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
     let desc = sapp_desc {
         init_userdata_cb: kiraGraphicsSokolInit
         frame_userdata_cb: kiraGraphicsSokolFrame
@@ -11,7 +11,7 @@ function sokolRunApplication(app: GraphicsApplication, runtimeUserData: RawPtr):
         window_title: app.title
     }
 
-    sapp_run(desc)
+    sapp_run(move desc)
     return
 }
 
@@ -25,7 +25,7 @@ function kiraGraphicsSokolInit(runtimeUserData: RawPtr): Void {
     let graphics = Graphics {
         userData: state.userData
     }
-    onInit(graphics)
+    onInit(move graphics)
     return
 }
 
@@ -38,9 +38,10 @@ function kiraGraphicsSokolFrame(runtimeUserData: RawPtr): Void {
         userData: state.userData
     }
     let frame = graphics.frame()
+    let callbackFrame = frame
 
     state.frameIndex = state.frameIndex + 1
-    onFrame(frame)
+    onFrame(move callbackFrame)
     graphicsSubmitFrame(frame)
     kgSampleLifetimeFrame()
     kgMaybeRequestQuitAfterFrame(state.frameIndex)
@@ -56,7 +57,7 @@ function kiraGraphicsSokolCleanup(runtimeUserData: RawPtr): Void {
         userData: state.userData
     }
 
-    onCleanup(graphics)
+    onCleanup(move graphics)
     kgDestroyDefaultResources()
     kgReportLifetime()
     sg_shutdown()

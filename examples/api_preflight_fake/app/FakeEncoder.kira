@@ -17,25 +17,25 @@ class FakeRenderEncoder {
     var indexCount: Int = 0
     var instanceCount: Int = 1
 
-    function setPipeline(pipeline: FakeRenderPipeline) {
+    function setPipeline(pipeline: borrow FakeRenderPipeline) {
         self.pipeline = pipeline
         return
     }
 
-    function setVertexBuffer(buffer: FakeGraphicsBuffer) {
+    function setVertexBuffer(buffer: borrow FakeGraphicsBuffer) {
         self.vertexBuffer = buffer
         self.hasVertexBuffer = true
         return
     }
 
-    function setIndexBuffer(buffer: FakeGraphicsBuffer, format: FakeIndexFormat) {
+    function setIndexBuffer(buffer: borrow FakeGraphicsBuffer, format: FakeIndexFormat) {
         self.indexBuffer = buffer
         self.indexFormat = format
         self.hasIndexBuffer = true
         return
     }
 
-    function setBindGroup(slot: Int, bindGroup: FakeBindGroup) {
+    function setBindGroup(slot: Int, bindGroup: borrow FakeBindGroup) {
         if (slot == 0) {
             self.bindGroup0 = bindGroup
             self.hasBindGroup0 = true
@@ -83,4 +83,3 @@ class FakeRenderEncoder {
         return
     }
 }
-

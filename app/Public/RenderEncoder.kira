@@ -1,3 +1,10 @@
+struct GraphicsRect {
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var width: Float = 0.0
+    var height: Float = 0.0
+}
+
 struct RenderEncoderState {
     var pipelineId: U32 = 0
     var hasPipeline: Bool = false
@@ -27,21 +34,21 @@ struct RenderEncoderState {
 class RenderEncoder {
     var storage: RawPtr
 
-    function setPipeline(pipeline: RenderPipeline) {
+    function setPipeline(pipeline: borrow RenderPipeline) {
         var state = nativeRecover<RenderEncoderState>(self.storage)
         state.pipelineId = pipeline.id
         state.hasPipeline = pipeline.id != 0
         return
     }
 
-    function setVertexBuffer(buffer: GraphicsBuffer) {
+    function setVertexBuffer(buffer: borrow GraphicsBuffer) {
         var state = nativeRecover<RenderEncoderState>(self.storage)
         state.vertexBufferId = buffer.id
         state.hasVertexBuffer = buffer.id != 0
         return
     }
 
-    function setIndexBuffer(buffer: GraphicsBuffer, format: Int) {
+    function setIndexBuffer(buffer: borrow GraphicsBuffer, format: Int) {
         var state = nativeRecover<RenderEncoderState>(self.storage)
         state.indexBufferId = buffer.id
         state.indexFormat = format
@@ -49,7 +56,7 @@ class RenderEncoder {
         return
     }
 
-    function setBindGroup(slot: Int, bindGroup: BindGroup) {
+    function setBindGroup(slot: Int, bindGroup: borrow BindGroup) {
         var state = nativeRecover<RenderEncoderState>(self.storage)
         if (slot == 0) {
             state.bindGroup0Id = bindGroup.id
@@ -182,7 +189,7 @@ class RenderEncoder {
         return
     }
 
-    function pushClip(frame: Rect, radius: Float) {
+    function pushClip(frame: borrow GraphicsRect, radius: Float) {
         sokolUiPushClip(frame.x, frame.y, frame.width, frame.height, radius)
         return
     }
@@ -192,7 +199,7 @@ class RenderEncoder {
         return
     }
 
-    function drawSurface(frame: Rect, fill: Color, border: Color, borderWidth: Float, radius: Float) {
+    function drawSurface(frame: borrow GraphicsRect, fill: borrow Color, border: borrow Color, borderWidth: Float, radius: Float) {
         sokolUiDrawSurface(
             frame.x,
             frame.y,
@@ -212,12 +219,12 @@ class RenderEncoder {
         return
     }
 
-    function drawText(frame: Rect, content: String, color: Color, size: Float) {
+    function drawText(frame: borrow GraphicsRect, content: borrow String, color: borrow Color, size: Float) {
         sokolUiDrawText(content, frame.x, frame.y, frame.width, frame.height, color.r, color.g, color.b, color.a, size)
         return
     }
 
-    function drawGlow(frame: Rect, color: Color, radius: Float, intensity: Float) {
+    function drawGlow(frame: borrow GraphicsRect, color: borrow Color, radius: Float, intensity: Float) {
         sokolUiDrawGlow(frame.x, frame.y, frame.width, frame.height, color.r, color.g, color.b, color.a, radius, intensity)
         return
     }
@@ -248,7 +255,7 @@ function sokolUiDrawGlow(x: Float, y: Float, width: Float, height: Float, r: Flo
 }
 
 @Native
-function sokolUiDrawText(content: String, x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, size: Float) {
+function sokolUiDrawText(content: borrow String, x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, size: Float) {
     kgUiDrawText(content, x, y, width, height, r, g, b, a, size)
     return
 }

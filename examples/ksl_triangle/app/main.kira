@@ -102,11 +102,11 @@ function main() {
         let pipeline = triangleState.pipeline
         let vertices = triangleState.vertices
 
-        frame.renderPass(pass) { encoder in
-            encoder.setPipeline(pipeline)
-            encoder.setVertexBuffer(vertices)
-            encoder.draw(3)
-        }
+        let encoder = frame.beginRenderPass(pass)
+        encoder.setPipeline(pipeline)
+        encoder.setVertexBuffer(vertices)
+        encoder.draw(3)
+        frame.endPass()
         frame.requestQuit()
         return
     }

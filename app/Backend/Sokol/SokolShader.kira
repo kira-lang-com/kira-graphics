@@ -1,10 +1,10 @@
 @Native
-function sokolCreateShaderId(label: String, vertexSource: String, fragmentSource: String, vertexPath: String, fragmentPath: String) -> U32 {
+function sokolCreateShaderId(label: borrow String, vertexSource: borrow String, fragmentSource: borrow String, vertexPath: borrow String, fragmentPath: borrow String) -> U32 {
     return kgMakeShader(label, vertexSource, fragmentSource, vertexPath, fragmentPath)
 }
 
 @Native
-function sokolCreateShaderFromKslId(label: String, asset: String, directory: String) -> U32 {
+function sokolCreateShaderFromKslId(label: borrow String, asset: borrow String, directory: borrow String) -> U32 {
     return kgMakeKslShader(label, asset, directory)
 }
 

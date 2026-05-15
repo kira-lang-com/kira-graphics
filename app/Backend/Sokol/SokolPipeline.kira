@@ -1,5 +1,5 @@
 @Native
-function sokolCreateRenderPipelineId(shaderId: U32, label: String, stride: I64, attributeCount: I64, attr0Location: I64, attr0Format: I64, attr0Offset: I64, attr1Location: I64, attr1Format: I64, attr1Offset: I64, attr2Location: I64, attr2Format: I64, attr2Offset: I64, attr3Location: I64, attr3Format: I64, attr3Offset: I64, colorTargetCount: I64, colorFormat: I64, blendEnabled: I64, blendPreset: I64, depthEnabled: I64, depthWriteEnabled: I64, depthCompare: I64, depthFormat: I64, cullMode: I64, frontFace: I64, topology: I64) -> U32 {
+function sokolCreateRenderPipelineId(shaderId: U32, label: borrow String, stride: I64, attributeCount: I64, attr0Location: I64, attr0Format: I64, attr0Offset: I64, attr1Location: I64, attr1Format: I64, attr1Offset: I64, attr2Location: I64, attr2Format: I64, attr2Offset: I64, attr3Location: I64, attr3Format: I64, attr3Offset: I64, colorTargetCount: I64, colorFormat: I64, blendEnabled: I64, blendPreset: I64, depthEnabled: I64, depthWriteEnabled: I64, depthCompare: I64, depthFormat: I64, cullMode: I64, frontFace: I64, topology: I64) -> U32 {
     return kgMakePipelineDetailed(
         shaderId,
         label,
@@ -31,7 +31,7 @@ function sokolCreateRenderPipelineId(shaderId: U32, label: String, stride: I64, 
     )
 }
 
-function sokolCreateRenderPipeline(descriptor: RenderPipelineDescriptor) -> RenderPipeline {
+function sokolCreateRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> RenderPipeline {
     let attributeCount: I64 = descriptor.vertexLayout.attributes.count
     let colorTargetCount: I64 = descriptor.colorTargets.count
 

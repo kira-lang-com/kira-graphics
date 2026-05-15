@@ -14,13 +14,13 @@ function emptyGraphicsUniform() -> GraphicsUniform {
 }
 
 @Native
-function sokolCreateUniformId(label: String, expectedFloatCount: Int) -> U32 {
+function sokolCreateUniformId(label: borrow String, expectedFloatCount: Int) -> U32 {
     let nativeExpectedFloatCount: I64 = expectedFloatCount
     return kgCreateUniformId(label, nativeExpectedFloatCount)
 }
 
 @Native
-function updateGraphicsUniform(uniform: GraphicsUniform, data: [Float]) {
+function updateGraphicsUniform(uniform: borrow GraphicsUniform, data: borrow [Float]) {
     var index = 0
     while index < data.count {
         let nativeIndex: I64 = index
@@ -39,7 +39,7 @@ function sokolDestroyUniformId(uniformId: U32) {
 }
 
 @Native
-function sokolCreateBindGroupId(label: String) -> U32 {
+function sokolCreateBindGroupId(label: borrow String) -> U32 {
     return kgCreateBindGroupId(label)
 }
 

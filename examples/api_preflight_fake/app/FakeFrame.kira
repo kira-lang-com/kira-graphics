@@ -2,27 +2,27 @@ class FakeGraphicsFrame {
     var descriptor: FakeRenderPassDescriptor = FakeRenderPassDescriptor {}
     var encoder: FakeRenderEncoder = FakeRenderEncoder {}
 
-    function beginRenderPass(descriptor: FakeRenderPassDescriptor) -> FakeRenderEncoder {
+    function beginRenderPass(descriptor: borrow FakeRenderPassDescriptor) -> FakeRenderEncoder {
         self.descriptor = descriptor
         self.encoder = FakeRenderEncoder {}
         return self.encoder
     }
 
-    function endPass(encoder: FakeRenderEncoder) {
-        self.encoder = encoder
+    function endPass() {
         return
     }
 
-    function renderPass(descriptor: FakeRenderPassDescriptor, body: (FakeRenderEncoder) -> Void) {
+    function renderPass(descriptor: borrow FakeRenderPassDescriptor, body: (FakeRenderEncoder) -> Void) {
         let encoder = beginRenderPass(descriptor)
-        body(encoder)
-        endPass(encoder)
+        let callbackEncoder = encoder
+        body(move callbackEncoder)
+        endPass()
         return
     }
 }
 
 class FakeGraphics {
-    function createShaderFromKsl(descriptor: FakeKslShaderDescriptor) -> FakeShader {
+    function createShaderFromKsl(descriptor: borrow FakeKslShaderDescriptor) -> FakeShader {
         return FakeShader {
             handle: FakeBackendShaderHandle {
                 id: 1
@@ -30,7 +30,7 @@ class FakeGraphics {
         }
     }
 
-    function createBuffer(descriptor: FakeBufferDescriptor) -> FakeGraphicsBuffer {
+    function createBuffer(descriptor: borrow FakeBufferDescriptor) -> FakeGraphicsBuffer {
         return FakeGraphicsBuffer {
             handle: FakeBackendBufferHandle {
                 id: 1
@@ -38,7 +38,7 @@ class FakeGraphics {
         }
     }
 
-    function createTexture(descriptor: FakeTextureDescriptor) -> FakeGraphicsTexture {
+    function createTexture(descriptor: borrow FakeTextureDescriptor) -> FakeGraphicsTexture {
         return FakeGraphicsTexture {
             handle: FakeBackendTextureHandle {
                 id: 1
@@ -46,7 +46,7 @@ class FakeGraphics {
         }
     }
 
-    function createSampler(descriptor: FakeSamplerDescriptor) -> FakeGraphicsSampler {
+    function createSampler(descriptor: borrow FakeSamplerDescriptor) -> FakeGraphicsSampler {
         return FakeGraphicsSampler {
             handle: FakeBackendSamplerHandle {
                 id: 1
@@ -54,7 +54,7 @@ class FakeGraphics {
         }
     }
 
-    function createRenderPipeline(descriptor: FakePipelineDescriptor) -> FakeRenderPipeline {
+    function createRenderPipeline(descriptor: borrow FakePipelineDescriptor) -> FakeRenderPipeline {
         return FakeRenderPipeline {
             handle: FakeBackendPipelineHandle {
                 id: 1
@@ -62,7 +62,7 @@ class FakeGraphics {
         }
     }
 
-    function createBindGroup(descriptor: FakeBindGroupDescriptor) -> FakeBindGroup {
+    function createBindGroup(descriptor: borrow FakeBindGroupDescriptor) -> FakeBindGroup {
         return FakeBindGroup {
             handle: FakeBackendBindGroupHandle {
                 id: 1
@@ -82,24 +82,23 @@ class FakeGraphics {
         return
     }
 
-    function destroyBuffer(buffer: FakeGraphicsBuffer) {
+    function destroyBuffer(buffer: borrow FakeGraphicsBuffer) {
         return
     }
 
-    function destroyTexture(texture: FakeGraphicsTexture) {
+    function destroyTexture(texture: borrow FakeGraphicsTexture) {
         return
     }
 
-    function destroySampler(sampler: FakeGraphicsSampler) {
+    function destroySampler(sampler: borrow FakeGraphicsSampler) {
         return
     }
 
-    function destroyRenderPipeline(pipeline: FakeRenderPipeline) {
+    function destroyRenderPipeline(pipeline: borrow FakeRenderPipeline) {
         return
     }
 
-    function destroyBindGroup(bindGroup: FakeBindGroup) {
+    function destroyBindGroup(bindGroup: borrow FakeBindGroup) {
         return
     }
 }
-

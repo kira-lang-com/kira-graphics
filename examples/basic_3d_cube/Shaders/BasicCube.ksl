@@ -51,14 +51,14 @@ shader BasicCube {
         input VertexIn
         output VertexOut
 
-        function entry(input: VertexIn) -> VertexOut {
+        function entry(vertexIn: VertexIn) -> VertexOut {
             let result: VertexOut
 
-            let worldPosition = mul(object.model, Float4(input.position, 1.0))
+            let worldPosition = mul(object.model, Float4(vertexIn.position, 1.0))
             result.clip_position = mul(scene.viewProjection, worldPosition)
             result.worldPosition = Float3(worldPosition.x, worldPosition.y, worldPosition.z)
 
-            let normal4 = mul(object.model, Float4(input.normal, 0.0))
+            let normal4 = mul(object.model, Float4(vertexIn.normal, 0.0))
             result.worldNormal = normalize(Float3(normal4.x, normal4.y, normal4.z))
             result.color = object.baseColor
 
@@ -70,11 +70,16 @@ shader BasicCube {
         input VertexOut
         output FragmentOut
 
-        function entry(input: VertexOut) -> FragmentOut {
+        function entry(fragmentIn: VertexOut) -> FragmentOut {
             let result: FragmentOut
 
-            let n = normalize(input.worldNormal)
-            result.color = Float4(absolute(n.x), absolute(n.y), absolute(n.z), input.color.w)
+            let n = normalize(fragmentIn.worldNormal)
+            result.color = Float4(
+                absolute(n.x),
+                absolute(n.y),
+                absolute(n.z),
+                fragmentIn.color.w
+            )
 
             return result
         }

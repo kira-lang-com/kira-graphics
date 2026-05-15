@@ -119,11 +119,11 @@ function main() {
         let pipeline = uiState.pipeline
         let vertices = uiState.vertices
 
-        frame.renderPass(pass) { encoder in
-            encoder.setPipeline(pipeline)
-            encoder.setVertexBuffer(vertices)
-            encoder.draw(18)
-        }
+        let encoder = frame.beginRenderPass(pass)
+        encoder.setPipeline(pipeline)
+        encoder.setVertexBuffer(vertices)
+        encoder.draw(18)
+        frame.endPass()
         return
     }
 

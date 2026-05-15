@@ -40,12 +40,13 @@ class GraphicsFrame {
 
     var hasRenderPass: Bool = false
     var renderPassActive: Bool = false
+    var currentEncoder: RenderEncoder
     var shouldPresent: Bool = false
     var passSubmitted: Bool = false
     var shouldQuit: Bool = false
     var userData: RawPtr
 
-    function beginRenderPass(descriptor: RenderPassDescriptor) -> RenderEncoder {
+    function beginRenderPass(descriptor: borrow RenderPassDescriptor) -> RenderEncoder {
         var colorAttachment = descriptor.primaryColorAttachment
         self.hasColorAttachment = descriptor.hasPrimaryColorAttachment
         if (!self.hasColorAttachment) {
@@ -89,11 +90,13 @@ class GraphicsFrame {
             graphicsDiagnostic("Kira Graphics skipped render pass because the backend could not begin it")
         }
 
-        return makeRenderEncoderWithPassActive(self.renderPassActive)
+        let encoder = makeRenderEncoderWithPassActive(self.renderPassActive)
+        self.currentEncoder = encoder
+        return encoder
     }
 
-    function endPass(encoder: RenderEncoder) {
-        let encoderState = nativeRecover<RenderEncoderState>(encoder.storage)
+    function endPass() {
+        let encoderState = nativeRecover<RenderEncoderState>(self.currentEncoder.storage)
         self.encoderPipelineId = encoderState.pipelineId
         self.encoderHasPipeline = encoderState.hasPipeline
         self.encoderVertexBufferId = encoderState.vertexBufferId
@@ -110,22 +113,24 @@ class GraphicsFrame {
             sokolEndPassAndCommitNative()
         }
         self.renderPassActive = false
+        self.currentEncoder = makeRenderEncoder()
         return
     }
 
-    function renderPass(descriptor: RenderPassDescriptor, body: (RenderEncoder) -> Void) {
+    function renderPass(descriptor: borrow RenderPassDescriptor, body: (RenderEncoder) -> Void) {
         let encoder = beginRenderPass(descriptor)
-        body(encoder)
-        endPass(encoder)
+        let callbackEncoder = encoder
+        body(move callbackEncoder)
+        endPass()
         return
     }
 
-    function beginPass(clearColor: Color) -> RenderEncoder {
+    function beginPass(clearColor: borrow Color) -> RenderEncoder {
         return beginRenderPass(clearSwapchainRenderPass(clearColor))
     }
 
-    function pass(clearColor: Color, body: (RenderEncoder) -> Void) {
-        renderPass(clearSwapchainRenderPass(clearColor), body)
+    function pass(clearColor: borrow Color, body: (RenderEncoder) -> Void) {
+        renderPass(clearSwapchainRenderPass(clearColor), move body)
         return
     }
 
@@ -133,4 +138,24 @@ class GraphicsFrame {
         self.shouldQuit = true
         return
     }
+}
+
+function drawPass(frame: borrow GraphicsFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, vertexCount: Int) {
+    let encoder = frame.beginRenderPass(descriptor)
+    encoder.setPipeline(pipeline)
+    encoder.setVertexBuffer(vertexBuffer)
+    encoder.draw(vertexCount)
+    frame.endPass()
+    return
+}
+
+function drawPassWithBindGroups(frame: borrow GraphicsFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, bindGroup0: borrow BindGroup, bindGroup1: borrow BindGroup, vertexCount: Int) {
+    let encoder = frame.beginRenderPass(descriptor)
+    encoder.setPipeline(pipeline)
+    encoder.setVertexBuffer(vertexBuffer)
+    encoder.setBindGroup(0, bindGroup0)
+    encoder.setBindGroup(1, bindGroup1)
+    encoder.draw(vertexCount)
+    frame.endPass()
+    return
 }

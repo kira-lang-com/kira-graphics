@@ -1,5 +1,4 @@
-function graphicsSubmitFrame(frame: GraphicsFrame) {
+function graphicsSubmitFrame(frame: borrow GraphicsFrame) {
     sokolSubmitFrame(frame)
     return
 }
-

@@ -136,7 +136,7 @@ function fakeSetupCube(graphics: FakeGraphics) -> FakeCubeState {
     }
 }
 
-function fakeEncodeCubePass(encoder: FakeRenderEncoder, state: FakeCubeState) {
+function fakeEncodeCubePass(encoder: borrow FakeRenderEncoder, state: borrow FakeCubeState) {
     encoder.setPipeline(state.pipeline)
     encoder.setVertexBuffer(state.vertices)
     encoder.setIndexBuffer(state.indices, FakeIndexFormat.uint32)
@@ -176,7 +176,6 @@ function fakeDrawCube(frame: FakeGraphicsFrame, state: FakeCubeState) {
 
     let encoder = frame.beginRenderPass(pass)
     fakeEncodeCubePass(encoder, state)
-    frame.endPass(encoder)
+    frame.endPass()
     return
 }
-

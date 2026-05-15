@@ -160,7 +160,7 @@ function fakeSetupUi(graphics: FakeGraphics) -> FakeUiEffectsState {
     }
 }
 
-function fakeEncodeUiPass(encoder: FakeRenderEncoder, state: FakeUiEffectsState) {
+function fakeEncodeUiPass(encoder: borrow FakeRenderEncoder, state: borrow FakeUiEffectsState) {
     encoder.setPipeline(state.pipeline)
     encoder.setVertexBuffer(state.vertices)
     encoder.setBindGroup(0, state.bindGroup)
@@ -218,11 +218,10 @@ function fakeDrawUi(frame: FakeGraphicsFrame, state: FakeUiEffectsState) {
 
     let sceneEncoder = frame.beginRenderPass(scenePass)
     fakeEncodeUiPass(sceneEncoder, state)
-    frame.endPass(sceneEncoder)
+    frame.endPass()
 
     let presentEncoder = frame.beginRenderPass(presentPass)
     fakeEncodeUiPass(presentEncoder, state)
-    frame.endPass(presentEncoder)
+    frame.endPass()
     return
 }
-

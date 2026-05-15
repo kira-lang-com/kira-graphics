@@ -110,7 +110,7 @@ function main() {
         encoder.setPipeline(pipeline)
         encoder.setVertexBuffer(vertices)
         encoder.draw(3)
-        frame.endPass(encoder)
+        frame.endPass()
         frame.requestQuit()
         return
     }

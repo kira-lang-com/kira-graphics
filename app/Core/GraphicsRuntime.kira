@@ -1,4 +1,4 @@
-function graphicsRuntimeRun(app: GraphicsApplication, userData: RawPtr) {
+function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
     var runtimeState = nativeState(GraphicsAppRuntimeState {
         app: app
         userData: userData

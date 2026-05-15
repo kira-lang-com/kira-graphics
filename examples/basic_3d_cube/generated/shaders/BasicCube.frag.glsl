@@ -60,10 +60,10 @@ float absolute(float value) {
     return value;
 }
 
-FragmentOut BasicCube__fragment__entry(VertexOut input) {
+FragmentOut BasicCube__fragment__entry(VertexOut fragmentIn) {
     FragmentOut result;
-    vec3 n = normalize(input.worldNormal);
-    result.color = vec4(absolute(n.x), absolute(n.y), absolute(n.z), input.color.w);
+    vec3 n = normalize(fragmentIn.worldNormal);
+    result.color = vec4(absolute(n.x), absolute(n.y), absolute(n.z), fragmentIn.color.w);
     return result;
 }
 

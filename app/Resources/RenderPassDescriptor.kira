@@ -95,7 +95,7 @@ function swapchainRenderTarget() -> RenderTarget {
 }
 
 @Native
-function clearSwapchainRenderPass(clearColor: Color) -> RenderPassDescriptor {
+function clearSwapchainRenderPass(clearColor: borrow Color) -> RenderPassDescriptor {
     return RenderPassDescriptor {
         label: "swapchain-pass"
         colorAttachments: [

@@ -1,4 +1,4 @@
-function sokolBeginRenderPass(frame: GraphicsFrame) -> Bool {
+function sokolBeginRenderPass(frame: borrow GraphicsFrame) -> Bool {
     if (!frame.hasColorAttachment) {
         graphicsDiagnostic("Kira Graphics skipped render pass because the pass descriptor has no color attachments")
         return false
@@ -35,11 +35,11 @@ function sokolBeginRenderPass(frame: GraphicsFrame) -> Bool {
     )
 }
 
-function sokolBeginRenderPassFromFrame(frame: GraphicsFrame) -> Bool {
+function sokolBeginRenderPassFromFrame(frame: borrow GraphicsFrame) -> Bool {
     return sokolBeginRenderPass(frame)
 }
 
-function sokolSubmitFrame(frame: GraphicsFrame): Void {
+function sokolSubmitFrame(frame: borrow GraphicsFrame): Void {
     if (frame.passSubmitted) {
         if (frame.shouldQuit) {
             sokolRequestQuitNative()
@@ -121,7 +121,7 @@ function sokolSubmitFrame(frame: GraphicsFrame): Void {
 }
 
 @Native
-function sokolBeginRenderPassFlat(label: String, colorTargetKind: I64, colorTextureId: U32, colorMipLevel: I64, colorArrayLayer: I64, colorLoadAction: I64, colorStoreAction: I64, clearR: Float, clearG: Float, clearB: Float, clearA: Float, hasResolveTarget: I64, resolveTextureId: U32, resolveMipLevel: I64, resolveArrayLayer: I64, hasDepthAttachment: I64, depthTextureId: U32, depthLoadAction: I64, depthStoreAction: I64, clearDepth: Float, depthReadOnly: I64, hasStencilAttachment: I64, stencilTextureId: U32, stencilLoadAction: I64, stencilStoreAction: I64, clearStencil: I64, stencilReadOnly: I64) -> Bool {
+function sokolBeginRenderPassFlat(label: borrow String, colorTargetKind: I64, colorTextureId: U32, colorMipLevel: I64, colorArrayLayer: I64, colorLoadAction: I64, colorStoreAction: I64, clearR: Float, clearG: Float, clearB: Float, clearA: Float, hasResolveTarget: I64, resolveTextureId: U32, resolveMipLevel: I64, resolveArrayLayer: I64, hasDepthAttachment: I64, depthTextureId: U32, depthLoadAction: I64, depthStoreAction: I64, clearDepth: Float, depthReadOnly: I64, hasStencilAttachment: I64, stencilTextureId: U32, stencilLoadAction: I64, stencilStoreAction: I64, clearStencil: I64, stencilReadOnly: I64) -> Bool {
     return kgBeginRenderPass(label, colorTargetKind, colorTextureId, colorMipLevel, colorArrayLayer, colorLoadAction, colorStoreAction, clearR, clearG, clearB, clearA, hasResolveTarget, resolveTextureId, resolveMipLevel, resolveArrayLayer, hasDepthAttachment, depthTextureId, depthLoadAction, depthStoreAction, clearDepth, depthReadOnly, hasStencilAttachment, stencilTextureId, stencilLoadAction, stencilStoreAction, clearStencil, stencilReadOnly) != 0
 }
 

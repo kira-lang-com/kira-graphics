@@ -61,12 +61,12 @@ float absolute(float value) {
     return value;
 }
 
-VertexOut BasicCube__vertex__entry(VertexIn input) {
+VertexOut BasicCube__vertex__entry(VertexIn vertexIn) {
     VertexOut result;
-    vec4 worldPosition = (object.model * vec4(input.position, 1));
+    vec4 worldPosition = (object.model * vec4(vertexIn.position, 1));
     result.clip_position = (scene.viewProjection * worldPosition);
     result.worldPosition = vec3(worldPosition.x, worldPosition.y, worldPosition.z);
-    vec4 normal4 = (object.model * vec4(input.normal, 0));
+    vec4 normal4 = (object.model * vec4(vertexIn.normal, 0));
     result.worldNormal = normalize(vec3(normal4.x, normal4.y, normal4.z));
     result.color = object.baseColor;
     return result;

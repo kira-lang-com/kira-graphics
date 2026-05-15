@@ -8,14 +8,14 @@ struct PerspectiveCamera {
     var farPlane: Float = 100.0
 }
 
-function cameraViewMatrix(camera: PerspectiveCamera) -> Float4x4 {
+function cameraViewMatrix(camera: borrow PerspectiveCamera) -> Float4x4 {
     return matrixLookAtRightHanded(camera.position, camera.target, camera.up)
 }
 
-function cameraProjectionMatrix(camera: PerspectiveCamera) -> Float4x4 {
+function cameraProjectionMatrix(camera: borrow PerspectiveCamera) -> Float4x4 {
     return matrixPerspectiveRightHanded(camera.fovYRadians, camera.aspect, camera.nearPlane, camera.farPlane)
 }
 
-function cameraViewProjectionMatrix(camera: PerspectiveCamera) -> Float4x4 {
+function cameraViewProjectionMatrix(camera: borrow PerspectiveCamera) -> Float4x4 {
     return matrixMultiply(cameraProjectionMatrix(camera), cameraViewMatrix(camera))
 }
