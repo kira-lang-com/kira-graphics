@@ -73,6 +73,9 @@ function kgUiPopClip(): Void;
 @FFI.Extern { library: sokol; symbol: kg_ui_draw_surface; abi: c; }
 function kgUiDrawSurface(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, borderR: Float, borderG: Float, borderB: Float, borderA: Float, borderWidth: Float, radius: Float): Void;
 
+@FFI.Extern { library: sokol; symbol: kg_ui_draw_squircle_surface; abi: c; }
+function kgUiDrawSquircleSurface(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, borderR: Float, borderG: Float, borderB: Float, borderA: Float, borderWidth: Float, radius: Float): Void;
+
 @FFI.Extern { library: sokol; symbol: kg_ui_draw_glow; abi: c; }
 function kgUiDrawGlow(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, radius: Float, intensity: Float): Void;
 

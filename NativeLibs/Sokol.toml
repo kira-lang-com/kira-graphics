@@ -6,7 +6,7 @@ abi = "c"
 [headers]
 entrypoint = "Sokol/sokol_bindings.h"
 include_dirs = ["Sokol"]
-defines = ["SOKOL_NO_ENTRY", "SOKOL_GLCORE"]
+defines = ["SOKOL_NO_ENTRY"]
 
 [autobinding]
 module = "sokol"
@@ -22,10 +22,17 @@ include_dirs = ["Sokol"]
 
 [target.aarch64-macos-none]
 static_lib = "../generated/native/aarch64-macos/libsokol.a"
-frameworks = ["AppKit", "QuartzCore", "OpenGL"]
+defines = ["SOKOL_GLCORE"]
+frameworks = ["Foundation", "AppKit", "QuartzCore", "OpenGL"]
+
+[target.aarch64-ios-none]
+static_lib = "../generated/native/aarch64-ios/libsokol.a"
+defines = ["SOKOL_METAL"]
+frameworks = ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"]
 
 [target.x86_64-linux-gnu]
 static_lib = "../generated/native/x86_64-linux-gnu/libsokol.a"
+defines = ["SOKOL_GLCORE"]
 system_libs = ["X11", "Xi", "Xcursor", "GL", "dl", "pthread", "m"]
 
 [target.x86_64-windows-msvc]

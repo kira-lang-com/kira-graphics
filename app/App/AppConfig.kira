@@ -2,7 +2,7 @@ function graphicsApplicationDefaultInit(graphics: Graphics) {
     return
 }
 
-function graphicsApplicationDefaultFrame(frame: GraphicsFrame) {
+function graphicsApplicationDefaultFrame(frame: borrow mut GraphicsFrame) {
     return
 }
 
@@ -16,7 +16,7 @@ struct GraphicsApplication {
     var height: Int = 480
     var sampleCount: Int = 1
     var initHandler: (Graphics) -> Void = graphicsApplicationDefaultInit
-    var frameHandler: (GraphicsFrame) -> Void = graphicsApplicationDefaultFrame
+    var frameHandler: (borrow mut GraphicsFrame) -> Void = graphicsApplicationDefaultFrame
     var cleanupHandler: (Graphics) -> Void = graphicsApplicationDefaultCleanup
 
     function onInit(body: (Graphics) -> Void) {
@@ -24,7 +24,7 @@ struct GraphicsApplication {
         return
     }
 
-    function onFrame(body: (GraphicsFrame) -> Void) {
+    function onFrame(body: (borrow mut GraphicsFrame) -> Void) {
         self.frameHandler = body
         return
     }

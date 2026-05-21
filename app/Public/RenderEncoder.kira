@@ -219,6 +219,26 @@ class RenderEncoder {
         return
     }
 
+    function drawSquircleSurface(frame: borrow GraphicsRect, fill: borrow Color, border: borrow Color, borderWidth: Float, radius: Float) {
+        sokolUiDrawSquircleSurface(
+            frame.x,
+            frame.y,
+            frame.width,
+            frame.height,
+            fill.r,
+            fill.g,
+            fill.b,
+            fill.a,
+            border.r,
+            border.g,
+            border.b,
+            border.a,
+            borderWidth,
+            radius
+        )
+        return
+    }
+
     function drawText(frame: borrow GraphicsRect, content: borrow String, color: borrow Color, size: Float) {
         sokolUiDrawText(content, frame.x, frame.y, frame.width, frame.height, color.r, color.g, color.b, color.a, size)
         return
@@ -245,6 +265,12 @@ function sokolUiPopClip() {
 @Native
 function sokolUiDrawSurface(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, borderR: Float, borderG: Float, borderB: Float, borderA: Float, borderWidth: Float, radius: Float) {
     kgUiDrawSurface(x, y, width, height, r, g, b, a, borderR, borderG, borderB, borderA, borderWidth, radius)
+    return
+}
+
+@Native
+function sokolUiDrawSquircleSurface(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, borderR: Float, borderG: Float, borderB: Float, borderA: Float, borderWidth: Float, radius: Float) {
+    kgUiDrawSquircleSurface(x, y, width, height, r, g, b, a, borderR, borderG, borderB, borderA, borderWidth, radius)
     return
 }
 

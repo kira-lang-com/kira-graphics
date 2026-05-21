@@ -33,15 +33,14 @@ function kiraGraphicsSokolInit(runtimeUserData: RawPtr): Void {
 function kiraGraphicsSokolFrame(runtimeUserData: RawPtr): Void {
     var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
     let app = state.app
-    let onFrame: (GraphicsFrame) -> Void = app.frameHandler
+    let onFrame: (borrow mut GraphicsFrame) -> Void = app.frameHandler
     let graphics = Graphics {
         userData: state.userData
     }
-    let frame = graphics.frame()
-    let callbackFrame = frame
+    var frame = graphics.frame()
 
     state.frameIndex = state.frameIndex + 1
-    onFrame(move callbackFrame)
+    onFrame(frame)
     graphicsSubmitFrame(frame)
     kgSampleLifetimeFrame()
     kgMaybeRequestQuitAfterFrame(state.frameIndex)
