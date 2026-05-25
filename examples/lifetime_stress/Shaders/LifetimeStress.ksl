@@ -19,10 +19,10 @@ shader LifetimeStress {
         input VertexIn
         output VertexOut
 
-        function entry(input: VertexIn) -> VertexOut {
+        function entry(vertexInput: VertexIn) -> VertexOut {
             let result: VertexOut
-            result.clip_position = Float4(input.position, 1.0)
-            result.color = Float4(input.normal.x, input.normal.y, input.normal.z, 1.0)
+            result.clip_position = Float4(vertexInput.position, 1.0)
+            result.color = Float4(vertexInput.normal.x, vertexInput.normal.y, vertexInput.normal.z, 1.0)
             return result
         }
     }
@@ -31,9 +31,9 @@ shader LifetimeStress {
         input VertexOut
         output FragmentOut
 
-        function entry(input: VertexOut) -> FragmentOut {
+        function entry(fragmentInput: VertexOut) -> FragmentOut {
             let result: FragmentOut
-            result.color = input.color
+            result.color = fragmentInput.color
             return result
         }
     }

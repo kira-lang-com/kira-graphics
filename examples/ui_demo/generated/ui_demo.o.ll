@@ -5,6 +5,7 @@ target triple = "arm64-apple-macosx"
 %t.sapp_event = type { i64, i32, i32, i32, i8, i32, i32, float, float, float, float, float, float, i32, [8 x %t.sapp_touchpoint], i32, i32, i32, i32 }
 %t.GraphicsShader = type { %t.BackendShaderHandle, i32 }
 %t.sapp_touchpoint = type { i64, float, float, i32, i8 }
+%t.UiDemoState = type { %t.GraphicsShader, %t.RenderPipeline, %t.GraphicsBuffer }
 %t.sapp_logger = type { ptr, ptr }
 %t.BindGroupDescriptor = type { %kira.string, ptr }
 %t.sapp_gl_desc = type { i32, i32 }
@@ -35,7 +36,6 @@ target triple = "arm64-apple-macosx"
 %t.BufferDescriptor = type { %kira.string, i64, i64, ptr }
 %t.RasterizationDescriptor = type { i64, i64 }
 %t.BackendTextureHandle = type { i32 }
-%t.TriangleState = type { %t.GraphicsShader, %t.RenderPipeline, %t.GraphicsBuffer }
 %t.VertexLayout = type { i64, ptr }
 %t.KslShaderDescriptor = type { %kira.string, %kira.string, %kira.string }
 %t.DepthAttachment = type { %t.GraphicsTexture, i64, i64, double, i8 }
@@ -134,6 +134,27 @@ entry:
   br i1 %isnull, label %done, label %body
 body:
   call void @"kira_release_contents_sapp_touchpoint"(ptr %value)
+  call void @free(ptr %value)
+  br label %done
+done:
+  ret void
+}
+define void @"kira_release_contents_UiDemoState"(ptr %value) {
+entry:
+  %release.field.0 = getelementptr inbounds %t.UiDemoState, ptr %value, i32 0, i32 0
+  call void @"kira_release_contents_GraphicsShader"(ptr %release.field.0)
+  %release.field.1 = getelementptr inbounds %t.UiDemoState, ptr %value, i32 0, i32 1
+  call void @"kira_release_contents_RenderPipeline"(ptr %release.field.1)
+  %release.field.2 = getelementptr inbounds %t.UiDemoState, ptr %value, i32 0, i32 2
+  call void @"kira_release_contents_GraphicsBuffer"(ptr %release.field.2)
+  ret void
+}
+define void @"kira_destroy_UiDemoState"(ptr %value) {
+entry:
+  %isnull = icmp eq ptr %value, null
+  br i1 %isnull, label %done, label %body
+body:
+  call void @"kira_release_contents_UiDemoState"(ptr %value)
   call void @free(ptr %value)
   br label %done
 done:
@@ -640,27 +661,6 @@ body:
 done:
   ret void
 }
-define void @"kira_release_contents_TriangleState"(ptr %value) {
-entry:
-  %release.field.0 = getelementptr inbounds %t.TriangleState, ptr %value, i32 0, i32 0
-  call void @"kira_release_contents_GraphicsShader"(ptr %release.field.0)
-  %release.field.1 = getelementptr inbounds %t.TriangleState, ptr %value, i32 0, i32 1
-  call void @"kira_release_contents_RenderPipeline"(ptr %release.field.1)
-  %release.field.2 = getelementptr inbounds %t.TriangleState, ptr %value, i32 0, i32 2
-  call void @"kira_release_contents_GraphicsBuffer"(ptr %release.field.2)
-  ret void
-}
-define void @"kira_destroy_TriangleState"(ptr %value) {
-entry:
-  %isnull = icmp eq ptr %value, null
-  br i1 %isnull, label %done, label %body
-body:
-  call void @"kira_release_contents_TriangleState"(ptr %value)
-  call void @free(ptr %value)
-  br label %done
-done:
-  ret void
-}
 define void @"kira_release_contents_VertexLayout"(ptr %value) {
 entry:
   %release.array.field.1 = getelementptr inbounds %t.VertexLayout, ptr %value, i32 0, i32 1
@@ -1080,9 +1080,9 @@ declare void @"sg_shutdown"()
 
 @kira_str_0 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([9 x i8], ptr @kira_str_0_data, i64 0, i64 0), i64 8 }
 
-@kira_str_1_data = private unnamed_addr constant [27 x i8] c"Kira Graphics KSL Triangle\00"
+@kira_str_1_data = private unnamed_addr constant [22 x i8] c"Kira Graphics UI Demo\00"
 
-@kira_str_1 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([27 x i8], ptr @kira_str_1_data, i64 0, i64 0), i64 26 }
+@kira_str_1 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([22 x i8], ptr @kira_str_1_data, i64 0, i64 0), i64 21 }
 
 @kira_str_2_data = private unnamed_addr constant [87 x i8] c"Kira Graphics skipped render pass because the pass descriptor has no color attachments\00"
 
@@ -1132,9 +1132,9 @@ declare void @"sg_shutdown"()
 
 @kira_str_13 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([15 x i8], ptr @kira_str_13_data, i64 0, i64 0), i64 14 }
 
-@kira_str_14_data = private unnamed_addr constant [20 x i8] c"ksl-triangle-shader\00"
+@kira_str_14_data = private unnamed_addr constant [15 x i8] c"ui-demo-shader\00"
 
-@kira_str_14 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([20 x i8], ptr @kira_str_14_data, i64 0, i64 0), i64 19 }
+@kira_str_14 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([15 x i8], ptr @kira_str_14_data, i64 0, i64 0), i64 14 }
 
 @kira_str_15_data = private unnamed_addr constant [1 x i8] c"\00"
 
@@ -1144,89 +1144,374 @@ declare void @"sg_shutdown"()
 
 @kira_str_16 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([1 x i8], ptr @kira_str_16_data, i64 0, i64 0), i64 0 }
 
-@kira_str_17_data = private unnamed_addr constant [42 x i8] c"generated/shaders/BasicTriangle.vert.glsl\00"
+@kira_str_17_data = private unnamed_addr constant [35 x i8] c"generated/shaders/UiDemo.vert.glsl\00"
 
-@kira_str_17 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([42 x i8], ptr @kira_str_17_data, i64 0, i64 0), i64 41 }
+@kira_str_17 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([35 x i8], ptr @kira_str_17_data, i64 0, i64 0), i64 34 }
 
-@kira_str_18_data = private unnamed_addr constant [42 x i8] c"generated/shaders/BasicTriangle.frag.glsl\00"
+@kira_str_18_data = private unnamed_addr constant [35 x i8] c"generated/shaders/UiDemo.frag.glsl\00"
 
-@kira_str_18 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([42 x i8], ptr @kira_str_18_data, i64 0, i64 0), i64 41 }
+@kira_str_18 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([35 x i8], ptr @kira_str_18_data, i64 0, i64 0), i64 34 }
 
-@kira_str_19_data = private unnamed_addr constant [22 x i8] c"ksl-triangle-vertices\00"
+@kira_str_19_data = private unnamed_addr constant [17 x i8] c"ui-demo-vertices\00"
 
-@kira_str_19 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([22 x i8], ptr @kira_str_19_data, i64 0, i64 0), i64 21 }
+@kira_str_19 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([17 x i8], ptr @kira_str_19_data, i64 0, i64 0), i64 16 }
 
-@kira_str_20_data = private unnamed_addr constant [22 x i8] c"ksl-triangle-pipeline\00"
+@kira_str_20_data = private unnamed_addr constant [17 x i8] c"ui-demo-pipeline\00"
 
-@kira_str_20 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([22 x i8], ptr @kira_str_20_data, i64 0, i64 0), i64 21 }
+@kira_str_20 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([17 x i8], ptr @kira_str_20_data, i64 0, i64 0), i64 16 }
 
 
-define i64 @"kira_fn_0_kslTriangleVertices"() {
+define i64 @"kira_fn_0_uiDemoVertices"() {
 entry:
-  %r0 = add i64 0, 6
+  %r0 = add i64 0, 36
   %alloc.array.ptr.1 = call ptr @"kira_array_alloc"(i64 %r0)
   %r1 = ptrtoint ptr %alloc.array.ptr.1 to i64
   %r2 = add i64 0, 0
-  %r3 = fadd double 0.0, 0.0
-  %array.set.ptr.3 = inttoptr i64 %r1 to ptr
+  %r3 = fadd double 0.0, 0.44
+  %r4 = fsub double 0.0, %r3
+  %array.set.ptr.4 = inttoptr i64 %r1 to ptr
   %array.set.pack.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
-  %array.set.float.bits.0 = bitcast double %r3 to i64
+  %array.set.float.bits.0 = bitcast double %r4 to i64
   %array.set.pack.0 = insertvalue %kira.bridge.value %array.set.pack.0.0, i64 %array.set.float.bits.0, 2
   %array.set.pack.ptr.0 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.0, ptr %array.set.pack.ptr.0
-  call void @"kira_array_store"(ptr %array.set.ptr.3, i64 %r2, ptr %array.set.pack.ptr.0)
-  %r4 = add i64 0, 1
-  %r5 = fadd double 0.0, 0.55
-  %array.set.ptr.5 = inttoptr i64 %r1 to ptr
+  call void @"kira_array_store"(ptr %array.set.ptr.4, i64 %r2, ptr %array.set.pack.ptr.0)
+  %r5 = add i64 0, 1
+  %r6 = fadd double 0.0, 0.24
+  %r7 = fsub double 0.0, %r6
+  %array.set.ptr.7 = inttoptr i64 %r1 to ptr
   %array.set.pack.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
-  %array.set.float.bits.1 = bitcast double %r5 to i64
+  %array.set.float.bits.1 = bitcast double %r7 to i64
   %array.set.pack.1 = insertvalue %kira.bridge.value %array.set.pack.1.0, i64 %array.set.float.bits.1, 2
   %array.set.pack.ptr.1 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.1, ptr %array.set.pack.ptr.1
-  call void @"kira_array_store"(ptr %array.set.ptr.5, i64 %r4, ptr %array.set.pack.ptr.1)
-  %r6 = add i64 0, 2
-  %r7 = fadd double 0.0, 0.55
-  %array.set.ptr.7 = inttoptr i64 %r1 to ptr
+  call void @"kira_array_store"(ptr %array.set.ptr.7, i64 %r5, ptr %array.set.pack.ptr.1)
+  %r8 = add i64 0, 2
+  %r9 = fadd double 0.0, 0.44
+  %array.set.ptr.9 = inttoptr i64 %r1 to ptr
   %array.set.pack.2.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
-  %array.set.float.bits.2 = bitcast double %r7 to i64
+  %array.set.float.bits.2 = bitcast double %r9 to i64
   %array.set.pack.2 = insertvalue %kira.bridge.value %array.set.pack.2.0, i64 %array.set.float.bits.2, 2
   %array.set.pack.ptr.2 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.2, ptr %array.set.pack.ptr.2
-  call void @"kira_array_store"(ptr %array.set.ptr.7, i64 %r6, ptr %array.set.pack.ptr.2)
-  %r8 = add i64 0, 3
-  %r9 = fadd double 0.0, 0.55
-  %r10 = fsub double 0.0, %r9
-  %array.set.ptr.10 = inttoptr i64 %r1 to ptr
+  call void @"kira_array_store"(ptr %array.set.ptr.9, i64 %r8, ptr %array.set.pack.ptr.2)
+  %r10 = add i64 0, 3
+  %r11 = fadd double 0.0, 0.24
+  %r12 = fsub double 0.0, %r11
+  %array.set.ptr.12 = inttoptr i64 %r1 to ptr
   %array.set.pack.3.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
-  %array.set.float.bits.3 = bitcast double %r10 to i64
+  %array.set.float.bits.3 = bitcast double %r12 to i64
   %array.set.pack.3 = insertvalue %kira.bridge.value %array.set.pack.3.0, i64 %array.set.float.bits.3, 2
   %array.set.pack.ptr.3 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.3, ptr %array.set.pack.ptr.3
-  call void @"kira_array_store"(ptr %array.set.ptr.10, i64 %r8, ptr %array.set.pack.ptr.3)
-  %r11 = add i64 0, 4
-  %r12 = fadd double 0.0, 0.55
-  %r13 = fsub double 0.0, %r12
-  %array.set.ptr.13 = inttoptr i64 %r1 to ptr
+  call void @"kira_array_store"(ptr %array.set.ptr.12, i64 %r10, ptr %array.set.pack.ptr.3)
+  %r13 = add i64 0, 4
+  %r14 = fadd double 0.0, 0.44
+  %array.set.ptr.14 = inttoptr i64 %r1 to ptr
   %array.set.pack.4.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
-  %array.set.float.bits.4 = bitcast double %r13 to i64
+  %array.set.float.bits.4 = bitcast double %r14 to i64
   %array.set.pack.4 = insertvalue %kira.bridge.value %array.set.pack.4.0, i64 %array.set.float.bits.4, 2
   %array.set.pack.ptr.4 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.4, ptr %array.set.pack.ptr.4
-  call void @"kira_array_store"(ptr %array.set.ptr.13, i64 %r11, ptr %array.set.pack.ptr.4)
-  %r14 = add i64 0, 5
-  %r15 = fadd double 0.0, 0.55
-  %r16 = fsub double 0.0, %r15
+  call void @"kira_array_store"(ptr %array.set.ptr.14, i64 %r13, ptr %array.set.pack.ptr.4)
+  %r15 = add i64 0, 5
+  %r16 = fadd double 0.0, 0.24
   %array.set.ptr.16 = inttoptr i64 %r1 to ptr
   %array.set.pack.5.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
   %array.set.float.bits.5 = bitcast double %r16 to i64
   %array.set.pack.5 = insertvalue %kira.bridge.value %array.set.pack.5.0, i64 %array.set.float.bits.5, 2
   %array.set.pack.ptr.5 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.5, ptr %array.set.pack.ptr.5
-  call void @"kira_array_store"(ptr %array.set.ptr.16, i64 %r14, ptr %array.set.pack.ptr.5)
+  call void @"kira_array_store"(ptr %array.set.ptr.16, i64 %r15, ptr %array.set.pack.ptr.5)
+  %r17 = add i64 0, 6
+  %r18 = fadd double 0.0, 0.44
+  %r19 = fsub double 0.0, %r18
+  %array.set.ptr.19 = inttoptr i64 %r1 to ptr
+  %array.set.pack.6.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.6 = bitcast double %r19 to i64
+  %array.set.pack.6 = insertvalue %kira.bridge.value %array.set.pack.6.0, i64 %array.set.float.bits.6, 2
+  %array.set.pack.ptr.6 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.6, ptr %array.set.pack.ptr.6
+  call void @"kira_array_store"(ptr %array.set.ptr.19, i64 %r17, ptr %array.set.pack.ptr.6)
+  %r20 = add i64 0, 7
+  %r21 = fadd double 0.0, 0.24
+  %r22 = fsub double 0.0, %r21
+  %array.set.ptr.22 = inttoptr i64 %r1 to ptr
+  %array.set.pack.7.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.7 = bitcast double %r22 to i64
+  %array.set.pack.7 = insertvalue %kira.bridge.value %array.set.pack.7.0, i64 %array.set.float.bits.7, 2
+  %array.set.pack.ptr.7 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.7, ptr %array.set.pack.ptr.7
+  call void @"kira_array_store"(ptr %array.set.ptr.22, i64 %r20, ptr %array.set.pack.ptr.7)
+  %r23 = add i64 0, 8
+  %r24 = fadd double 0.0, 0.44
+  %array.set.ptr.24 = inttoptr i64 %r1 to ptr
+  %array.set.pack.8.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.8 = bitcast double %r24 to i64
+  %array.set.pack.8 = insertvalue %kira.bridge.value %array.set.pack.8.0, i64 %array.set.float.bits.8, 2
+  %array.set.pack.ptr.8 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.8, ptr %array.set.pack.ptr.8
+  call void @"kira_array_store"(ptr %array.set.ptr.24, i64 %r23, ptr %array.set.pack.ptr.8)
+  %r25 = add i64 0, 9
+  %r26 = fadd double 0.0, 0.24
+  %array.set.ptr.26 = inttoptr i64 %r1 to ptr
+  %array.set.pack.9.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.9 = bitcast double %r26 to i64
+  %array.set.pack.9 = insertvalue %kira.bridge.value %array.set.pack.9.0, i64 %array.set.float.bits.9, 2
+  %array.set.pack.ptr.9 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.9, ptr %array.set.pack.ptr.9
+  call void @"kira_array_store"(ptr %array.set.ptr.26, i64 %r25, ptr %array.set.pack.ptr.9)
+  %r27 = add i64 0, 10
+  %r28 = fadd double 0.0, 0.44
+  %r29 = fsub double 0.0, %r28
+  %array.set.ptr.29 = inttoptr i64 %r1 to ptr
+  %array.set.pack.10.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.10 = bitcast double %r29 to i64
+  %array.set.pack.10 = insertvalue %kira.bridge.value %array.set.pack.10.0, i64 %array.set.float.bits.10, 2
+  %array.set.pack.ptr.10 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.10, ptr %array.set.pack.ptr.10
+  call void @"kira_array_store"(ptr %array.set.ptr.29, i64 %r27, ptr %array.set.pack.ptr.10)
+  %r30 = add i64 0, 11
+  %r31 = fadd double 0.0, 0.24
+  %array.set.ptr.31 = inttoptr i64 %r1 to ptr
+  %array.set.pack.11.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.11 = bitcast double %r31 to i64
+  %array.set.pack.11 = insertvalue %kira.bridge.value %array.set.pack.11.0, i64 %array.set.float.bits.11, 2
+  %array.set.pack.ptr.11 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.11, ptr %array.set.pack.ptr.11
+  call void @"kira_array_store"(ptr %array.set.ptr.31, i64 %r30, ptr %array.set.pack.ptr.11)
+  %r32 = add i64 0, 12
+  %r33 = fadd double 0.0, 0.28
+  %r34 = fsub double 0.0, %r33
+  %array.set.ptr.34 = inttoptr i64 %r1 to ptr
+  %array.set.pack.12.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.12 = bitcast double %r34 to i64
+  %array.set.pack.12 = insertvalue %kira.bridge.value %array.set.pack.12.0, i64 %array.set.float.bits.12, 2
+  %array.set.pack.ptr.12 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.12, ptr %array.set.pack.ptr.12
+  call void @"kira_array_store"(ptr %array.set.ptr.34, i64 %r32, ptr %array.set.pack.ptr.12)
+  %r35 = add i64 0, 13
+  %r36 = fadd double 0.0, 0.06
+  %array.set.ptr.36 = inttoptr i64 %r1 to ptr
+  %array.set.pack.13.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.13 = bitcast double %r36 to i64
+  %array.set.pack.13 = insertvalue %kira.bridge.value %array.set.pack.13.0, i64 %array.set.float.bits.13, 2
+  %array.set.pack.ptr.13 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.13, ptr %array.set.pack.ptr.13
+  call void @"kira_array_store"(ptr %array.set.ptr.36, i64 %r35, ptr %array.set.pack.ptr.13)
+  %r37 = add i64 0, 14
+  %r38 = fadd double 0.0, 0.28
+  %array.set.ptr.38 = inttoptr i64 %r1 to ptr
+  %array.set.pack.14.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.14 = bitcast double %r38 to i64
+  %array.set.pack.14 = insertvalue %kira.bridge.value %array.set.pack.14.0, i64 %array.set.float.bits.14, 2
+  %array.set.pack.ptr.14 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.14, ptr %array.set.pack.ptr.14
+  call void @"kira_array_store"(ptr %array.set.ptr.38, i64 %r37, ptr %array.set.pack.ptr.14)
+  %r39 = add i64 0, 15
+  %r40 = fadd double 0.0, 0.06
+  %array.set.ptr.40 = inttoptr i64 %r1 to ptr
+  %array.set.pack.15.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.15 = bitcast double %r40 to i64
+  %array.set.pack.15 = insertvalue %kira.bridge.value %array.set.pack.15.0, i64 %array.set.float.bits.15, 2
+  %array.set.pack.ptr.15 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.15, ptr %array.set.pack.ptr.15
+  call void @"kira_array_store"(ptr %array.set.ptr.40, i64 %r39, ptr %array.set.pack.ptr.15)
+  %r41 = add i64 0, 16
+  %r42 = fadd double 0.0, 0.28
+  %array.set.ptr.42 = inttoptr i64 %r1 to ptr
+  %array.set.pack.16.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.16 = bitcast double %r42 to i64
+  %array.set.pack.16 = insertvalue %kira.bridge.value %array.set.pack.16.0, i64 %array.set.float.bits.16, 2
+  %array.set.pack.ptr.16 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.16, ptr %array.set.pack.ptr.16
+  call void @"kira_array_store"(ptr %array.set.ptr.42, i64 %r41, ptr %array.set.pack.ptr.16)
+  %r43 = add i64 0, 17
+  %r44 = fadd double 0.0, 0.12
+  %array.set.ptr.44 = inttoptr i64 %r1 to ptr
+  %array.set.pack.17.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.17 = bitcast double %r44 to i64
+  %array.set.pack.17 = insertvalue %kira.bridge.value %array.set.pack.17.0, i64 %array.set.float.bits.17, 2
+  %array.set.pack.ptr.17 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.17, ptr %array.set.pack.ptr.17
+  call void @"kira_array_store"(ptr %array.set.ptr.44, i64 %r43, ptr %array.set.pack.ptr.17)
+  %r45 = add i64 0, 18
+  %r46 = fadd double 0.0, 0.28
+  %r47 = fsub double 0.0, %r46
+  %array.set.ptr.47 = inttoptr i64 %r1 to ptr
+  %array.set.pack.18.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.18 = bitcast double %r47 to i64
+  %array.set.pack.18 = insertvalue %kira.bridge.value %array.set.pack.18.0, i64 %array.set.float.bits.18, 2
+  %array.set.pack.ptr.18 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.18, ptr %array.set.pack.ptr.18
+  call void @"kira_array_store"(ptr %array.set.ptr.47, i64 %r45, ptr %array.set.pack.ptr.18)
+  %r48 = add i64 0, 19
+  %r49 = fadd double 0.0, 0.06
+  %array.set.ptr.49 = inttoptr i64 %r1 to ptr
+  %array.set.pack.19.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.19 = bitcast double %r49 to i64
+  %array.set.pack.19 = insertvalue %kira.bridge.value %array.set.pack.19.0, i64 %array.set.float.bits.19, 2
+  %array.set.pack.ptr.19 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.19, ptr %array.set.pack.ptr.19
+  call void @"kira_array_store"(ptr %array.set.ptr.49, i64 %r48, ptr %array.set.pack.ptr.19)
+  %r50 = add i64 0, 20
+  %r51 = fadd double 0.0, 0.28
+  %array.set.ptr.51 = inttoptr i64 %r1 to ptr
+  %array.set.pack.20.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.20 = bitcast double %r51 to i64
+  %array.set.pack.20 = insertvalue %kira.bridge.value %array.set.pack.20.0, i64 %array.set.float.bits.20, 2
+  %array.set.pack.ptr.20 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.20, ptr %array.set.pack.ptr.20
+  call void @"kira_array_store"(ptr %array.set.ptr.51, i64 %r50, ptr %array.set.pack.ptr.20)
+  %r52 = add i64 0, 21
+  %r53 = fadd double 0.0, 0.12
+  %array.set.ptr.53 = inttoptr i64 %r1 to ptr
+  %array.set.pack.21.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.21 = bitcast double %r53 to i64
+  %array.set.pack.21 = insertvalue %kira.bridge.value %array.set.pack.21.0, i64 %array.set.float.bits.21, 2
+  %array.set.pack.ptr.21 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.21, ptr %array.set.pack.ptr.21
+  call void @"kira_array_store"(ptr %array.set.ptr.53, i64 %r52, ptr %array.set.pack.ptr.21)
+  %r54 = add i64 0, 22
+  %r55 = fadd double 0.0, 0.28
+  %r56 = fsub double 0.0, %r55
+  %array.set.ptr.56 = inttoptr i64 %r1 to ptr
+  %array.set.pack.22.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.22 = bitcast double %r56 to i64
+  %array.set.pack.22 = insertvalue %kira.bridge.value %array.set.pack.22.0, i64 %array.set.float.bits.22, 2
+  %array.set.pack.ptr.22 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.22, ptr %array.set.pack.ptr.22
+  call void @"kira_array_store"(ptr %array.set.ptr.56, i64 %r54, ptr %array.set.pack.ptr.22)
+  %r57 = add i64 0, 23
+  %r58 = fadd double 0.0, 0.12
+  %array.set.ptr.58 = inttoptr i64 %r1 to ptr
+  %array.set.pack.23.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.23 = bitcast double %r58 to i64
+  %array.set.pack.23 = insertvalue %kira.bridge.value %array.set.pack.23.0, i64 %array.set.float.bits.23, 2
+  %array.set.pack.ptr.23 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.23, ptr %array.set.pack.ptr.23
+  call void @"kira_array_store"(ptr %array.set.ptr.58, i64 %r57, ptr %array.set.pack.ptr.23)
+  %r59 = add i64 0, 24
+  %r60 = fadd double 0.0, 0.28
+  %r61 = fsub double 0.0, %r60
+  %array.set.ptr.61 = inttoptr i64 %r1 to ptr
+  %array.set.pack.24.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.24 = bitcast double %r61 to i64
+  %array.set.pack.24 = insertvalue %kira.bridge.value %array.set.pack.24.0, i64 %array.set.float.bits.24, 2
+  %array.set.pack.ptr.24 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.24, ptr %array.set.pack.ptr.24
+  call void @"kira_array_store"(ptr %array.set.ptr.61, i64 %r59, ptr %array.set.pack.ptr.24)
+  %r62 = add i64 0, 25
+  %r63 = fadd double 0.0, 0.08
+  %r64 = fsub double 0.0, %r63
+  %array.set.ptr.64 = inttoptr i64 %r1 to ptr
+  %array.set.pack.25.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.25 = bitcast double %r64 to i64
+  %array.set.pack.25 = insertvalue %kira.bridge.value %array.set.pack.25.0, i64 %array.set.float.bits.25, 2
+  %array.set.pack.ptr.25 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.25, ptr %array.set.pack.ptr.25
+  call void @"kira_array_store"(ptr %array.set.ptr.64, i64 %r62, ptr %array.set.pack.ptr.25)
+  %r65 = add i64 0, 26
+  %r66 = fadd double 0.0, 0.16
+  %array.set.ptr.66 = inttoptr i64 %r1 to ptr
+  %array.set.pack.26.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.26 = bitcast double %r66 to i64
+  %array.set.pack.26 = insertvalue %kira.bridge.value %array.set.pack.26.0, i64 %array.set.float.bits.26, 2
+  %array.set.pack.ptr.26 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.26, ptr %array.set.pack.ptr.26
+  call void @"kira_array_store"(ptr %array.set.ptr.66, i64 %r65, ptr %array.set.pack.ptr.26)
+  %r67 = add i64 0, 27
+  %r68 = fadd double 0.0, 0.08
+  %r69 = fsub double 0.0, %r68
+  %array.set.ptr.69 = inttoptr i64 %r1 to ptr
+  %array.set.pack.27.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.27 = bitcast double %r69 to i64
+  %array.set.pack.27 = insertvalue %kira.bridge.value %array.set.pack.27.0, i64 %array.set.float.bits.27, 2
+  %array.set.pack.ptr.27 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.27, ptr %array.set.pack.ptr.27
+  call void @"kira_array_store"(ptr %array.set.ptr.69, i64 %r67, ptr %array.set.pack.ptr.27)
+  %r70 = add i64 0, 28
+  %r71 = fadd double 0.0, 0.16
+  %array.set.ptr.71 = inttoptr i64 %r1 to ptr
+  %array.set.pack.28.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.28 = bitcast double %r71 to i64
+  %array.set.pack.28 = insertvalue %kira.bridge.value %array.set.pack.28.0, i64 %array.set.float.bits.28, 2
+  %array.set.pack.ptr.28 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.28, ptr %array.set.pack.ptr.28
+  call void @"kira_array_store"(ptr %array.set.ptr.71, i64 %r70, ptr %array.set.pack.ptr.28)
+  %r72 = add i64 0, 29
+  %r73 = fadd double 0.0, 0.02
+  %r74 = fsub double 0.0, %r73
+  %array.set.ptr.74 = inttoptr i64 %r1 to ptr
+  %array.set.pack.29.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.29 = bitcast double %r74 to i64
+  %array.set.pack.29 = insertvalue %kira.bridge.value %array.set.pack.29.0, i64 %array.set.float.bits.29, 2
+  %array.set.pack.ptr.29 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.29, ptr %array.set.pack.ptr.29
+  call void @"kira_array_store"(ptr %array.set.ptr.74, i64 %r72, ptr %array.set.pack.ptr.29)
+  %r75 = add i64 0, 30
+  %r76 = fadd double 0.0, 0.28
+  %r77 = fsub double 0.0, %r76
+  %array.set.ptr.77 = inttoptr i64 %r1 to ptr
+  %array.set.pack.30.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.30 = bitcast double %r77 to i64
+  %array.set.pack.30 = insertvalue %kira.bridge.value %array.set.pack.30.0, i64 %array.set.float.bits.30, 2
+  %array.set.pack.ptr.30 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.30, ptr %array.set.pack.ptr.30
+  call void @"kira_array_store"(ptr %array.set.ptr.77, i64 %r75, ptr %array.set.pack.ptr.30)
+  %r78 = add i64 0, 31
+  %r79 = fadd double 0.0, 0.08
+  %r80 = fsub double 0.0, %r79
+  %array.set.ptr.80 = inttoptr i64 %r1 to ptr
+  %array.set.pack.31.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.31 = bitcast double %r80 to i64
+  %array.set.pack.31 = insertvalue %kira.bridge.value %array.set.pack.31.0, i64 %array.set.float.bits.31, 2
+  %array.set.pack.ptr.31 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.31, ptr %array.set.pack.ptr.31
+  call void @"kira_array_store"(ptr %array.set.ptr.80, i64 %r78, ptr %array.set.pack.ptr.31)
+  %r81 = add i64 0, 32
+  %r82 = fadd double 0.0, 0.16
+  %array.set.ptr.82 = inttoptr i64 %r1 to ptr
+  %array.set.pack.32.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.32 = bitcast double %r82 to i64
+  %array.set.pack.32 = insertvalue %kira.bridge.value %array.set.pack.32.0, i64 %array.set.float.bits.32, 2
+  %array.set.pack.ptr.32 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.32, ptr %array.set.pack.ptr.32
+  call void @"kira_array_store"(ptr %array.set.ptr.82, i64 %r81, ptr %array.set.pack.ptr.32)
+  %r83 = add i64 0, 33
+  %r84 = fadd double 0.0, 0.02
+  %r85 = fsub double 0.0, %r84
+  %array.set.ptr.85 = inttoptr i64 %r1 to ptr
+  %array.set.pack.33.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.33 = bitcast double %r85 to i64
+  %array.set.pack.33 = insertvalue %kira.bridge.value %array.set.pack.33.0, i64 %array.set.float.bits.33, 2
+  %array.set.pack.ptr.33 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.33, ptr %array.set.pack.ptr.33
+  call void @"kira_array_store"(ptr %array.set.ptr.85, i64 %r83, ptr %array.set.pack.ptr.33)
+  %r86 = add i64 0, 34
+  %r87 = fadd double 0.0, 0.28
+  %r88 = fsub double 0.0, %r87
+  %array.set.ptr.88 = inttoptr i64 %r1 to ptr
+  %array.set.pack.34.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.34 = bitcast double %r88 to i64
+  %array.set.pack.34 = insertvalue %kira.bridge.value %array.set.pack.34.0, i64 %array.set.float.bits.34, 2
+  %array.set.pack.ptr.34 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.34, ptr %array.set.pack.ptr.34
+  call void @"kira_array_store"(ptr %array.set.ptr.88, i64 %r86, ptr %array.set.pack.ptr.34)
+  %r89 = add i64 0, 35
+  %r90 = fadd double 0.0, 0.02
+  %r91 = fsub double 0.0, %r90
+  %array.set.ptr.91 = inttoptr i64 %r1 to ptr
+  %array.set.pack.35.0 = insertvalue %kira.bridge.value zeroinitializer, i8 2, 0
+  %array.set.float.bits.35 = bitcast double %r91 to i64
+  %array.set.pack.35 = insertvalue %kira.bridge.value %array.set.pack.35.0, i64 %array.set.float.bits.35, 2
+  %array.set.pack.ptr.35 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.35, ptr %array.set.pack.ptr.35
+  call void @"kira_array_store"(ptr %array.set.ptr.91, i64 %r89, ptr %array.set.pack.ptr.35)
   ret i64 %r1
 }
 
-define i64 @"kira_fn_1_kslTriangleVertexLayout"() {
+define i64 @"kira_fn_1_uiDemoVertexLayout"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -1383,19 +1668,19 @@ entry:
   %copy.src.0 = inttoptr i64 %r0 to ptr
   %copy.val.15 = load %t.GraphicsApplication, ptr %copy.src.0
   store %t.GraphicsApplication %copy.val.15, ptr %copy.dst.15
-  %alloc.size.ptr.16 = getelementptr %t.TriangleState, ptr null, i32 1
+  %alloc.size.ptr.16 = getelementptr %t.UiDemoState, ptr null, i32 1
   %alloc.size.16 = ptrtoint ptr %alloc.size.ptr.16 to i64
   %alloc.empty.16 = icmp eq i64 %alloc.size.16, 0
   %alloc.bytes.16 = select i1 %alloc.empty.16, i64 1, i64 %alloc.size.16
   %alloc.ptr.16 = call ptr @malloc(i64 %alloc.bytes.16)
-  store %t.TriangleState zeroinitializer, ptr %alloc.ptr.16
+  store %t.UiDemoState zeroinitializer, ptr %alloc.ptr.16
   %r16 = ptrtoint ptr %alloc.ptr.16 to i64
   store ptr %alloc.ptr.16, ptr %cleanup.heap.slot.16
   %r17 = call i64 @"kira_fn_177_emptyGraphicsShader"()
   %cleanup.call.ptr.17 = inttoptr i64 %r17 to ptr
   store ptr %cleanup.call.ptr.17, ptr %cleanup.heap.slot.17
   %field.base.18 = inttoptr i64 %r16 to ptr
-  %field.ptr.18 = getelementptr inbounds %t.TriangleState, ptr %field.base.18, i32 0, i32 0
+  %field.ptr.18 = getelementptr inbounds %t.UiDemoState, ptr %field.base.18, i32 0, i32 0
   %r18 = ptrtoint ptr %field.ptr.18 to i64
   %copy.dst.18 = inttoptr i64 %r18 to ptr
   %copy.src.17 = inttoptr i64 %r17 to ptr
@@ -1405,7 +1690,7 @@ entry:
   %cleanup.call.ptr.19 = inttoptr i64 %r19 to ptr
   store ptr %cleanup.call.ptr.19, ptr %cleanup.heap.slot.19
   %field.base.20 = inttoptr i64 %r16 to ptr
-  %field.ptr.20 = getelementptr inbounds %t.TriangleState, ptr %field.base.20, i32 0, i32 1
+  %field.ptr.20 = getelementptr inbounds %t.UiDemoState, ptr %field.base.20, i32 0, i32 1
   %r20 = ptrtoint ptr %field.ptr.20 to i64
   %copy.dst.20 = inttoptr i64 %r20 to ptr
   %copy.src.19 = inttoptr i64 %r19 to ptr
@@ -1415,7 +1700,7 @@ entry:
   %cleanup.call.ptr.21 = inttoptr i64 %r21 to ptr
   store ptr %cleanup.call.ptr.21, ptr %cleanup.heap.slot.21
   %field.base.22 = inttoptr i64 %r16 to ptr
-  %field.ptr.22 = getelementptr inbounds %t.TriangleState, ptr %field.base.22, i32 0, i32 2
+  %field.ptr.22 = getelementptr inbounds %t.UiDemoState, ptr %field.base.22, i32 0, i32 2
   %r22 = ptrtoint ptr %field.ptr.22 to i64
   %copy.dst.22 = inttoptr i64 %r22 to ptr
   %copy.src.21 = inttoptr i64 %r21 to ptr
@@ -1423,10 +1708,10 @@ entry:
   store %t.GraphicsBuffer %copy.val.22, ptr %copy.dst.22
   %native.state.size.ptr.23 = getelementptr [3 x %kira.bridge.value], ptr null, i32 1
   %native.state.size.23 = ptrtoint ptr %native.state.size.ptr.23 to i64
-  %native.state.box.23 = call ptr @"kira_native_state_alloc"(i64 8814238373109695030, i64 %native.state.size.23)
+  %native.state.box.23 = call ptr @"kira_native_state_alloc"(i64 7089347247675172085, i64 %native.state.size.23)
   %native.state.payload.23 = call ptr @"kira_native_state_payload"(ptr %native.state.box.23)
   %native.state.src.23 = inttoptr i64 %r16 to ptr
-  %native.state.src.field.ptr.23.0 = getelementptr inbounds %t.TriangleState, ptr %native.state.src.23, i32 0, i32 0
+  %native.state.src.field.ptr.23.0 = getelementptr inbounds %t.UiDemoState, ptr %native.state.src.23, i32 0, i32 0
   %native.state.slot.ptr.23.0 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.23, i64 0
   %native.state.pack.23.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
   %native.state.load.struct.23.0 = load %t.GraphicsShader, ptr %native.state.src.field.ptr.23.0
@@ -1437,7 +1722,7 @@ entry:
   %native.state.load.struct.ptrint.23.0 = ptrtoint ptr %native.state.load.struct.copy.23.0 to i64
   %native.state.pack.23.0 = insertvalue %kira.bridge.value %native.state.pack.23.0.0, i64 %native.state.load.struct.ptrint.23.0, 2
   store %kira.bridge.value %native.state.pack.23.0, ptr %native.state.slot.ptr.23.0
-  %native.state.src.field.ptr.23.1 = getelementptr inbounds %t.TriangleState, ptr %native.state.src.23, i32 0, i32 1
+  %native.state.src.field.ptr.23.1 = getelementptr inbounds %t.UiDemoState, ptr %native.state.src.23, i32 0, i32 1
   %native.state.slot.ptr.23.1 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.23, i64 1
   %native.state.pack.23.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
   %native.state.load.struct.23.1 = load %t.RenderPipeline, ptr %native.state.src.field.ptr.23.1
@@ -1448,7 +1733,7 @@ entry:
   %native.state.load.struct.ptrint.23.1 = ptrtoint ptr %native.state.load.struct.copy.23.1 to i64
   %native.state.pack.23.1 = insertvalue %kira.bridge.value %native.state.pack.23.1.0, i64 %native.state.load.struct.ptrint.23.1, 2
   store %kira.bridge.value %native.state.pack.23.1, ptr %native.state.slot.ptr.23.1
-  %native.state.src.field.ptr.23.2 = getelementptr inbounds %t.TriangleState, ptr %native.state.src.23, i32 0, i32 2
+  %native.state.src.field.ptr.23.2 = getelementptr inbounds %t.UiDemoState, ptr %native.state.src.23, i32 0, i32 2
   %native.state.slot.ptr.23.2 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.23, i64 2
   %native.state.pack.23.2.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
   %native.state.load.struct.23.2 = load %t.GraphicsBuffer, ptr %native.state.src.field.ptr.23.2
@@ -10596,7 +10881,7 @@ entry:
   %load.rawptr.2 = load ptr, ptr %load.ptr.2
   %r2 = ptrtoint ptr %load.rawptr.2 to i64
   %native.recover.state.3 = inttoptr i64 %r2 to ptr
-  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8814238373109695030)
+  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 7089347247675172085)
   %r3 = ptrtoint ptr %native.recover.payload.3 to i64
   store i64 %r3, ptr %local1
   %r4 = load i64, ptr %local0
@@ -10681,7 +10966,7 @@ entry:
   %r25 = ptrtoint ptr %field.ptr.25 to i64
   %store.ptr.24 = inttoptr i64 %r25 to ptr
   store i64 %r24, ptr %store.ptr.24
-  %r26 = call i64 @"kira_fn_0_kslTriangleVertices"()
+  %r26 = call i64 @"kira_fn_0_uiDemoVertices"()
   %field.base.27 = inttoptr i64 %r19 to ptr
   %field.ptr.27 = getelementptr inbounds %t.BufferDescriptor, ptr %field.base.27, i32 0, i32 3
   %r27 = ptrtoint ptr %field.ptr.27 to i64
@@ -10731,7 +11016,7 @@ entry:
   %copy.src.35 = inttoptr i64 %r35 to ptr
   %copy.val.36 = load %t.GraphicsShader, ptr %copy.src.35
   store %t.GraphicsShader %copy.val.36, ptr %copy.dst.36
-  %r37 = call i64 @"kira_fn_1_kslTriangleVertexLayout"()
+  %r37 = call i64 @"kira_fn_1_uiDemoVertexLayout"()
   %cleanup.call.ptr.37 = inttoptr i64 %r37 to ptr
   store ptr %cleanup.call.ptr.37, ptr %cleanup.heap.slot.37
   %field.base.38 = inttoptr i64 %r31 to ptr
@@ -10993,8 +11278,6 @@ entry:
   store ptr null, ptr %cleanup.heap.slot.29
   %cleanup.heap.slot.31 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.31
-  %cleanup.heap.slot.32 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.32
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
   %field.base.1 = inttoptr i64 %r0 to ptr
@@ -11004,7 +11287,7 @@ entry:
   %load.rawptr.2 = load ptr, ptr %load.ptr.2
   %r2 = ptrtoint ptr %load.rawptr.2 to i64
   %native.recover.state.3 = inttoptr i64 %r2 to ptr
-  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8814238373109695030)
+  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 7089347247675172085)
   %r3 = ptrtoint ptr %native.recover.payload.3 to i64
   store i64 %r3, ptr %local1
   %alloc.size.ptr.4 = getelementptr %t.Color, ptr null, i32 1
@@ -11015,19 +11298,19 @@ entry:
   store %t.Color zeroinitializer, ptr %alloc.ptr.4
   %r4 = ptrtoint ptr %alloc.ptr.4 to i64
   store ptr %alloc.ptr.4, ptr %cleanup.heap.slot.4
-  %r5 = fadd double 0.0, 0.03
+  %r5 = fadd double 0.0, 0.05
   %field.base.6 = inttoptr i64 %r4 to ptr
   %field.ptr.6 = getelementptr inbounds %t.Color, ptr %field.base.6, i32 0, i32 0
   %r6 = ptrtoint ptr %field.ptr.6 to i64
   %store.ptr.5 = inttoptr i64 %r6 to ptr
   store double %r5, ptr %store.ptr.5
-  %r7 = fadd double 0.0, 0.04
+  %r7 = fadd double 0.0, 0.06
   %field.base.8 = inttoptr i64 %r4 to ptr
   %field.ptr.8 = getelementptr inbounds %t.Color, ptr %field.base.8, i32 0, i32 1
   %r8 = ptrtoint ptr %field.ptr.8 to i64
   %store.ptr.7 = inttoptr i64 %r8 to ptr
   store double %r7, ptr %store.ptr.7
-  %r9 = fadd double 0.0, 0.07
+  %r9 = fadd double 0.0, 0.08
   %field.base.10 = inttoptr i64 %r4 to ptr
   %field.ptr.10 = getelementptr inbounds %t.Color, ptr %field.base.10, i32 0, i32 2
   %r10 = ptrtoint ptr %field.ptr.10 to i64
@@ -11082,12 +11365,10 @@ entry:
   %r28 = load i64, ptr %local4
   call void @"kira_fn_431_RenderEncoder.setVertexBuffer"(i64 %r27, i64 %r28)
   %r29 = load i64, ptr %local5
-  %r30 = add i64 0, 3
+  %r30 = add i64 0, 18
   call void @"kira_fn_434_RenderEncoder.draw"(i64 %r29, i64 %r30)
   %r31 = load i64, ptr %local0
   call void @"kira_fn_406_GraphicsFrame.endPass"(i64 %r31)
-  %r32 = load i64, ptr %local0
-  call void @"kira_fn_410_GraphicsFrame.requestQuit"(i64 %r32)
   %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.4
   call void @free(ptr %cleanup.heap.ptr.2)
   %cleanup.heap.ptr.3 = load ptr, ptr %cleanup.heap.slot.13
@@ -11127,7 +11408,7 @@ entry:
   %load.rawptr.2 = load ptr, ptr %load.ptr.2
   %r2 = ptrtoint ptr %load.rawptr.2 to i64
   %native.recover.state.3 = inttoptr i64 %r2 to ptr
-  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8814238373109695030)
+  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 7089347247675172085)
   %r3 = ptrtoint ptr %native.recover.payload.3 to i64
   store i64 %r3, ptr %local1
   %r4 = load i64, ptr %local0

@@ -16,9 +16,9 @@ struct VertexOut {
 layout(location = 0) in vec2 kira_attr_position;
 out vec4 kira_varying_color;
 
-VertexOut BasicTriangle__vertex__entry(VertexIn input) {
+VertexOut BasicTriangle__vertex__entry(VertexIn kira_stage_input) {
     VertexOut result;
-    result.clip_position = vec4(input.position, 0, 1);
+    result.clip_position = vec4(kira_stage_input.position, 0, 1);
     result.color = vec4(1, 0.95, 0.85, 1);
     return result;
 }

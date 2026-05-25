@@ -23,7 +23,7 @@ function rawSokolInit(data: RawPtr) -> Void {
     let desc = sg_desc {
         environment: sglue_environment()
     }
-    sg_setup(desc)
+    sg_setup(move desc)
 
     let shaderDesc = sg_shader_desc {
         vertex_func: sg_shader_function {
@@ -34,13 +34,13 @@ function rawSokolInit(data: RawPtr) -> Void {
         }
         label: "raw-sokol-triangle-shader"
     }
-    state.shader = sg_make_shader(shaderDesc)
+    state.shader = sg_make_shader(move shaderDesc)
 
     let pipelineDesc = sg_pipeline_desc {
         shader: state.shader
         label: "raw-sokol-triangle-pipeline"
     }
-    state.pipeline = sg_make_pipeline(pipelineDesc)
+    state.pipeline = sg_make_pipeline(move pipelineDesc)
     return
 }
 
@@ -88,6 +88,6 @@ function main() {
         window_title: "Kira Graphics Raw Sokol Interop"
     }
 
-    sapp_run(desc)
+    sapp_run(move desc)
     return
 }

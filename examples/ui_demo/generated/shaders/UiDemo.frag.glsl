@@ -30,9 +30,9 @@ vec4 uiColor(vec2 position) {
     return vec4(0.16, 0.22, 0.3, 1);
 }
 
-FragmentOut UiDemo__fragment__entry(VertexOut input) {
+FragmentOut UiDemo__fragment__entry(VertexOut kira_stage_input) {
     FragmentOut result;
-    result.color = input.color;
+    result.color = kira_stage_input.color;
     return result;
 }
 

@@ -35,7 +35,6 @@ target triple = "arm64-apple-macosx"
 %t.BufferDescriptor = type { %kira.string, i64, i64, ptr }
 %t.RasterizationDescriptor = type { i64, i64 }
 %t.BackendTextureHandle = type { i32 }
-%t.TriangleState = type { %t.GraphicsShader, %t.RenderPipeline, %t.GraphicsBuffer }
 %t.VertexLayout = type { i64, ptr }
 %t.KslShaderDescriptor = type { %kira.string, %kira.string, %kira.string }
 %t.DepthAttachment = type { %t.GraphicsTexture, i64, i64, double, i8 }
@@ -43,6 +42,7 @@ target triple = "arm64-apple-macosx"
 %t.RenderPipeline = type { %t.BackendPipelineHandle, i32 }
 %t.StencilAttachment = type { %t.GraphicsTexture, i64, i64, i64, i8 }
 %t.RenderPassDescriptor = type { %kira.string, ptr, %t.ColorAttachment, i8, %t.DepthAttachment, i8, %t.StencilAttachment, i8 }
+%t.FrameTriangleState = type { %t.GraphicsShader, %t.RenderPipeline, %t.GraphicsBuffer }
 %t.Color = type { double, double, double, double }
 %t.sapp_win32_desc = type { i8, i8, i8 }
 %t.GraphicsAppRuntimeState = type { %t.GraphicsApplication, ptr, i64 }
@@ -640,27 +640,6 @@ body:
 done:
   ret void
 }
-define void @"kira_release_contents_TriangleState"(ptr %value) {
-entry:
-  %release.field.0 = getelementptr inbounds %t.TriangleState, ptr %value, i32 0, i32 0
-  call void @"kira_release_contents_GraphicsShader"(ptr %release.field.0)
-  %release.field.1 = getelementptr inbounds %t.TriangleState, ptr %value, i32 0, i32 1
-  call void @"kira_release_contents_RenderPipeline"(ptr %release.field.1)
-  %release.field.2 = getelementptr inbounds %t.TriangleState, ptr %value, i32 0, i32 2
-  call void @"kira_release_contents_GraphicsBuffer"(ptr %release.field.2)
-  ret void
-}
-define void @"kira_destroy_TriangleState"(ptr %value) {
-entry:
-  %isnull = icmp eq ptr %value, null
-  br i1 %isnull, label %done, label %body
-body:
-  call void @"kira_release_contents_TriangleState"(ptr %value)
-  call void @free(ptr %value)
-  br label %done
-done:
-  ret void
-}
 define void @"kira_release_contents_VertexLayout"(ptr %value) {
 entry:
   %release.array.field.1 = getelementptr inbounds %t.VertexLayout, ptr %value, i32 0, i32 1
@@ -781,6 +760,27 @@ entry:
   br i1 %isnull, label %done, label %body
 body:
   call void @"kira_release_contents_RenderPassDescriptor"(ptr %value)
+  call void @free(ptr %value)
+  br label %done
+done:
+  ret void
+}
+define void @"kira_release_contents_FrameTriangleState"(ptr %value) {
+entry:
+  %release.field.0 = getelementptr inbounds %t.FrameTriangleState, ptr %value, i32 0, i32 0
+  call void @"kira_release_contents_GraphicsShader"(ptr %release.field.0)
+  %release.field.1 = getelementptr inbounds %t.FrameTriangleState, ptr %value, i32 0, i32 1
+  call void @"kira_release_contents_RenderPipeline"(ptr %release.field.1)
+  %release.field.2 = getelementptr inbounds %t.FrameTriangleState, ptr %value, i32 0, i32 2
+  call void @"kira_release_contents_GraphicsBuffer"(ptr %release.field.2)
+  ret void
+}
+define void @"kira_destroy_FrameTriangleState"(ptr %value) {
+entry:
+  %isnull = icmp eq ptr %value, null
+  br i1 %isnull, label %done, label %body
+body:
+  call void @"kira_release_contents_FrameTriangleState"(ptr %value)
   call void @free(ptr %value)
   br label %done
 done:
@@ -1076,92 +1076,104 @@ declare void @"sg_shutdown"()
 
 
 
-@kira_str_0_data = private unnamed_addr constant [9 x i8] c"position\00"
+@kira_str_0_data = private unnamed_addr constant [194 x i8] c"#version 330 core\0Alayout(location = 0) in vec2 kira_attr_position;\0Aout vec4 color;\0Avoid main() {\0A    gl_Position = vec4(kira_attr_position, 0.0, 1.0);\0A    color = vec4(0.28, 0.78, 1.0, 1.0);\0A}\0A\00"
 
-@kira_str_0 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([9 x i8], ptr @kira_str_0_data, i64 0, i64 0), i64 8 }
+@kira_str_0 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([194 x i8], ptr @kira_str_0_data, i64 0, i64 0), i64 193 }
 
-@kira_str_1_data = private unnamed_addr constant [27 x i8] c"Kira Graphics KSL Triangle\00"
+@kira_str_1_data = private unnamed_addr constant [95 x i8] c"#version 330 core\0Ain vec4 color;\0Aout vec4 frag_color;\0Avoid main() {\0A    frag_color = color;\0A}\0A\00"
 
-@kira_str_1 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([27 x i8], ptr @kira_str_1_data, i64 0, i64 0), i64 26 }
+@kira_str_1 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([95 x i8], ptr @kira_str_1_data, i64 0, i64 0), i64 94 }
 
-@kira_str_2_data = private unnamed_addr constant [87 x i8] c"Kira Graphics skipped render pass because the pass descriptor has no color attachments\00"
+@kira_str_2_data = private unnamed_addr constant [33 x i8] c"Kira Graphics Frame API Triangle\00"
 
-@kira_str_2 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([87 x i8], ptr @kira_str_2_data, i64 0, i64 0), i64 86 }
+@kira_str_2 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([33 x i8], ptr @kira_str_2_data, i64 0, i64 0), i64 32 }
 
-@kira_str_3_data = private unnamed_addr constant [1 x i8] c"\00"
+@kira_str_3_data = private unnamed_addr constant [87 x i8] c"Kira Graphics skipped render pass because the pass descriptor has no color attachments\00"
 
-@kira_str_3 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([1 x i8], ptr @kira_str_3_data, i64 0, i64 0), i64 0 }
+@kira_str_3 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([87 x i8], ptr @kira_str_3_data, i64 0, i64 0), i64 86 }
 
-@kira_str_4_data = private unnamed_addr constant [15 x i8] c"submit:no-pass\00"
+@kira_str_4_data = private unnamed_addr constant [1 x i8] c"\00"
 
-@kira_str_4 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([15 x i8], ptr @kira_str_4_data, i64 0, i64 0), i64 14 }
+@kira_str_4 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([1 x i8], ptr @kira_str_4_data, i64 0, i64 0), i64 0 }
 
-@kira_str_5_data = private unnamed_addr constant [20 x i8] c"submit:begin-failed\00"
+@kira_str_5_data = private unnamed_addr constant [15 x i8] c"submit:no-pass\00"
 
-@kira_str_5 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([20 x i8], ptr @kira_str_5_data, i64 0, i64 0), i64 19 }
+@kira_str_5 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([15 x i8], ptr @kira_str_5_data, i64 0, i64 0), i64 14 }
 
-@kira_str_6_data = private unnamed_addr constant [7 x i8] c"submit\00"
+@kira_str_6_data = private unnamed_addr constant [20 x i8] c"submit:begin-failed\00"
 
-@kira_str_6 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([7 x i8], ptr @kira_str_6_data, i64 0, i64 0), i64 6 }
+@kira_str_6 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([20 x i8], ptr @kira_str_6_data, i64 0, i64 0), i64 19 }
 
-@kira_str_7_data = private unnamed_addr constant [64 x i8] c"Kira Graphics skipped draw because no render pipeline was bound\00"
+@kira_str_7_data = private unnamed_addr constant [7 x i8] c"submit\00"
 
-@kira_str_7 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([64 x i8], ptr @kira_str_7_data, i64 0, i64 0), i64 63 }
+@kira_str_7 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([7 x i8], ptr @kira_str_7_data, i64 0, i64 0), i64 6 }
 
-@kira_str_8_data = private unnamed_addr constant [68 x i8] c"Kira Graphics skipped draw because no valid vertex buffer was bound\00"
+@kira_str_8_data = private unnamed_addr constant [64 x i8] c"Kira Graphics skipped draw because no render pipeline was bound\00"
 
-@kira_str_8 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([68 x i8], ptr @kira_str_8_data, i64 0, i64 0), i64 67 }
+@kira_str_8 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([64 x i8], ptr @kira_str_8_data, i64 0, i64 0), i64 63 }
 
-@kira_str_9_data = private unnamed_addr constant [75 x i8] c"Kira Graphics skipped indexed draw because no valid index buffer was bound\00"
+@kira_str_9_data = private unnamed_addr constant [68 x i8] c"Kira Graphics skipped draw because no valid vertex buffer was bound\00"
 
-@kira_str_9 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([75 x i8], ptr @kira_str_9_data, i64 0, i64 0), i64 74 }
+@kira_str_9 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([68 x i8], ptr @kira_str_9_data, i64 0, i64 0), i64 67 }
 
-@kira_str_10_data = private unnamed_addr constant [116 x i8] c"Kira Graphics skipped indexed draw because the current Sokol backend only supports indexFormatUint32() in this pass\00"
+@kira_str_10_data = private unnamed_addr constant [75 x i8] c"Kira Graphics skipped indexed draw because no valid index buffer was bound\00"
 
-@kira_str_10 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([116 x i8], ptr @kira_str_10_data, i64 0, i64 0), i64 115 }
+@kira_str_10 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([75 x i8], ptr @kira_str_10_data, i64 0, i64 0), i64 74 }
 
-@kira_str_11_data = private unnamed_addr constant [97 x i8] c"Kira Graphics skipped draw because the backend could not apply the current pipeline and bindings\00"
+@kira_str_11_data = private unnamed_addr constant [116 x i8] c"Kira Graphics skipped indexed draw because the current Sokol backend only supports indexFormatUint32() in this pass\00"
 
-@kira_str_11 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([97 x i8], ptr @kira_str_11_data, i64 0, i64 0), i64 96 }
+@kira_str_11 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([116 x i8], ptr @kira_str_11_data, i64 0, i64 0), i64 115 }
 
-@kira_str_12_data = private unnamed_addr constant [73 x i8] c"Kira Graphics skipped render pass because the backend could not begin it\00"
+@kira_str_12_data = private unnamed_addr constant [97 x i8] c"Kira Graphics skipped draw because the backend could not apply the current pipeline and bindings\00"
 
-@kira_str_12 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([73 x i8], ptr @kira_str_12_data, i64 0, i64 0), i64 72 }
+@kira_str_12 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([97 x i8], ptr @kira_str_12_data, i64 0, i64 0), i64 96 }
 
-@kira_str_13_data = private unnamed_addr constant [15 x i8] c"swapchain-pass\00"
+@kira_str_13_data = private unnamed_addr constant [73 x i8] c"Kira Graphics skipped render pass because the backend could not begin it\00"
 
-@kira_str_13 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([15 x i8], ptr @kira_str_13_data, i64 0, i64 0), i64 14 }
+@kira_str_13 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([73 x i8], ptr @kira_str_13_data, i64 0, i64 0), i64 72 }
 
-@kira_str_14_data = private unnamed_addr constant [20 x i8] c"ksl-triangle-shader\00"
+@kira_str_14_data = private unnamed_addr constant [15 x i8] c"swapchain-pass\00"
 
-@kira_str_14 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([20 x i8], ptr @kira_str_14_data, i64 0, i64 0), i64 19 }
+@kira_str_14 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([15 x i8], ptr @kira_str_14_data, i64 0, i64 0), i64 14 }
 
-@kira_str_15_data = private unnamed_addr constant [1 x i8] c"\00"
+@kira_str_15_data = private unnamed_addr constant [26 x i8] c"frame-api-triangle-shader\00"
 
-@kira_str_15 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([1 x i8], ptr @kira_str_15_data, i64 0, i64 0), i64 0 }
+@kira_str_15 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([26 x i8], ptr @kira_str_15_data, i64 0, i64 0), i64 25 }
 
 @kira_str_16_data = private unnamed_addr constant [1 x i8] c"\00"
 
 @kira_str_16 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([1 x i8], ptr @kira_str_16_data, i64 0, i64 0), i64 0 }
 
-@kira_str_17_data = private unnamed_addr constant [42 x i8] c"generated/shaders/BasicTriangle.vert.glsl\00"
+@kira_str_17_data = private unnamed_addr constant [1 x i8] c"\00"
 
-@kira_str_17 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([42 x i8], ptr @kira_str_17_data, i64 0, i64 0), i64 41 }
+@kira_str_17 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([1 x i8], ptr @kira_str_17_data, i64 0, i64 0), i64 0 }
 
-@kira_str_18_data = private unnamed_addr constant [42 x i8] c"generated/shaders/BasicTriangle.frag.glsl\00"
+@kira_str_18_data = private unnamed_addr constant [28 x i8] c"frame-api-triangle-vertices\00"
 
-@kira_str_18 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([42 x i8], ptr @kira_str_18_data, i64 0, i64 0), i64 41 }
+@kira_str_18 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([28 x i8], ptr @kira_str_18_data, i64 0, i64 0), i64 27 }
 
-@kira_str_19_data = private unnamed_addr constant [22 x i8] c"ksl-triangle-vertices\00"
+@kira_str_19_data = private unnamed_addr constant [28 x i8] c"frame-api-triangle-pipeline\00"
 
-@kira_str_19 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([22 x i8], ptr @kira_str_19_data, i64 0, i64 0), i64 21 }
+@kira_str_19 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([28 x i8], ptr @kira_str_19_data, i64 0, i64 0), i64 27 }
 
-@kira_str_20_data = private unnamed_addr constant [22 x i8] c"ksl-triangle-pipeline\00"
+@kira_str_20_data = private unnamed_addr constant [9 x i8] c"position\00"
 
-@kira_str_20 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([22 x i8], ptr @kira_str_20_data, i64 0, i64 0), i64 21 }
+@kira_str_20 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([9 x i8], ptr @kira_str_20_data, i64 0, i64 0), i64 8 }
 
 
-define i64 @"kira_fn_0_kslTriangleVertices"() {
+define %kira.string @"kira_fn_0_frameTriangleVertexSource"() {
+entry:
+  %r0 = load %kira.string, ptr @kira_str_0
+  ret %kira.string %r0
+}
+
+define %kira.string @"kira_fn_1_frameTriangleFragmentSource"() {
+entry:
+  %r0 = load %kira.string, ptr @kira_str_1
+  ret %kira.string %r0
+}
+
+define i64 @"kira_fn_2_frameTriangleVertices"() {
 entry:
   %r0 = add i64 0, 6
   %alloc.array.ptr.1 = call ptr @"kira_array_alloc"(i64 %r0)
@@ -1226,78 +1238,7 @@ entry:
   ret i64 %r1
 }
 
-define i64 @"kira_fn_1_kslTriangleVertexLayout"() {
-entry:
-  %cleanup.heap.slot.0 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.0
-  %cleanup.heap.slot.6 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.6
-  %alloc.size.ptr.0 = getelementptr %t.VertexLayout, ptr null, i32 1
-  %alloc.size.0 = ptrtoint ptr %alloc.size.ptr.0 to i64
-  %alloc.empty.0 = icmp eq i64 %alloc.size.0, 0
-  %alloc.bytes.0 = select i1 %alloc.empty.0, i64 1, i64 %alloc.size.0
-  %alloc.ptr.0 = call ptr @malloc(i64 %alloc.bytes.0)
-  store %t.VertexLayout zeroinitializer, ptr %alloc.ptr.0
-  %r0 = ptrtoint ptr %alloc.ptr.0 to i64
-  store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = add i64 0, 8
-  %field.base.2 = inttoptr i64 %r0 to ptr
-  %field.ptr.2 = getelementptr inbounds %t.VertexLayout, ptr %field.base.2, i32 0, i32 0
-  %r2 = ptrtoint ptr %field.ptr.2 to i64
-  %store.ptr.1 = inttoptr i64 %r2 to ptr
-  store i64 %r1, ptr %store.ptr.1
-  %r3 = add i64 0, 1
-  %alloc.array.ptr.4 = call ptr @"kira_array_alloc"(i64 %r3)
-  %r4 = ptrtoint ptr %alloc.array.ptr.4 to i64
-  %r5 = add i64 0, 0
-  %alloc.size.ptr.6 = getelementptr %t.VertexAttribute, ptr null, i32 1
-  %alloc.size.6 = ptrtoint ptr %alloc.size.ptr.6 to i64
-  %alloc.empty.6 = icmp eq i64 %alloc.size.6, 0
-  %alloc.bytes.6 = select i1 %alloc.empty.6, i64 1, i64 %alloc.size.6
-  %alloc.ptr.6 = call ptr @malloc(i64 %alloc.bytes.6)
-  store %t.VertexAttribute zeroinitializer, ptr %alloc.ptr.6
-  %r6 = ptrtoint ptr %alloc.ptr.6 to i64
-  store ptr %alloc.ptr.6, ptr %cleanup.heap.slot.6
-  %r7 = load %kira.string, ptr @kira_str_0
-  %field.base.8 = inttoptr i64 %r6 to ptr
-  %field.ptr.8 = getelementptr inbounds %t.VertexAttribute, ptr %field.base.8, i32 0, i32 0
-  %r8 = ptrtoint ptr %field.ptr.8 to i64
-  %store.ptr.7 = inttoptr i64 %r8 to ptr
-  store %kira.string %r7, ptr %store.ptr.7
-  %r9 = add i64 0, 0
-  %field.base.10 = inttoptr i64 %r6 to ptr
-  %field.ptr.10 = getelementptr inbounds %t.VertexAttribute, ptr %field.base.10, i32 0, i32 1
-  %r10 = ptrtoint ptr %field.ptr.10 to i64
-  %store.ptr.9 = inttoptr i64 %r10 to ptr
-  store i64 %r9, ptr %store.ptr.9
-  %r11 = call i64 @"kira_fn_94_vertexFormatFloat2"()
-  %field.base.12 = inttoptr i64 %r6 to ptr
-  %field.ptr.12 = getelementptr inbounds %t.VertexAttribute, ptr %field.base.12, i32 0, i32 2
-  %r12 = ptrtoint ptr %field.ptr.12 to i64
-  %store.ptr.11 = inttoptr i64 %r12 to ptr
-  store i64 %r11, ptr %store.ptr.11
-  %r13 = add i64 0, 0
-  %field.base.14 = inttoptr i64 %r6 to ptr
-  %field.ptr.14 = getelementptr inbounds %t.VertexAttribute, ptr %field.base.14, i32 0, i32 3
-  %r14 = ptrtoint ptr %field.ptr.14 to i64
-  %store.ptr.13 = inttoptr i64 %r14 to ptr
-  store i64 %r13, ptr %store.ptr.13
-  %array.set.ptr.6 = inttoptr i64 %r4 to ptr
-  %array.set.pack.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %array.set.pack.0 = insertvalue %kira.bridge.value %array.set.pack.0.0, i64 %r6, 2
-  %array.set.pack.ptr.0 = alloca %kira.bridge.value
-  store %kira.bridge.value %array.set.pack.0, ptr %array.set.pack.ptr.0
-  call void @"kira_array_store"(ptr %array.set.ptr.6, i64 %r5, ptr %array.set.pack.ptr.0)
-  %field.base.15 = inttoptr i64 %r0 to ptr
-  %field.ptr.15 = getelementptr inbounds %t.VertexLayout, ptr %field.base.15, i32 0, i32 1
-  %r15 = ptrtoint ptr %field.ptr.15 to i64
-  %store.ptr.4 = inttoptr i64 %r15 to ptr
-  %store.arrayptr.4 = inttoptr i64 %r4 to ptr
-  store ptr %store.arrayptr.4, ptr %store.ptr.4
-  ret i64 %r0
-}
-
-define void @"kira_fn_2_main"() {
+define void @"kira_fn_3_main"() {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsApplication
@@ -1333,7 +1274,7 @@ entry:
   store %t.GraphicsApplication zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = load %kira.string, ptr @kira_str_1
+  %r1 = load %kira.string, ptr @kira_str_2
   %field.base.2 = inttoptr i64 %r0 to ptr
   %field.ptr.2 = getelementptr inbounds %t.GraphicsApplication, ptr %field.base.2, i32 0, i32 0
   %r2 = ptrtoint ptr %field.ptr.2 to i64
@@ -1357,21 +1298,21 @@ entry:
   %r8 = ptrtoint ptr %field.ptr.8 to i64
   %store.ptr.7 = inttoptr i64 %r8 to ptr
   store i64 %r7, ptr %store.ptr.7
-  %r9 = add i64 0, 3
+  %r9 = add i64 0, 4
   %field.base.10 = inttoptr i64 %r0 to ptr
   %field.ptr.10 = getelementptr inbounds %t.GraphicsApplication, ptr %field.base.10, i32 0, i32 4
   %r10 = ptrtoint ptr %field.ptr.10 to i64
   %store.ptr.9 = inttoptr i64 %r10 to ptr
   %store.rawptr.9 = inttoptr i64 %r9 to ptr
   store ptr %store.rawptr.9, ptr %store.ptr.9
-  %r11 = add i64 0, 4
+  %r11 = add i64 0, 5
   %field.base.12 = inttoptr i64 %r0 to ptr
   %field.ptr.12 = getelementptr inbounds %t.GraphicsApplication, ptr %field.base.12, i32 0, i32 5
   %r12 = ptrtoint ptr %field.ptr.12 to i64
   %store.ptr.11 = inttoptr i64 %r12 to ptr
   %store.rawptr.11 = inttoptr i64 %r11 to ptr
   store ptr %store.rawptr.11, ptr %store.ptr.11
-  %r13 = add i64 0, 5
+  %r13 = add i64 0, 6
   %field.base.14 = inttoptr i64 %r0 to ptr
   %field.ptr.14 = getelementptr inbounds %t.GraphicsApplication, ptr %field.base.14, i32 0, i32 6
   %r14 = ptrtoint ptr %field.ptr.14 to i64
@@ -1383,39 +1324,39 @@ entry:
   %copy.src.0 = inttoptr i64 %r0 to ptr
   %copy.val.15 = load %t.GraphicsApplication, ptr %copy.src.0
   store %t.GraphicsApplication %copy.val.15, ptr %copy.dst.15
-  %alloc.size.ptr.16 = getelementptr %t.TriangleState, ptr null, i32 1
+  %alloc.size.ptr.16 = getelementptr %t.FrameTriangleState, ptr null, i32 1
   %alloc.size.16 = ptrtoint ptr %alloc.size.ptr.16 to i64
   %alloc.empty.16 = icmp eq i64 %alloc.size.16, 0
   %alloc.bytes.16 = select i1 %alloc.empty.16, i64 1, i64 %alloc.size.16
   %alloc.ptr.16 = call ptr @malloc(i64 %alloc.bytes.16)
-  store %t.TriangleState zeroinitializer, ptr %alloc.ptr.16
+  store %t.FrameTriangleState zeroinitializer, ptr %alloc.ptr.16
   %r16 = ptrtoint ptr %alloc.ptr.16 to i64
   store ptr %alloc.ptr.16, ptr %cleanup.heap.slot.16
-  %r17 = call i64 @"kira_fn_177_emptyGraphicsShader"()
+  %r17 = call i64 @"kira_fn_178_emptyGraphicsShader"()
   %cleanup.call.ptr.17 = inttoptr i64 %r17 to ptr
   store ptr %cleanup.call.ptr.17, ptr %cleanup.heap.slot.17
   %field.base.18 = inttoptr i64 %r16 to ptr
-  %field.ptr.18 = getelementptr inbounds %t.TriangleState, ptr %field.base.18, i32 0, i32 0
+  %field.ptr.18 = getelementptr inbounds %t.FrameTriangleState, ptr %field.base.18, i32 0, i32 0
   %r18 = ptrtoint ptr %field.ptr.18 to i64
   %copy.dst.18 = inttoptr i64 %r18 to ptr
   %copy.src.17 = inttoptr i64 %r17 to ptr
   %copy.val.18 = load %t.GraphicsShader, ptr %copy.src.17
   store %t.GraphicsShader %copy.val.18, ptr %copy.dst.18
-  %r19 = call i64 @"kira_fn_167_emptyRenderPipeline"()
+  %r19 = call i64 @"kira_fn_168_emptyRenderPipeline"()
   %cleanup.call.ptr.19 = inttoptr i64 %r19 to ptr
   store ptr %cleanup.call.ptr.19, ptr %cleanup.heap.slot.19
   %field.base.20 = inttoptr i64 %r16 to ptr
-  %field.ptr.20 = getelementptr inbounds %t.TriangleState, ptr %field.base.20, i32 0, i32 1
+  %field.ptr.20 = getelementptr inbounds %t.FrameTriangleState, ptr %field.base.20, i32 0, i32 1
   %r20 = ptrtoint ptr %field.ptr.20 to i64
   %copy.dst.20 = inttoptr i64 %r20 to ptr
   %copy.src.19 = inttoptr i64 %r19 to ptr
   %copy.val.20 = load %t.RenderPipeline, ptr %copy.src.19
   store %t.RenderPipeline %copy.val.20, ptr %copy.dst.20
-  %r21 = call i64 @"kira_fn_84_emptyGraphicsBuffer"()
+  %r21 = call i64 @"kira_fn_85_emptyGraphicsBuffer"()
   %cleanup.call.ptr.21 = inttoptr i64 %r21 to ptr
   store ptr %cleanup.call.ptr.21, ptr %cleanup.heap.slot.21
   %field.base.22 = inttoptr i64 %r16 to ptr
-  %field.ptr.22 = getelementptr inbounds %t.TriangleState, ptr %field.base.22, i32 0, i32 2
+  %field.ptr.22 = getelementptr inbounds %t.FrameTriangleState, ptr %field.base.22, i32 0, i32 2
   %r22 = ptrtoint ptr %field.ptr.22 to i64
   %copy.dst.22 = inttoptr i64 %r22 to ptr
   %copy.src.21 = inttoptr i64 %r21 to ptr
@@ -1423,10 +1364,10 @@ entry:
   store %t.GraphicsBuffer %copy.val.22, ptr %copy.dst.22
   %native.state.size.ptr.23 = getelementptr [3 x %kira.bridge.value], ptr null, i32 1
   %native.state.size.23 = ptrtoint ptr %native.state.size.ptr.23 to i64
-  %native.state.box.23 = call ptr @"kira_native_state_alloc"(i64 8814238373109695030, i64 %native.state.size.23)
+  %native.state.box.23 = call ptr @"kira_native_state_alloc"(i64 8458404067835574923, i64 %native.state.size.23)
   %native.state.payload.23 = call ptr @"kira_native_state_payload"(ptr %native.state.box.23)
   %native.state.src.23 = inttoptr i64 %r16 to ptr
-  %native.state.src.field.ptr.23.0 = getelementptr inbounds %t.TriangleState, ptr %native.state.src.23, i32 0, i32 0
+  %native.state.src.field.ptr.23.0 = getelementptr inbounds %t.FrameTriangleState, ptr %native.state.src.23, i32 0, i32 0
   %native.state.slot.ptr.23.0 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.23, i64 0
   %native.state.pack.23.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
   %native.state.load.struct.23.0 = load %t.GraphicsShader, ptr %native.state.src.field.ptr.23.0
@@ -1437,7 +1378,7 @@ entry:
   %native.state.load.struct.ptrint.23.0 = ptrtoint ptr %native.state.load.struct.copy.23.0 to i64
   %native.state.pack.23.0 = insertvalue %kira.bridge.value %native.state.pack.23.0.0, i64 %native.state.load.struct.ptrint.23.0, 2
   store %kira.bridge.value %native.state.pack.23.0, ptr %native.state.slot.ptr.23.0
-  %native.state.src.field.ptr.23.1 = getelementptr inbounds %t.TriangleState, ptr %native.state.src.23, i32 0, i32 1
+  %native.state.src.field.ptr.23.1 = getelementptr inbounds %t.FrameTriangleState, ptr %native.state.src.23, i32 0, i32 1
   %native.state.slot.ptr.23.1 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.23, i64 1
   %native.state.pack.23.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
   %native.state.load.struct.23.1 = load %t.RenderPipeline, ptr %native.state.src.field.ptr.23.1
@@ -1448,7 +1389,7 @@ entry:
   %native.state.load.struct.ptrint.23.1 = ptrtoint ptr %native.state.load.struct.copy.23.1 to i64
   %native.state.pack.23.1 = insertvalue %kira.bridge.value %native.state.pack.23.1.0, i64 %native.state.load.struct.ptrint.23.1, 2
   store %kira.bridge.value %native.state.pack.23.1, ptr %native.state.slot.ptr.23.1
-  %native.state.src.field.ptr.23.2 = getelementptr inbounds %t.TriangleState, ptr %native.state.src.23, i32 0, i32 2
+  %native.state.src.field.ptr.23.2 = getelementptr inbounds %t.FrameTriangleState, ptr %native.state.src.23, i32 0, i32 2
   %native.state.slot.ptr.23.2 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.23, i64 2
   %native.state.pack.23.2.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
   %native.state.load.struct.23.2 = load %t.GraphicsBuffer, ptr %native.state.src.field.ptr.23.2
@@ -1462,17 +1403,17 @@ entry:
   %r23 = ptrtoint ptr %native.state.box.23 to i64
   store i64 %r23, ptr %local1
   %r24 = load i64, ptr %local0
-  %r25 = add i64 0, 444
-  call void @"kira_fn_401_GraphicsApplication.onInit"(i64 %r24, i64 %r25)
+  %r25 = add i64 0, 445
+  call void @"kira_fn_402_GraphicsApplication.onInit"(i64 %r24, i64 %r25)
   %r26 = load i64, ptr %local0
-  %r27 = add i64 0, 445
-  call void @"kira_fn_402_GraphicsApplication.onFrame"(i64 %r26, i64 %r27)
+  %r27 = add i64 0, 446
+  call void @"kira_fn_403_GraphicsApplication.onFrame"(i64 %r26, i64 %r27)
   %r28 = load i64, ptr %local0
-  %r29 = add i64 0, 446
-  call void @"kira_fn_403_GraphicsApplication.onCleanup"(i64 %r28, i64 %r29)
+  %r29 = add i64 0, 447
+  call void @"kira_fn_404_GraphicsApplication.onCleanup"(i64 %r28, i64 %r29)
   %r30 = load i64, ptr %local0
   %r31 = load i64, ptr %local1
-  call void @"kira_fn_404_GraphicsApplication.run"(i64 %r30, i64 %r31)
+  call void @"kira_fn_405_GraphicsApplication.run"(i64 %r30, i64 %r31)
   %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.0
   call void @free(ptr %cleanup.heap.ptr.0)
   %cleanup.heap.ptr.1 = load ptr, ptr %cleanup.heap.slot.16
@@ -1487,7 +1428,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_3_graphicsApplicationDefaultInit"(i64 %arg0) {
+define void @"kira_fn_4_graphicsApplicationDefaultInit"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -1498,7 +1439,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_4_graphicsApplicationDefaultFrame"(i64 %arg0) {
+define void @"kira_fn_5_graphicsApplicationDefaultFrame"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -1509,7 +1450,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_5_graphicsApplicationDefaultCleanup"(i64 %arg0) {
+define void @"kira_fn_6_graphicsApplicationDefaultCleanup"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -1520,7 +1461,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_401_GraphicsApplication.onInit"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_402_GraphicsApplication.onInit"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsApplication
@@ -1544,7 +1485,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_402_GraphicsApplication.onFrame"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_403_GraphicsApplication.onFrame"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsApplication
@@ -1568,7 +1509,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_403_GraphicsApplication.onCleanup"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_404_GraphicsApplication.onCleanup"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsApplication
@@ -1592,7 +1533,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_404_GraphicsApplication.run"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_405_GraphicsApplication.run"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsApplication
@@ -1606,11 +1547,11 @@ entry:
   store i64 %arg1, ptr %local1
   %r0 = load i64, ptr %local0
   %r1 = load i64, ptr %local1
-  call void @"kira_fn_79_graphicsRuntimeRun"(i64 %r0, i64 %r1)
+  call void @"kira_fn_80_graphicsRuntimeRun"(i64 %r0, i64 %r1)
   ret void
 }
 
-define void @"kira_fn_7_sokolRunApplication"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_8_sokolRunApplication"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsApplication
@@ -1647,21 +1588,21 @@ entry:
   store %t.sapp_desc zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = ptrtoint ptr @"kira_fn_8_kiraGraphicsSokolInit" to i64
+  %r1 = ptrtoint ptr @"kira_fn_9_kiraGraphicsSokolInit" to i64
   %field.base.2 = inttoptr i64 %r0 to ptr
   %field.ptr.2 = getelementptr inbounds %t.sapp_desc, ptr %field.base.2, i32 0, i32 5
   %r2 = ptrtoint ptr %field.ptr.2 to i64
   %store.ptr.1 = inttoptr i64 %r2 to ptr
   %store.rawptr.1 = inttoptr i64 %r1 to ptr
   store ptr %store.rawptr.1, ptr %store.ptr.1
-  %r3 = ptrtoint ptr @"kira_fn_9_kiraGraphicsSokolFrame" to i64
+  %r3 = ptrtoint ptr @"kira_fn_10_kiraGraphicsSokolFrame" to i64
   %field.base.4 = inttoptr i64 %r0 to ptr
   %field.ptr.4 = getelementptr inbounds %t.sapp_desc, ptr %field.base.4, i32 0, i32 6
   %r4 = ptrtoint ptr %field.ptr.4 to i64
   %store.ptr.3 = inttoptr i64 %r4 to ptr
   %store.rawptr.3 = inttoptr i64 %r3 to ptr
   store ptr %store.rawptr.3, ptr %store.ptr.3
-  %r5 = ptrtoint ptr @"kira_fn_10_kiraGraphicsSokolCleanup" to i64
+  %r5 = ptrtoint ptr @"kira_fn_11_kiraGraphicsSokolCleanup" to i64
   %field.base.6 = inttoptr i64 %r0 to ptr
   %field.ptr.6 = getelementptr inbounds %t.sapp_desc, ptr %field.base.6, i32 0, i32 7
   %r6 = ptrtoint ptr %field.ptr.6 to i64
@@ -1732,14 +1673,14 @@ entry:
   %copy.val.25 = load %t.sapp_desc, ptr %copy.src.0
   store %t.sapp_desc %copy.val.25, ptr %copy.dst.25
   %r26 = load i64, ptr %local2
-  %call.arg.232.0 = inttoptr i64 %r26 to ptr
-  call void @"sapp_run"(ptr %call.arg.232.0)
+  %call.arg.233.0 = inttoptr i64 %r26 to ptr
+  call void @"sapp_run"(ptr %call.arg.233.0)
   %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.0
   call void @free(ptr %cleanup.heap.ptr.0)
   ret void
 }
 
-define void @"kira_fn_8_kiraGraphicsSokolInit"(i64 %arg0) {
+define void @"kira_fn_9_kiraGraphicsSokolInit"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -1824,7 +1765,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_9_kiraGraphicsSokolFrame"(i64 %arg0) {
+define void @"kira_fn_10_kiraGraphicsSokolFrame"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -1913,7 +1854,7 @@ entry:
   %copy.val.12 = load %t.Graphics, ptr %copy.src.8
   store %t.Graphics %copy.val.12, ptr %copy.dst.12
   %r13 = load i64, ptr %local4
-  %r14 = call i64 @"kira_fn_429_Graphics.frame"(i64 %r13)
+  %r14 = call i64 @"kira_fn_430_Graphics.frame"(i64 %r13)
   %cleanup.call.ptr.14 = inttoptr i64 %r14 to ptr
   store ptr %cleanup.call.ptr.14, ptr %cleanup.heap.slot.14
   %r15 = load i64, ptr %local5
@@ -1938,7 +1879,7 @@ entry:
   %r22 = load i64, ptr %local5
   call void @"kira_callable_dispatch_83c614efdab68a73"(i64 %r21, i64 %r22)
   %r23 = load i64, ptr %local5
-  call void @"kira_fn_78_graphicsSubmitFrame"(i64 %r23)
+  call void @"kira_fn_79_graphicsSubmitFrame"(i64 %r23)
   call void @"kg_sample_lifetime_frame"()
   %r24 = load i64, ptr %local1
   %native.state.get.ptr.25 = inttoptr i64 %r24 to ptr
@@ -1955,7 +1896,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_10_kiraGraphicsSokolCleanup"(i64 %arg0) {
+define void @"kira_fn_11_kiraGraphicsSokolCleanup"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -2042,7 +1983,7 @@ entry:
   ret void
 }
 
-define i64 @"kira_fn_53_sokolBeginFloatBufferUpload"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3) {
+define i64 @"kira_fn_54_sokolBeginFloatBufferUpload"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca i64
@@ -2068,17 +2009,17 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r3, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r3, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.13.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.13.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.13.0, i64 %call.arg.str.len.0
+  %call.arg.14.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.14.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.14.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.7 = call i32 @"kg_begin_float_buffer_upload"(ptr %call.arg.13.0, i64 %r4, i64 %r5, i64 %r6)
+  %call.int.7 = call i32 @"kg_begin_float_buffer_upload"(ptr %call.arg.14.0, i64 %r4, i64 %r5, i64 %r6)
   %r7.sext = sext i32 %call.int.7 to i64
   %r7 = add i64 %r7.sext, 0
   ret i64 %r7
 }
 
-define void @"kira_fn_54_sokolSetFloatBufferUploadValue"(i64 %arg0, i64 %arg1, double %arg2) {
+define void @"kira_fn_55_sokolSetFloatBufferUploadValue"(i64 %arg0, i64 %arg1, double %arg2) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -2092,24 +2033,24 @@ entry:
   %r1 = load i64, ptr %local0
   %r2 = load i64, ptr %local3
   %r3 = load double, ptr %local2
-  %call.arg.14.0 = trunc i64 %r1 to i32
-  call void @"kg_set_float_buffer_upload_value"(i32 %call.arg.14.0, i64 %r2, double %r3)
+  %call.arg.15.0 = trunc i64 %r1 to i32
+  call void @"kg_set_float_buffer_upload_value"(i32 %call.arg.15.0, i64 %r2, double %r3)
   ret void
 }
 
-define i64 @"kira_fn_55_sokolFinalizeFloatBufferUpload"(i64 %arg0) {
+define i64 @"kira_fn_56_sokolFinalizeFloatBufferUpload"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
-  %call.arg.15.0 = trunc i64 %r0 to i32
-  %call.int.1 = call i32 @"kg_finalize_float_buffer_upload"(i32 %call.arg.15.0)
+  %call.arg.16.0 = trunc i64 %r0 to i32
+  %call.int.1 = call i32 @"kg_finalize_float_buffer_upload"(i32 %call.arg.16.0)
   %r1.sext = sext i32 %call.int.1 to i64
   %r1 = add i64 %r1.sext, 0
   ret i64 %r1
 }
 
-define i64 @"kira_fn_56_sokolBeginIndexBufferUpload"(%kira.string %arg0, i64 %arg1, i64 %arg2) {
+define i64 @"kira_fn_57_sokolBeginIndexBufferUpload"(%kira.string %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca i64
@@ -2129,17 +2070,17 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r2, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r2, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.16.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.16.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.16.0, i64 %call.arg.str.len.0
+  %call.arg.17.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.17.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.17.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.5 = call i32 @"kg_begin_index_buffer_upload"(ptr %call.arg.16.0, i64 %r3, i64 %r4)
+  %call.int.5 = call i32 @"kg_begin_index_buffer_upload"(ptr %call.arg.17.0, i64 %r3, i64 %r4)
   %r5.sext = sext i32 %call.int.5 to i64
   %r5 = add i64 %r5.sext, 0
   ret i64 %r5
 }
 
-define void @"kira_fn_57_sokolSetIndexBufferUploadValue"(i64 %arg0, i64 %arg1, i64 %arg2) {
+define void @"kira_fn_58_sokolSetIndexBufferUploadValue"(i64 %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -2156,24 +2097,24 @@ entry:
   %r2 = load i64, ptr %local0
   %r3 = load i64, ptr %local3
   %r4 = load i64, ptr %local4
-  %call.arg.17.0 = trunc i64 %r2 to i32
-  call void @"kg_set_index_buffer_upload_value"(i32 %call.arg.17.0, i64 %r3, i64 %r4)
+  %call.arg.18.0 = trunc i64 %r2 to i32
+  call void @"kg_set_index_buffer_upload_value"(i32 %call.arg.18.0, i64 %r3, i64 %r4)
   ret void
 }
 
-define i64 @"kira_fn_58_sokolFinalizeIndexBufferUpload"(i64 %arg0) {
+define i64 @"kira_fn_59_sokolFinalizeIndexBufferUpload"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
-  %call.arg.18.0 = trunc i64 %r0 to i32
-  %call.int.1 = call i32 @"kg_finalize_index_buffer_upload"(i32 %call.arg.18.0)
+  %call.arg.19.0 = trunc i64 %r0 to i32
+  %call.int.1 = call i32 @"kg_finalize_index_buffer_upload"(i32 %call.arg.19.0)
   %r1.sext = sext i32 %call.int.1 to i64
   %r1 = add i64 %r1.sext, 0
   ret i64 %r1
 }
 
-define void @"kira_fn_59_sokolDestroyBufferId"(i64 %arg0) {
+define void @"kira_fn_60_sokolDestroyBufferId"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
@@ -2183,14 +2124,14 @@ entry:
   br i1 %r2, label %kira_label_0, label %kira_label_1
 kira_label_0:
   %r3 = load i64, ptr %local0
-  %call.arg.19.0 = trunc i64 %r3 to i32
-  call void @"kg_destroy_buffer_id"(i32 %call.arg.19.0)
+  %call.arg.20.0 = trunc i64 %r3 to i32
+  call void @"kg_destroy_buffer_id"(i32 %call.arg.20.0)
   br label %kira_label_1
 kira_label_1:
   ret void
 }
 
-define i1 @"kira_fn_61_sokolBeginRenderPass"(i64 %arg0) {
+define i1 @"kira_fn_62_sokolBeginRenderPass"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -2267,12 +2208,12 @@ entry:
   %r3 = xor i1 %r2, true
   br i1 %r3, label %kira_label_0, label %kira_label_1
 kira_label_0:
-  %r4 = load %kira.string, ptr @kira_str_2
-  call void @"kira_fn_77_graphicsDiagnostic"(%kira.string %r4)
+  %r4 = load %kira.string, ptr @kira_str_3
+  call void @"kira_fn_78_graphicsDiagnostic"(%kira.string %r4)
   %r5 = add i1 0, 0
   ret i1 %r5
 kira_label_1:
-  %r6 = load %kira.string, ptr @kira_str_3
+  %r6 = load %kira.string, ptr @kira_str_4
   %r7 = load i64, ptr %local0
   %field.base.8 = inttoptr i64 %r7 to ptr
   %field.ptr.8 = getelementptr inbounds %t.GraphicsFrame, ptr %field.base.8, i32 0, i32 1
@@ -2510,11 +2451,11 @@ kira_label_15:
   br label %kira_label_16
 kira_label_16:
   %r99 = load i64, ptr %local5
-  %r100 = call i1 @"kira_fn_64_sokolBeginRenderPassFlat"(%kira.string %r6, i64 %r9, i64 %r12, i64 %r15, i64 %r18, i64 %r21, i64 %r24, double %r27, double %r30, double %r33, double %r36, i64 %r42, i64 %r45, i64 %r48, i64 %r51, i64 %r57, i64 %r60, i64 %r63, i64 %r66, double %r69, i64 %r75, i64 %r81, i64 %r84, i64 %r87, i64 %r90, i64 %r93, i64 %r99)
+  %r100 = call i1 @"kira_fn_65_sokolBeginRenderPassFlat"(%kira.string %r6, i64 %r9, i64 %r12, i64 %r15, i64 %r18, i64 %r21, i64 %r24, double %r27, double %r30, double %r33, double %r36, i64 %r42, i64 %r45, i64 %r48, i64 %r51, i64 %r57, i64 %r60, i64 %r63, i64 %r66, double %r69, i64 %r75, i64 %r81, i64 %r84, i64 %r87, i64 %r90, i64 %r93, i64 %r99)
   ret i1 %r100
 }
 
-define i1 @"kira_fn_62_sokolBeginRenderPassFromFrame"(i64 %arg0) {
+define i1 @"kira_fn_63_sokolBeginRenderPassFromFrame"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -2525,11 +2466,11 @@ entry:
   store ptr null, ptr %cleanup.heap.slot.0
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
-  %r1 = call i1 @"kira_fn_61_sokolBeginRenderPass"(i64 %r0)
+  %r1 = call i1 @"kira_fn_62_sokolBeginRenderPass"(i64 %r0)
   ret i1 %r1
 }
 
-define void @"kira_fn_63_sokolSubmitFrame"(i64 %arg0) {
+define void @"kira_fn_64_sokolSubmitFrame"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -2644,7 +2585,7 @@ kira_label_0:
   %r5 = trunc i8 %load.raw.5 to i1
   br i1 %r5, label %kira_label_2, label %kira_label_3
 kira_label_2:
-  call void @"kira_fn_67_sokolRequestQuitNative"()
+  call void @"kira_fn_68_sokolRequestQuitNative"()
   br label %kira_label_3
 kira_label_3:
   ret void
@@ -2659,7 +2600,7 @@ kira_label_1:
   %r9 = xor i1 %r8, true
   br i1 %r9, label %kira_label_4, label %kira_label_5
 kira_label_4:
-  %r10 = load %kira.string, ptr @kira_str_4
+  %r10 = load %kira.string, ptr @kira_str_5
   %print.str.ptr.0 = extractvalue %kira.string %r10, 0
   %print.str.len.0 = extractvalue %kira.string %r10, 1
   call void @"kira_native_write_string"(ptr %print.str.ptr.0, i64 %print.str.len.0)
@@ -2667,11 +2608,11 @@ kira_label_4:
   ret void
 kira_label_5:
   %r11 = load i64, ptr %local0
-  %r12 = call i1 @"kira_fn_61_sokolBeginRenderPass"(i64 %r11)
+  %r12 = call i1 @"kira_fn_62_sokolBeginRenderPass"(i64 %r11)
   %r13 = xor i1 %r12, true
   br i1 %r13, label %kira_label_6, label %kira_label_7
 kira_label_6:
-  %r14 = load %kira.string, ptr @kira_str_5
+  %r14 = load %kira.string, ptr @kira_str_6
   %print.str.ptr.1 = extractvalue %kira.string %r14, 0
   %print.str.len.1 = extractvalue %kira.string %r14, 1
   call void @"kira_native_write_string"(ptr %print.str.ptr.1, i64 %print.str.len.1)
@@ -2685,7 +2626,7 @@ kira_label_6:
   %r17 = trunc i8 %load.raw.17 to i1
   br i1 %r17, label %kira_label_8, label %kira_label_9
 kira_label_8:
-  call void @"kira_fn_67_sokolRequestQuitNative"()
+  call void @"kira_fn_68_sokolRequestQuitNative"()
   br label %kira_label_9
 kira_label_9:
   ret void
@@ -2797,8 +2738,8 @@ kira_label_18:
   %load.ptr.59 = inttoptr i64 %r58 to ptr
   %load.raw.59 = load i64, ptr %load.ptr.59
   %r59 = load i64, ptr %load.ptr.59
-  call void @"kira_fn_68_sokolLogSubmitState"(i64 %r32, i64 %r35, i64 %r41, i64 %r44, i64 %r50, i64 %r53, i64 %r56, i64 %r59)
-  %r60 = load %kira.string, ptr @kira_str_6
+  call void @"kira_fn_69_sokolLogSubmitState"(i64 %r32, i64 %r35, i64 %r41, i64 %r44, i64 %r50, i64 %r53, i64 %r56, i64 %r59)
+  %r60 = load %kira.string, ptr @kira_str_7
   %print.str.ptr.2 = extractvalue %kira.string %r60, 0
   %print.str.len.2 = extractvalue %kira.string %r60, 1
   call void @"kira_native_write_string"(ptr %print.str.ptr.2, i64 %print.str.len.2)
@@ -2889,8 +2830,8 @@ kira_label_23:
   %r90 = load i1, ptr %local5
   br i1 %r90, label %kira_label_24, label %kira_label_25
 kira_label_24:
-  %r91 = load %kira.string, ptr @kira_str_7
-  call void @"kira_fn_77_graphicsDiagnostic"(%kira.string %r91)
+  %r91 = load %kira.string, ptr @kira_str_8
+  call void @"kira_fn_78_graphicsDiagnostic"(%kira.string %r91)
   br label %kira_label_26
 kira_label_25:
   %r92 = load i64, ptr %local0
@@ -2922,8 +2863,8 @@ kira_label_29:
   %r102 = load i1, ptr %local6
   br i1 %r102, label %kira_label_30, label %kira_label_31
 kira_label_30:
-  %r103 = load %kira.string, ptr @kira_str_8
-  call void @"kira_fn_77_graphicsDiagnostic"(%kira.string %r103)
+  %r103 = load %kira.string, ptr @kira_str_9
+  call void @"kira_fn_78_graphicsDiagnostic"(%kira.string %r103)
   br label %kira_label_32
 kira_label_31:
   %r104 = load i64, ptr %local0
@@ -2974,8 +2915,8 @@ kira_label_35:
   %r121 = load i1, ptr %local7
   br i1 %r121, label %kira_label_39, label %kira_label_40
 kira_label_39:
-  %r122 = load %kira.string, ptr @kira_str_9
-  call void @"kira_fn_77_graphicsDiagnostic"(%kira.string %r122)
+  %r122 = load %kira.string, ptr @kira_str_10
+  call void @"kira_fn_78_graphicsDiagnostic"(%kira.string %r122)
   br label %kira_label_41
 kira_label_40:
   %r123 = load i64, ptr %local0
@@ -3000,7 +2941,7 @@ kira_label_42:
   %load.ptr.131 = inttoptr i64 %r130 to ptr
   %load.raw.131 = load i64, ptr %load.ptr.131
   %r131 = load i64, ptr %load.ptr.131
-  %r132 = call i64 @"kira_fn_120_indexFormatUint32"()
+  %r132 = call i64 @"kira_fn_121_indexFormatUint32"()
   %r133 = icmp ne i64 %r131, %r132
   store i1 %r133, ptr %local9
   br label %kira_label_44
@@ -3008,8 +2949,8 @@ kira_label_44:
   %r134 = load i1, ptr %local9
   br i1 %r134, label %kira_label_45, label %kira_label_46
 kira_label_45:
-  %r135 = load %kira.string, ptr @kira_str_10
-  call void @"kira_fn_77_graphicsDiagnostic"(%kira.string %r135)
+  %r135 = load %kira.string, ptr @kira_str_11
+  call void @"kira_fn_78_graphicsDiagnostic"(%kira.string %r135)
   br label %kira_label_47
 kira_label_46:
   %r136 = load i64, ptr %local0
@@ -3098,12 +3039,12 @@ kira_label_53:
   %load.ptr.173 = inttoptr i64 %r172 to ptr
   %load.raw.173 = load i64, ptr %load.ptr.173
   %r173 = load i64, ptr %load.ptr.173
-  %r174 = call i1 @"kira_fn_65_sokolApplyPipelineBindingsAndDrawFlat"(i64 %r138, i64 %r141, i64 %r147, i64 %r150, i64 %r156, i64 %r157, i64 %r158, i64 %r159, i64 %r160, i64 %r161, i64 %r162, i64 %r163, i64 %r164, i64 %r167, i64 %r170, i64 %r173)
+  %r174 = call i1 @"kira_fn_66_sokolApplyPipelineBindingsAndDrawFlat"(i64 %r138, i64 %r141, i64 %r147, i64 %r150, i64 %r156, i64 %r157, i64 %r158, i64 %r159, i64 %r160, i64 %r161, i64 %r162, i64 %r163, i64 %r164, i64 %r167, i64 %r170, i64 %r173)
   %r175 = xor i1 %r174, true
   br i1 %r175, label %kira_label_54, label %kira_label_55
 kira_label_54:
-  %r176 = load %kira.string, ptr @kira_str_11
-  call void @"kira_fn_77_graphicsDiagnostic"(%kira.string %r176)
+  %r176 = load %kira.string, ptr @kira_str_12
+  call void @"kira_fn_78_graphicsDiagnostic"(%kira.string %r176)
   br label %kira_label_55
 kira_label_55:
   br label %kira_label_47
@@ -3116,7 +3057,7 @@ kira_label_32:
 kira_label_26:
   br label %kira_label_20
 kira_label_20:
-  call void @"kira_fn_66_sokolEndPassAndCommitNative"()
+  call void @"kira_fn_67_sokolEndPassAndCommitNative"()
   %r177 = load i64, ptr %local0
   %field.base.178 = inttoptr i64 %r177 to ptr
   %field.ptr.178 = getelementptr inbounds %t.GraphicsFrame, ptr %field.base.178, i32 0, i32 42
@@ -3126,13 +3067,13 @@ kira_label_20:
   %r179 = trunc i8 %load.raw.179 to i1
   br i1 %r179, label %kira_label_56, label %kira_label_57
 kira_label_56:
-  call void @"kira_fn_67_sokolRequestQuitNative"()
+  call void @"kira_fn_68_sokolRequestQuitNative"()
   br label %kira_label_57
 kira_label_57:
   ret void
 }
 
-define i1 @"kira_fn_64_sokolBeginRenderPassFlat"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, double %arg7, double %arg8, double %arg9, double %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15, i64 %arg16, i64 %arg17, i64 %arg18, double %arg19, i64 %arg20, i64 %arg21, i64 %arg22, i64 %arg23, i64 %arg24, i64 %arg25, i64 %arg26) {
+define i1 @"kira_fn_65_sokolBeginRenderPassFlat"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, double %arg7, double %arg8, double %arg9, double %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15, i64 %arg16, i64 %arg17, i64 %arg18, double %arg19, i64 %arg20, i64 %arg21, i64 %arg22, i64 %arg23, i64 %arg24, i64 %arg25, i64 %arg26) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca i64
@@ -3218,15 +3159,15 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.29.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.29.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.29.0, i64 %call.arg.str.len.0
+  %call.arg.30.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.30.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.30.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.arg.29.2 = trunc i64 %r2 to i32
-  %call.arg.29.12 = trunc i64 %r12 to i32
-  %call.arg.29.16 = trunc i64 %r16 to i32
-  %call.arg.29.22 = trunc i64 %r22 to i32
-  %call.int.27 = call i32 @"kg_begin_render_pass"(ptr %call.arg.29.0, i64 %r1, i32 %call.arg.29.2, i64 %r3, i64 %r4, i64 %r5, i64 %r6, double %r7, double %r8, double %r9, double %r10, i64 %r11, i32 %call.arg.29.12, i64 %r13, i64 %r14, i64 %r15, i32 %call.arg.29.16, i64 %r17, i64 %r18, double %r19, i64 %r20, i64 %r21, i32 %call.arg.29.22, i64 %r23, i64 %r24, i64 %r25, i64 %r26)
+  %call.arg.30.2 = trunc i64 %r2 to i32
+  %call.arg.30.12 = trunc i64 %r12 to i32
+  %call.arg.30.16 = trunc i64 %r16 to i32
+  %call.arg.30.22 = trunc i64 %r22 to i32
+  %call.int.27 = call i32 @"kg_begin_render_pass"(ptr %call.arg.30.0, i64 %r1, i32 %call.arg.30.2, i64 %r3, i64 %r4, i64 %r5, i64 %r6, double %r7, double %r8, double %r9, double %r10, i64 %r11, i32 %call.arg.30.12, i64 %r13, i64 %r14, i64 %r15, i32 %call.arg.30.16, i64 %r17, i64 %r18, double %r19, i64 %r20, i64 %r21, i32 %call.arg.30.22, i64 %r23, i64 %r24, i64 %r25, i64 %r26)
   %r27.sext = sext i32 %call.int.27 to i64
   %r27 = add i64 %r27.sext, 0
   %r28 = add i64 0, 0
@@ -3234,7 +3175,7 @@ entry:
   ret i1 %r29
 }
 
-define i1 @"kira_fn_65_sokolApplyPipelineBindingsAndDrawFlat"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7, i64 %arg8, i64 %arg9, i64 %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15) {
+define i1 @"kira_fn_66_sokolApplyPipelineBindingsAndDrawFlat"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7, i64 %arg8, i64 %arg9, i64 %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -3284,14 +3225,14 @@ entry:
   %r13 = load i64, ptr %local13
   %r14 = load i64, ptr %local14
   %r15 = load i64, ptr %local15
-  %call.arg.30.0 = trunc i64 %r0 to i32
-  %call.arg.30.1 = trunc i64 %r1 to i32
-  %call.arg.30.3 = trunc i64 %r3 to i32
-  %call.arg.30.5 = trunc i64 %r5 to i32
-  %call.arg.30.7 = trunc i64 %r7 to i32
-  %call.arg.30.9 = trunc i64 %r9 to i32
-  %call.arg.30.11 = trunc i64 %r11 to i32
-  %call.int.16 = call i32 @"kg_apply_pipeline_bindings_and_draw"(i32 %call.arg.30.0, i32 %call.arg.30.1, i64 %r2, i32 %call.arg.30.3, i64 %r4, i32 %call.arg.30.5, i64 %r6, i32 %call.arg.30.7, i64 %r8, i32 %call.arg.30.9, i64 %r10, i32 %call.arg.30.11, i64 %r12, i64 %r13, i64 %r14, i64 %r15)
+  %call.arg.31.0 = trunc i64 %r0 to i32
+  %call.arg.31.1 = trunc i64 %r1 to i32
+  %call.arg.31.3 = trunc i64 %r3 to i32
+  %call.arg.31.5 = trunc i64 %r5 to i32
+  %call.arg.31.7 = trunc i64 %r7 to i32
+  %call.arg.31.9 = trunc i64 %r9 to i32
+  %call.arg.31.11 = trunc i64 %r11 to i32
+  %call.int.16 = call i32 @"kg_apply_pipeline_bindings_and_draw"(i32 %call.arg.31.0, i32 %call.arg.31.1, i64 %r2, i32 %call.arg.31.3, i64 %r4, i32 %call.arg.31.5, i64 %r6, i32 %call.arg.31.7, i64 %r8, i32 %call.arg.31.9, i64 %r10, i32 %call.arg.31.11, i64 %r12, i64 %r13, i64 %r14, i64 %r15)
   %r16.sext = sext i32 %call.int.16 to i64
   %r16 = add i64 %r16.sext, 0
   %r17 = add i64 0, 0
@@ -3299,19 +3240,19 @@ entry:
   ret i1 %r18
 }
 
-define void @"kira_fn_66_sokolEndPassAndCommitNative"() {
+define void @"kira_fn_67_sokolEndPassAndCommitNative"() {
 entry:
   call void @"kg_end_pass_and_commit"()
   ret void
 }
 
-define void @"kira_fn_67_sokolRequestQuitNative"() {
+define void @"kira_fn_68_sokolRequestQuitNative"() {
 entry:
   call void @"sapp_request_quit"()
   ret void
 }
 
-define void @"kira_fn_68_sokolLogSubmitState"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7) {
+define void @"kira_fn_69_sokolLogSubmitState"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -3352,14 +3293,14 @@ entry:
   %r10 = load i64, ptr %local10
   %r11 = load i64, ptr %local11
   %r12 = load i64, ptr %local12
-  %call.arg.31.0 = trunc i64 %r5 to i32
-  %call.arg.31.1 = trunc i64 %r6 to i32
-  %call.arg.31.3 = trunc i64 %r8 to i32
-  call void @"kg_log_submit_state"(i32 %call.arg.31.0, i32 %call.arg.31.1, i64 %r7, i32 %call.arg.31.3, i64 %r9, i64 %r10, i64 %r11, i64 %r12)
+  %call.arg.32.0 = trunc i64 %r5 to i32
+  %call.arg.32.1 = trunc i64 %r6 to i32
+  %call.arg.32.3 = trunc i64 %r8 to i32
+  call void @"kg_log_submit_state"(i32 %call.arg.32.0, i32 %call.arg.32.1, i64 %r7, i32 %call.arg.32.3, i64 %r9, i64 %r10, i64 %r11, i64 %r12)
   ret void
 }
 
-define i64 @"kira_fn_69_sokolCreateRenderPipelineId"(i64 %arg0, %kira.string %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7, i64 %arg8, i64 %arg9, i64 %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15, i64 %arg16, i64 %arg17, i64 %arg18, i64 %arg19, i64 %arg20, i64 %arg21, i64 %arg22, i64 %arg23, i64 %arg24, i64 %arg25, i64 %arg26) {
+define i64 @"kira_fn_70_sokolCreateRenderPipelineId"(i64 %arg0, %kira.string %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7, i64 %arg8, i64 %arg9, i64 %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15, i64 %arg16, i64 %arg17, i64 %arg18, i64 %arg19, i64 %arg20, i64 %arg21, i64 %arg22, i64 %arg23, i64 %arg24, i64 %arg25, i64 %arg26) {
 entry:
   %local0 = alloca i64
   %local1 = alloca %kira.string
@@ -3442,21 +3383,21 @@ entry:
   %r24 = load i64, ptr %local24
   %r25 = load i64, ptr %local25
   %r26 = load i64, ptr %local26
-  %call.arg.46.0 = trunc i64 %r0 to i32
+  %call.arg.47.0 = trunc i64 %r0 to i32
   %call.arg.str.ptr.0 = extractvalue %kira.string %r1, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r1, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.46.1 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.46.1, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.46.1, i64 %call.arg.str.len.0
+  %call.arg.47.1 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.47.1, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.47.1, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.27 = call i32 @"kg_make_pipeline_detailed"(i32 %call.arg.46.0, ptr %call.arg.46.1, i64 %r2, i64 %r3, i64 %r4, i64 %r5, i64 %r6, i64 %r7, i64 %r8, i64 %r9, i64 %r10, i64 %r11, i64 %r12, i64 %r13, i64 %r14, i64 %r15, i64 %r16, i64 %r17, i64 %r18, i64 %r19, i64 %r20, i64 %r21, i64 %r22, i64 %r23, i64 %r24, i64 %r25, i64 %r26)
+  %call.int.27 = call i32 @"kg_make_pipeline_detailed"(i32 %call.arg.47.0, ptr %call.arg.47.1, i64 %r2, i64 %r3, i64 %r4, i64 %r5, i64 %r6, i64 %r7, i64 %r8, i64 %r9, i64 %r10, i64 %r11, i64 %r12, i64 %r13, i64 %r14, i64 %r15, i64 %r16, i64 %r17, i64 %r18, i64 %r19, i64 %r20, i64 %r21, i64 %r22, i64 %r23, i64 %r24, i64 %r25, i64 %r26)
   %r27.sext = sext i32 %call.int.27 to i64
   %r27 = add i64 %r27.sext, 0
   ret i64 %r27
 }
 
-define i64 @"kira_fn_70_sokolCreateRenderPipeline"(i64 %arg0) {
+define i64 @"kira_fn_71_sokolCreateRenderPipeline"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderPipelineDescriptor
@@ -3617,25 +3558,25 @@ entry:
   store i64 %r12, ptr %local3
   %r13 = add i64 0, 0
   store i64 %r13, ptr %local4
-  %r14 = call i64 @"kira_fn_94_vertexFormatFloat2"()
+  %r14 = call i64 @"kira_fn_95_vertexFormatFloat2"()
   store i64 %r14, ptr %local5
   %r15 = add i64 0, 0
   store i64 %r15, ptr %local6
   %r16 = add i64 0, 1
   store i64 %r16, ptr %local7
-  %r17 = call i64 @"kira_fn_94_vertexFormatFloat2"()
+  %r17 = call i64 @"kira_fn_95_vertexFormatFloat2"()
   store i64 %r17, ptr %local8
   %r18 = add i64 0, 0
   store i64 %r18, ptr %local9
   %r19 = add i64 0, 2
   store i64 %r19, ptr %local10
-  %r20 = call i64 @"kira_fn_94_vertexFormatFloat2"()
+  %r20 = call i64 @"kira_fn_95_vertexFormatFloat2"()
   store i64 %r20, ptr %local11
   %r21 = add i64 0, 0
   store i64 %r21, ptr %local12
   %r22 = add i64 0, 3
   store i64 %r22, ptr %local13
-  %r23 = call i64 @"kira_fn_94_vertexFormatFloat2"()
+  %r23 = call i64 @"kira_fn_95_vertexFormatFloat2"()
   store i64 %r23, ptr %local14
   %r24 = add i64 0, 0
   store i64 %r24, ptr %local15
@@ -4163,7 +4104,7 @@ kira_label_16:
   %r223 = load i64, ptr %local23
   %r224 = load i64, ptr %local24
   %r225 = load i64, ptr %local25
-  %r226 = call i64 @"kira_fn_69_sokolCreateRenderPipelineId"(i64 %r197, %kira.string %r200, i64 %r201, i64 %r202, i64 %r203, i64 %r204, i64 %r205, i64 %r206, i64 %r207, i64 %r208, i64 %r209, i64 %r210, i64 %r211, i64 %r212, i64 %r213, i64 %r214, i64 %r215, i64 %r216, i64 %r217, i64 %r218, i64 %r219, i64 %r220, i64 %r221, i64 %r222, i64 %r223, i64 %r224, i64 %r225)
+  %r226 = call i64 @"kira_fn_70_sokolCreateRenderPipelineId"(i64 %r197, %kira.string %r200, i64 %r201, i64 %r202, i64 %r203, i64 %r204, i64 %r205, i64 %r206, i64 %r207, i64 %r208, i64 %r209, i64 %r210, i64 %r211, i64 %r212, i64 %r213, i64 %r214, i64 %r215, i64 %r216, i64 %r217, i64 %r218, i64 %r219, i64 %r220, i64 %r221, i64 %r222, i64 %r223, i64 %r224, i64 %r225)
   store i64 %r226, ptr %local26
   %alloc.size.ptr.227 = getelementptr %t.RenderPipeline, ptr null, i32 1
   %alloc.size.227 = ptrtoint ptr %alloc.size.ptr.227 to i64
@@ -4207,7 +4148,7 @@ kira_label_16:
   ret i64 %r227
 }
 
-define void @"kira_fn_71_sokolDestroyRenderPipelineId"(i64 %arg0) {
+define void @"kira_fn_72_sokolDestroyRenderPipelineId"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
@@ -4217,14 +4158,14 @@ entry:
   br i1 %r2, label %kira_label_0, label %kira_label_1
 kira_label_0:
   %r3 = load i64, ptr %local0
-  %call.arg.39.0 = trunc i64 %r3 to i32
-  call void @"kg_destroy_pipeline_id"(i32 %call.arg.39.0)
+  %call.arg.40.0 = trunc i64 %r3 to i32
+  call void @"kg_destroy_pipeline_id"(i32 %call.arg.40.0)
   br label %kira_label_1
 kira_label_1:
   ret void
 }
 
-define i64 @"kira_fn_72_sokolCreateShaderId"(%kira.string %arg0, %kira.string %arg1, %kira.string %arg2, %kira.string %arg3, %kira.string %arg4) {
+define i64 @"kira_fn_73_sokolCreateShaderId"(%kira.string %arg0, %kira.string %arg1, %kira.string %arg2, %kira.string %arg3, %kira.string %arg4) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca %kira.string
@@ -4241,58 +4182,6 @@ entry:
   %r2 = load %kira.string, ptr %local2
   %r3 = load %kira.string, ptr %local3
   %r4 = load %kira.string, ptr %local4
-  %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
-  %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
-  %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.47.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.47.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.47.0, i64 %call.arg.str.len.0
-  store i8 0, ptr %call.arg.str.null.0
-  %call.arg.str.ptr.1 = extractvalue %kira.string %r1, 0
-  %call.arg.str.len.1 = extractvalue %kira.string %r1, 1
-  %call.arg.str.alloclen.1 = add i64 %call.arg.str.len.1, 1
-  %call.arg.47.1 = call ptr @malloc(i64 %call.arg.str.alloclen.1)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.47.1, ptr %call.arg.str.ptr.1, i64 %call.arg.str.len.1, i1 false)
-  %call.arg.str.null.1 = getelementptr inbounds i8, ptr %call.arg.47.1, i64 %call.arg.str.len.1
-  store i8 0, ptr %call.arg.str.null.1
-  %call.arg.str.ptr.2 = extractvalue %kira.string %r2, 0
-  %call.arg.str.len.2 = extractvalue %kira.string %r2, 1
-  %call.arg.str.alloclen.2 = add i64 %call.arg.str.len.2, 1
-  %call.arg.47.2 = call ptr @malloc(i64 %call.arg.str.alloclen.2)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.47.2, ptr %call.arg.str.ptr.2, i64 %call.arg.str.len.2, i1 false)
-  %call.arg.str.null.2 = getelementptr inbounds i8, ptr %call.arg.47.2, i64 %call.arg.str.len.2
-  store i8 0, ptr %call.arg.str.null.2
-  %call.arg.str.ptr.3 = extractvalue %kira.string %r3, 0
-  %call.arg.str.len.3 = extractvalue %kira.string %r3, 1
-  %call.arg.str.alloclen.3 = add i64 %call.arg.str.len.3, 1
-  %call.arg.47.3 = call ptr @malloc(i64 %call.arg.str.alloclen.3)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.47.3, ptr %call.arg.str.ptr.3, i64 %call.arg.str.len.3, i1 false)
-  %call.arg.str.null.3 = getelementptr inbounds i8, ptr %call.arg.47.3, i64 %call.arg.str.len.3
-  store i8 0, ptr %call.arg.str.null.3
-  %call.arg.str.ptr.4 = extractvalue %kira.string %r4, 0
-  %call.arg.str.len.4 = extractvalue %kira.string %r4, 1
-  %call.arg.str.alloclen.4 = add i64 %call.arg.str.len.4, 1
-  %call.arg.47.4 = call ptr @malloc(i64 %call.arg.str.alloclen.4)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.47.4, ptr %call.arg.str.ptr.4, i64 %call.arg.str.len.4, i1 false)
-  %call.arg.str.null.4 = getelementptr inbounds i8, ptr %call.arg.47.4, i64 %call.arg.str.len.4
-  store i8 0, ptr %call.arg.str.null.4
-  %call.int.5 = call i32 @"kg_make_shader"(ptr %call.arg.47.0, ptr %call.arg.47.1, ptr %call.arg.47.2, ptr %call.arg.47.3, ptr %call.arg.47.4)
-  %r5.sext = sext i32 %call.int.5 to i64
-  %r5 = add i64 %r5.sext, 0
-  ret i64 %r5
-}
-
-define i64 @"kira_fn_73_sokolCreateShaderFromKslId"(%kira.string %arg0, %kira.string %arg1, %kira.string %arg2) {
-entry:
-  %local0 = alloca %kira.string
-  %local1 = alloca %kira.string
-  %local2 = alloca %kira.string
-  store %kira.string %arg0, ptr %local0
-  store %kira.string %arg1, ptr %local1
-  store %kira.string %arg2, ptr %local2
-  %r0 = load %kira.string, ptr %local0
-  %r1 = load %kira.string, ptr %local1
-  %r2 = load %kira.string, ptr %local2
   %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
@@ -4314,13 +4203,65 @@ entry:
   call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.48.2, ptr %call.arg.str.ptr.2, i64 %call.arg.str.len.2, i1 false)
   %call.arg.str.null.2 = getelementptr inbounds i8, ptr %call.arg.48.2, i64 %call.arg.str.len.2
   store i8 0, ptr %call.arg.str.null.2
-  %call.int.3 = call i32 @"kg_make_ksl_shader"(ptr %call.arg.48.0, ptr %call.arg.48.1, ptr %call.arg.48.2)
+  %call.arg.str.ptr.3 = extractvalue %kira.string %r3, 0
+  %call.arg.str.len.3 = extractvalue %kira.string %r3, 1
+  %call.arg.str.alloclen.3 = add i64 %call.arg.str.len.3, 1
+  %call.arg.48.3 = call ptr @malloc(i64 %call.arg.str.alloclen.3)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.48.3, ptr %call.arg.str.ptr.3, i64 %call.arg.str.len.3, i1 false)
+  %call.arg.str.null.3 = getelementptr inbounds i8, ptr %call.arg.48.3, i64 %call.arg.str.len.3
+  store i8 0, ptr %call.arg.str.null.3
+  %call.arg.str.ptr.4 = extractvalue %kira.string %r4, 0
+  %call.arg.str.len.4 = extractvalue %kira.string %r4, 1
+  %call.arg.str.alloclen.4 = add i64 %call.arg.str.len.4, 1
+  %call.arg.48.4 = call ptr @malloc(i64 %call.arg.str.alloclen.4)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.48.4, ptr %call.arg.str.ptr.4, i64 %call.arg.str.len.4, i1 false)
+  %call.arg.str.null.4 = getelementptr inbounds i8, ptr %call.arg.48.4, i64 %call.arg.str.len.4
+  store i8 0, ptr %call.arg.str.null.4
+  %call.int.5 = call i32 @"kg_make_shader"(ptr %call.arg.48.0, ptr %call.arg.48.1, ptr %call.arg.48.2, ptr %call.arg.48.3, ptr %call.arg.48.4)
+  %r5.sext = sext i32 %call.int.5 to i64
+  %r5 = add i64 %r5.sext, 0
+  ret i64 %r5
+}
+
+define i64 @"kira_fn_74_sokolCreateShaderFromKslId"(%kira.string %arg0, %kira.string %arg1, %kira.string %arg2) {
+entry:
+  %local0 = alloca %kira.string
+  %local1 = alloca %kira.string
+  %local2 = alloca %kira.string
+  store %kira.string %arg0, ptr %local0
+  store %kira.string %arg1, ptr %local1
+  store %kira.string %arg2, ptr %local2
+  %r0 = load %kira.string, ptr %local0
+  %r1 = load %kira.string, ptr %local1
+  %r2 = load %kira.string, ptr %local2
+  %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
+  %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
+  %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
+  %call.arg.49.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.49.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.49.0, i64 %call.arg.str.len.0
+  store i8 0, ptr %call.arg.str.null.0
+  %call.arg.str.ptr.1 = extractvalue %kira.string %r1, 0
+  %call.arg.str.len.1 = extractvalue %kira.string %r1, 1
+  %call.arg.str.alloclen.1 = add i64 %call.arg.str.len.1, 1
+  %call.arg.49.1 = call ptr @malloc(i64 %call.arg.str.alloclen.1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.49.1, ptr %call.arg.str.ptr.1, i64 %call.arg.str.len.1, i1 false)
+  %call.arg.str.null.1 = getelementptr inbounds i8, ptr %call.arg.49.1, i64 %call.arg.str.len.1
+  store i8 0, ptr %call.arg.str.null.1
+  %call.arg.str.ptr.2 = extractvalue %kira.string %r2, 0
+  %call.arg.str.len.2 = extractvalue %kira.string %r2, 1
+  %call.arg.str.alloclen.2 = add i64 %call.arg.str.len.2, 1
+  %call.arg.49.2 = call ptr @malloc(i64 %call.arg.str.alloclen.2)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.49.2, ptr %call.arg.str.ptr.2, i64 %call.arg.str.len.2, i1 false)
+  %call.arg.str.null.2 = getelementptr inbounds i8, ptr %call.arg.49.2, i64 %call.arg.str.len.2
+  store i8 0, ptr %call.arg.str.null.2
+  %call.int.3 = call i32 @"kg_make_ksl_shader"(ptr %call.arg.49.0, ptr %call.arg.49.1, ptr %call.arg.49.2)
   %r3.sext = sext i32 %call.int.3 to i64
   %r3 = add i64 %r3.sext, 0
   ret i64 %r3
 }
 
-define void @"kira_fn_74_sokolDestroyShaderId"(i64 %arg0) {
+define void @"kira_fn_75_sokolDestroyShaderId"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
@@ -4330,14 +4271,14 @@ entry:
   br i1 %r2, label %kira_label_0, label %kira_label_1
 kira_label_0:
   %r3 = load i64, ptr %local0
-  %call.arg.45.0 = trunc i64 %r3 to i32
-  call void @"kg_destroy_shader_id"(i32 %call.arg.45.0)
+  %call.arg.46.0 = trunc i64 %r3 to i32
+  call void @"kg_destroy_shader_id"(i32 %call.arg.46.0)
   br label %kira_label_1
 kira_label_1:
   ret void
 }
 
-define i64 @"kira_fn_75_sokolCreateTextureId"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6) {
+define i64 @"kira_fn_76_sokolCreateTextureId"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca i64
@@ -4381,17 +4322,17 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r6, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r6, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.27.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.27.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.27.0, i64 %call.arg.str.len.0
+  %call.arg.28.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.28.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.28.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.13 = call i32 @"kg_create_texture_id"(ptr %call.arg.27.0, i64 %r7, i64 %r8, i64 %r9, i64 %r10, i64 %r11, i64 %r12)
+  %call.int.13 = call i32 @"kg_create_texture_id"(ptr %call.arg.28.0, i64 %r7, i64 %r8, i64 %r9, i64 %r10, i64 %r11, i64 %r12)
   %r13.sext = sext i32 %call.int.13 to i64
   %r13 = add i64 %r13.sext, 0
   ret i64 %r13
 }
 
-define void @"kira_fn_76_sokolDestroyTextureId"(i64 %arg0) {
+define void @"kira_fn_77_sokolDestroyTextureId"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
@@ -4401,14 +4342,14 @@ entry:
   br i1 %r2, label %kira_label_0, label %kira_label_1
 kira_label_0:
   %r3 = load i64, ptr %local0
-  %call.arg.28.0 = trunc i64 %r3 to i32
-  call void @"kg_destroy_texture_id"(i32 %call.arg.28.0)
+  %call.arg.29.0 = trunc i64 %r3 to i32
+  call void @"kg_destroy_texture_id"(i32 %call.arg.29.0)
   br label %kira_label_1
 kira_label_1:
   ret void
 }
 
-define void @"kira_fn_77_graphicsDiagnostic"(%kira.string %arg0) {
+define void @"kira_fn_78_graphicsDiagnostic"(%kira.string %arg0) {
 entry:
   %local0 = alloca %kira.string
   store %kira.string %arg0, ptr %local0
@@ -4420,7 +4361,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_78_graphicsSubmitFrame"(i64 %arg0) {
+define void @"kira_fn_79_graphicsSubmitFrame"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -4431,11 +4372,11 @@ entry:
   store ptr null, ptr %cleanup.heap.slot.0
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
-  call void @"kira_fn_63_sokolSubmitFrame"(i64 %r0)
+  call void @"kira_fn_64_sokolSubmitFrame"(i64 %r0)
   ret void
 }
 
-define void @"kira_fn_79_graphicsRuntimeRun"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_80_graphicsRuntimeRun"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsApplication
@@ -4514,13 +4455,13 @@ entry:
   store i64 %r7, ptr %local2
   %r8 = load i64, ptr %local0
   %r9 = load i64, ptr %local2
-  call void @"kira_fn_7_sokolRunApplication"(i64 %r8, i64 %r9)
+  call void @"kira_fn_8_sokolRunApplication"(i64 %r8, i64 %r9)
   %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.0
   call void @free(ptr %cleanup.heap.ptr.0)
   ret void
 }
 
-define i64 @"kira_fn_84_emptyGraphicsBuffer"() {
+define i64 @"kira_fn_85_emptyGraphicsBuffer"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -4568,85 +4509,85 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_fn_88_bufferUsageVertex"() {
+define i64 @"kira_fn_89_bufferUsageVertex"() {
 entry:
   %r0 = add i64 0, 1
   ret i64 %r0
 }
 
-define i64 @"kira_fn_94_vertexFormatFloat2"() {
+define i64 @"kira_fn_95_vertexFormatFloat2"() {
 entry:
   %r0 = add i64 0, 1
   ret i64 %r0
 }
 
-define i64 @"kira_fn_97_textureFormatRgba8Unorm"() {
+define i64 @"kira_fn_98_textureFormatRgba8Unorm"() {
 entry:
   %r0 = add i64 0, 1
   ret i64 %r0
 }
 
-define i64 @"kira_fn_99_textureFormatDepth24Stencil8"() {
+define i64 @"kira_fn_100_textureFormatDepth24Stencil8"() {
 entry:
   %r0 = add i64 0, 3
   ret i64 %r0
 }
 
-define i64 @"kira_fn_100_primitiveTopologyTriangleList"() {
+define i64 @"kira_fn_101_primitiveTopologyTriangleList"() {
 entry:
   %r0 = add i64 0, 1
   ret i64 %r0
 }
 
-define i64 @"kira_fn_103_blendPresetReplace"() {
+define i64 @"kira_fn_104_blendPresetReplace"() {
 entry:
   %r0 = add i64 0, 1
   ret i64 %r0
 }
 
-define i64 @"kira_fn_113_compareFunctionAlways"() {
+define i64 @"kira_fn_114_compareFunctionAlways"() {
 entry:
   %r0 = add i64 0, 6
   ret i64 %r0
 }
 
-define i64 @"kira_fn_114_cullModeNone"() {
+define i64 @"kira_fn_115_cullModeNone"() {
 entry:
   %r0 = add i64 0, 0
   ret i64 %r0
 }
 
-define i64 @"kira_fn_117_frontFaceCounterClockwise"() {
+define i64 @"kira_fn_118_frontFaceCounterClockwise"() {
 entry:
   %r0 = add i64 0, 1
   ret i64 %r0
 }
 
-define i64 @"kira_fn_120_indexFormatUint32"() {
+define i64 @"kira_fn_121_indexFormatUint32"() {
 entry:
   %r0 = add i64 0, 2
   ret i64 %r0
 }
 
-define i64 @"kira_fn_121_loadActionClear"() {
+define i64 @"kira_fn_122_loadActionClear"() {
 entry:
   %r0 = add i64 0, 1
   ret i64 %r0
 }
 
-define i64 @"kira_fn_124_storeActionStore"() {
+define i64 @"kira_fn_125_storeActionStore"() {
 entry:
   %r0 = add i64 0, 1
   ret i64 %r0
 }
 
-define i64 @"kira_fn_126_renderTargetKindSwapchain"() {
+define i64 @"kira_fn_127_renderTargetKindSwapchain"() {
 entry:
   %r0 = add i64 0, 1
   ret i64 %r0
 }
 
-define i64 @"kira_fn_405_GraphicsFrame.beginRenderPass"(i64 %arg0, i64 %arg1) {
+define i64 @"kira_fn_406_GraphicsFrame.beginRenderPass"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -5341,7 +5282,7 @@ kira_label_1:
   %store.bool.188 = zext i1 %r188 to i8
   store i8 %store.bool.188, ptr %store.ptr.188
   %r191 = load i64, ptr %local0
-  %r192 = call i1 @"kira_fn_62_sokolBeginRenderPassFromFrame"(i64 %r191)
+  %r192 = call i1 @"kira_fn_63_sokolBeginRenderPassFromFrame"(i64 %r191)
   %r193 = load i64, ptr %local0
   %field.base.194 = inttoptr i64 %r193 to ptr
   %field.ptr.194 = getelementptr inbounds %t.GraphicsFrame, ptr %field.base.194, i32 0, i32 38
@@ -5359,8 +5300,8 @@ kira_label_1:
   %r198 = xor i1 %r197, true
   br i1 %r198, label %kira_label_4, label %kira_label_5
 kira_label_4:
-  %r199 = load %kira.string, ptr @kira_str_12
-  call void @"kira_fn_77_graphicsDiagnostic"(%kira.string %r199)
+  %r199 = load %kira.string, ptr @kira_str_13
+  call void @"kira_fn_78_graphicsDiagnostic"(%kira.string %r199)
   br label %kira_label_5
 kira_label_5:
   %r200 = load i64, ptr %local0
@@ -5370,7 +5311,7 @@ kira_label_5:
   %load.ptr.202 = inttoptr i64 %r201 to ptr
   %load.raw.202 = load i8, ptr %load.ptr.202
   %r202 = trunc i8 %load.raw.202 to i1
-  %r203 = call i64 @"kira_fn_175_makeRenderEncoderWithPassActive"(i1 %r202)
+  %r203 = call i64 @"kira_fn_176_makeRenderEncoderWithPassActive"(i1 %r202)
   %cleanup.call.ptr.203 = inttoptr i64 %r203 to ptr
   store ptr %cleanup.call.ptr.203, ptr %cleanup.heap.slot.203
   %r204 = load i64, ptr %local3
@@ -5394,7 +5335,7 @@ kira_label_5:
   ret i64 %r208
 }
 
-define void @"kira_fn_406_GraphicsFrame.endPass"(i64 %arg0) {
+define void @"kira_fn_407_GraphicsFrame.endPass"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -5595,7 +5536,7 @@ entry:
   %r53 = trunc i8 %load.raw.53 to i1
   br i1 %r53, label %kira_label_0, label %kira_label_1
 kira_label_0:
-  call void @"kira_fn_66_sokolEndPassAndCommitNative"()
+  call void @"kira_fn_67_sokolEndPassAndCommitNative"()
   br label %kira_label_1
 kira_label_1:
   %r54 = add i1 0, 0
@@ -5606,7 +5547,7 @@ kira_label_1:
   %store.ptr.54 = inttoptr i64 %r56 to ptr
   %store.bool.54 = zext i1 %r54 to i8
   store i8 %store.bool.54, ptr %store.ptr.54
-  %r57 = call i64 @"kira_fn_174_makeRenderEncoder"()
+  %r57 = call i64 @"kira_fn_175_makeRenderEncoder"()
   %cleanup.call.ptr.57 = inttoptr i64 %r57 to ptr
   store ptr %cleanup.call.ptr.57, ptr %cleanup.heap.slot.57
   %r58 = load i64, ptr %local0
@@ -5623,7 +5564,7 @@ kira_label_1:
   ret void
 }
 
-define void @"kira_fn_407_GraphicsFrame.renderPass"(i64 %arg0, i64 %arg1, i64 %arg2) {
+define void @"kira_fn_408_GraphicsFrame.renderPass"(i64 %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -5667,7 +5608,7 @@ entry:
   store i64 %arg2, ptr %local2
   %r0 = load i64, ptr %local0
   %r1 = load i64, ptr %local1
-  %r2 = call i64 @"kira_fn_405_GraphicsFrame.beginRenderPass"(i64 %r0, i64 %r1)
+  %r2 = call i64 @"kira_fn_406_GraphicsFrame.beginRenderPass"(i64 %r0, i64 %r1)
   %r3 = load i64, ptr %local3
   %copy.dst.3 = inttoptr i64 %r3 to ptr
   %copy.src.2 = inttoptr i64 %r2 to ptr
@@ -5683,11 +5624,11 @@ entry:
   %r7 = load i64, ptr %local4
   call void @"kira_callable_dispatch_45bbf038adba07d0"(i64 %r6, i64 %r7)
   %r8 = load i64, ptr %local0
-  call void @"kira_fn_406_GraphicsFrame.endPass"(i64 %r8)
+  call void @"kira_fn_407_GraphicsFrame.endPass"(i64 %r8)
   ret void
 }
 
-define i64 @"kira_fn_408_GraphicsFrame.beginPass"(i64 %arg0, i64 %arg1) {
+define i64 @"kira_fn_409_GraphicsFrame.beginPass"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -5711,16 +5652,16 @@ entry:
   store i64 %arg1, ptr %local1
   %r0 = load i64, ptr %local0
   %r1 = load i64, ptr %local1
-  %r2 = call i64 @"kira_fn_191_clearSwapchainRenderPass"(i64 %r1)
+  %r2 = call i64 @"kira_fn_192_clearSwapchainRenderPass"(i64 %r1)
   %cleanup.call.ptr.2 = inttoptr i64 %r2 to ptr
   store ptr %cleanup.call.ptr.2, ptr %cleanup.heap.slot.2
-  %r3 = call i64 @"kira_fn_405_GraphicsFrame.beginRenderPass"(i64 %r0, i64 %r2)
+  %r3 = call i64 @"kira_fn_406_GraphicsFrame.beginRenderPass"(i64 %r0, i64 %r2)
   %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.2
   call void @free(ptr %cleanup.heap.ptr.0)
   ret i64 %r3
 }
 
-define void @"kira_fn_409_GraphicsFrame.pass"(i64 %arg0, i64 %arg1, i64 %arg2) {
+define void @"kira_fn_410_GraphicsFrame.pass"(i64 %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -5744,17 +5685,17 @@ entry:
   store i64 %arg2, ptr %local2
   %r0 = load i64, ptr %local0
   %r1 = load i64, ptr %local1
-  %r2 = call i64 @"kira_fn_191_clearSwapchainRenderPass"(i64 %r1)
+  %r2 = call i64 @"kira_fn_192_clearSwapchainRenderPass"(i64 %r1)
   %cleanup.call.ptr.2 = inttoptr i64 %r2 to ptr
   store ptr %cleanup.call.ptr.2, ptr %cleanup.heap.slot.2
   %r3 = load i64, ptr %local2
-  call void @"kira_fn_407_GraphicsFrame.renderPass"(i64 %r0, i64 %r2, i64 %r3)
+  call void @"kira_fn_408_GraphicsFrame.renderPass"(i64 %r0, i64 %r2, i64 %r3)
   %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.2
   call void @free(ptr %cleanup.heap.ptr.0)
   ret void
 }
 
-define void @"kira_fn_410_GraphicsFrame.requestQuit"(i64 %arg0) {
+define void @"kira_fn_411_GraphicsFrame.requestQuit"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -5776,7 +5717,7 @@ entry:
   ret void
 }
 
-define i64 @"kira_fn_411_Graphics.createShader"(i64 %arg0, i64 %arg1) {
+define i64 @"kira_fn_412_Graphics.createShader"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -5835,7 +5776,7 @@ entry:
   %r13 = ptrtoint ptr %field.ptr.13 to i64
   %load.ptr.14 = inttoptr i64 %r13 to ptr
   %r14 = load %kira.string, ptr %load.ptr.14
-  %r15 = call i64 @"kira_fn_72_sokolCreateShaderId"(%kira.string %r2, %kira.string %r5, %kira.string %r8, %kira.string %r11, %kira.string %r14)
+  %r15 = call i64 @"kira_fn_73_sokolCreateShaderId"(%kira.string %r2, %kira.string %r5, %kira.string %r8, %kira.string %r11, %kira.string %r14)
   store i64 %r15, ptr %local2
   %alloc.size.ptr.16 = getelementptr %t.GraphicsShader, ptr null, i32 1
   %alloc.size.16 = ptrtoint ptr %alloc.size.ptr.16 to i64
@@ -5879,7 +5820,7 @@ entry:
   ret i64 %r16
 }
 
-define i64 @"kira_fn_412_Graphics.createShaderFromKsl"(i64 %arg0, i64 %arg1) {
+define i64 @"kira_fn_413_Graphics.createShaderFromKsl"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -5922,7 +5863,7 @@ entry:
   %r7 = ptrtoint ptr %field.ptr.7 to i64
   %load.ptr.8 = inttoptr i64 %r7 to ptr
   %r8 = load %kira.string, ptr %load.ptr.8
-  %r9 = call i64 @"kira_fn_73_sokolCreateShaderFromKslId"(%kira.string %r2, %kira.string %r5, %kira.string %r8)
+  %r9 = call i64 @"kira_fn_74_sokolCreateShaderFromKslId"(%kira.string %r2, %kira.string %r5, %kira.string %r8)
   store i64 %r9, ptr %local2
   %alloc.size.ptr.10 = getelementptr %t.GraphicsShader, ptr null, i32 1
   %alloc.size.10 = ptrtoint ptr %alloc.size.ptr.10 to i64
@@ -5966,7 +5907,7 @@ entry:
   ret i64 %r10
 }
 
-define void @"kira_fn_413_Graphics.destroyShader"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_414_Graphics.destroyShader"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -5989,11 +5930,11 @@ entry:
   %load.ptr.2 = inttoptr i64 %r1 to ptr
   %load.raw.2 = load i32, ptr %load.ptr.2
   %r2 = sext i32 %load.raw.2 to i64
-  call void @"kira_fn_74_sokolDestroyShaderId"(i64 %r2)
+  call void @"kira_fn_75_sokolDestroyShaderId"(i64 %r2)
   ret void
 }
 
-define i64 @"kira_fn_414_Graphics.createRenderPipeline"(i64 %arg0, i64 %arg1) {
+define i64 @"kira_fn_415_Graphics.createRenderPipeline"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6012,13 +5953,13 @@ entry:
   store i64 %arg0, ptr %local0
   store i64 %arg1, ptr %local1
   %r0 = load i64, ptr %local1
-  %r1 = call i64 @"kira_fn_70_sokolCreateRenderPipeline"(i64 %r0)
+  %r1 = call i64 @"kira_fn_71_sokolCreateRenderPipeline"(i64 %r0)
   %cleanup.call.ptr.1 = inttoptr i64 %r1 to ptr
   store ptr %cleanup.call.ptr.1, ptr %cleanup.heap.slot.1
   ret i64 %r1
 }
 
-define void @"kira_fn_415_Graphics.destroyPipeline"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_416_Graphics.destroyPipeline"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6041,11 +5982,11 @@ entry:
   %load.ptr.2 = inttoptr i64 %r1 to ptr
   %load.raw.2 = load i32, ptr %load.ptr.2
   %r2 = sext i32 %load.raw.2 to i64
-  call void @"kira_fn_71_sokolDestroyRenderPipelineId"(i64 %r2)
+  call void @"kira_fn_72_sokolDestroyRenderPipelineId"(i64 %r2)
   ret void
 }
 
-define void @"kira_fn_416_Graphics.destroyRenderPipeline"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_417_Graphics.destroyRenderPipeline"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6065,11 +6006,11 @@ entry:
   store i64 %arg1, ptr %local1
   %r0 = load i64, ptr %local0
   %r1 = load i64, ptr %local1
-  call void @"kira_fn_415_Graphics.destroyPipeline"(i64 %r0, i64 %r1)
+  call void @"kira_fn_416_Graphics.destroyPipeline"(i64 %r0, i64 %r1)
   ret void
 }
 
-define i64 @"kira_fn_417_Graphics.createBuffer"(i64 %arg0, i64 %arg1) {
+define i64 @"kira_fn_418_Graphics.createBuffer"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6131,7 +6072,7 @@ entry:
   %r11 = ptrtoint ptr %load.arrayptr.11 to i64
   %array.ptr.12 = inttoptr i64 %r11 to ptr
   %r12 = call i64 @"kira_array_len"(ptr %array.ptr.12)
-  %r13 = call i64 @"kira_fn_53_sokolBeginFloatBufferUpload"(%kira.string %r2, i64 %r5, i64 %r8, i64 %r12)
+  %r13 = call i64 @"kira_fn_54_sokolBeginFloatBufferUpload"(%kira.string %r2, i64 %r5, i64 %r8, i64 %r12)
   store i64 %r13, ptr %local2
   %r14 = add i64 0, 0
   store i64 %r14, ptr %local3
@@ -6166,7 +6107,7 @@ kira_label_1:
   %array.get.val.0 = load %kira.bridge.value, ptr %array.get.val.ptr.0
   %array.get.bits.0 = extractvalue %kira.bridge.value %array.get.val.0, 2
   %r27 = bitcast i64 %array.get.bits.0 to double
-  call void @"kira_fn_54_sokolSetFloatBufferUploadValue"(i64 %r21, i64 %r22, double %r27)
+  call void @"kira_fn_55_sokolSetFloatBufferUploadValue"(i64 %r21, i64 %r22, double %r27)
   %r28 = load i64, ptr %local3
   %r29 = add i64 0, 1
   %r30 = add i64 %r28, %r29
@@ -6174,7 +6115,7 @@ kira_label_1:
   br label %kira_label_0
 kira_label_2:
   %r31 = load i64, ptr %local2
-  %r32 = call i64 @"kira_fn_55_sokolFinalizeFloatBufferUpload"(i64 %r31)
+  %r32 = call i64 @"kira_fn_56_sokolFinalizeFloatBufferUpload"(i64 %r31)
   store i64 %r32, ptr %local4
   %alloc.size.ptr.33 = getelementptr %t.GraphicsBuffer, ptr null, i32 1
   %alloc.size.33 = ptrtoint ptr %alloc.size.ptr.33 to i64
@@ -6218,7 +6159,7 @@ kira_label_2:
   ret i64 %r33
 }
 
-define i64 @"kira_fn_418_Graphics.createIndexBuffer"(i64 %arg0, i64 %arg1) {
+define i64 @"kira_fn_419_Graphics.createIndexBuffer"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6271,7 +6212,7 @@ entry:
   %r8 = ptrtoint ptr %load.arrayptr.8 to i64
   %array.ptr.9 = inttoptr i64 %r8 to ptr
   %r9 = call i64 @"kira_array_len"(ptr %array.ptr.9)
-  %r10 = call i64 @"kira_fn_56_sokolBeginIndexBufferUpload"(%kira.string %r2, i64 %r5, i64 %r9)
+  %r10 = call i64 @"kira_fn_57_sokolBeginIndexBufferUpload"(%kira.string %r2, i64 %r5, i64 %r9)
   store i64 %r10, ptr %local2
   %r11 = add i64 0, 0
   store i64 %r11, ptr %local3
@@ -6305,7 +6246,7 @@ kira_label_1:
   call void @"kira_array_load"(ptr %array.get.ptr.24, i64 %r23, ptr %array.get.val.ptr.0)
   %array.get.val.0 = load %kira.bridge.value, ptr %array.get.val.ptr.0
   %r24 = extractvalue %kira.bridge.value %array.get.val.0, 2
-  call void @"kira_fn_57_sokolSetIndexBufferUploadValue"(i64 %r18, i64 %r19, i64 %r24)
+  call void @"kira_fn_58_sokolSetIndexBufferUploadValue"(i64 %r18, i64 %r19, i64 %r24)
   %r25 = load i64, ptr %local3
   %r26 = add i64 0, 1
   %r27 = add i64 %r25, %r26
@@ -6313,7 +6254,7 @@ kira_label_1:
   br label %kira_label_0
 kira_label_2:
   %r28 = load i64, ptr %local2
-  %r29 = call i64 @"kira_fn_58_sokolFinalizeIndexBufferUpload"(i64 %r28)
+  %r29 = call i64 @"kira_fn_59_sokolFinalizeIndexBufferUpload"(i64 %r28)
   store i64 %r29, ptr %local4
   %alloc.size.ptr.30 = getelementptr %t.GraphicsBuffer, ptr null, i32 1
   %alloc.size.30 = ptrtoint ptr %alloc.size.ptr.30 to i64
@@ -6357,7 +6298,7 @@ kira_label_2:
   ret i64 %r30
 }
 
-define void @"kira_fn_419_Graphics.destroyBuffer"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_420_Graphics.destroyBuffer"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6380,11 +6321,11 @@ entry:
   %load.ptr.2 = inttoptr i64 %r1 to ptr
   %load.raw.2 = load i32, ptr %load.ptr.2
   %r2 = sext i32 %load.raw.2 to i64
-  call void @"kira_fn_59_sokolDestroyBufferId"(i64 %r2)
+  call void @"kira_fn_60_sokolDestroyBufferId"(i64 %r2)
   ret void
 }
 
-define i64 @"kira_fn_420_Graphics.createUniform"(i64 %arg0, i64 %arg1) {
+define i64 @"kira_fn_421_Graphics.createUniform"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6435,7 +6376,7 @@ entry:
   %load.ptr.5 = inttoptr i64 %r4 to ptr
   %load.raw.5 = load i64, ptr %load.ptr.5
   %r5 = load i64, ptr %load.ptr.5
-  %r6 = call i64 @"kira_fn_180_sokolCreateUniformId"(%kira.string %r2, i64 %r5)
+  %r6 = call i64 @"kira_fn_181_sokolCreateUniformId"(%kira.string %r2, i64 %r5)
   store i64 %r6, ptr %local2
   %alloc.size.ptr.7 = getelementptr %t.GraphicsUniform, ptr null, i32 1
   %alloc.size.7 = ptrtoint ptr %alloc.size.ptr.7 to i64
@@ -6488,7 +6429,7 @@ entry:
   %load.ptr.19 = inttoptr i64 %r18 to ptr
   %load.arrayptr.19 = load ptr, ptr %load.ptr.19
   %r19 = ptrtoint ptr %load.arrayptr.19 to i64
-  call void @"kira_fn_421_Graphics.updateUniform"(i64 %r15, i64 %r16, i64 %r19)
+  call void @"kira_fn_422_Graphics.updateUniform"(i64 %r15, i64 %r16, i64 %r19)
   %r20 = load i64, ptr %local3
   %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.7
   call void @free(ptr %cleanup.heap.ptr.0)
@@ -6497,7 +6438,7 @@ entry:
   ret i64 %r20
 }
 
-define void @"kira_fn_421_Graphics.updateUniform"(i64 %arg0, i64 %arg1, i64 %arg2) {
+define void @"kira_fn_422_Graphics.updateUniform"(i64 %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6517,11 +6458,11 @@ entry:
   store i64 %arg2, ptr %local2
   %r0 = load i64, ptr %local1
   %r1 = load i64, ptr %local2
-  call void @"kira_fn_181_updateGraphicsUniform"(i64 %r0, i64 %r1)
+  call void @"kira_fn_182_updateGraphicsUniform"(i64 %r0, i64 %r1)
   ret void
 }
 
-define void @"kira_fn_422_Graphics.destroyUniform"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_423_Graphics.destroyUniform"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6544,11 +6485,11 @@ entry:
   %load.ptr.2 = inttoptr i64 %r1 to ptr
   %load.raw.2 = load i32, ptr %load.ptr.2
   %r2 = sext i32 %load.raw.2 to i64
-  call void @"kira_fn_182_sokolDestroyUniformId"(i64 %r2)
+  call void @"kira_fn_183_sokolDestroyUniformId"(i64 %r2)
   ret void
 }
 
-define i64 @"kira_fn_423_Graphics.createBindGroup"(i64 %arg0, i64 %arg1) {
+define i64 @"kira_fn_424_Graphics.createBindGroup"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6593,7 +6534,7 @@ entry:
   %r1 = ptrtoint ptr %field.ptr.1 to i64
   %load.ptr.2 = inttoptr i64 %r1 to ptr
   %r2 = load %kira.string, ptr %load.ptr.2
-  %r3 = call i64 @"kira_fn_183_sokolCreateBindGroupId"(%kira.string %r2)
+  %r3 = call i64 @"kira_fn_184_sokolCreateBindGroupId"(%kira.string %r2)
   store i64 %r3, ptr %local2
   %r4 = add i64 0, 0
   store i64 %r4, ptr %local3
@@ -6649,7 +6590,7 @@ kira_label_1:
   %load.ptr.25 = inttoptr i64 %r24 to ptr
   %load.raw.25 = load i32, ptr %load.ptr.25
   %r25 = sext i32 %load.raw.25 to i64
-  call void @"kira_fn_184_sokolSetBindGroupUniform"(i64 %r17, i64 %r18, i64 %r21, i64 %r25)
+  call void @"kira_fn_185_sokolSetBindGroupUniform"(i64 %r17, i64 %r18, i64 %r21, i64 %r25)
   %r26 = load i64, ptr %local3
   %r27 = add i64 0, 1
   %r28 = add i64 %r26, %r27
@@ -6698,7 +6639,7 @@ kira_label_2:
   ret i64 %r29
 }
 
-define i64 @"kira_fn_424_Graphics.createUniformBindGroup"(i64 %arg0, %kira.string %arg1, i64 %arg2, i64 %arg3) {
+define i64 @"kira_fn_425_Graphics.createUniformBindGroup"(i64 %arg0, %kira.string %arg1, i64 %arg2, i64 %arg3) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6724,7 +6665,7 @@ entry:
   store i64 %arg2, ptr %local2
   store i64 %arg3, ptr %local3
   %r0 = load %kira.string, ptr %local1
-  %r1 = call i64 @"kira_fn_183_sokolCreateBindGroupId"(%kira.string %r0)
+  %r1 = call i64 @"kira_fn_184_sokolCreateBindGroupId"(%kira.string %r0)
   store i64 %r1, ptr %local4
   %r2 = load i64, ptr %local4
   %r3 = add i64 0, 0
@@ -6736,7 +6677,7 @@ entry:
   %load.ptr.7 = inttoptr i64 %r6 to ptr
   %load.raw.7 = load i32, ptr %load.ptr.7
   %r7 = sext i32 %load.raw.7 to i64
-  call void @"kira_fn_184_sokolSetBindGroupUniform"(i64 %r2, i64 %r3, i64 %r4, i64 %r7)
+  call void @"kira_fn_185_sokolSetBindGroupUniform"(i64 %r2, i64 %r3, i64 %r4, i64 %r7)
   %alloc.size.ptr.8 = getelementptr %t.BindGroup, ptr null, i32 1
   %alloc.size.8 = ptrtoint ptr %alloc.size.ptr.8 to i64
   %alloc.empty.8 = icmp eq i64 %alloc.size.8, 0
@@ -6779,7 +6720,7 @@ entry:
   ret i64 %r8
 }
 
-define void @"kira_fn_425_Graphics.destroyBindGroup"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_426_Graphics.destroyBindGroup"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6802,11 +6743,11 @@ entry:
   %load.ptr.2 = inttoptr i64 %r1 to ptr
   %load.raw.2 = load i32, ptr %load.ptr.2
   %r2 = sext i32 %load.raw.2 to i64
-  call void @"kira_fn_185_sokolDestroyBindGroupId"(i64 %r2)
+  call void @"kira_fn_186_sokolDestroyBindGroupId"(i64 %r2)
   ret void
 }
 
-define i64 @"kira_fn_426_Graphics.createTexture"(i64 %arg0, i64 %arg1) {
+define i64 @"kira_fn_427_Graphics.createTexture"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6887,7 +6828,7 @@ entry:
   %load.ptr.20 = inttoptr i64 %r19 to ptr
   %load.raw.20 = load i64, ptr %load.ptr.20
   %r20 = load i64, ptr %load.ptr.20
-  %r21 = call i64 @"kira_fn_75_sokolCreateTextureId"(%kira.string %r2, i64 %r5, i64 %r8, i64 %r11, i64 %r14, i64 %r17, i64 %r20)
+  %r21 = call i64 @"kira_fn_76_sokolCreateTextureId"(%kira.string %r2, i64 %r5, i64 %r8, i64 %r11, i64 %r14, i64 %r17, i64 %r20)
   store i64 %r21, ptr %local2
   %alloc.size.ptr.22 = getelementptr %t.GraphicsTexture, ptr null, i32 1
   %alloc.size.22 = ptrtoint ptr %alloc.size.ptr.22 to i64
@@ -6931,7 +6872,7 @@ entry:
   ret i64 %r22
 }
 
-define void @"kira_fn_427_Graphics.destroyTexture"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_428_Graphics.destroyTexture"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6954,11 +6895,11 @@ entry:
   %load.ptr.2 = inttoptr i64 %r1 to ptr
   %load.raw.2 = load i32, ptr %load.ptr.2
   %r2 = sext i32 %load.raw.2 to i64
-  call void @"kira_fn_76_sokolDestroyTextureId"(i64 %r2)
+  call void @"kira_fn_77_sokolDestroyTextureId"(i64 %r2)
   ret void
 }
 
-define i1 @"kira_fn_428_Graphics.runLifetimeStress"(i64 %arg0, i64 %arg1, %kira.string %arg2, %kira.string %arg3) {
+define i1 @"kira_fn_429_Graphics.runLifetimeStress"(i64 %arg0, i64 %arg1, %kira.string %arg2, %kira.string %arg3) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -6981,18 +6922,18 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r2, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r2, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.44.1 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.44.1, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.44.1, i64 %call.arg.str.len.0
+  %call.arg.45.1 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.45.1, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.45.1, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
   %call.arg.str.ptr.1 = extractvalue %kira.string %r3, 0
   %call.arg.str.len.1 = extractvalue %kira.string %r3, 1
   %call.arg.str.alloclen.1 = add i64 %call.arg.str.len.1, 1
-  %call.arg.44.2 = call ptr @malloc(i64 %call.arg.str.alloclen.1)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.44.2, ptr %call.arg.str.ptr.1, i64 %call.arg.str.len.1, i1 false)
-  %call.arg.str.null.1 = getelementptr inbounds i8, ptr %call.arg.44.2, i64 %call.arg.str.len.1
+  %call.arg.45.2 = call ptr @malloc(i64 %call.arg.str.alloclen.1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.45.2, ptr %call.arg.str.ptr.1, i64 %call.arg.str.len.1, i1 false)
+  %call.arg.str.null.1 = getelementptr inbounds i8, ptr %call.arg.45.2, i64 %call.arg.str.len.1
   store i8 0, ptr %call.arg.str.null.1
-  %call.int.4 = call i32 @"kg_run_lifetime_stress"(i64 %r1, ptr %call.arg.44.1, ptr %call.arg.44.2)
+  %call.int.4 = call i32 @"kg_run_lifetime_stress"(i64 %r1, ptr %call.arg.45.1, ptr %call.arg.45.2)
   %r4.sext = sext i32 %call.int.4 to i64
   %r4 = add i64 %r4.sext, 0
   %r5 = add i64 0, 0
@@ -7000,7 +6941,7 @@ entry:
   ret i1 %r6
 }
 
-define i64 @"kira_fn_429_Graphics.frame"(i64 %arg0) {
+define i64 @"kira_fn_430_Graphics.frame"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -7236,7 +7177,7 @@ entry:
   %store.ptr.65 = inttoptr i64 %r66 to ptr
   %store.bool.65 = zext i1 %r65 to i8
   store i8 %store.bool.65, ptr %store.ptr.65
-  %r67 = call i64 @"kira_fn_120_indexFormatUint32"()
+  %r67 = call i64 @"kira_fn_121_indexFormatUint32"()
   %field.base.68 = inttoptr i64 %r0 to ptr
   %field.ptr.68 = getelementptr inbounds %t.GraphicsFrame, ptr %field.base.68, i32 0, i32 33
   %r68 = ptrtoint ptr %field.ptr.68 to i64
@@ -7274,7 +7215,7 @@ entry:
   %store.ptr.77 = inttoptr i64 %r78 to ptr
   %store.bool.77 = zext i1 %r77 to i8
   store i8 %store.bool.77, ptr %store.ptr.77
-  %r79 = call i64 @"kira_fn_174_makeRenderEncoder"()
+  %r79 = call i64 @"kira_fn_175_makeRenderEncoder"()
   %cleanup.call.ptr.79 = inttoptr i64 %r79 to ptr
   store ptr %cleanup.call.ptr.79, ptr %cleanup.heap.slot.79
   %field.base.80 = inttoptr i64 %r0 to ptr
@@ -7323,7 +7264,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_fn_167_emptyRenderPipeline"() {
+define i64 @"kira_fn_168_emptyRenderPipeline"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -7371,7 +7312,7 @@ entry:
   ret i64 %r0
 }
 
-define void @"kira_fn_430_RenderEncoder.setPipeline"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_431_RenderEncoder.setPipeline"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -7435,7 +7376,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_431_RenderEncoder.setVertexBuffer"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_432_RenderEncoder.setVertexBuffer"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -7499,7 +7440,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_432_RenderEncoder.setIndexBuffer"(i64 %arg0, i64 %arg1, i64 %arg2) {
+define void @"kira_fn_433_RenderEncoder.setIndexBuffer"(i64 %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -7572,7 +7513,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_433_RenderEncoder.setBindGroup"(i64 %arg0, i64 %arg1, i64 %arg2) {
+define void @"kira_fn_434_RenderEncoder.setBindGroup"(i64 %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -7765,7 +7706,7 @@ kira_label_7:
   ret void
 }
 
-define void @"kira_fn_434_RenderEncoder.draw"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_435_RenderEncoder.draw"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -8011,13 +7952,13 @@ kira_label_25:
   %native.state.get.slot.71 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.71, i64 18
   %native.state.get.val.21 = load %kira.bridge.value, ptr %native.state.get.slot.71
   %r71 = extractvalue %kira.bridge.value %native.state.get.val.21, 2
-  call i1 @"kira_fn_65_sokolApplyPipelineBindingsAndDrawFlat"(i64 %r23, i64 %r25, i64 %r30, i64 %r32, i64 %r37, i64 %r39, i64 %r44, i64 %r46, i64 %r51, i64 %r53, i64 %r58, i64 %r60, i64 %r65, i64 %r67, i64 %r69, i64 %r71)
+  call i1 @"kira_fn_66_sokolApplyPipelineBindingsAndDrawFlat"(i64 %r23, i64 %r25, i64 %r30, i64 %r32, i64 %r37, i64 %r39, i64 %r44, i64 %r46, i64 %r51, i64 %r53, i64 %r58, i64 %r60, i64 %r65, i64 %r67, i64 %r69, i64 %r71)
   br label %kira_label_7
 kira_label_7:
   ret void
 }
 
-define void @"kira_fn_435_RenderEncoder.drawIndexed"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_436_RenderEncoder.drawIndexed"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -8263,13 +8204,13 @@ kira_label_25:
   %native.state.get.slot.71 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.71, i64 18
   %native.state.get.val.21 = load %kira.bridge.value, ptr %native.state.get.slot.71
   %r71 = extractvalue %kira.bridge.value %native.state.get.val.21, 2
-  call i1 @"kira_fn_65_sokolApplyPipelineBindingsAndDrawFlat"(i64 %r23, i64 %r25, i64 %r30, i64 %r32, i64 %r37, i64 %r39, i64 %r44, i64 %r46, i64 %r51, i64 %r53, i64 %r58, i64 %r60, i64 %r65, i64 %r67, i64 %r69, i64 %r71)
+  call i1 @"kira_fn_66_sokolApplyPipelineBindingsAndDrawFlat"(i64 %r23, i64 %r25, i64 %r30, i64 %r32, i64 %r37, i64 %r39, i64 %r44, i64 %r46, i64 %r51, i64 %r53, i64 %r58, i64 %r60, i64 %r65, i64 %r67, i64 %r69, i64 %r71)
   br label %kira_label_7
 kira_label_7:
   ret void
 }
 
-define void @"kira_fn_436_RenderEncoder.drawInstanced"(i64 %arg0, i64 %arg1, i64 %arg2) {
+define void @"kira_fn_437_RenderEncoder.drawInstanced"(i64 %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -8517,13 +8458,13 @@ kira_label_25:
   %native.state.get.slot.71 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.71, i64 18
   %native.state.get.val.21 = load %kira.bridge.value, ptr %native.state.get.slot.71
   %r71 = extractvalue %kira.bridge.value %native.state.get.val.21, 2
-  call i1 @"kira_fn_65_sokolApplyPipelineBindingsAndDrawFlat"(i64 %r23, i64 %r25, i64 %r30, i64 %r32, i64 %r37, i64 %r39, i64 %r44, i64 %r46, i64 %r51, i64 %r53, i64 %r58, i64 %r60, i64 %r65, i64 %r67, i64 %r69, i64 %r71)
+  call i1 @"kira_fn_66_sokolApplyPipelineBindingsAndDrawFlat"(i64 %r23, i64 %r25, i64 %r30, i64 %r32, i64 %r37, i64 %r39, i64 %r44, i64 %r46, i64 %r51, i64 %r53, i64 %r58, i64 %r60, i64 %r65, i64 %r67, i64 %r69, i64 %r71)
   br label %kira_label_7
 kira_label_7:
   ret void
 }
 
-define void @"kira_fn_437_RenderEncoder.drawIndexedInstanced"(i64 %arg0, i64 %arg1, i64 %arg2) {
+define void @"kira_fn_438_RenderEncoder.drawIndexedInstanced"(i64 %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -8771,13 +8712,13 @@ kira_label_25:
   %native.state.get.slot.71 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.71, i64 18
   %native.state.get.val.21 = load %kira.bridge.value, ptr %native.state.get.slot.71
   %r71 = extractvalue %kira.bridge.value %native.state.get.val.21, 2
-  call i1 @"kira_fn_65_sokolApplyPipelineBindingsAndDrawFlat"(i64 %r23, i64 %r25, i64 %r30, i64 %r32, i64 %r37, i64 %r39, i64 %r44, i64 %r46, i64 %r51, i64 %r53, i64 %r58, i64 %r60, i64 %r65, i64 %r67, i64 %r69, i64 %r71)
+  call i1 @"kira_fn_66_sokolApplyPipelineBindingsAndDrawFlat"(i64 %r23, i64 %r25, i64 %r30, i64 %r32, i64 %r37, i64 %r39, i64 %r44, i64 %r46, i64 %r51, i64 %r53, i64 %r58, i64 %r60, i64 %r65, i64 %r67, i64 %r69, i64 %r71)
   br label %kira_label_7
 kira_label_7:
   ret void
 }
 
-define void @"kira_fn_438_RenderEncoder.pushClip"(i64 %arg0, i64 %arg1, double %arg2) {
+define void @"kira_fn_439_RenderEncoder.pushClip"(i64 %arg0, i64 %arg1, double %arg2) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -8830,11 +8771,11 @@ entry:
   %load.raw.float.11 = load double, ptr %load.ptr.11
   %r11 = fadd double %load.raw.float.11, 0.0
   %r12 = load double, ptr %local2
-  call void @"kira_fn_168_sokolUiPushClip"(double %r2, double %r5, double %r8, double %r11, double %r12)
+  call void @"kira_fn_169_sokolUiPushClip"(double %r2, double %r5, double %r8, double %r11, double %r12)
   ret void
 }
 
-define void @"kira_fn_439_RenderEncoder.popClip"(i64 %arg0) {
+define void @"kira_fn_440_RenderEncoder.popClip"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -8842,155 +8783,11 @@ entry:
   %local.storage.int.0 = ptrtoint ptr %local.storage.0 to i64
   store i64 %local.storage.int.0, ptr %local0
   store i64 %arg0, ptr %local0
-  call void @"kira_fn_169_sokolUiPopClip"()
+  call void @"kira_fn_170_sokolUiPopClip"()
   ret void
 }
 
-define void @"kira_fn_440_RenderEncoder.drawSurface"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, double %arg4, double %arg5) {
-entry:
-  %local0 = alloca i64
-  %local.storage.0 = alloca %t.RenderEncoder
-  store %t.RenderEncoder zeroinitializer, ptr %local.storage.0
-  %local.storage.int.0 = ptrtoint ptr %local.storage.0 to i64
-  store i64 %local.storage.int.0, ptr %local0
-  %local1 = alloca i64
-  %local.storage.1 = alloca %t.GraphicsRect
-  store %t.GraphicsRect zeroinitializer, ptr %local.storage.1
-  %local.storage.int.1 = ptrtoint ptr %local.storage.1 to i64
-  store i64 %local.storage.int.1, ptr %local1
-  %local2 = alloca i64
-  %local.storage.2 = alloca %t.Color
-  store %t.Color zeroinitializer, ptr %local.storage.2
-  %local.storage.int.2 = ptrtoint ptr %local.storage.2 to i64
-  store i64 %local.storage.int.2, ptr %local2
-  %local3 = alloca i64
-  %local.storage.3 = alloca %t.Color
-  store %t.Color zeroinitializer, ptr %local.storage.3
-  %local.storage.int.3 = ptrtoint ptr %local.storage.3 to i64
-  store i64 %local.storage.int.3, ptr %local3
-  %local4 = alloca double
-  %local5 = alloca double
-  %cleanup.heap.slot.0 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.0
-  %cleanup.heap.slot.3 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.3
-  %cleanup.heap.slot.6 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.6
-  %cleanup.heap.slot.9 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.9
-  %cleanup.heap.slot.12 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.12
-  %cleanup.heap.slot.15 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.15
-  %cleanup.heap.slot.18 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.18
-  %cleanup.heap.slot.21 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.21
-  %cleanup.heap.slot.24 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.24
-  %cleanup.heap.slot.27 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.27
-  %cleanup.heap.slot.30 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.30
-  %cleanup.heap.slot.33 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.33
-  store i64 %arg0, ptr %local0
-  store i64 %arg1, ptr %local1
-  store i64 %arg2, ptr %local2
-  store i64 %arg3, ptr %local3
-  store double %arg4, ptr %local4
-  store double %arg5, ptr %local5
-  %r0 = load i64, ptr %local1
-  %field.base.1 = inttoptr i64 %r0 to ptr
-  %field.ptr.1 = getelementptr inbounds %t.GraphicsRect, ptr %field.base.1, i32 0, i32 0
-  %r1 = ptrtoint ptr %field.ptr.1 to i64
-  %load.ptr.2 = inttoptr i64 %r1 to ptr
-  %load.raw.float.2 = load double, ptr %load.ptr.2
-  %r2 = fadd double %load.raw.float.2, 0.0
-  %r3 = load i64, ptr %local1
-  %field.base.4 = inttoptr i64 %r3 to ptr
-  %field.ptr.4 = getelementptr inbounds %t.GraphicsRect, ptr %field.base.4, i32 0, i32 1
-  %r4 = ptrtoint ptr %field.ptr.4 to i64
-  %load.ptr.5 = inttoptr i64 %r4 to ptr
-  %load.raw.float.5 = load double, ptr %load.ptr.5
-  %r5 = fadd double %load.raw.float.5, 0.0
-  %r6 = load i64, ptr %local1
-  %field.base.7 = inttoptr i64 %r6 to ptr
-  %field.ptr.7 = getelementptr inbounds %t.GraphicsRect, ptr %field.base.7, i32 0, i32 2
-  %r7 = ptrtoint ptr %field.ptr.7 to i64
-  %load.ptr.8 = inttoptr i64 %r7 to ptr
-  %load.raw.float.8 = load double, ptr %load.ptr.8
-  %r8 = fadd double %load.raw.float.8, 0.0
-  %r9 = load i64, ptr %local1
-  %field.base.10 = inttoptr i64 %r9 to ptr
-  %field.ptr.10 = getelementptr inbounds %t.GraphicsRect, ptr %field.base.10, i32 0, i32 3
-  %r10 = ptrtoint ptr %field.ptr.10 to i64
-  %load.ptr.11 = inttoptr i64 %r10 to ptr
-  %load.raw.float.11 = load double, ptr %load.ptr.11
-  %r11 = fadd double %load.raw.float.11, 0.0
-  %r12 = load i64, ptr %local2
-  %field.base.13 = inttoptr i64 %r12 to ptr
-  %field.ptr.13 = getelementptr inbounds %t.Color, ptr %field.base.13, i32 0, i32 0
-  %r13 = ptrtoint ptr %field.ptr.13 to i64
-  %load.ptr.14 = inttoptr i64 %r13 to ptr
-  %load.raw.float.14 = load double, ptr %load.ptr.14
-  %r14 = fadd double %load.raw.float.14, 0.0
-  %r15 = load i64, ptr %local2
-  %field.base.16 = inttoptr i64 %r15 to ptr
-  %field.ptr.16 = getelementptr inbounds %t.Color, ptr %field.base.16, i32 0, i32 1
-  %r16 = ptrtoint ptr %field.ptr.16 to i64
-  %load.ptr.17 = inttoptr i64 %r16 to ptr
-  %load.raw.float.17 = load double, ptr %load.ptr.17
-  %r17 = fadd double %load.raw.float.17, 0.0
-  %r18 = load i64, ptr %local2
-  %field.base.19 = inttoptr i64 %r18 to ptr
-  %field.ptr.19 = getelementptr inbounds %t.Color, ptr %field.base.19, i32 0, i32 2
-  %r19 = ptrtoint ptr %field.ptr.19 to i64
-  %load.ptr.20 = inttoptr i64 %r19 to ptr
-  %load.raw.float.20 = load double, ptr %load.ptr.20
-  %r20 = fadd double %load.raw.float.20, 0.0
-  %r21 = load i64, ptr %local2
-  %field.base.22 = inttoptr i64 %r21 to ptr
-  %field.ptr.22 = getelementptr inbounds %t.Color, ptr %field.base.22, i32 0, i32 3
-  %r22 = ptrtoint ptr %field.ptr.22 to i64
-  %load.ptr.23 = inttoptr i64 %r22 to ptr
-  %load.raw.float.23 = load double, ptr %load.ptr.23
-  %r23 = fadd double %load.raw.float.23, 0.0
-  %r24 = load i64, ptr %local3
-  %field.base.25 = inttoptr i64 %r24 to ptr
-  %field.ptr.25 = getelementptr inbounds %t.Color, ptr %field.base.25, i32 0, i32 0
-  %r25 = ptrtoint ptr %field.ptr.25 to i64
-  %load.ptr.26 = inttoptr i64 %r25 to ptr
-  %load.raw.float.26 = load double, ptr %load.ptr.26
-  %r26 = fadd double %load.raw.float.26, 0.0
-  %r27 = load i64, ptr %local3
-  %field.base.28 = inttoptr i64 %r27 to ptr
-  %field.ptr.28 = getelementptr inbounds %t.Color, ptr %field.base.28, i32 0, i32 1
-  %r28 = ptrtoint ptr %field.ptr.28 to i64
-  %load.ptr.29 = inttoptr i64 %r28 to ptr
-  %load.raw.float.29 = load double, ptr %load.ptr.29
-  %r29 = fadd double %load.raw.float.29, 0.0
-  %r30 = load i64, ptr %local3
-  %field.base.31 = inttoptr i64 %r30 to ptr
-  %field.ptr.31 = getelementptr inbounds %t.Color, ptr %field.base.31, i32 0, i32 2
-  %r31 = ptrtoint ptr %field.ptr.31 to i64
-  %load.ptr.32 = inttoptr i64 %r31 to ptr
-  %load.raw.float.32 = load double, ptr %load.ptr.32
-  %r32 = fadd double %load.raw.float.32, 0.0
-  %r33 = load i64, ptr %local3
-  %field.base.34 = inttoptr i64 %r33 to ptr
-  %field.ptr.34 = getelementptr inbounds %t.Color, ptr %field.base.34, i32 0, i32 3
-  %r34 = ptrtoint ptr %field.ptr.34 to i64
-  %load.ptr.35 = inttoptr i64 %r34 to ptr
-  %load.raw.float.35 = load double, ptr %load.ptr.35
-  %r35 = fadd double %load.raw.float.35, 0.0
-  %r36 = load double, ptr %local4
-  %r37 = load double, ptr %local5
-  call void @"kira_fn_170_sokolUiDrawSurface"(double %r2, double %r5, double %r8, double %r11, double %r14, double %r17, double %r20, double %r23, double %r26, double %r29, double %r32, double %r35, double %r36, double %r37)
-  ret void
-}
-
-define void @"kira_fn_441_RenderEncoder.drawSquircleSurface"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, double %arg4, double %arg5) {
+define void @"kira_fn_441_RenderEncoder.drawSurface"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, double %arg4, double %arg5) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -9130,11 +8927,155 @@ entry:
   %r35 = fadd double %load.raw.float.35, 0.0
   %r36 = load double, ptr %local4
   %r37 = load double, ptr %local5
-  call void @"kira_fn_171_sokolUiDrawSquircleSurface"(double %r2, double %r5, double %r8, double %r11, double %r14, double %r17, double %r20, double %r23, double %r26, double %r29, double %r32, double %r35, double %r36, double %r37)
+  call void @"kira_fn_171_sokolUiDrawSurface"(double %r2, double %r5, double %r8, double %r11, double %r14, double %r17, double %r20, double %r23, double %r26, double %r29, double %r32, double %r35, double %r36, double %r37)
   ret void
 }
 
-define void @"kira_fn_442_RenderEncoder.drawText"(i64 %arg0, i64 %arg1, %kira.string %arg2, i64 %arg3, double %arg4) {
+define void @"kira_fn_442_RenderEncoder.drawSquircleSurface"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, double %arg4, double %arg5) {
+entry:
+  %local0 = alloca i64
+  %local.storage.0 = alloca %t.RenderEncoder
+  store %t.RenderEncoder zeroinitializer, ptr %local.storage.0
+  %local.storage.int.0 = ptrtoint ptr %local.storage.0 to i64
+  store i64 %local.storage.int.0, ptr %local0
+  %local1 = alloca i64
+  %local.storage.1 = alloca %t.GraphicsRect
+  store %t.GraphicsRect zeroinitializer, ptr %local.storage.1
+  %local.storage.int.1 = ptrtoint ptr %local.storage.1 to i64
+  store i64 %local.storage.int.1, ptr %local1
+  %local2 = alloca i64
+  %local.storage.2 = alloca %t.Color
+  store %t.Color zeroinitializer, ptr %local.storage.2
+  %local.storage.int.2 = ptrtoint ptr %local.storage.2 to i64
+  store i64 %local.storage.int.2, ptr %local2
+  %local3 = alloca i64
+  %local.storage.3 = alloca %t.Color
+  store %t.Color zeroinitializer, ptr %local.storage.3
+  %local.storage.int.3 = ptrtoint ptr %local.storage.3 to i64
+  store i64 %local.storage.int.3, ptr %local3
+  %local4 = alloca double
+  %local5 = alloca double
+  %cleanup.heap.slot.0 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.0
+  %cleanup.heap.slot.3 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.3
+  %cleanup.heap.slot.6 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.6
+  %cleanup.heap.slot.9 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.9
+  %cleanup.heap.slot.12 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.12
+  %cleanup.heap.slot.15 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.15
+  %cleanup.heap.slot.18 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.18
+  %cleanup.heap.slot.21 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.21
+  %cleanup.heap.slot.24 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.24
+  %cleanup.heap.slot.27 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.27
+  %cleanup.heap.slot.30 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.30
+  %cleanup.heap.slot.33 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.33
+  store i64 %arg0, ptr %local0
+  store i64 %arg1, ptr %local1
+  store i64 %arg2, ptr %local2
+  store i64 %arg3, ptr %local3
+  store double %arg4, ptr %local4
+  store double %arg5, ptr %local5
+  %r0 = load i64, ptr %local1
+  %field.base.1 = inttoptr i64 %r0 to ptr
+  %field.ptr.1 = getelementptr inbounds %t.GraphicsRect, ptr %field.base.1, i32 0, i32 0
+  %r1 = ptrtoint ptr %field.ptr.1 to i64
+  %load.ptr.2 = inttoptr i64 %r1 to ptr
+  %load.raw.float.2 = load double, ptr %load.ptr.2
+  %r2 = fadd double %load.raw.float.2, 0.0
+  %r3 = load i64, ptr %local1
+  %field.base.4 = inttoptr i64 %r3 to ptr
+  %field.ptr.4 = getelementptr inbounds %t.GraphicsRect, ptr %field.base.4, i32 0, i32 1
+  %r4 = ptrtoint ptr %field.ptr.4 to i64
+  %load.ptr.5 = inttoptr i64 %r4 to ptr
+  %load.raw.float.5 = load double, ptr %load.ptr.5
+  %r5 = fadd double %load.raw.float.5, 0.0
+  %r6 = load i64, ptr %local1
+  %field.base.7 = inttoptr i64 %r6 to ptr
+  %field.ptr.7 = getelementptr inbounds %t.GraphicsRect, ptr %field.base.7, i32 0, i32 2
+  %r7 = ptrtoint ptr %field.ptr.7 to i64
+  %load.ptr.8 = inttoptr i64 %r7 to ptr
+  %load.raw.float.8 = load double, ptr %load.ptr.8
+  %r8 = fadd double %load.raw.float.8, 0.0
+  %r9 = load i64, ptr %local1
+  %field.base.10 = inttoptr i64 %r9 to ptr
+  %field.ptr.10 = getelementptr inbounds %t.GraphicsRect, ptr %field.base.10, i32 0, i32 3
+  %r10 = ptrtoint ptr %field.ptr.10 to i64
+  %load.ptr.11 = inttoptr i64 %r10 to ptr
+  %load.raw.float.11 = load double, ptr %load.ptr.11
+  %r11 = fadd double %load.raw.float.11, 0.0
+  %r12 = load i64, ptr %local2
+  %field.base.13 = inttoptr i64 %r12 to ptr
+  %field.ptr.13 = getelementptr inbounds %t.Color, ptr %field.base.13, i32 0, i32 0
+  %r13 = ptrtoint ptr %field.ptr.13 to i64
+  %load.ptr.14 = inttoptr i64 %r13 to ptr
+  %load.raw.float.14 = load double, ptr %load.ptr.14
+  %r14 = fadd double %load.raw.float.14, 0.0
+  %r15 = load i64, ptr %local2
+  %field.base.16 = inttoptr i64 %r15 to ptr
+  %field.ptr.16 = getelementptr inbounds %t.Color, ptr %field.base.16, i32 0, i32 1
+  %r16 = ptrtoint ptr %field.ptr.16 to i64
+  %load.ptr.17 = inttoptr i64 %r16 to ptr
+  %load.raw.float.17 = load double, ptr %load.ptr.17
+  %r17 = fadd double %load.raw.float.17, 0.0
+  %r18 = load i64, ptr %local2
+  %field.base.19 = inttoptr i64 %r18 to ptr
+  %field.ptr.19 = getelementptr inbounds %t.Color, ptr %field.base.19, i32 0, i32 2
+  %r19 = ptrtoint ptr %field.ptr.19 to i64
+  %load.ptr.20 = inttoptr i64 %r19 to ptr
+  %load.raw.float.20 = load double, ptr %load.ptr.20
+  %r20 = fadd double %load.raw.float.20, 0.0
+  %r21 = load i64, ptr %local2
+  %field.base.22 = inttoptr i64 %r21 to ptr
+  %field.ptr.22 = getelementptr inbounds %t.Color, ptr %field.base.22, i32 0, i32 3
+  %r22 = ptrtoint ptr %field.ptr.22 to i64
+  %load.ptr.23 = inttoptr i64 %r22 to ptr
+  %load.raw.float.23 = load double, ptr %load.ptr.23
+  %r23 = fadd double %load.raw.float.23, 0.0
+  %r24 = load i64, ptr %local3
+  %field.base.25 = inttoptr i64 %r24 to ptr
+  %field.ptr.25 = getelementptr inbounds %t.Color, ptr %field.base.25, i32 0, i32 0
+  %r25 = ptrtoint ptr %field.ptr.25 to i64
+  %load.ptr.26 = inttoptr i64 %r25 to ptr
+  %load.raw.float.26 = load double, ptr %load.ptr.26
+  %r26 = fadd double %load.raw.float.26, 0.0
+  %r27 = load i64, ptr %local3
+  %field.base.28 = inttoptr i64 %r27 to ptr
+  %field.ptr.28 = getelementptr inbounds %t.Color, ptr %field.base.28, i32 0, i32 1
+  %r28 = ptrtoint ptr %field.ptr.28 to i64
+  %load.ptr.29 = inttoptr i64 %r28 to ptr
+  %load.raw.float.29 = load double, ptr %load.ptr.29
+  %r29 = fadd double %load.raw.float.29, 0.0
+  %r30 = load i64, ptr %local3
+  %field.base.31 = inttoptr i64 %r30 to ptr
+  %field.ptr.31 = getelementptr inbounds %t.Color, ptr %field.base.31, i32 0, i32 2
+  %r31 = ptrtoint ptr %field.ptr.31 to i64
+  %load.ptr.32 = inttoptr i64 %r31 to ptr
+  %load.raw.float.32 = load double, ptr %load.ptr.32
+  %r32 = fadd double %load.raw.float.32, 0.0
+  %r33 = load i64, ptr %local3
+  %field.base.34 = inttoptr i64 %r33 to ptr
+  %field.ptr.34 = getelementptr inbounds %t.Color, ptr %field.base.34, i32 0, i32 3
+  %r34 = ptrtoint ptr %field.ptr.34 to i64
+  %load.ptr.35 = inttoptr i64 %r34 to ptr
+  %load.raw.float.35 = load double, ptr %load.ptr.35
+  %r35 = fadd double %load.raw.float.35, 0.0
+  %r36 = load double, ptr %local4
+  %r37 = load double, ptr %local5
+  call void @"kira_fn_172_sokolUiDrawSquircleSurface"(double %r2, double %r5, double %r8, double %r11, double %r14, double %r17, double %r20, double %r23, double %r26, double %r29, double %r32, double %r35, double %r36, double %r37)
+  ret void
+}
+
+define void @"kira_fn_443_RenderEncoder.drawText"(i64 %arg0, i64 %arg1, %kira.string %arg2, i64 %arg3, double %arg4) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -9232,11 +9173,11 @@ entry:
   %load.raw.float.24 = load double, ptr %load.ptr.24
   %r24 = fadd double %load.raw.float.24, 0.0
   %r25 = load double, ptr %local4
-  call void @"kira_fn_173_sokolUiDrawText"(%kira.string %r0, double %r3, double %r6, double %r9, double %r12, double %r15, double %r18, double %r21, double %r24, double %r25)
+  call void @"kira_fn_174_sokolUiDrawText"(%kira.string %r0, double %r3, double %r6, double %r9, double %r12, double %r15, double %r18, double %r21, double %r24, double %r25)
   ret void
 }
 
-define void @"kira_fn_443_RenderEncoder.drawGlow"(i64 %arg0, i64 %arg1, i64 %arg2, double %arg3, double %arg4) {
+define void @"kira_fn_444_RenderEncoder.drawGlow"(i64 %arg0, i64 %arg1, i64 %arg2, double %arg3, double %arg4) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
@@ -9334,11 +9275,11 @@ entry:
   %r23 = fadd double %load.raw.float.23, 0.0
   %r24 = load double, ptr %local3
   %r25 = load double, ptr %local4
-  call void @"kira_fn_172_sokolUiDrawGlow"(double %r2, double %r5, double %r8, double %r11, double %r14, double %r17, double %r20, double %r23, double %r24, double %r25)
+  call void @"kira_fn_173_sokolUiDrawGlow"(double %r2, double %r5, double %r8, double %r11, double %r14, double %r17, double %r20, double %r23, double %r24, double %r25)
   ret void
 }
 
-define void @"kira_fn_168_sokolUiPushClip"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4) {
+define void @"kira_fn_169_sokolUiPushClip"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4) {
 entry:
   %local0 = alloca double
   %local1 = alloca double
@@ -9359,13 +9300,13 @@ entry:
   ret void
 }
 
-define void @"kira_fn_169_sokolUiPopClip"() {
+define void @"kira_fn_170_sokolUiPopClip"() {
 entry:
   call void @"kg_ui_pop_clip"()
   ret void
 }
 
-define void @"kira_fn_170_sokolUiDrawSurface"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9, double %arg10, double %arg11, double %arg12, double %arg13) {
+define void @"kira_fn_171_sokolUiDrawSurface"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9, double %arg10, double %arg11, double %arg12, double %arg13) {
 entry:
   %local0 = alloca double
   %local1 = alloca double
@@ -9413,7 +9354,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_171_sokolUiDrawSquircleSurface"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9, double %arg10, double %arg11, double %arg12, double %arg13) {
+define void @"kira_fn_172_sokolUiDrawSquircleSurface"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9, double %arg10, double %arg11, double %arg12, double %arg13) {
 entry:
   %local0 = alloca double
   %local1 = alloca double
@@ -9461,7 +9402,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_172_sokolUiDrawGlow"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9) {
+define void @"kira_fn_173_sokolUiDrawGlow"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9) {
 entry:
   %local0 = alloca double
   %local1 = alloca double
@@ -9497,7 +9438,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_173_sokolUiDrawText"(%kira.string %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9) {
+define void @"kira_fn_174_sokolUiDrawText"(%kira.string %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca double
@@ -9532,26 +9473,26 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.38.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.38.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.38.0, i64 %call.arg.str.len.0
+  %call.arg.39.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.39.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.39.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  call void @"kg_ui_draw_text"(ptr %call.arg.38.0, double %r1, double %r2, double %r3, double %r4, double %r5, double %r6, double %r7, double %r8, double %r9)
+  call void @"kg_ui_draw_text"(ptr %call.arg.39.0, double %r1, double %r2, double %r3, double %r4, double %r5, double %r6, double %r7, double %r8, double %r9)
   ret void
 }
 
-define i64 @"kira_fn_174_makeRenderEncoder"() {
+define i64 @"kira_fn_175_makeRenderEncoder"() {
 entry:
   %cleanup.heap.slot.1 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.1
   %r0 = add i1 0, 0
-  %r1 = call i64 @"kira_fn_175_makeRenderEncoderWithPassActive"(i1 %r0)
+  %r1 = call i64 @"kira_fn_176_makeRenderEncoderWithPassActive"(i1 %r0)
   %cleanup.call.ptr.1 = inttoptr i64 %r1 to ptr
   store ptr %cleanup.call.ptr.1, ptr %cleanup.heap.slot.1
   ret i64 %r1
 }
 
-define i64 @"kira_fn_175_makeRenderEncoderWithPassActive"(i1 %arg0) {
+define i64 @"kira_fn_176_makeRenderEncoderWithPassActive"(i1 %arg0) {
 entry:
   %local0 = alloca i1
   %local1 = alloca i64
@@ -9617,7 +9558,7 @@ entry:
   %store.ptr.13 = inttoptr i64 %r14 to ptr
   %store.bool.13 = zext i1 %r13 to i8
   store i8 %store.bool.13, ptr %store.ptr.13
-  %r15 = call i64 @"kira_fn_120_indexFormatUint32"()
+  %r15 = call i64 @"kira_fn_121_indexFormatUint32"()
   %field.base.16 = inttoptr i64 %r0 to ptr
   %field.ptr.16 = getelementptr inbounds %t.RenderEncoderState, ptr %field.base.16, i32 0, i32 7
   %r16 = ptrtoint ptr %field.ptr.16 to i64
@@ -9853,7 +9794,7 @@ entry:
   ret i64 %r40
 }
 
-define i64 @"kira_fn_177_emptyGraphicsShader"() {
+define i64 @"kira_fn_178_emptyGraphicsShader"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -9901,7 +9842,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_fn_178_emptyGraphicsTexture"() {
+define i64 @"kira_fn_179_emptyGraphicsTexture"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -9949,7 +9890,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_fn_180_sokolCreateUniformId"(%kira.string %arg0, i64 %arg1) {
+define i64 @"kira_fn_181_sokolCreateUniformId"(%kira.string %arg0, i64 %arg1) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca i64
@@ -9963,17 +9904,17 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r1, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r1, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.20.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.20.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.20.0, i64 %call.arg.str.len.0
+  %call.arg.21.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.21.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.21.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.3 = call i32 @"kg_create_uniform_id"(ptr %call.arg.20.0, i64 %r2)
+  %call.int.3 = call i32 @"kg_create_uniform_id"(ptr %call.arg.21.0, i64 %r2)
   %r3.sext = sext i32 %call.int.3 to i64
   %r3 = add i64 %r3.sext, 0
   ret i64 %r3
 }
 
-define void @"kira_fn_181_updateGraphicsUniform"(i64 %arg0, i64 %arg1) {
+define void @"kira_fn_182_updateGraphicsUniform"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsUniform
@@ -10019,8 +9960,8 @@ kira_label_1:
   %array.get.val.0 = load %kira.bridge.value, ptr %array.get.val.ptr.0
   %array.get.bits.0 = extractvalue %kira.bridge.value %array.get.val.0, 2
   %r12 = bitcast i64 %array.get.bits.0 to double
-  %call.arg.21.0 = trunc i64 %r8 to i32
-  call void @"kg_set_uniform_float"(i32 %call.arg.21.0, i64 %r9, double %r12)
+  %call.arg.22.0 = trunc i64 %r8 to i32
+  call void @"kg_set_uniform_float"(i32 %call.arg.22.0, i64 %r9, double %r12)
   %r13 = load i64, ptr %local2
   %r14 = add i64 0, 1
   %r15 = add i64 %r13, %r14
@@ -10039,22 +9980,22 @@ kira_label_2:
   %load.raw.20 = load i32, ptr %load.ptr.20
   %r20 = sext i32 %load.raw.20 to i64
   %r21 = load i64, ptr %local4
-  %call.arg.22.0 = trunc i64 %r20 to i32
-  call i32 @"kg_finish_uniform_update"(i32 %call.arg.22.0, i64 %r21)
+  %call.arg.23.0 = trunc i64 %r20 to i32
+  call i32 @"kg_finish_uniform_update"(i32 %call.arg.23.0, i64 %r21)
   ret void
 }
 
-define void @"kira_fn_182_sokolDestroyUniformId"(i64 %arg0) {
+define void @"kira_fn_183_sokolDestroyUniformId"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
-  %call.arg.23.0 = trunc i64 %r0 to i32
-  call void @"kg_destroy_uniform_id"(i32 %call.arg.23.0)
+  %call.arg.24.0 = trunc i64 %r0 to i32
+  call void @"kg_destroy_uniform_id"(i32 %call.arg.24.0)
   ret void
 }
 
-define i64 @"kira_fn_183_sokolCreateBindGroupId"(%kira.string %arg0) {
+define i64 @"kira_fn_184_sokolCreateBindGroupId"(%kira.string %arg0) {
 entry:
   %local0 = alloca %kira.string
   store %kira.string %arg0, ptr %local0
@@ -10062,17 +10003,17 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.24.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.24.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.24.0, i64 %call.arg.str.len.0
+  %call.arg.25.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.25.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.25.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.1 = call i32 @"kg_create_bind_group_id"(ptr %call.arg.24.0)
+  %call.int.1 = call i32 @"kg_create_bind_group_id"(ptr %call.arg.25.0)
   %r1.sext = sext i32 %call.int.1 to i64
   %r1 = add i64 %r1.sext, 0
   ret i64 %r1
 }
 
-define void @"kira_fn_184_sokolSetBindGroupUniform"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3) {
+define void @"kira_fn_185_sokolSetBindGroupUniform"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -10092,23 +10033,23 @@ entry:
   %r3 = load i64, ptr %local4
   %r4 = load i64, ptr %local5
   %r5 = load i64, ptr %local3
-  %call.arg.25.0 = trunc i64 %r2 to i32
-  %call.arg.25.3 = trunc i64 %r5 to i32
-  call i32 @"kg_set_bind_group_uniform"(i32 %call.arg.25.0, i64 %r3, i64 %r4, i32 %call.arg.25.3)
+  %call.arg.26.0 = trunc i64 %r2 to i32
+  %call.arg.26.3 = trunc i64 %r5 to i32
+  call i32 @"kg_set_bind_group_uniform"(i32 %call.arg.26.0, i64 %r3, i64 %r4, i32 %call.arg.26.3)
   ret void
 }
 
-define void @"kira_fn_185_sokolDestroyBindGroupId"(i64 %arg0) {
+define void @"kira_fn_186_sokolDestroyBindGroupId"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
-  %call.arg.26.0 = trunc i64 %r0 to i32
-  call void @"kg_destroy_bind_group_id"(i32 %call.arg.26.0)
+  %call.arg.27.0 = trunc i64 %r0 to i32
+  call void @"kg_destroy_bind_group_id"(i32 %call.arg.27.0)
   ret void
 }
 
-define i64 @"kira_fn_186_emptyRenderTarget"() {
+define i64 @"kira_fn_187_emptyRenderTarget"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -10122,13 +10063,13 @@ entry:
   store %t.RenderTarget zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = call i64 @"kira_fn_126_renderTargetKindSwapchain"()
+  %r1 = call i64 @"kira_fn_127_renderTargetKindSwapchain"()
   %field.base.2 = inttoptr i64 %r0 to ptr
   %field.ptr.2 = getelementptr inbounds %t.RenderTarget, ptr %field.base.2, i32 0, i32 0
   %r2 = ptrtoint ptr %field.ptr.2 to i64
   %store.ptr.1 = inttoptr i64 %r2 to ptr
   store i64 %r1, ptr %store.ptr.1
-  %r3 = call i64 @"kira_fn_178_emptyGraphicsTexture"()
+  %r3 = call i64 @"kira_fn_179_emptyGraphicsTexture"()
   %cleanup.call.ptr.3 = inttoptr i64 %r3 to ptr
   store ptr %cleanup.call.ptr.3, ptr %cleanup.heap.slot.3
   %field.base.4 = inttoptr i64 %r0 to ptr
@@ -10155,7 +10096,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_fn_187_emptyDepthAttachment"() {
+define i64 @"kira_fn_188_emptyDepthAttachment"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -10169,7 +10110,7 @@ entry:
   store %t.DepthAttachment zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = call i64 @"kira_fn_178_emptyGraphicsTexture"()
+  %r1 = call i64 @"kira_fn_179_emptyGraphicsTexture"()
   %cleanup.call.ptr.1 = inttoptr i64 %r1 to ptr
   store ptr %cleanup.call.ptr.1, ptr %cleanup.heap.slot.1
   %field.base.2 = inttoptr i64 %r0 to ptr
@@ -10179,13 +10120,13 @@ entry:
   %copy.src.1 = inttoptr i64 %r1 to ptr
   %copy.val.2 = load %t.GraphicsTexture, ptr %copy.src.1
   store %t.GraphicsTexture %copy.val.2, ptr %copy.dst.2
-  %r3 = call i64 @"kira_fn_121_loadActionClear"()
+  %r3 = call i64 @"kira_fn_122_loadActionClear"()
   %field.base.4 = inttoptr i64 %r0 to ptr
   %field.ptr.4 = getelementptr inbounds %t.DepthAttachment, ptr %field.base.4, i32 0, i32 1
   %r4 = ptrtoint ptr %field.ptr.4 to i64
   %store.ptr.3 = inttoptr i64 %r4 to ptr
   store i64 %r3, ptr %store.ptr.3
-  %r5 = call i64 @"kira_fn_124_storeActionStore"()
+  %r5 = call i64 @"kira_fn_125_storeActionStore"()
   %field.base.6 = inttoptr i64 %r0 to ptr
   %field.ptr.6 = getelementptr inbounds %t.DepthAttachment, ptr %field.base.6, i32 0, i32 2
   %r6 = ptrtoint ptr %field.ptr.6 to i64
@@ -10209,7 +10150,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_fn_189_emptyStencilAttachment"() {
+define i64 @"kira_fn_190_emptyStencilAttachment"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -10223,7 +10164,7 @@ entry:
   store %t.StencilAttachment zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = call i64 @"kira_fn_178_emptyGraphicsTexture"()
+  %r1 = call i64 @"kira_fn_179_emptyGraphicsTexture"()
   %cleanup.call.ptr.1 = inttoptr i64 %r1 to ptr
   store ptr %cleanup.call.ptr.1, ptr %cleanup.heap.slot.1
   %field.base.2 = inttoptr i64 %r0 to ptr
@@ -10233,13 +10174,13 @@ entry:
   %copy.src.1 = inttoptr i64 %r1 to ptr
   %copy.val.2 = load %t.GraphicsTexture, ptr %copy.src.1
   store %t.GraphicsTexture %copy.val.2, ptr %copy.dst.2
-  %r3 = call i64 @"kira_fn_121_loadActionClear"()
+  %r3 = call i64 @"kira_fn_122_loadActionClear"()
   %field.base.4 = inttoptr i64 %r0 to ptr
   %field.ptr.4 = getelementptr inbounds %t.StencilAttachment, ptr %field.base.4, i32 0, i32 1
   %r4 = ptrtoint ptr %field.ptr.4 to i64
   %store.ptr.3 = inttoptr i64 %r4 to ptr
   store i64 %r3, ptr %store.ptr.3
-  %r5 = call i64 @"kira_fn_124_storeActionStore"()
+  %r5 = call i64 @"kira_fn_125_storeActionStore"()
   %field.base.6 = inttoptr i64 %r0 to ptr
   %field.ptr.6 = getelementptr inbounds %t.StencilAttachment, ptr %field.base.6, i32 0, i32 2
   %r6 = ptrtoint ptr %field.ptr.6 to i64
@@ -10263,7 +10204,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_fn_190_swapchainRenderTarget"() {
+define i64 @"kira_fn_191_swapchainRenderTarget"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -10277,13 +10218,13 @@ entry:
   store %t.RenderTarget zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = call i64 @"kira_fn_126_renderTargetKindSwapchain"()
+  %r1 = call i64 @"kira_fn_127_renderTargetKindSwapchain"()
   %field.base.2 = inttoptr i64 %r0 to ptr
   %field.ptr.2 = getelementptr inbounds %t.RenderTarget, ptr %field.base.2, i32 0, i32 0
   %r2 = ptrtoint ptr %field.ptr.2 to i64
   %store.ptr.1 = inttoptr i64 %r2 to ptr
   store i64 %r1, ptr %store.ptr.1
-  %r3 = call i64 @"kira_fn_178_emptyGraphicsTexture"()
+  %r3 = call i64 @"kira_fn_179_emptyGraphicsTexture"()
   %cleanup.call.ptr.3 = inttoptr i64 %r3 to ptr
   store ptr %cleanup.call.ptr.3, ptr %cleanup.heap.slot.3
   %field.base.4 = inttoptr i64 %r0 to ptr
@@ -10310,7 +10251,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_fn_191_clearSwapchainRenderPass"(i64 %arg0) {
+define i64 @"kira_fn_192_clearSwapchainRenderPass"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Color
@@ -10348,7 +10289,7 @@ entry:
   store %t.RenderPassDescriptor zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = load %kira.string, ptr @kira_str_13
+  %r1 = load %kira.string, ptr @kira_str_14
   %field.base.2 = inttoptr i64 %r0 to ptr
   %field.ptr.2 = getelementptr inbounds %t.RenderPassDescriptor, ptr %field.base.2, i32 0, i32 0
   %r2 = ptrtoint ptr %field.ptr.2 to i64
@@ -10366,7 +10307,7 @@ entry:
   store %t.ColorAttachment zeroinitializer, ptr %alloc.ptr.6
   %r6 = ptrtoint ptr %alloc.ptr.6 to i64
   store ptr %alloc.ptr.6, ptr %cleanup.heap.slot.6
-  %r7 = call i64 @"kira_fn_190_swapchainRenderTarget"()
+  %r7 = call i64 @"kira_fn_191_swapchainRenderTarget"()
   %cleanup.call.ptr.7 = inttoptr i64 %r7 to ptr
   store ptr %cleanup.call.ptr.7, ptr %cleanup.heap.slot.7
   %field.base.8 = inttoptr i64 %r6 to ptr
@@ -10376,13 +10317,13 @@ entry:
   %copy.src.7 = inttoptr i64 %r7 to ptr
   %copy.val.8 = load %t.RenderTarget, ptr %copy.src.7
   store %t.RenderTarget %copy.val.8, ptr %copy.dst.8
-  %r9 = call i64 @"kira_fn_121_loadActionClear"()
+  %r9 = call i64 @"kira_fn_122_loadActionClear"()
   %field.base.10 = inttoptr i64 %r6 to ptr
   %field.ptr.10 = getelementptr inbounds %t.ColorAttachment, ptr %field.base.10, i32 0, i32 1
   %r10 = ptrtoint ptr %field.ptr.10 to i64
   %store.ptr.9 = inttoptr i64 %r10 to ptr
   store i64 %r9, ptr %store.ptr.9
-  %r11 = call i64 @"kira_fn_124_storeActionStore"()
+  %r11 = call i64 @"kira_fn_125_storeActionStore"()
   %field.base.12 = inttoptr i64 %r6 to ptr
   %field.ptr.12 = getelementptr inbounds %t.ColorAttachment, ptr %field.base.12, i32 0, i32 2
   %r12 = ptrtoint ptr %field.ptr.12 to i64
@@ -10396,7 +10337,7 @@ entry:
   %copy.src.13 = inttoptr i64 %r13 to ptr
   %copy.val.14 = load %t.Color, ptr %copy.src.13
   store %t.Color %copy.val.14, ptr %copy.dst.14
-  %r15 = call i64 @"kira_fn_186_emptyRenderTarget"()
+  %r15 = call i64 @"kira_fn_187_emptyRenderTarget"()
   %cleanup.call.ptr.15 = inttoptr i64 %r15 to ptr
   store ptr %cleanup.call.ptr.15, ptr %cleanup.heap.slot.15
   %field.base.16 = inttoptr i64 %r6 to ptr
@@ -10433,7 +10374,7 @@ entry:
   store %t.ColorAttachment zeroinitializer, ptr %alloc.ptr.20
   %r20 = ptrtoint ptr %alloc.ptr.20 to i64
   store ptr %alloc.ptr.20, ptr %cleanup.heap.slot.20
-  %r21 = call i64 @"kira_fn_190_swapchainRenderTarget"()
+  %r21 = call i64 @"kira_fn_191_swapchainRenderTarget"()
   %cleanup.call.ptr.21 = inttoptr i64 %r21 to ptr
   store ptr %cleanup.call.ptr.21, ptr %cleanup.heap.slot.21
   %field.base.22 = inttoptr i64 %r20 to ptr
@@ -10443,13 +10384,13 @@ entry:
   %copy.src.21 = inttoptr i64 %r21 to ptr
   %copy.val.22 = load %t.RenderTarget, ptr %copy.src.21
   store %t.RenderTarget %copy.val.22, ptr %copy.dst.22
-  %r23 = call i64 @"kira_fn_121_loadActionClear"()
+  %r23 = call i64 @"kira_fn_122_loadActionClear"()
   %field.base.24 = inttoptr i64 %r20 to ptr
   %field.ptr.24 = getelementptr inbounds %t.ColorAttachment, ptr %field.base.24, i32 0, i32 1
   %r24 = ptrtoint ptr %field.ptr.24 to i64
   %store.ptr.23 = inttoptr i64 %r24 to ptr
   store i64 %r23, ptr %store.ptr.23
-  %r25 = call i64 @"kira_fn_124_storeActionStore"()
+  %r25 = call i64 @"kira_fn_125_storeActionStore"()
   %field.base.26 = inttoptr i64 %r20 to ptr
   %field.ptr.26 = getelementptr inbounds %t.ColorAttachment, ptr %field.base.26, i32 0, i32 2
   %r26 = ptrtoint ptr %field.ptr.26 to i64
@@ -10463,7 +10404,7 @@ entry:
   %copy.src.27 = inttoptr i64 %r27 to ptr
   %copy.val.28 = load %t.Color, ptr %copy.src.27
   store %t.Color %copy.val.28, ptr %copy.dst.28
-  %r29 = call i64 @"kira_fn_186_emptyRenderTarget"()
+  %r29 = call i64 @"kira_fn_187_emptyRenderTarget"()
   %cleanup.call.ptr.29 = inttoptr i64 %r29 to ptr
   store ptr %cleanup.call.ptr.29, ptr %cleanup.heap.slot.29
   %field.base.30 = inttoptr i64 %r20 to ptr
@@ -10494,7 +10435,7 @@ entry:
   %store.ptr.34 = inttoptr i64 %r35 to ptr
   %store.bool.34 = zext i1 %r34 to i8
   store i8 %store.bool.34, ptr %store.ptr.34
-  %r36 = call i64 @"kira_fn_187_emptyDepthAttachment"()
+  %r36 = call i64 @"kira_fn_188_emptyDepthAttachment"()
   %cleanup.call.ptr.36 = inttoptr i64 %r36 to ptr
   store ptr %cleanup.call.ptr.36, ptr %cleanup.heap.slot.36
   %field.base.37 = inttoptr i64 %r0 to ptr
@@ -10511,7 +10452,7 @@ entry:
   %store.ptr.38 = inttoptr i64 %r39 to ptr
   %store.bool.38 = zext i1 %r38 to i8
   store i8 %store.bool.38, ptr %store.ptr.38
-  %r40 = call i64 @"kira_fn_189_emptyStencilAttachment"()
+  %r40 = call i64 @"kira_fn_190_emptyStencilAttachment"()
   %cleanup.call.ptr.40 = inttoptr i64 %r40 to ptr
   store ptr %cleanup.call.ptr.40, ptr %cleanup.heap.slot.40
   %field.base.41 = inttoptr i64 %r0 to ptr
@@ -10545,7 +10486,7 @@ entry:
   ret i64 %r0
 }
 
-define void @"kira_fn_444_main$callback_444"(i64 %arg0) {
+define void @"kira_fn_445_main$callback_445"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -10575,18 +10516,20 @@ entry:
   store ptr null, ptr %cleanup.heap.slot.35
   %cleanup.heap.slot.37 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.37
-  %cleanup.heap.slot.42 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.42
-  %cleanup.heap.slot.45 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.45
-  %cleanup.heap.slot.52 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.52
-  %cleanup.heap.slot.62 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.62
-  %cleanup.heap.slot.68 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.68
-  %cleanup.heap.slot.72 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.72
+  %cleanup.heap.slot.43 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.43
+  %cleanup.heap.slot.57 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.57
+  %cleanup.heap.slot.60 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.60
+  %cleanup.heap.slot.67 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.67
+  %cleanup.heap.slot.77 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.77
+  %cleanup.heap.slot.83 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.83
+  %cleanup.heap.slot.87 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.87
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
   %field.base.1 = inttoptr i64 %r0 to ptr
@@ -10596,7 +10539,7 @@ entry:
   %load.rawptr.2 = load ptr, ptr %load.ptr.2
   %r2 = ptrtoint ptr %load.rawptr.2 to i64
   %native.recover.state.3 = inttoptr i64 %r2 to ptr
-  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8814238373109695030)
+  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8458404067835574923)
   %r3 = ptrtoint ptr %native.recover.payload.3 to i64
   store i64 %r3, ptr %local1
   %r4 = load i64, ptr %local0
@@ -10608,37 +10551,37 @@ entry:
   store %t.ShaderDescriptor zeroinitializer, ptr %alloc.ptr.5
   %r5 = ptrtoint ptr %alloc.ptr.5 to i64
   store ptr %alloc.ptr.5, ptr %cleanup.heap.slot.5
-  %r6 = load %kira.string, ptr @kira_str_14
+  %r6 = load %kira.string, ptr @kira_str_15
   %field.base.7 = inttoptr i64 %r5 to ptr
   %field.ptr.7 = getelementptr inbounds %t.ShaderDescriptor, ptr %field.base.7, i32 0, i32 0
   %r7 = ptrtoint ptr %field.ptr.7 to i64
   %store.ptr.6 = inttoptr i64 %r7 to ptr
   store %kira.string %r6, ptr %store.ptr.6
-  %r8 = load %kira.string, ptr @kira_str_15
+  %r8 = call %kira.string @"kira_fn_0_frameTriangleVertexSource"()
   %field.base.9 = inttoptr i64 %r5 to ptr
   %field.ptr.9 = getelementptr inbounds %t.ShaderDescriptor, ptr %field.base.9, i32 0, i32 1
   %r9 = ptrtoint ptr %field.ptr.9 to i64
   %store.ptr.8 = inttoptr i64 %r9 to ptr
   store %kira.string %r8, ptr %store.ptr.8
-  %r10 = load %kira.string, ptr @kira_str_16
+  %r10 = call %kira.string @"kira_fn_1_frameTriangleFragmentSource"()
   %field.base.11 = inttoptr i64 %r5 to ptr
   %field.ptr.11 = getelementptr inbounds %t.ShaderDescriptor, ptr %field.base.11, i32 0, i32 2
   %r11 = ptrtoint ptr %field.ptr.11 to i64
   %store.ptr.10 = inttoptr i64 %r11 to ptr
   store %kira.string %r10, ptr %store.ptr.10
-  %r12 = load %kira.string, ptr @kira_str_17
+  %r12 = load %kira.string, ptr @kira_str_16
   %field.base.13 = inttoptr i64 %r5 to ptr
   %field.ptr.13 = getelementptr inbounds %t.ShaderDescriptor, ptr %field.base.13, i32 0, i32 3
   %r13 = ptrtoint ptr %field.ptr.13 to i64
   %store.ptr.12 = inttoptr i64 %r13 to ptr
   store %kira.string %r12, ptr %store.ptr.12
-  %r14 = load %kira.string, ptr @kira_str_18
+  %r14 = load %kira.string, ptr @kira_str_17
   %field.base.15 = inttoptr i64 %r5 to ptr
   %field.ptr.15 = getelementptr inbounds %t.ShaderDescriptor, ptr %field.base.15, i32 0, i32 4
   %r15 = ptrtoint ptr %field.ptr.15 to i64
   %store.ptr.14 = inttoptr i64 %r15 to ptr
   store %kira.string %r14, ptr %store.ptr.14
-  %r16 = call i64 @"kira_fn_411_Graphics.createShader"(i64 %r4, i64 %r5)
+  %r16 = call i64 @"kira_fn_412_Graphics.createShader"(i64 %r4, i64 %r5)
   %cleanup.call.ptr.16 = inttoptr i64 %r16 to ptr
   store ptr %cleanup.call.ptr.16, ptr %cleanup.heap.slot.16
   %r17 = load i64, ptr %local1
@@ -10663,13 +10606,13 @@ entry:
   store %t.BufferDescriptor zeroinitializer, ptr %alloc.ptr.19
   %r19 = ptrtoint ptr %alloc.ptr.19 to i64
   store ptr %alloc.ptr.19, ptr %cleanup.heap.slot.19
-  %r20 = load %kira.string, ptr @kira_str_19
+  %r20 = load %kira.string, ptr @kira_str_18
   %field.base.21 = inttoptr i64 %r19 to ptr
   %field.ptr.21 = getelementptr inbounds %t.BufferDescriptor, ptr %field.base.21, i32 0, i32 0
   %r21 = ptrtoint ptr %field.ptr.21 to i64
   %store.ptr.20 = inttoptr i64 %r21 to ptr
   store %kira.string %r20, ptr %store.ptr.20
-  %r22 = call i64 @"kira_fn_88_bufferUsageVertex"()
+  %r22 = call i64 @"kira_fn_89_bufferUsageVertex"()
   %field.base.23 = inttoptr i64 %r19 to ptr
   %field.ptr.23 = getelementptr inbounds %t.BufferDescriptor, ptr %field.base.23, i32 0, i32 1
   %r23 = ptrtoint ptr %field.ptr.23 to i64
@@ -10681,14 +10624,14 @@ entry:
   %r25 = ptrtoint ptr %field.ptr.25 to i64
   %store.ptr.24 = inttoptr i64 %r25 to ptr
   store i64 %r24, ptr %store.ptr.24
-  %r26 = call i64 @"kira_fn_0_kslTriangleVertices"()
+  %r26 = call i64 @"kira_fn_2_frameTriangleVertices"()
   %field.base.27 = inttoptr i64 %r19 to ptr
   %field.ptr.27 = getelementptr inbounds %t.BufferDescriptor, ptr %field.base.27, i32 0, i32 3
   %r27 = ptrtoint ptr %field.ptr.27 to i64
   %store.ptr.26 = inttoptr i64 %r27 to ptr
   %store.arrayptr.26 = inttoptr i64 %r26 to ptr
   store ptr %store.arrayptr.26, ptr %store.ptr.26
-  %r28 = call i64 @"kira_fn_417_Graphics.createBuffer"(i64 %r18, i64 %r19)
+  %r28 = call i64 @"kira_fn_418_Graphics.createBuffer"(i64 %r18, i64 %r19)
   %cleanup.call.ptr.28 = inttoptr i64 %r28 to ptr
   store ptr %cleanup.call.ptr.28, ptr %cleanup.heap.slot.28
   %r29 = load i64, ptr %local1
@@ -10713,7 +10656,7 @@ entry:
   store %t.RenderPipelineDescriptor zeroinitializer, ptr %alloc.ptr.31
   %r31 = ptrtoint ptr %alloc.ptr.31 to i64
   store ptr %alloc.ptr.31, ptr %cleanup.heap.slot.31
-  %r32 = load %kira.string, ptr @kira_str_20
+  %r32 = load %kira.string, ptr @kira_str_19
   %field.base.33 = inttoptr i64 %r31 to ptr
   %field.ptr.33 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.33, i32 0, i32 0
   %r33 = ptrtoint ptr %field.ptr.33 to i64
@@ -10731,205 +10674,264 @@ entry:
   %copy.src.35 = inttoptr i64 %r35 to ptr
   %copy.val.36 = load %t.GraphicsShader, ptr %copy.src.35
   store %t.GraphicsShader %copy.val.36, ptr %copy.dst.36
-  %r37 = call i64 @"kira_fn_1_kslTriangleVertexLayout"()
-  %cleanup.call.ptr.37 = inttoptr i64 %r37 to ptr
-  store ptr %cleanup.call.ptr.37, ptr %cleanup.heap.slot.37
-  %field.base.38 = inttoptr i64 %r31 to ptr
-  %field.ptr.38 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.38, i32 0, i32 2
-  %r38 = ptrtoint ptr %field.ptr.38 to i64
-  %copy.dst.38 = inttoptr i64 %r38 to ptr
-  %copy.src.37 = inttoptr i64 %r37 to ptr
-  %copy.val.38 = load %t.VertexLayout, ptr %copy.src.37
-  store %t.VertexLayout %copy.val.38, ptr %copy.dst.38
-  %r39 = add i64 0, 1
-  %alloc.array.ptr.40 = call ptr @"kira_array_alloc"(i64 %r39)
-  %r40 = ptrtoint ptr %alloc.array.ptr.40 to i64
-  %r41 = add i64 0, 0
-  %alloc.size.ptr.42 = getelementptr %t.ColorTargetDescriptor, ptr null, i32 1
-  %alloc.size.42 = ptrtoint ptr %alloc.size.ptr.42 to i64
-  %alloc.empty.42 = icmp eq i64 %alloc.size.42, 0
-  %alloc.bytes.42 = select i1 %alloc.empty.42, i64 1, i64 %alloc.size.42
-  %alloc.ptr.42 = call ptr @malloc(i64 %alloc.bytes.42)
-  store %t.ColorTargetDescriptor zeroinitializer, ptr %alloc.ptr.42
-  %r42 = ptrtoint ptr %alloc.ptr.42 to i64
-  store ptr %alloc.ptr.42, ptr %cleanup.heap.slot.42
-  %r43 = call i64 @"kira_fn_97_textureFormatRgba8Unorm"()
-  %field.base.44 = inttoptr i64 %r42 to ptr
-  %field.ptr.44 = getelementptr inbounds %t.ColorTargetDescriptor, ptr %field.base.44, i32 0, i32 0
-  %r44 = ptrtoint ptr %field.ptr.44 to i64
-  %store.ptr.43 = inttoptr i64 %r44 to ptr
-  store i64 %r43, ptr %store.ptr.43
-  %alloc.size.ptr.45 = getelementptr %t.BlendState, ptr null, i32 1
-  %alloc.size.45 = ptrtoint ptr %alloc.size.ptr.45 to i64
-  %alloc.empty.45 = icmp eq i64 %alloc.size.45, 0
-  %alloc.bytes.45 = select i1 %alloc.empty.45, i64 1, i64 %alloc.size.45
-  %alloc.ptr.45 = call ptr @malloc(i64 %alloc.bytes.45)
-  store %t.BlendState zeroinitializer, ptr %alloc.ptr.45
-  %r45 = ptrtoint ptr %alloc.ptr.45 to i64
-  store ptr %alloc.ptr.45, ptr %cleanup.heap.slot.45
-  %r46 = add i1 0, 0
-  %field.base.47 = inttoptr i64 %r45 to ptr
-  %field.ptr.47 = getelementptr inbounds %t.BlendState, ptr %field.base.47, i32 0, i32 0
+  %alloc.size.ptr.37 = getelementptr %t.VertexLayout, ptr null, i32 1
+  %alloc.size.37 = ptrtoint ptr %alloc.size.ptr.37 to i64
+  %alloc.empty.37 = icmp eq i64 %alloc.size.37, 0
+  %alloc.bytes.37 = select i1 %alloc.empty.37, i64 1, i64 %alloc.size.37
+  %alloc.ptr.37 = call ptr @malloc(i64 %alloc.bytes.37)
+  store %t.VertexLayout zeroinitializer, ptr %alloc.ptr.37
+  %r37 = ptrtoint ptr %alloc.ptr.37 to i64
+  store ptr %alloc.ptr.37, ptr %cleanup.heap.slot.37
+  %r38 = add i64 0, 8
+  %field.base.39 = inttoptr i64 %r37 to ptr
+  %field.ptr.39 = getelementptr inbounds %t.VertexLayout, ptr %field.base.39, i32 0, i32 0
+  %r39 = ptrtoint ptr %field.ptr.39 to i64
+  %store.ptr.38 = inttoptr i64 %r39 to ptr
+  store i64 %r38, ptr %store.ptr.38
+  %r40 = add i64 0, 1
+  %alloc.array.ptr.41 = call ptr @"kira_array_alloc"(i64 %r40)
+  %r41 = ptrtoint ptr %alloc.array.ptr.41 to i64
+  %r42 = add i64 0, 0
+  %alloc.size.ptr.43 = getelementptr %t.VertexAttribute, ptr null, i32 1
+  %alloc.size.43 = ptrtoint ptr %alloc.size.ptr.43 to i64
+  %alloc.empty.43 = icmp eq i64 %alloc.size.43, 0
+  %alloc.bytes.43 = select i1 %alloc.empty.43, i64 1, i64 %alloc.size.43
+  %alloc.ptr.43 = call ptr @malloc(i64 %alloc.bytes.43)
+  store %t.VertexAttribute zeroinitializer, ptr %alloc.ptr.43
+  %r43 = ptrtoint ptr %alloc.ptr.43 to i64
+  store ptr %alloc.ptr.43, ptr %cleanup.heap.slot.43
+  %r44 = load %kira.string, ptr @kira_str_20
+  %field.base.45 = inttoptr i64 %r43 to ptr
+  %field.ptr.45 = getelementptr inbounds %t.VertexAttribute, ptr %field.base.45, i32 0, i32 0
+  %r45 = ptrtoint ptr %field.ptr.45 to i64
+  %store.ptr.44 = inttoptr i64 %r45 to ptr
+  store %kira.string %r44, ptr %store.ptr.44
+  %r46 = add i64 0, 0
+  %field.base.47 = inttoptr i64 %r43 to ptr
+  %field.ptr.47 = getelementptr inbounds %t.VertexAttribute, ptr %field.base.47, i32 0, i32 1
   %r47 = ptrtoint ptr %field.ptr.47 to i64
   %store.ptr.46 = inttoptr i64 %r47 to ptr
-  %store.bool.46 = zext i1 %r46 to i8
-  store i8 %store.bool.46, ptr %store.ptr.46
-  %r48 = call i64 @"kira_fn_103_blendPresetReplace"()
-  %field.base.49 = inttoptr i64 %r45 to ptr
-  %field.ptr.49 = getelementptr inbounds %t.BlendState, ptr %field.base.49, i32 0, i32 1
+  store i64 %r46, ptr %store.ptr.46
+  %r48 = call i64 @"kira_fn_95_vertexFormatFloat2"()
+  %field.base.49 = inttoptr i64 %r43 to ptr
+  %field.ptr.49 = getelementptr inbounds %t.VertexAttribute, ptr %field.base.49, i32 0, i32 2
   %r49 = ptrtoint ptr %field.ptr.49 to i64
   %store.ptr.48 = inttoptr i64 %r49 to ptr
   store i64 %r48, ptr %store.ptr.48
-  %field.base.50 = inttoptr i64 %r42 to ptr
-  %field.ptr.50 = getelementptr inbounds %t.ColorTargetDescriptor, ptr %field.base.50, i32 0, i32 1
-  %r50 = ptrtoint ptr %field.ptr.50 to i64
-  %copy.dst.50 = inttoptr i64 %r50 to ptr
-  %copy.src.45 = inttoptr i64 %r45 to ptr
-  %copy.val.50 = load %t.BlendState, ptr %copy.src.45
-  store %t.BlendState %copy.val.50, ptr %copy.dst.50
-  %array.set.ptr.42 = inttoptr i64 %r40 to ptr
+  %r50 = add i64 0, 0
+  %field.base.51 = inttoptr i64 %r43 to ptr
+  %field.ptr.51 = getelementptr inbounds %t.VertexAttribute, ptr %field.base.51, i32 0, i32 3
+  %r51 = ptrtoint ptr %field.ptr.51 to i64
+  %store.ptr.50 = inttoptr i64 %r51 to ptr
+  store i64 %r50, ptr %store.ptr.50
+  %array.set.ptr.43 = inttoptr i64 %r41 to ptr
   %array.set.pack.3.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %array.set.pack.3 = insertvalue %kira.bridge.value %array.set.pack.3.0, i64 %r42, 2
+  %array.set.pack.3 = insertvalue %kira.bridge.value %array.set.pack.3.0, i64 %r43, 2
   %array.set.pack.ptr.3 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.3, ptr %array.set.pack.ptr.3
-  call void @"kira_array_store"(ptr %array.set.ptr.42, i64 %r41, ptr %array.set.pack.ptr.3)
-  %field.base.51 = inttoptr i64 %r31 to ptr
-  %field.ptr.51 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.51, i32 0, i32 3
-  %r51 = ptrtoint ptr %field.ptr.51 to i64
-  %store.ptr.40 = inttoptr i64 %r51 to ptr
-  %store.arrayptr.40 = inttoptr i64 %r40 to ptr
-  store ptr %store.arrayptr.40, ptr %store.ptr.40
-  %alloc.size.ptr.52 = getelementptr %t.DepthStencilDescriptor, ptr null, i32 1
-  %alloc.size.52 = ptrtoint ptr %alloc.size.ptr.52 to i64
-  %alloc.empty.52 = icmp eq i64 %alloc.size.52, 0
-  %alloc.bytes.52 = select i1 %alloc.empty.52, i64 1, i64 %alloc.size.52
-  %alloc.ptr.52 = call ptr @malloc(i64 %alloc.bytes.52)
-  store %t.DepthStencilDescriptor zeroinitializer, ptr %alloc.ptr.52
-  %r52 = ptrtoint ptr %alloc.ptr.52 to i64
-  store ptr %alloc.ptr.52, ptr %cleanup.heap.slot.52
-  %r53 = add i1 0, 0
-  %field.base.54 = inttoptr i64 %r52 to ptr
-  %field.ptr.54 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.54, i32 0, i32 0
-  %r54 = ptrtoint ptr %field.ptr.54 to i64
-  %store.ptr.53 = inttoptr i64 %r54 to ptr
-  %store.bool.53 = zext i1 %r53 to i8
-  store i8 %store.bool.53, ptr %store.ptr.53
-  %r55 = add i1 0, 0
-  %field.base.56 = inttoptr i64 %r52 to ptr
-  %field.ptr.56 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.56, i32 0, i32 1
-  %r56 = ptrtoint ptr %field.ptr.56 to i64
-  %store.ptr.55 = inttoptr i64 %r56 to ptr
-  %store.bool.55 = zext i1 %r55 to i8
-  store i8 %store.bool.55, ptr %store.ptr.55
-  %r57 = call i64 @"kira_fn_113_compareFunctionAlways"()
-  %field.base.58 = inttoptr i64 %r52 to ptr
-  %field.ptr.58 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.58, i32 0, i32 2
-  %r58 = ptrtoint ptr %field.ptr.58 to i64
-  %store.ptr.57 = inttoptr i64 %r58 to ptr
-  store i64 %r57, ptr %store.ptr.57
-  %r59 = call i64 @"kira_fn_99_textureFormatDepth24Stencil8"()
-  %field.base.60 = inttoptr i64 %r52 to ptr
-  %field.ptr.60 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.60, i32 0, i32 3
-  %r60 = ptrtoint ptr %field.ptr.60 to i64
-  %store.ptr.59 = inttoptr i64 %r60 to ptr
-  store i64 %r59, ptr %store.ptr.59
-  %field.base.61 = inttoptr i64 %r31 to ptr
-  %field.ptr.61 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.61, i32 0, i32 4
-  %r61 = ptrtoint ptr %field.ptr.61 to i64
-  %copy.dst.61 = inttoptr i64 %r61 to ptr
-  %copy.src.52 = inttoptr i64 %r52 to ptr
-  %copy.val.61 = load %t.DepthStencilDescriptor, ptr %copy.src.52
-  store %t.DepthStencilDescriptor %copy.val.61, ptr %copy.dst.61
-  %alloc.size.ptr.62 = getelementptr %t.RasterizationDescriptor, ptr null, i32 1
-  %alloc.size.62 = ptrtoint ptr %alloc.size.ptr.62 to i64
-  %alloc.empty.62 = icmp eq i64 %alloc.size.62, 0
-  %alloc.bytes.62 = select i1 %alloc.empty.62, i64 1, i64 %alloc.size.62
-  %alloc.ptr.62 = call ptr @malloc(i64 %alloc.bytes.62)
-  store %t.RasterizationDescriptor zeroinitializer, ptr %alloc.ptr.62
-  %r62 = ptrtoint ptr %alloc.ptr.62 to i64
-  store ptr %alloc.ptr.62, ptr %cleanup.heap.slot.62
-  %r63 = call i64 @"kira_fn_114_cullModeNone"()
-  %field.base.64 = inttoptr i64 %r62 to ptr
-  %field.ptr.64 = getelementptr inbounds %t.RasterizationDescriptor, ptr %field.base.64, i32 0, i32 0
+  call void @"kira_array_store"(ptr %array.set.ptr.43, i64 %r42, ptr %array.set.pack.ptr.3)
+  %field.base.52 = inttoptr i64 %r37 to ptr
+  %field.ptr.52 = getelementptr inbounds %t.VertexLayout, ptr %field.base.52, i32 0, i32 1
+  %r52 = ptrtoint ptr %field.ptr.52 to i64
+  %store.ptr.41 = inttoptr i64 %r52 to ptr
+  %store.arrayptr.41 = inttoptr i64 %r41 to ptr
+  store ptr %store.arrayptr.41, ptr %store.ptr.41
+  %field.base.53 = inttoptr i64 %r31 to ptr
+  %field.ptr.53 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.53, i32 0, i32 2
+  %r53 = ptrtoint ptr %field.ptr.53 to i64
+  %copy.dst.53 = inttoptr i64 %r53 to ptr
+  %copy.src.37 = inttoptr i64 %r37 to ptr
+  %copy.val.53 = load %t.VertexLayout, ptr %copy.src.37
+  store %t.VertexLayout %copy.val.53, ptr %copy.dst.53
+  %r54 = add i64 0, 1
+  %alloc.array.ptr.55 = call ptr @"kira_array_alloc"(i64 %r54)
+  %r55 = ptrtoint ptr %alloc.array.ptr.55 to i64
+  %r56 = add i64 0, 0
+  %alloc.size.ptr.57 = getelementptr %t.ColorTargetDescriptor, ptr null, i32 1
+  %alloc.size.57 = ptrtoint ptr %alloc.size.ptr.57 to i64
+  %alloc.empty.57 = icmp eq i64 %alloc.size.57, 0
+  %alloc.bytes.57 = select i1 %alloc.empty.57, i64 1, i64 %alloc.size.57
+  %alloc.ptr.57 = call ptr @malloc(i64 %alloc.bytes.57)
+  store %t.ColorTargetDescriptor zeroinitializer, ptr %alloc.ptr.57
+  %r57 = ptrtoint ptr %alloc.ptr.57 to i64
+  store ptr %alloc.ptr.57, ptr %cleanup.heap.slot.57
+  %r58 = call i64 @"kira_fn_98_textureFormatRgba8Unorm"()
+  %field.base.59 = inttoptr i64 %r57 to ptr
+  %field.ptr.59 = getelementptr inbounds %t.ColorTargetDescriptor, ptr %field.base.59, i32 0, i32 0
+  %r59 = ptrtoint ptr %field.ptr.59 to i64
+  %store.ptr.58 = inttoptr i64 %r59 to ptr
+  store i64 %r58, ptr %store.ptr.58
+  %alloc.size.ptr.60 = getelementptr %t.BlendState, ptr null, i32 1
+  %alloc.size.60 = ptrtoint ptr %alloc.size.ptr.60 to i64
+  %alloc.empty.60 = icmp eq i64 %alloc.size.60, 0
+  %alloc.bytes.60 = select i1 %alloc.empty.60, i64 1, i64 %alloc.size.60
+  %alloc.ptr.60 = call ptr @malloc(i64 %alloc.bytes.60)
+  store %t.BlendState zeroinitializer, ptr %alloc.ptr.60
+  %r60 = ptrtoint ptr %alloc.ptr.60 to i64
+  store ptr %alloc.ptr.60, ptr %cleanup.heap.slot.60
+  %r61 = add i1 0, 0
+  %field.base.62 = inttoptr i64 %r60 to ptr
+  %field.ptr.62 = getelementptr inbounds %t.BlendState, ptr %field.base.62, i32 0, i32 0
+  %r62 = ptrtoint ptr %field.ptr.62 to i64
+  %store.ptr.61 = inttoptr i64 %r62 to ptr
+  %store.bool.61 = zext i1 %r61 to i8
+  store i8 %store.bool.61, ptr %store.ptr.61
+  %r63 = call i64 @"kira_fn_104_blendPresetReplace"()
+  %field.base.64 = inttoptr i64 %r60 to ptr
+  %field.ptr.64 = getelementptr inbounds %t.BlendState, ptr %field.base.64, i32 0, i32 1
   %r64 = ptrtoint ptr %field.ptr.64 to i64
   %store.ptr.63 = inttoptr i64 %r64 to ptr
   store i64 %r63, ptr %store.ptr.63
-  %r65 = call i64 @"kira_fn_117_frontFaceCounterClockwise"()
-  %field.base.66 = inttoptr i64 %r62 to ptr
-  %field.ptr.66 = getelementptr inbounds %t.RasterizationDescriptor, ptr %field.base.66, i32 0, i32 1
+  %field.base.65 = inttoptr i64 %r57 to ptr
+  %field.ptr.65 = getelementptr inbounds %t.ColorTargetDescriptor, ptr %field.base.65, i32 0, i32 1
+  %r65 = ptrtoint ptr %field.ptr.65 to i64
+  %copy.dst.65 = inttoptr i64 %r65 to ptr
+  %copy.src.60 = inttoptr i64 %r60 to ptr
+  %copy.val.65 = load %t.BlendState, ptr %copy.src.60
+  store %t.BlendState %copy.val.65, ptr %copy.dst.65
+  %array.set.ptr.57 = inttoptr i64 %r55 to ptr
+  %array.set.pack.4.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
+  %array.set.pack.4 = insertvalue %kira.bridge.value %array.set.pack.4.0, i64 %r57, 2
+  %array.set.pack.ptr.4 = alloca %kira.bridge.value
+  store %kira.bridge.value %array.set.pack.4, ptr %array.set.pack.ptr.4
+  call void @"kira_array_store"(ptr %array.set.ptr.57, i64 %r56, ptr %array.set.pack.ptr.4)
+  %field.base.66 = inttoptr i64 %r31 to ptr
+  %field.ptr.66 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.66, i32 0, i32 3
   %r66 = ptrtoint ptr %field.ptr.66 to i64
-  %store.ptr.65 = inttoptr i64 %r66 to ptr
-  store i64 %r65, ptr %store.ptr.65
-  %field.base.67 = inttoptr i64 %r31 to ptr
-  %field.ptr.67 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.67, i32 0, i32 5
-  %r67 = ptrtoint ptr %field.ptr.67 to i64
-  %copy.dst.67 = inttoptr i64 %r67 to ptr
-  %copy.src.62 = inttoptr i64 %r62 to ptr
-  %copy.val.67 = load %t.RasterizationDescriptor, ptr %copy.src.62
-  store %t.RasterizationDescriptor %copy.val.67, ptr %copy.dst.67
-  %alloc.size.ptr.68 = getelementptr %t.PrimitiveDescriptor, ptr null, i32 1
-  %alloc.size.68 = ptrtoint ptr %alloc.size.ptr.68 to i64
-  %alloc.empty.68 = icmp eq i64 %alloc.size.68, 0
-  %alloc.bytes.68 = select i1 %alloc.empty.68, i64 1, i64 %alloc.size.68
-  %alloc.ptr.68 = call ptr @malloc(i64 %alloc.bytes.68)
-  store %t.PrimitiveDescriptor zeroinitializer, ptr %alloc.ptr.68
-  %r68 = ptrtoint ptr %alloc.ptr.68 to i64
-  store ptr %alloc.ptr.68, ptr %cleanup.heap.slot.68
-  %r69 = call i64 @"kira_fn_100_primitiveTopologyTriangleList"()
-  %field.base.70 = inttoptr i64 %r68 to ptr
-  %field.ptr.70 = getelementptr inbounds %t.PrimitiveDescriptor, ptr %field.base.70, i32 0, i32 0
-  %r70 = ptrtoint ptr %field.ptr.70 to i64
-  %store.ptr.69 = inttoptr i64 %r70 to ptr
-  store i64 %r69, ptr %store.ptr.69
-  %field.base.71 = inttoptr i64 %r31 to ptr
-  %field.ptr.71 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.71, i32 0, i32 6
+  %store.ptr.55 = inttoptr i64 %r66 to ptr
+  %store.arrayptr.55 = inttoptr i64 %r55 to ptr
+  store ptr %store.arrayptr.55, ptr %store.ptr.55
+  %alloc.size.ptr.67 = getelementptr %t.DepthStencilDescriptor, ptr null, i32 1
+  %alloc.size.67 = ptrtoint ptr %alloc.size.ptr.67 to i64
+  %alloc.empty.67 = icmp eq i64 %alloc.size.67, 0
+  %alloc.bytes.67 = select i1 %alloc.empty.67, i64 1, i64 %alloc.size.67
+  %alloc.ptr.67 = call ptr @malloc(i64 %alloc.bytes.67)
+  store %t.DepthStencilDescriptor zeroinitializer, ptr %alloc.ptr.67
+  %r67 = ptrtoint ptr %alloc.ptr.67 to i64
+  store ptr %alloc.ptr.67, ptr %cleanup.heap.slot.67
+  %r68 = add i1 0, 0
+  %field.base.69 = inttoptr i64 %r67 to ptr
+  %field.ptr.69 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.69, i32 0, i32 0
+  %r69 = ptrtoint ptr %field.ptr.69 to i64
+  %store.ptr.68 = inttoptr i64 %r69 to ptr
+  %store.bool.68 = zext i1 %r68 to i8
+  store i8 %store.bool.68, ptr %store.ptr.68
+  %r70 = add i1 0, 0
+  %field.base.71 = inttoptr i64 %r67 to ptr
+  %field.ptr.71 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.71, i32 0, i32 1
   %r71 = ptrtoint ptr %field.ptr.71 to i64
-  %copy.dst.71 = inttoptr i64 %r71 to ptr
-  %copy.src.68 = inttoptr i64 %r68 to ptr
-  %copy.val.71 = load %t.PrimitiveDescriptor, ptr %copy.src.68
-  store %t.PrimitiveDescriptor %copy.val.71, ptr %copy.dst.71
-  %r72 = call i64 @"kira_fn_414_Graphics.createRenderPipeline"(i64 %r30, i64 %r31)
-  %cleanup.call.ptr.72 = inttoptr i64 %r72 to ptr
-  store ptr %cleanup.call.ptr.72, ptr %cleanup.heap.slot.72
-  %r73 = load i64, ptr %local1
-  %native.state.set.ptr.72 = inttoptr i64 %r73 to ptr
-  %native.state.set.slot.72 = getelementptr inbounds %kira.bridge.value, ptr %native.state.set.ptr.72, i64 1
-  %native.state.set.pack.4.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %native.state.set.struct.src.4 = inttoptr i64 %r72 to ptr
-  %native.state.set.struct.value.4 = load %t.RenderPipeline, ptr %native.state.set.struct.src.4
-  %native.state.set.struct.size.ptr.4 = getelementptr %t.RenderPipeline, ptr null, i32 1
-  %native.state.set.struct.size.4 = ptrtoint ptr %native.state.set.struct.size.ptr.4 to i64
-  %native.state.set.struct.copy.4 = call ptr @malloc(i64 %native.state.set.struct.size.4)
-  store %t.RenderPipeline %native.state.set.struct.value.4, ptr %native.state.set.struct.copy.4
-  %native.state.set.struct.ptrint.4 = ptrtoint ptr %native.state.set.struct.copy.4 to i64
-  %native.state.set.pack.4 = insertvalue %kira.bridge.value %native.state.set.pack.4.0, i64 %native.state.set.struct.ptrint.4, 2
-  store %kira.bridge.value %native.state.set.pack.4, ptr %native.state.set.slot.72
-  %cleanup.heap.ptr.5 = load ptr, ptr %cleanup.heap.slot.5
-  call void @free(ptr %cleanup.heap.ptr.5)
-  %cleanup.heap.ptr.6 = load ptr, ptr %cleanup.heap.slot.16
+  %store.ptr.70 = inttoptr i64 %r71 to ptr
+  %store.bool.70 = zext i1 %r70 to i8
+  store i8 %store.bool.70, ptr %store.ptr.70
+  %r72 = call i64 @"kira_fn_114_compareFunctionAlways"()
+  %field.base.73 = inttoptr i64 %r67 to ptr
+  %field.ptr.73 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.73, i32 0, i32 2
+  %r73 = ptrtoint ptr %field.ptr.73 to i64
+  %store.ptr.72 = inttoptr i64 %r73 to ptr
+  store i64 %r72, ptr %store.ptr.72
+  %r74 = call i64 @"kira_fn_100_textureFormatDepth24Stencil8"()
+  %field.base.75 = inttoptr i64 %r67 to ptr
+  %field.ptr.75 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.75, i32 0, i32 3
+  %r75 = ptrtoint ptr %field.ptr.75 to i64
+  %store.ptr.74 = inttoptr i64 %r75 to ptr
+  store i64 %r74, ptr %store.ptr.74
+  %field.base.76 = inttoptr i64 %r31 to ptr
+  %field.ptr.76 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.76, i32 0, i32 4
+  %r76 = ptrtoint ptr %field.ptr.76 to i64
+  %copy.dst.76 = inttoptr i64 %r76 to ptr
+  %copy.src.67 = inttoptr i64 %r67 to ptr
+  %copy.val.76 = load %t.DepthStencilDescriptor, ptr %copy.src.67
+  store %t.DepthStencilDescriptor %copy.val.76, ptr %copy.dst.76
+  %alloc.size.ptr.77 = getelementptr %t.RasterizationDescriptor, ptr null, i32 1
+  %alloc.size.77 = ptrtoint ptr %alloc.size.ptr.77 to i64
+  %alloc.empty.77 = icmp eq i64 %alloc.size.77, 0
+  %alloc.bytes.77 = select i1 %alloc.empty.77, i64 1, i64 %alloc.size.77
+  %alloc.ptr.77 = call ptr @malloc(i64 %alloc.bytes.77)
+  store %t.RasterizationDescriptor zeroinitializer, ptr %alloc.ptr.77
+  %r77 = ptrtoint ptr %alloc.ptr.77 to i64
+  store ptr %alloc.ptr.77, ptr %cleanup.heap.slot.77
+  %r78 = call i64 @"kira_fn_115_cullModeNone"()
+  %field.base.79 = inttoptr i64 %r77 to ptr
+  %field.ptr.79 = getelementptr inbounds %t.RasterizationDescriptor, ptr %field.base.79, i32 0, i32 0
+  %r79 = ptrtoint ptr %field.ptr.79 to i64
+  %store.ptr.78 = inttoptr i64 %r79 to ptr
+  store i64 %r78, ptr %store.ptr.78
+  %r80 = call i64 @"kira_fn_118_frontFaceCounterClockwise"()
+  %field.base.81 = inttoptr i64 %r77 to ptr
+  %field.ptr.81 = getelementptr inbounds %t.RasterizationDescriptor, ptr %field.base.81, i32 0, i32 1
+  %r81 = ptrtoint ptr %field.ptr.81 to i64
+  %store.ptr.80 = inttoptr i64 %r81 to ptr
+  store i64 %r80, ptr %store.ptr.80
+  %field.base.82 = inttoptr i64 %r31 to ptr
+  %field.ptr.82 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.82, i32 0, i32 5
+  %r82 = ptrtoint ptr %field.ptr.82 to i64
+  %copy.dst.82 = inttoptr i64 %r82 to ptr
+  %copy.src.77 = inttoptr i64 %r77 to ptr
+  %copy.val.82 = load %t.RasterizationDescriptor, ptr %copy.src.77
+  store %t.RasterizationDescriptor %copy.val.82, ptr %copy.dst.82
+  %alloc.size.ptr.83 = getelementptr %t.PrimitiveDescriptor, ptr null, i32 1
+  %alloc.size.83 = ptrtoint ptr %alloc.size.ptr.83 to i64
+  %alloc.empty.83 = icmp eq i64 %alloc.size.83, 0
+  %alloc.bytes.83 = select i1 %alloc.empty.83, i64 1, i64 %alloc.size.83
+  %alloc.ptr.83 = call ptr @malloc(i64 %alloc.bytes.83)
+  store %t.PrimitiveDescriptor zeroinitializer, ptr %alloc.ptr.83
+  %r83 = ptrtoint ptr %alloc.ptr.83 to i64
+  store ptr %alloc.ptr.83, ptr %cleanup.heap.slot.83
+  %r84 = call i64 @"kira_fn_101_primitiveTopologyTriangleList"()
+  %field.base.85 = inttoptr i64 %r83 to ptr
+  %field.ptr.85 = getelementptr inbounds %t.PrimitiveDescriptor, ptr %field.base.85, i32 0, i32 0
+  %r85 = ptrtoint ptr %field.ptr.85 to i64
+  %store.ptr.84 = inttoptr i64 %r85 to ptr
+  store i64 %r84, ptr %store.ptr.84
+  %field.base.86 = inttoptr i64 %r31 to ptr
+  %field.ptr.86 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.86, i32 0, i32 6
+  %r86 = ptrtoint ptr %field.ptr.86 to i64
+  %copy.dst.86 = inttoptr i64 %r86 to ptr
+  %copy.src.83 = inttoptr i64 %r83 to ptr
+  %copy.val.86 = load %t.PrimitiveDescriptor, ptr %copy.src.83
+  store %t.PrimitiveDescriptor %copy.val.86, ptr %copy.dst.86
+  %r87 = call i64 @"kira_fn_415_Graphics.createRenderPipeline"(i64 %r30, i64 %r31)
+  %cleanup.call.ptr.87 = inttoptr i64 %r87 to ptr
+  store ptr %cleanup.call.ptr.87, ptr %cleanup.heap.slot.87
+  %r88 = load i64, ptr %local1
+  %native.state.set.ptr.87 = inttoptr i64 %r88 to ptr
+  %native.state.set.slot.87 = getelementptr inbounds %kira.bridge.value, ptr %native.state.set.ptr.87, i64 1
+  %native.state.set.pack.5.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
+  %native.state.set.struct.src.5 = inttoptr i64 %r87 to ptr
+  %native.state.set.struct.value.5 = load %t.RenderPipeline, ptr %native.state.set.struct.src.5
+  %native.state.set.struct.size.ptr.5 = getelementptr %t.RenderPipeline, ptr null, i32 1
+  %native.state.set.struct.size.5 = ptrtoint ptr %native.state.set.struct.size.ptr.5 to i64
+  %native.state.set.struct.copy.5 = call ptr @malloc(i64 %native.state.set.struct.size.5)
+  store %t.RenderPipeline %native.state.set.struct.value.5, ptr %native.state.set.struct.copy.5
+  %native.state.set.struct.ptrint.5 = ptrtoint ptr %native.state.set.struct.copy.5 to i64
+  %native.state.set.pack.5 = insertvalue %kira.bridge.value %native.state.set.pack.5.0, i64 %native.state.set.struct.ptrint.5, 2
+  store %kira.bridge.value %native.state.set.pack.5, ptr %native.state.set.slot.87
+  %cleanup.heap.ptr.6 = load ptr, ptr %cleanup.heap.slot.5
   call void @free(ptr %cleanup.heap.ptr.6)
-  %cleanup.heap.ptr.7 = load ptr, ptr %cleanup.heap.slot.19
+  %cleanup.heap.ptr.7 = load ptr, ptr %cleanup.heap.slot.16
   call void @free(ptr %cleanup.heap.ptr.7)
-  %cleanup.heap.ptr.8 = load ptr, ptr %cleanup.heap.slot.28
+  %cleanup.heap.ptr.8 = load ptr, ptr %cleanup.heap.slot.19
   call void @free(ptr %cleanup.heap.ptr.8)
-  %cleanup.heap.ptr.9 = load ptr, ptr %cleanup.heap.slot.31
+  %cleanup.heap.ptr.9 = load ptr, ptr %cleanup.heap.slot.28
   call void @free(ptr %cleanup.heap.ptr.9)
-  %cleanup.heap.ptr.10 = load ptr, ptr %cleanup.heap.slot.37
+  %cleanup.heap.ptr.10 = load ptr, ptr %cleanup.heap.slot.31
   call void @free(ptr %cleanup.heap.ptr.10)
-  %cleanup.heap.ptr.11 = load ptr, ptr %cleanup.heap.slot.45
+  %cleanup.heap.ptr.11 = load ptr, ptr %cleanup.heap.slot.37
   call void @free(ptr %cleanup.heap.ptr.11)
-  %cleanup.heap.ptr.12 = load ptr, ptr %cleanup.heap.slot.52
+  %cleanup.heap.ptr.12 = load ptr, ptr %cleanup.heap.slot.60
   call void @free(ptr %cleanup.heap.ptr.12)
-  %cleanup.heap.ptr.13 = load ptr, ptr %cleanup.heap.slot.62
+  %cleanup.heap.ptr.13 = load ptr, ptr %cleanup.heap.slot.67
   call void @free(ptr %cleanup.heap.ptr.13)
-  %cleanup.heap.ptr.14 = load ptr, ptr %cleanup.heap.slot.68
+  %cleanup.heap.ptr.14 = load ptr, ptr %cleanup.heap.slot.77
   call void @free(ptr %cleanup.heap.ptr.14)
-  %cleanup.heap.ptr.15 = load ptr, ptr %cleanup.heap.slot.72
+  %cleanup.heap.ptr.15 = load ptr, ptr %cleanup.heap.slot.83
   call void @free(ptr %cleanup.heap.ptr.15)
+  %cleanup.heap.ptr.16 = load ptr, ptr %cleanup.heap.slot.87
+  call void @free(ptr %cleanup.heap.ptr.16)
   ret void
 }
 
-define void @"kira_fn_445_main$callback_445"(i64 %arg0) {
+define void @"kira_fn_446_main$callback_446"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -11004,7 +11006,7 @@ entry:
   %load.rawptr.2 = load ptr, ptr %load.ptr.2
   %r2 = ptrtoint ptr %load.rawptr.2 to i64
   %native.recover.state.3 = inttoptr i64 %r2 to ptr
-  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8814238373109695030)
+  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8458404067835574923)
   %r3 = ptrtoint ptr %native.recover.payload.3 to i64
   store i64 %r3, ptr %local1
   %alloc.size.ptr.4 = getelementptr %t.Color, ptr null, i32 1
@@ -11015,19 +11017,19 @@ entry:
   store %t.Color zeroinitializer, ptr %alloc.ptr.4
   %r4 = ptrtoint ptr %alloc.ptr.4 to i64
   store ptr %alloc.ptr.4, ptr %cleanup.heap.slot.4
-  %r5 = fadd double 0.0, 0.03
+  %r5 = fadd double 0.0, 0.05
   %field.base.6 = inttoptr i64 %r4 to ptr
   %field.ptr.6 = getelementptr inbounds %t.Color, ptr %field.base.6, i32 0, i32 0
   %r6 = ptrtoint ptr %field.ptr.6 to i64
   %store.ptr.5 = inttoptr i64 %r6 to ptr
   store double %r5, ptr %store.ptr.5
-  %r7 = fadd double 0.0, 0.04
+  %r7 = fadd double 0.0, 0.07
   %field.base.8 = inttoptr i64 %r4 to ptr
   %field.ptr.8 = getelementptr inbounds %t.Color, ptr %field.base.8, i32 0, i32 1
   %r8 = ptrtoint ptr %field.ptr.8 to i64
   %store.ptr.7 = inttoptr i64 %r8 to ptr
   store double %r7, ptr %store.ptr.7
-  %r9 = fadd double 0.0, 0.07
+  %r9 = fadd double 0.0, 0.1
   %field.base.10 = inttoptr i64 %r4 to ptr
   %field.ptr.10 = getelementptr inbounds %t.Color, ptr %field.base.10, i32 0, i32 2
   %r10 = ptrtoint ptr %field.ptr.10 to i64
@@ -11039,7 +11041,7 @@ entry:
   %r12 = ptrtoint ptr %field.ptr.12 to i64
   %store.ptr.11 = inttoptr i64 %r12 to ptr
   store double %r11, ptr %store.ptr.11
-  %r13 = call i64 @"kira_fn_191_clearSwapchainRenderPass"(i64 %r4)
+  %r13 = call i64 @"kira_fn_192_clearSwapchainRenderPass"(i64 %r4)
   %cleanup.call.ptr.13 = inttoptr i64 %r13 to ptr
   store ptr %cleanup.call.ptr.13, ptr %cleanup.heap.slot.13
   %r14 = load i64, ptr %local2
@@ -11069,7 +11071,7 @@ entry:
   store %t.GraphicsBuffer %copy.val.20, ptr %copy.dst.20
   %r21 = load i64, ptr %local0
   %r22 = load i64, ptr %local2
-  %r23 = call i64 @"kira_fn_405_GraphicsFrame.beginRenderPass"(i64 %r21, i64 %r22)
+  %r23 = call i64 @"kira_fn_406_GraphicsFrame.beginRenderPass"(i64 %r21, i64 %r22)
   %r24 = load i64, ptr %local5
   %copy.dst.24 = inttoptr i64 %r24 to ptr
   %copy.src.23 = inttoptr i64 %r23 to ptr
@@ -11077,17 +11079,17 @@ entry:
   store %t.RenderEncoder %copy.val.24, ptr %copy.dst.24
   %r25 = load i64, ptr %local5
   %r26 = load i64, ptr %local3
-  call void @"kira_fn_430_RenderEncoder.setPipeline"(i64 %r25, i64 %r26)
+  call void @"kira_fn_431_RenderEncoder.setPipeline"(i64 %r25, i64 %r26)
   %r27 = load i64, ptr %local5
   %r28 = load i64, ptr %local4
-  call void @"kira_fn_431_RenderEncoder.setVertexBuffer"(i64 %r27, i64 %r28)
+  call void @"kira_fn_432_RenderEncoder.setVertexBuffer"(i64 %r27, i64 %r28)
   %r29 = load i64, ptr %local5
   %r30 = add i64 0, 3
-  call void @"kira_fn_434_RenderEncoder.draw"(i64 %r29, i64 %r30)
+  call void @"kira_fn_435_RenderEncoder.draw"(i64 %r29, i64 %r30)
   %r31 = load i64, ptr %local0
-  call void @"kira_fn_406_GraphicsFrame.endPass"(i64 %r31)
+  call void @"kira_fn_407_GraphicsFrame.endPass"(i64 %r31)
   %r32 = load i64, ptr %local0
-  call void @"kira_fn_410_GraphicsFrame.requestQuit"(i64 %r32)
+  call void @"kira_fn_411_GraphicsFrame.requestQuit"(i64 %r32)
   %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.4
   call void @free(ptr %cleanup.heap.ptr.2)
   %cleanup.heap.ptr.3 = load ptr, ptr %cleanup.heap.slot.13
@@ -11096,7 +11098,7 @@ entry:
   ret void
 }
 
-define void @"kira_fn_446_main$callback_446"(i64 %arg0) {
+define void @"kira_fn_447_main$callback_447"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -11127,7 +11129,7 @@ entry:
   %load.rawptr.2 = load ptr, ptr %load.ptr.2
   %r2 = ptrtoint ptr %load.rawptr.2 to i64
   %native.recover.state.3 = inttoptr i64 %r2 to ptr
-  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8814238373109695030)
+  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8458404067835574923)
   %r3 = ptrtoint ptr %native.recover.payload.3 to i64
   store i64 %r3, ptr %local1
   %r4 = load i64, ptr %local0
@@ -11136,27 +11138,27 @@ entry:
   %native.state.get.slot.6 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.6, i64 2
   %native.state.get.val.0 = load %kira.bridge.value, ptr %native.state.get.slot.6
   %r6 = extractvalue %kira.bridge.value %native.state.get.val.0, 2
-  call void @"kira_fn_419_Graphics.destroyBuffer"(i64 %r4, i64 %r6)
+  call void @"kira_fn_420_Graphics.destroyBuffer"(i64 %r4, i64 %r6)
   %r7 = load i64, ptr %local0
   %r8 = load i64, ptr %local1
   %native.state.get.ptr.9 = inttoptr i64 %r8 to ptr
   %native.state.get.slot.9 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.9, i64 1
   %native.state.get.val.1 = load %kira.bridge.value, ptr %native.state.get.slot.9
   %r9 = extractvalue %kira.bridge.value %native.state.get.val.1, 2
-  call void @"kira_fn_416_Graphics.destroyRenderPipeline"(i64 %r7, i64 %r9)
+  call void @"kira_fn_417_Graphics.destroyRenderPipeline"(i64 %r7, i64 %r9)
   %r10 = load i64, ptr %local0
   %r11 = load i64, ptr %local1
   %native.state.get.ptr.12 = inttoptr i64 %r11 to ptr
   %native.state.get.slot.12 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.12, i64 0
   %native.state.get.val.2 = load %kira.bridge.value, ptr %native.state.get.slot.12
   %r12 = extractvalue %kira.bridge.value %native.state.get.val.2, 2
-  call void @"kira_fn_413_Graphics.destroyShader"(i64 %r10, i64 %r12)
+  call void @"kira_fn_414_Graphics.destroyShader"(i64 %r10, i64 %r12)
   ret void
 }
 
 define i32 @main() {
 entry:
-  call void @"kira_fn_2_main"()
+  call void @"kira_fn_3_main"()
   ret i32 0
 }
 
@@ -11166,22 +11168,22 @@ entry:
   br i1 %dispatch.is_direct, label %dispatch.direct, label %dispatch.closure
 dispatch.direct:
   switch i64 %function_id, label %dispatch.default [
-    i64 3, label %dispatch.case.0
-    i64 5, label %dispatch.case.1
-    i64 444, label %dispatch.case.2
-    i64 446, label %dispatch.case.3
+    i64 4, label %dispatch.case.0
+    i64 6, label %dispatch.case.1
+    i64 445, label %dispatch.case.2
+    i64 447, label %dispatch.case.3
   ]
 dispatch.case.0:
-  call void @"kira_fn_3_graphicsApplicationDefaultInit"(i64 %arg0)
+  call void @"kira_fn_4_graphicsApplicationDefaultInit"(i64 %arg0)
   ret void
 dispatch.case.1:
-  call void @"kira_fn_5_graphicsApplicationDefaultCleanup"(i64 %arg0)
+  call void @"kira_fn_6_graphicsApplicationDefaultCleanup"(i64 %arg0)
   ret void
 dispatch.case.2:
-  call void @"kira_fn_444_main$callback_444"(i64 %arg0)
+  call void @"kira_fn_445_main$callback_445"(i64 %arg0)
   ret void
 dispatch.case.3:
-  call void @"kira_fn_446_main$callback_446"(i64 %arg0)
+  call void @"kira_fn_447_main$callback_447"(i64 %arg0)
   ret void
 dispatch.closure:
   %closure.raw = and i64 %function_id, 9223372036854775807
@@ -11189,38 +11191,38 @@ dispatch.closure:
   %closure.id = load i64, ptr %closure.ptr
   %closure.slots = getelementptr inbounds i8, ptr %closure.ptr, i64 16
   switch i64 %closure.id, label %dispatch.default [
-    i64 413, label %dispatch.closure.case.0
-    i64 415, label %dispatch.closure.case.1
-    i64 416, label %dispatch.closure.case.2
-    i64 419, label %dispatch.closure.case.3
-    i64 421, label %dispatch.closure.case.4
-    i64 422, label %dispatch.closure.case.5
-    i64 425, label %dispatch.closure.case.6
-    i64 427, label %dispatch.closure.case.7
+    i64 414, label %dispatch.closure.case.0
+    i64 416, label %dispatch.closure.case.1
+    i64 417, label %dispatch.closure.case.2
+    i64 420, label %dispatch.closure.case.3
+    i64 422, label %dispatch.closure.case.4
+    i64 423, label %dispatch.closure.case.5
+    i64 426, label %dispatch.closure.case.6
+    i64 428, label %dispatch.closure.case.7
   ]
 dispatch.closure.case.0:
   %closure.slot.0.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.0.0 = load %kira.bridge.value, ptr %closure.slot.0.0
   %closure.arg.0.0 = extractvalue %kira.bridge.value %closure.value.0.0, 2
-  call void @"kira_fn_413_Graphics.destroyShader"(i64 %arg0, i64 %closure.arg.0.0)
+  call void @"kira_fn_414_Graphics.destroyShader"(i64 %arg0, i64 %closure.arg.0.0)
   ret void
 dispatch.closure.case.1:
   %closure.slot.1.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.1.0 = load %kira.bridge.value, ptr %closure.slot.1.0
   %closure.arg.1.0 = extractvalue %kira.bridge.value %closure.value.1.0, 2
-  call void @"kira_fn_415_Graphics.destroyPipeline"(i64 %arg0, i64 %closure.arg.1.0)
+  call void @"kira_fn_416_Graphics.destroyPipeline"(i64 %arg0, i64 %closure.arg.1.0)
   ret void
 dispatch.closure.case.2:
   %closure.slot.2.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.2.0 = load %kira.bridge.value, ptr %closure.slot.2.0
   %closure.arg.2.0 = extractvalue %kira.bridge.value %closure.value.2.0, 2
-  call void @"kira_fn_416_Graphics.destroyRenderPipeline"(i64 %arg0, i64 %closure.arg.2.0)
+  call void @"kira_fn_417_Graphics.destroyRenderPipeline"(i64 %arg0, i64 %closure.arg.2.0)
   ret void
 dispatch.closure.case.3:
   %closure.slot.3.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.3.0 = load %kira.bridge.value, ptr %closure.slot.3.0
   %closure.arg.3.0 = extractvalue %kira.bridge.value %closure.value.3.0, 2
-  call void @"kira_fn_419_Graphics.destroyBuffer"(i64 %arg0, i64 %closure.arg.3.0)
+  call void @"kira_fn_420_Graphics.destroyBuffer"(i64 %arg0, i64 %closure.arg.3.0)
   ret void
 dispatch.closure.case.4:
   %closure.slot.4.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11229,25 +11231,25 @@ dispatch.closure.case.4:
   %closure.slot.4.1 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 1
   %closure.value.4.1 = load %kira.bridge.value, ptr %closure.slot.4.1
   %closure.arg.4.1 = extractvalue %kira.bridge.value %closure.value.4.1, 2
-  call void @"kira_fn_421_Graphics.updateUniform"(i64 %arg0, i64 %closure.arg.4.0, i64 %closure.arg.4.1)
+  call void @"kira_fn_422_Graphics.updateUniform"(i64 %arg0, i64 %closure.arg.4.0, i64 %closure.arg.4.1)
   ret void
 dispatch.closure.case.5:
   %closure.slot.5.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.5.0 = load %kira.bridge.value, ptr %closure.slot.5.0
   %closure.arg.5.0 = extractvalue %kira.bridge.value %closure.value.5.0, 2
-  call void @"kira_fn_422_Graphics.destroyUniform"(i64 %arg0, i64 %closure.arg.5.0)
+  call void @"kira_fn_423_Graphics.destroyUniform"(i64 %arg0, i64 %closure.arg.5.0)
   ret void
 dispatch.closure.case.6:
   %closure.slot.6.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.6.0 = load %kira.bridge.value, ptr %closure.slot.6.0
   %closure.arg.6.0 = extractvalue %kira.bridge.value %closure.value.6.0, 2
-  call void @"kira_fn_425_Graphics.destroyBindGroup"(i64 %arg0, i64 %closure.arg.6.0)
+  call void @"kira_fn_426_Graphics.destroyBindGroup"(i64 %arg0, i64 %closure.arg.6.0)
   ret void
 dispatch.closure.case.7:
   %closure.slot.7.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.7.0 = load %kira.bridge.value, ptr %closure.slot.7.0
   %closure.arg.7.0 = extractvalue %kira.bridge.value %closure.value.7.0, 2
-  call void @"kira_fn_427_Graphics.destroyTexture"(i64 %arg0, i64 %closure.arg.7.0)
+  call void @"kira_fn_428_Graphics.destroyTexture"(i64 %arg0, i64 %closure.arg.7.0)
   ret void
 dispatch.default:
   unreachable
@@ -11259,30 +11261,30 @@ entry:
   br i1 %dispatch.is_direct, label %dispatch.direct, label %dispatch.closure
 dispatch.direct:
   switch i64 %function_id, label %dispatch.default [
-    i64 4, label %dispatch.case.0
-    i64 63, label %dispatch.case.1
-    i64 78, label %dispatch.case.2
-    i64 406, label %dispatch.case.3
-    i64 410, label %dispatch.case.4
-    i64 445, label %dispatch.case.5
+    i64 5, label %dispatch.case.0
+    i64 64, label %dispatch.case.1
+    i64 79, label %dispatch.case.2
+    i64 407, label %dispatch.case.3
+    i64 411, label %dispatch.case.4
+    i64 446, label %dispatch.case.5
   ]
 dispatch.case.0:
-  call void @"kira_fn_4_graphicsApplicationDefaultFrame"(i64 %arg0)
+  call void @"kira_fn_5_graphicsApplicationDefaultFrame"(i64 %arg0)
   ret void
 dispatch.case.1:
-  call void @"kira_fn_63_sokolSubmitFrame"(i64 %arg0)
+  call void @"kira_fn_64_sokolSubmitFrame"(i64 %arg0)
   ret void
 dispatch.case.2:
-  call void @"kira_fn_78_graphicsSubmitFrame"(i64 %arg0)
+  call void @"kira_fn_79_graphicsSubmitFrame"(i64 %arg0)
   ret void
 dispatch.case.3:
-  call void @"kira_fn_406_GraphicsFrame.endPass"(i64 %arg0)
+  call void @"kira_fn_407_GraphicsFrame.endPass"(i64 %arg0)
   ret void
 dispatch.case.4:
-  call void @"kira_fn_410_GraphicsFrame.requestQuit"(i64 %arg0)
+  call void @"kira_fn_411_GraphicsFrame.requestQuit"(i64 %arg0)
   ret void
 dispatch.case.5:
-  call void @"kira_fn_445_main$callback_445"(i64 %arg0)
+  call void @"kira_fn_446_main$callback_446"(i64 %arg0)
   ret void
 dispatch.closure:
   %closure.raw = and i64 %function_id, 9223372036854775807
@@ -11290,8 +11292,8 @@ dispatch.closure:
   %closure.id = load i64, ptr %closure.ptr
   %closure.slots = getelementptr inbounds i8, ptr %closure.ptr, i64 16
   switch i64 %closure.id, label %dispatch.default [
-    i64 407, label %dispatch.closure.case.0
-    i64 409, label %dispatch.closure.case.1
+    i64 408, label %dispatch.closure.case.0
+    i64 410, label %dispatch.closure.case.1
   ]
 dispatch.closure.case.0:
   %closure.slot.0.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11300,7 +11302,7 @@ dispatch.closure.case.0:
   %closure.slot.0.1 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 1
   %closure.value.0.1 = load %kira.bridge.value, ptr %closure.slot.0.1
   %closure.arg.0.1 = extractvalue %kira.bridge.value %closure.value.0.1, 2
-  call void @"kira_fn_407_GraphicsFrame.renderPass"(i64 %arg0, i64 %closure.arg.0.0, i64 %closure.arg.0.1)
+  call void @"kira_fn_408_GraphicsFrame.renderPass"(i64 %arg0, i64 %closure.arg.0.0, i64 %closure.arg.0.1)
   ret void
 dispatch.closure.case.1:
   %closure.slot.1.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11309,7 +11311,7 @@ dispatch.closure.case.1:
   %closure.slot.1.1 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 1
   %closure.value.1.1 = load %kira.bridge.value, ptr %closure.slot.1.1
   %closure.arg.1.1 = extractvalue %kira.bridge.value %closure.value.1.1, 2
-  call void @"kira_fn_409_GraphicsFrame.pass"(i64 %arg0, i64 %closure.arg.1.0, i64 %closure.arg.1.1)
+  call void @"kira_fn_410_GraphicsFrame.pass"(i64 %arg0, i64 %closure.arg.1.0, i64 %closure.arg.1.1)
   ret void
 dispatch.default:
   unreachable
@@ -11321,10 +11323,10 @@ entry:
   br i1 %dispatch.is_direct, label %dispatch.direct, label %dispatch.closure
 dispatch.direct:
   switch i64 %function_id, label %dispatch.default [
-    i64 439, label %dispatch.case.0
+    i64 440, label %dispatch.case.0
   ]
 dispatch.case.0:
-  call void @"kira_fn_439_RenderEncoder.popClip"(i64 %arg0)
+  call void @"kira_fn_440_RenderEncoder.popClip"(i64 %arg0)
   ret void
 dispatch.closure:
   %closure.raw = and i64 %function_id, 9223372036854775807
@@ -11332,31 +11334,31 @@ dispatch.closure:
   %closure.id = load i64, ptr %closure.ptr
   %closure.slots = getelementptr inbounds i8, ptr %closure.ptr, i64 16
   switch i64 %closure.id, label %dispatch.default [
-    i64 430, label %dispatch.closure.case.0
-    i64 431, label %dispatch.closure.case.1
-    i64 432, label %dispatch.closure.case.2
-    i64 433, label %dispatch.closure.case.3
-    i64 434, label %dispatch.closure.case.4
-    i64 435, label %dispatch.closure.case.5
-    i64 436, label %dispatch.closure.case.6
-    i64 437, label %dispatch.closure.case.7
-    i64 438, label %dispatch.closure.case.8
-    i64 440, label %dispatch.closure.case.9
-    i64 441, label %dispatch.closure.case.10
-    i64 442, label %dispatch.closure.case.11
-    i64 443, label %dispatch.closure.case.12
+    i64 431, label %dispatch.closure.case.0
+    i64 432, label %dispatch.closure.case.1
+    i64 433, label %dispatch.closure.case.2
+    i64 434, label %dispatch.closure.case.3
+    i64 435, label %dispatch.closure.case.4
+    i64 436, label %dispatch.closure.case.5
+    i64 437, label %dispatch.closure.case.6
+    i64 438, label %dispatch.closure.case.7
+    i64 439, label %dispatch.closure.case.8
+    i64 441, label %dispatch.closure.case.9
+    i64 442, label %dispatch.closure.case.10
+    i64 443, label %dispatch.closure.case.11
+    i64 444, label %dispatch.closure.case.12
   ]
 dispatch.closure.case.0:
   %closure.slot.0.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.0.0 = load %kira.bridge.value, ptr %closure.slot.0.0
   %closure.arg.0.0 = extractvalue %kira.bridge.value %closure.value.0.0, 2
-  call void @"kira_fn_430_RenderEncoder.setPipeline"(i64 %arg0, i64 %closure.arg.0.0)
+  call void @"kira_fn_431_RenderEncoder.setPipeline"(i64 %arg0, i64 %closure.arg.0.0)
   ret void
 dispatch.closure.case.1:
   %closure.slot.1.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.1.0 = load %kira.bridge.value, ptr %closure.slot.1.0
   %closure.arg.1.0 = extractvalue %kira.bridge.value %closure.value.1.0, 2
-  call void @"kira_fn_431_RenderEncoder.setVertexBuffer"(i64 %arg0, i64 %closure.arg.1.0)
+  call void @"kira_fn_432_RenderEncoder.setVertexBuffer"(i64 %arg0, i64 %closure.arg.1.0)
   ret void
 dispatch.closure.case.2:
   %closure.slot.2.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11365,7 +11367,7 @@ dispatch.closure.case.2:
   %closure.slot.2.1 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 1
   %closure.value.2.1 = load %kira.bridge.value, ptr %closure.slot.2.1
   %closure.arg.2.1 = extractvalue %kira.bridge.value %closure.value.2.1, 2
-  call void @"kira_fn_432_RenderEncoder.setIndexBuffer"(i64 %arg0, i64 %closure.arg.2.0, i64 %closure.arg.2.1)
+  call void @"kira_fn_433_RenderEncoder.setIndexBuffer"(i64 %arg0, i64 %closure.arg.2.0, i64 %closure.arg.2.1)
   ret void
 dispatch.closure.case.3:
   %closure.slot.3.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11374,19 +11376,19 @@ dispatch.closure.case.3:
   %closure.slot.3.1 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 1
   %closure.value.3.1 = load %kira.bridge.value, ptr %closure.slot.3.1
   %closure.arg.3.1 = extractvalue %kira.bridge.value %closure.value.3.1, 2
-  call void @"kira_fn_433_RenderEncoder.setBindGroup"(i64 %arg0, i64 %closure.arg.3.0, i64 %closure.arg.3.1)
+  call void @"kira_fn_434_RenderEncoder.setBindGroup"(i64 %arg0, i64 %closure.arg.3.0, i64 %closure.arg.3.1)
   ret void
 dispatch.closure.case.4:
   %closure.slot.4.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.4.0 = load %kira.bridge.value, ptr %closure.slot.4.0
   %closure.arg.4.0 = extractvalue %kira.bridge.value %closure.value.4.0, 2
-  call void @"kira_fn_434_RenderEncoder.draw"(i64 %arg0, i64 %closure.arg.4.0)
+  call void @"kira_fn_435_RenderEncoder.draw"(i64 %arg0, i64 %closure.arg.4.0)
   ret void
 dispatch.closure.case.5:
   %closure.slot.5.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
   %closure.value.5.0 = load %kira.bridge.value, ptr %closure.slot.5.0
   %closure.arg.5.0 = extractvalue %kira.bridge.value %closure.value.5.0, 2
-  call void @"kira_fn_435_RenderEncoder.drawIndexed"(i64 %arg0, i64 %closure.arg.5.0)
+  call void @"kira_fn_436_RenderEncoder.drawIndexed"(i64 %arg0, i64 %closure.arg.5.0)
   ret void
 dispatch.closure.case.6:
   %closure.slot.6.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11395,7 +11397,7 @@ dispatch.closure.case.6:
   %closure.slot.6.1 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 1
   %closure.value.6.1 = load %kira.bridge.value, ptr %closure.slot.6.1
   %closure.arg.6.1 = extractvalue %kira.bridge.value %closure.value.6.1, 2
-  call void @"kira_fn_436_RenderEncoder.drawInstanced"(i64 %arg0, i64 %closure.arg.6.0, i64 %closure.arg.6.1)
+  call void @"kira_fn_437_RenderEncoder.drawInstanced"(i64 %arg0, i64 %closure.arg.6.0, i64 %closure.arg.6.1)
   ret void
 dispatch.closure.case.7:
   %closure.slot.7.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11404,7 +11406,7 @@ dispatch.closure.case.7:
   %closure.slot.7.1 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 1
   %closure.value.7.1 = load %kira.bridge.value, ptr %closure.slot.7.1
   %closure.arg.7.1 = extractvalue %kira.bridge.value %closure.value.7.1, 2
-  call void @"kira_fn_437_RenderEncoder.drawIndexedInstanced"(i64 %arg0, i64 %closure.arg.7.0, i64 %closure.arg.7.1)
+  call void @"kira_fn_438_RenderEncoder.drawIndexedInstanced"(i64 %arg0, i64 %closure.arg.7.0, i64 %closure.arg.7.1)
   ret void
 dispatch.closure.case.8:
   %closure.slot.8.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11414,7 +11416,7 @@ dispatch.closure.case.8:
   %closure.value.8.1 = load %kira.bridge.value, ptr %closure.slot.8.1
   %closure.bits.8.1 = extractvalue %kira.bridge.value %closure.value.8.1, 2
   %closure.arg.8.1 = bitcast i64 %closure.bits.8.1 to double
-  call void @"kira_fn_438_RenderEncoder.pushClip"(i64 %arg0, i64 %closure.arg.8.0, double %closure.arg.8.1)
+  call void @"kira_fn_439_RenderEncoder.pushClip"(i64 %arg0, i64 %closure.arg.8.0, double %closure.arg.8.1)
   ret void
 dispatch.closure.case.9:
   %closure.slot.9.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11434,7 +11436,7 @@ dispatch.closure.case.9:
   %closure.value.9.4 = load %kira.bridge.value, ptr %closure.slot.9.4
   %closure.bits.9.4 = extractvalue %kira.bridge.value %closure.value.9.4, 2
   %closure.arg.9.4 = bitcast i64 %closure.bits.9.4 to double
-  call void @"kira_fn_440_RenderEncoder.drawSurface"(i64 %arg0, i64 %closure.arg.9.0, i64 %closure.arg.9.1, i64 %closure.arg.9.2, double %closure.arg.9.3, double %closure.arg.9.4)
+  call void @"kira_fn_441_RenderEncoder.drawSurface"(i64 %arg0, i64 %closure.arg.9.0, i64 %closure.arg.9.1, i64 %closure.arg.9.2, double %closure.arg.9.3, double %closure.arg.9.4)
   ret void
 dispatch.closure.case.10:
   %closure.slot.10.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11454,7 +11456,7 @@ dispatch.closure.case.10:
   %closure.value.10.4 = load %kira.bridge.value, ptr %closure.slot.10.4
   %closure.bits.10.4 = extractvalue %kira.bridge.value %closure.value.10.4, 2
   %closure.arg.10.4 = bitcast i64 %closure.bits.10.4 to double
-  call void @"kira_fn_441_RenderEncoder.drawSquircleSurface"(i64 %arg0, i64 %closure.arg.10.0, i64 %closure.arg.10.1, i64 %closure.arg.10.2, double %closure.arg.10.3, double %closure.arg.10.4)
+  call void @"kira_fn_442_RenderEncoder.drawSquircleSurface"(i64 %arg0, i64 %closure.arg.10.0, i64 %closure.arg.10.1, i64 %closure.arg.10.2, double %closure.arg.10.3, double %closure.arg.10.4)
   ret void
 dispatch.closure.case.11:
   %closure.slot.11.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11474,7 +11476,7 @@ dispatch.closure.case.11:
   %closure.value.11.3 = load %kira.bridge.value, ptr %closure.slot.11.3
   %closure.bits.11.3 = extractvalue %kira.bridge.value %closure.value.11.3, 2
   %closure.arg.11.3 = bitcast i64 %closure.bits.11.3 to double
-  call void @"kira_fn_442_RenderEncoder.drawText"(i64 %arg0, i64 %closure.arg.11.0, %kira.string %closure.arg.11.1, i64 %closure.arg.11.2, double %closure.arg.11.3)
+  call void @"kira_fn_443_RenderEncoder.drawText"(i64 %arg0, i64 %closure.arg.11.0, %kira.string %closure.arg.11.1, i64 %closure.arg.11.2, double %closure.arg.11.3)
   ret void
 dispatch.closure.case.12:
   %closure.slot.12.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -11491,7 +11493,7 @@ dispatch.closure.case.12:
   %closure.value.12.3 = load %kira.bridge.value, ptr %closure.slot.12.3
   %closure.bits.12.3 = extractvalue %kira.bridge.value %closure.value.12.3, 2
   %closure.arg.12.3 = bitcast i64 %closure.bits.12.3 to double
-  call void @"kira_fn_443_RenderEncoder.drawGlow"(i64 %arg0, i64 %closure.arg.12.0, i64 %closure.arg.12.1, double %closure.arg.12.2, double %closure.arg.12.3)
+  call void @"kira_fn_444_RenderEncoder.drawGlow"(i64 %arg0, i64 %closure.arg.12.0, i64 %closure.arg.12.1, double %closure.arg.12.2, double %closure.arg.12.3)
   ret void
 dispatch.default:
   unreachable

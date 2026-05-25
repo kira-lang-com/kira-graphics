@@ -17,9 +17,9 @@ struct VertexOut {
 in vec4 kira_varying_color;
 layout(location = 0) out vec4 kira_frag_color;
 
-FragmentOut LifetimeStress__fragment__entry(VertexOut input) {
+FragmentOut LifetimeStress__fragment__entry(VertexOut kira_stage_input) {
     FragmentOut result;
-    result.color = input.color;
+    result.color = kira_stage_input.color;
     return result;
 }
 

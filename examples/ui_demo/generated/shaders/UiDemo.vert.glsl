@@ -30,10 +30,10 @@ vec4 uiColor(vec2 position) {
     return vec4(0.16, 0.22, 0.3, 1);
 }
 
-VertexOut UiDemo__vertex__entry(VertexIn input) {
+VertexOut UiDemo__vertex__entry(VertexIn kira_stage_input) {
     VertexOut result;
-    result.clip_position = vec4(input.position, 0, 1);
-    result.color = uiColor(input.position);
+    result.clip_position = vec4(kira_stage_input.position, 0, 1);
+    result.color = uiColor(kira_stage_input.position);
     return result;
 }
 

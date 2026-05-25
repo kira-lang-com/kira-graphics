@@ -6,6 +6,7 @@ target triple = "arm64-apple-macosx"
 %t.GraphicsShader = type { %t.BackendShaderHandle, i32 }
 %t.sapp_touchpoint = type { i64, float, float, i32, i8 }
 %t.sapp_logger = type { ptr, ptr }
+%t.LifetimeStressState = type { i8, i8 }
 %t.BindGroupDescriptor = type { %kira.string, ptr }
 %t.sapp_gl_desc = type { i32, i32 }
 %t.BlendState = type { i8, i64 }
@@ -35,7 +36,6 @@ target triple = "arm64-apple-macosx"
 %t.BufferDescriptor = type { %kira.string, i64, i64, ptr }
 %t.RasterizationDescriptor = type { i64, i64 }
 %t.BackendTextureHandle = type { i32 }
-%t.TriangleState = type { %t.GraphicsShader, %t.RenderPipeline, %t.GraphicsBuffer }
 %t.VertexLayout = type { i64, ptr }
 %t.KslShaderDescriptor = type { %kira.string, %kira.string, %kira.string }
 %t.DepthAttachment = type { %t.GraphicsTexture, i64, i64, double, i8 }
@@ -150,6 +150,21 @@ entry:
   br i1 %isnull, label %done, label %body
 body:
   call void @"kira_release_contents_sapp_logger"(ptr %value)
+  call void @free(ptr %value)
+  br label %done
+done:
+  ret void
+}
+define void @"kira_release_contents_LifetimeStressState"(ptr %value) {
+entry:
+  ret void
+}
+define void @"kira_destroy_LifetimeStressState"(ptr %value) {
+entry:
+  %isnull = icmp eq ptr %value, null
+  br i1 %isnull, label %done, label %body
+body:
+  call void @"kira_release_contents_LifetimeStressState"(ptr %value)
   call void @free(ptr %value)
   br label %done
 done:
@@ -641,27 +656,6 @@ body:
 done:
   ret void
 }
-define void @"kira_release_contents_TriangleState"(ptr %value) {
-entry:
-  %release.field.0 = getelementptr inbounds %t.TriangleState, ptr %value, i32 0, i32 0
-  call void @"kira_release_contents_GraphicsShader"(ptr %release.field.0)
-  %release.field.1 = getelementptr inbounds %t.TriangleState, ptr %value, i32 0, i32 1
-  call void @"kira_release_contents_RenderPipeline"(ptr %release.field.1)
-  %release.field.2 = getelementptr inbounds %t.TriangleState, ptr %value, i32 0, i32 2
-  call void @"kira_release_contents_GraphicsBuffer"(ptr %release.field.2)
-  ret void
-}
-define void @"kira_destroy_TriangleState"(ptr %value) {
-entry:
-  %isnull = icmp eq ptr %value, null
-  br i1 %isnull, label %done, label %body
-body:
-  call void @"kira_release_contents_TriangleState"(ptr %value)
-  call void @free(ptr %value)
-  br label %done
-done:
-  ret void
-}
 define void @"kira_release_contents_VertexLayout"(ptr %value) {
 entry:
   %release.array.field.1 = getelementptr inbounds %t.VertexLayout, ptr %value, i32 0, i32 1
@@ -1077,44 +1071,32 @@ declare void @"sg_shutdown"()
 
 
 
-@kira_str_0_data = private unnamed_addr constant [29 x i8] c"Kira Graphics Basic Triangle\00"
+@kira_str_0_data = private unnamed_addr constant [30 x i8] c"Kira Graphics Lifetime Stress\00"
 
-@kira_str_0 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([29 x i8], ptr @kira_str_0_data, i64 0, i64 0), i64 28 }
+@kira_str_0 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([30 x i8], ptr @kira_str_0_data, i64 0, i64 0), i64 29 }
 
 @kira_str_1_data = private unnamed_addr constant [15 x i8] c"swapchain-pass\00"
 
 @kira_str_1 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([15 x i8], ptr @kira_str_1_data, i64 0, i64 0), i64 14 }
 
-@kira_str_2_data = private unnamed_addr constant [22 x i8] c"basic-triangle-shader\00"
+@kira_str_2_data = private unnamed_addr constant [18 x i8] c"generated/shaders\00"
 
-@kira_str_2 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([22 x i8], ptr @kira_str_2_data, i64 0, i64 0), i64 21 }
+@kira_str_2 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([18 x i8], ptr @kira_str_2_data, i64 0, i64 0), i64 17 }
 
-@kira_str_3_data = private unnamed_addr constant [1 x i8] c"\00"
+@kira_str_3_data = private unnamed_addr constant [15 x i8] c"LifetimeStress\00"
 
-@kira_str_3 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([1 x i8], ptr @kira_str_3_data, i64 0, i64 0), i64 0 }
+@kira_str_3 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([15 x i8], ptr @kira_str_3_data, i64 0, i64 0), i64 14 }
 
-@kira_str_4_data = private unnamed_addr constant [1 x i8] c"\00"
+@kira_str_4_data = private unnamed_addr constant [27 x i8] c"lifetime stress app passed\00"
 
-@kira_str_4 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([1 x i8], ptr @kira_str_4_data, i64 0, i64 0), i64 0 }
+@kira_str_4 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([27 x i8], ptr @kira_str_4_data, i64 0, i64 0), i64 26 }
 
-@kira_str_5_data = private unnamed_addr constant [42 x i8] c"generated/Shaders/BasicTriangle.vert.glsl\00"
+@kira_str_5_data = private unnamed_addr constant [27 x i8] c"lifetime stress app failed\00"
 
-@kira_str_5 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([42 x i8], ptr @kira_str_5_data, i64 0, i64 0), i64 41 }
-
-@kira_str_6_data = private unnamed_addr constant [42 x i8] c"generated/Shaders/BasicTriangle.frag.glsl\00"
-
-@kira_str_6 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([42 x i8], ptr @kira_str_6_data, i64 0, i64 0), i64 41 }
-
-@kira_str_7_data = private unnamed_addr constant [24 x i8] c"basic-triangle-vertices\00"
-
-@kira_str_7 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([24 x i8], ptr @kira_str_7_data, i64 0, i64 0), i64 23 }
-
-@kira_str_8_data = private unnamed_addr constant [24 x i8] c"basic-triangle-pipeline\00"
-
-@kira_str_8 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([24 x i8], ptr @kira_str_8_data, i64 0, i64 0), i64 23 }
+@kira_str_5 = private unnamed_addr constant %kira.string { ptr getelementptr inbounds ([27 x i8], ptr @kira_str_5_data, i64 0, i64 0), i64 26 }
 
 
-define void @"kira_native_impl_3"() {
+define void @"kira_native_impl_0"() {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsApplication
@@ -1128,20 +1110,12 @@ entry:
   store ptr null, ptr %cleanup.heap.slot.15
   %cleanup.heap.slot.16 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.16
-  %cleanup.heap.slot.17 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.17
-  %cleanup.heap.slot.19 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.19
-  %cleanup.heap.slot.21 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.21
+  %cleanup.heap.slot.22 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.22
   %cleanup.heap.slot.24 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.24
   %cleanup.heap.slot.26 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.26
-  %cleanup.heap.slot.28 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.28
-  %cleanup.heap.slot.30 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.30
   %alloc.size.ptr.0 = getelementptr %t.GraphicsApplication, ptr null, i32 1
   %alloc.size.0 = ptrtoint ptr %alloc.size.ptr.0 to i64
   %alloc.empty.0 = icmp eq i64 %alloc.size.0, 0
@@ -1156,13 +1130,13 @@ entry:
   %r2 = ptrtoint ptr %field.ptr.2 to i64
   %store.ptr.1 = inttoptr i64 %r2 to ptr
   store %kira.string %r1, ptr %store.ptr.1
-  %r3 = add i64 0, 640
+  %r3 = add i64 0, 64
   %field.base.4 = inttoptr i64 %r0 to ptr
   %field.ptr.4 = getelementptr inbounds %t.GraphicsApplication, ptr %field.base.4, i32 0, i32 1
   %r4 = ptrtoint ptr %field.ptr.4 to i64
   %store.ptr.3 = inttoptr i64 %r4 to ptr
   store i64 %r3, ptr %store.ptr.3
-  %r5 = add i64 0, 480
+  %r5 = add i64 0, 64
   %field.base.6 = inttoptr i64 %r0 to ptr
   %field.ptr.6 = getelementptr inbounds %t.GraphicsApplication, ptr %field.base.6, i32 0, i32 2
   %r6 = ptrtoint ptr %field.ptr.6 to i64
@@ -1174,21 +1148,21 @@ entry:
   %r8 = ptrtoint ptr %field.ptr.8 to i64
   %store.ptr.7 = inttoptr i64 %r8 to ptr
   store i64 %r7, ptr %store.ptr.7
-  %r9 = add i64 0, 4
+  %r9 = add i64 0, 1
   %field.base.10 = inttoptr i64 %r0 to ptr
   %field.ptr.10 = getelementptr inbounds %t.GraphicsApplication, ptr %field.base.10, i32 0, i32 4
   %r10 = ptrtoint ptr %field.ptr.10 to i64
   %store.ptr.9 = inttoptr i64 %r10 to ptr
   %store.rawptr.9 = inttoptr i64 %r9 to ptr
   store ptr %store.rawptr.9, ptr %store.ptr.9
-  %r11 = add i64 0, 5
+  %r11 = add i64 0, 2
   %field.base.12 = inttoptr i64 %r0 to ptr
   %field.ptr.12 = getelementptr inbounds %t.GraphicsApplication, ptr %field.base.12, i32 0, i32 5
   %r12 = ptrtoint ptr %field.ptr.12 to i64
   %store.ptr.11 = inttoptr i64 %r12 to ptr
   %store.rawptr.11 = inttoptr i64 %r11 to ptr
   store ptr %store.rawptr.11, ptr %store.ptr.11
-  %r13 = add i64 0, 6
+  %r13 = add i64 0, 3
   %field.base.14 = inttoptr i64 %r0 to ptr
   %field.ptr.14 = getelementptr inbounds %t.GraphicsApplication, ptr %field.base.14, i32 0, i32 6
   %r14 = ptrtoint ptr %field.ptr.14 to i64
@@ -1200,151 +1174,97 @@ entry:
   %copy.src.0 = inttoptr i64 %r0 to ptr
   %copy.val.15 = load %t.GraphicsApplication, ptr %copy.src.0
   store %t.GraphicsApplication %copy.val.15, ptr %copy.dst.15
-  %alloc.size.ptr.16 = getelementptr %t.TriangleState, ptr null, i32 1
+  %alloc.size.ptr.16 = getelementptr %t.LifetimeStressState, ptr null, i32 1
   %alloc.size.16 = ptrtoint ptr %alloc.size.ptr.16 to i64
   %alloc.empty.16 = icmp eq i64 %alloc.size.16, 0
   %alloc.bytes.16 = select i1 %alloc.empty.16, i64 1, i64 %alloc.size.16
   %alloc.ptr.16 = call ptr @malloc(i64 %alloc.bytes.16)
-  store %t.TriangleState zeroinitializer, ptr %alloc.ptr.16
+  store %t.LifetimeStressState zeroinitializer, ptr %alloc.ptr.16
   %r16 = ptrtoint ptr %alloc.ptr.16 to i64
   store ptr %alloc.ptr.16, ptr %cleanup.heap.slot.16
-  %r17 = call i64 @"kira_native_impl_178"()
-  %cleanup.call.ptr.17 = inttoptr i64 %r17 to ptr
-  store ptr %cleanup.call.ptr.17, ptr %cleanup.heap.slot.17
+  %r17 = add i1 0, 0
   %field.base.18 = inttoptr i64 %r16 to ptr
-  %field.ptr.18 = getelementptr inbounds %t.TriangleState, ptr %field.base.18, i32 0, i32 0
+  %field.ptr.18 = getelementptr inbounds %t.LifetimeStressState, ptr %field.base.18, i32 0, i32 0
   %r18 = ptrtoint ptr %field.ptr.18 to i64
-  %copy.dst.18 = inttoptr i64 %r18 to ptr
-  %copy.src.17 = inttoptr i64 %r17 to ptr
-  %copy.val.18 = load %t.GraphicsShader, ptr %copy.src.17
-  store %t.GraphicsShader %copy.val.18, ptr %copy.dst.18
-  %r19 = call i64 @"kira_native_impl_168"()
-  %cleanup.call.ptr.19 = inttoptr i64 %r19 to ptr
-  store ptr %cleanup.call.ptr.19, ptr %cleanup.heap.slot.19
+  %store.ptr.17 = inttoptr i64 %r18 to ptr
+  %store.bool.17 = zext i1 %r17 to i8
+  store i8 %store.bool.17, ptr %store.ptr.17
+  %r19 = add i1 0, 0
   %field.base.20 = inttoptr i64 %r16 to ptr
-  %field.ptr.20 = getelementptr inbounds %t.TriangleState, ptr %field.base.20, i32 0, i32 1
+  %field.ptr.20 = getelementptr inbounds %t.LifetimeStressState, ptr %field.base.20, i32 0, i32 1
   %r20 = ptrtoint ptr %field.ptr.20 to i64
-  %copy.dst.20 = inttoptr i64 %r20 to ptr
-  %copy.src.19 = inttoptr i64 %r19 to ptr
-  %copy.val.20 = load %t.RenderPipeline, ptr %copy.src.19
-  store %t.RenderPipeline %copy.val.20, ptr %copy.dst.20
-  %r21 = call i64 @"kira_native_impl_85"()
-  %cleanup.call.ptr.21 = inttoptr i64 %r21 to ptr
-  store ptr %cleanup.call.ptr.21, ptr %cleanup.heap.slot.21
-  %field.base.22 = inttoptr i64 %r16 to ptr
-  %field.ptr.22 = getelementptr inbounds %t.TriangleState, ptr %field.base.22, i32 0, i32 2
-  %r22 = ptrtoint ptr %field.ptr.22 to i64
-  %copy.dst.22 = inttoptr i64 %r22 to ptr
-  %copy.src.21 = inttoptr i64 %r21 to ptr
-  %copy.val.22 = load %t.GraphicsBuffer, ptr %copy.src.21
-  store %t.GraphicsBuffer %copy.val.22, ptr %copy.dst.22
-  %native.state.size.ptr.23 = getelementptr [3 x %kira.bridge.value], ptr null, i32 1
-  %native.state.size.23 = ptrtoint ptr %native.state.size.ptr.23 to i64
-  %native.state.box.23 = call ptr @"kira_native_state_alloc"(i64 8814238373109695030, i64 %native.state.size.23)
-  %native.state.payload.23 = call ptr @"kira_native_state_payload"(ptr %native.state.box.23)
-  %native.state.src.23 = inttoptr i64 %r16 to ptr
-  %native.state.src.field.ptr.23.0 = getelementptr inbounds %t.TriangleState, ptr %native.state.src.23, i32 0, i32 0
-  %native.state.slot.ptr.23.0 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.23, i64 0
-  %native.state.pack.23.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %native.state.load.struct.23.0 = load %t.GraphicsShader, ptr %native.state.src.field.ptr.23.0
-  %native.state.load.struct.size.ptr.23.0 = getelementptr %t.GraphicsShader, ptr null, i32 1
-  %native.state.load.struct.size.23.0 = ptrtoint ptr %native.state.load.struct.size.ptr.23.0 to i64
-  %native.state.load.struct.copy.23.0 = call ptr @malloc(i64 %native.state.load.struct.size.23.0)
-  store %t.GraphicsShader %native.state.load.struct.23.0, ptr %native.state.load.struct.copy.23.0
-  %native.state.load.struct.ptrint.23.0 = ptrtoint ptr %native.state.load.struct.copy.23.0 to i64
-  %native.state.pack.23.0 = insertvalue %kira.bridge.value %native.state.pack.23.0.0, i64 %native.state.load.struct.ptrint.23.0, 2
-  store %kira.bridge.value %native.state.pack.23.0, ptr %native.state.slot.ptr.23.0
-  %native.state.src.field.ptr.23.1 = getelementptr inbounds %t.TriangleState, ptr %native.state.src.23, i32 0, i32 1
-  %native.state.slot.ptr.23.1 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.23, i64 1
-  %native.state.pack.23.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %native.state.load.struct.23.1 = load %t.RenderPipeline, ptr %native.state.src.field.ptr.23.1
-  %native.state.load.struct.size.ptr.23.1 = getelementptr %t.RenderPipeline, ptr null, i32 1
-  %native.state.load.struct.size.23.1 = ptrtoint ptr %native.state.load.struct.size.ptr.23.1 to i64
-  %native.state.load.struct.copy.23.1 = call ptr @malloc(i64 %native.state.load.struct.size.23.1)
-  store %t.RenderPipeline %native.state.load.struct.23.1, ptr %native.state.load.struct.copy.23.1
-  %native.state.load.struct.ptrint.23.1 = ptrtoint ptr %native.state.load.struct.copy.23.1 to i64
-  %native.state.pack.23.1 = insertvalue %kira.bridge.value %native.state.pack.23.1.0, i64 %native.state.load.struct.ptrint.23.1, 2
-  store %kira.bridge.value %native.state.pack.23.1, ptr %native.state.slot.ptr.23.1
-  %native.state.src.field.ptr.23.2 = getelementptr inbounds %t.TriangleState, ptr %native.state.src.23, i32 0, i32 2
-  %native.state.slot.ptr.23.2 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.23, i64 2
-  %native.state.pack.23.2.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %native.state.load.struct.23.2 = load %t.GraphicsBuffer, ptr %native.state.src.field.ptr.23.2
-  %native.state.load.struct.size.ptr.23.2 = getelementptr %t.GraphicsBuffer, ptr null, i32 1
-  %native.state.load.struct.size.23.2 = ptrtoint ptr %native.state.load.struct.size.ptr.23.2 to i64
-  %native.state.load.struct.copy.23.2 = call ptr @malloc(i64 %native.state.load.struct.size.23.2)
-  store %t.GraphicsBuffer %native.state.load.struct.23.2, ptr %native.state.load.struct.copy.23.2
-  %native.state.load.struct.ptrint.23.2 = ptrtoint ptr %native.state.load.struct.copy.23.2 to i64
-  %native.state.pack.23.2 = insertvalue %kira.bridge.value %native.state.pack.23.2.0, i64 %native.state.load.struct.ptrint.23.2, 2
-  store %kira.bridge.value %native.state.pack.23.2, ptr %native.state.slot.ptr.23.2
-  %r23 = ptrtoint ptr %native.state.box.23 to i64
-  store i64 %r23, ptr %local1
-  %r24 = load i64, ptr %local0
-  %r25 = add i64 0, 445
+  %store.ptr.19 = inttoptr i64 %r20 to ptr
+  %store.bool.19 = zext i1 %r19 to i8
+  store i8 %store.bool.19, ptr %store.ptr.19
+  %native.state.size.ptr.21 = getelementptr [2 x %kira.bridge.value], ptr null, i32 1
+  %native.state.size.21 = ptrtoint ptr %native.state.size.ptr.21 to i64
+  %native.state.box.21 = call ptr @"kira_native_state_alloc"(i64 4943524695424902447, i64 %native.state.size.21)
+  %native.state.payload.21 = call ptr @"kira_native_state_payload"(ptr %native.state.box.21)
+  %native.state.src.21 = inttoptr i64 %r16 to ptr
+  %native.state.src.field.ptr.21.0 = getelementptr inbounds %t.LifetimeStressState, ptr %native.state.src.21, i32 0, i32 0
+  %native.state.slot.ptr.21.0 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.21, i64 0
+  %native.state.pack.21.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 4, 0
+  %native.state.load.bool.21.0 = load i8, ptr %native.state.src.field.ptr.21.0
+  %native.state.load.bool.word.21.0 = zext i8 %native.state.load.bool.21.0 to i64
+  %native.state.pack.21.0 = insertvalue %kira.bridge.value %native.state.pack.21.0.0, i64 %native.state.load.bool.word.21.0, 2
+  store %kira.bridge.value %native.state.pack.21.0, ptr %native.state.slot.ptr.21.0
+  %native.state.src.field.ptr.21.1 = getelementptr inbounds %t.LifetimeStressState, ptr %native.state.src.21, i32 0, i32 1
+  %native.state.slot.ptr.21.1 = getelementptr inbounds %kira.bridge.value, ptr %native.state.payload.21, i64 1
+  %native.state.pack.21.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 4, 0
+  %native.state.load.bool.21.1 = load i8, ptr %native.state.src.field.ptr.21.1
+  %native.state.load.bool.word.21.1 = zext i8 %native.state.load.bool.21.1 to i64
+  %native.state.pack.21.1 = insertvalue %kira.bridge.value %native.state.pack.21.1.0, i64 %native.state.load.bool.word.21.1, 2
+  store %kira.bridge.value %native.state.pack.21.1, ptr %native.state.slot.ptr.21.1
+  %r21 = ptrtoint ptr %native.state.box.21 to i64
+  store i64 %r21, ptr %local1
+  %r22 = load i64, ptr %local0
+  %r23 = add i64 0, 442
   %rt.args.0 = alloca [2 x %kira.bridge.value]
   %rt.slot.0.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.0, i64 0, i64 0
   %rt.pack.0.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.0.0.1 = insertvalue %kira.bridge.value %rt.pack.0.0.0, i64 %r24, 2
+  %rt.pack.0.0.1 = insertvalue %kira.bridge.value %rt.pack.0.0.0, i64 %r22, 2
   store %kira.bridge.value %rt.pack.0.0.1, ptr %rt.slot.0.0
   %rt.slot.0.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.0, i64 0, i64 1
   %rt.pack.0.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.0.1.1 = insertvalue %kira.bridge.value %rt.pack.0.1.0, i64 %r25, 2
+  %rt.pack.0.1.1 = insertvalue %kira.bridge.value %rt.pack.0.1.0, i64 %r23, 2
   store %kira.bridge.value %rt.pack.0.1.1, ptr %rt.slot.0.1
   %rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 402, ptr %rt.args.0, i32 2, ptr %rt.result.0)
-  %r26 = load i64, ptr %local0
-  %r27 = add i64 0, 446
+  call void @"kira_hybrid_call_runtime"(i32 400, ptr %rt.args.0, i32 2, ptr %rt.result.0)
+  %r24 = load i64, ptr %local0
+  %r25 = add i64 0, 444
   %rt.args.1 = alloca [2 x %kira.bridge.value]
   %rt.slot.1.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.1, i64 0, i64 0
   %rt.pack.1.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.1.0.1 = insertvalue %kira.bridge.value %rt.pack.1.0.0, i64 %r26, 2
+  %rt.pack.1.0.1 = insertvalue %kira.bridge.value %rt.pack.1.0.0, i64 %r24, 2
   store %kira.bridge.value %rt.pack.1.0.1, ptr %rt.slot.1.0
   %rt.slot.1.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.1, i64 0, i64 1
   %rt.pack.1.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.1.1.1 = insertvalue %kira.bridge.value %rt.pack.1.1.0, i64 %r27, 2
+  %rt.pack.1.1.1 = insertvalue %kira.bridge.value %rt.pack.1.1.0, i64 %r25, 2
   store %kira.bridge.value %rt.pack.1.1.1, ptr %rt.slot.1.1
   %rt.result.1 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 403, ptr %rt.args.1, i32 2, ptr %rt.result.1)
-  %r28 = load i64, ptr %local0
-  %r29 = add i64 0, 448
+  call void @"kira_hybrid_call_runtime"(i32 401, ptr %rt.args.1, i32 2, ptr %rt.result.1)
+  %r26 = load i64, ptr %local0
+  %r27 = load i64, ptr %local1
   %rt.args.2 = alloca [2 x %kira.bridge.value]
   %rt.slot.2.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.2, i64 0, i64 0
   %rt.pack.2.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.2.0.1 = insertvalue %kira.bridge.value %rt.pack.2.0.0, i64 %r28, 2
+  %rt.pack.2.0.1 = insertvalue %kira.bridge.value %rt.pack.2.0.0, i64 %r26, 2
   store %kira.bridge.value %rt.pack.2.0.1, ptr %rt.slot.2.0
   %rt.slot.2.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.2, i64 0, i64 1
   %rt.pack.2.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.2.1.1 = insertvalue %kira.bridge.value %rt.pack.2.1.0, i64 %r29, 2
+  %rt.pack.2.1.1 = insertvalue %kira.bridge.value %rt.pack.2.1.0, i64 %r27, 2
   store %kira.bridge.value %rt.pack.2.1.1, ptr %rt.slot.2.1
   %rt.result.2 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 404, ptr %rt.args.2, i32 2, ptr %rt.result.2)
-  %r30 = load i64, ptr %local0
-  %r31 = load i64, ptr %local1
-  %rt.args.3 = alloca [2 x %kira.bridge.value]
-  %rt.slot.3.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.3, i64 0, i64 0
-  %rt.pack.3.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.3.0.1 = insertvalue %kira.bridge.value %rt.pack.3.0.0, i64 %r30, 2
-  store %kira.bridge.value %rt.pack.3.0.1, ptr %rt.slot.3.0
-  %rt.slot.3.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.3, i64 0, i64 1
-  %rt.pack.3.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.3.1.1 = insertvalue %kira.bridge.value %rt.pack.3.1.0, i64 %r31, 2
-  store %kira.bridge.value %rt.pack.3.1.1, ptr %rt.slot.3.1
-  %rt.result.3 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 405, ptr %rt.args.3, i32 2, ptr %rt.result.3)
-  %cleanup.heap.ptr.4 = load ptr, ptr %cleanup.heap.slot.0
+  call void @"kira_hybrid_call_runtime"(i32 402, ptr %rt.args.2, i32 2, ptr %rt.result.2)
+  %cleanup.heap.ptr.3 = load ptr, ptr %cleanup.heap.slot.0
+  call void @free(ptr %cleanup.heap.ptr.3)
+  %cleanup.heap.ptr.4 = load ptr, ptr %cleanup.heap.slot.16
   call void @free(ptr %cleanup.heap.ptr.4)
-  %cleanup.heap.ptr.5 = load ptr, ptr %cleanup.heap.slot.16
-  call void @free(ptr %cleanup.heap.ptr.5)
-  %cleanup.heap.ptr.6 = load ptr, ptr %cleanup.heap.slot.17
-  call void @free(ptr %cleanup.heap.ptr.6)
-  %cleanup.heap.ptr.7 = load ptr, ptr %cleanup.heap.slot.19
-  call void @free(ptr %cleanup.heap.ptr.7)
-  %cleanup.heap.ptr.8 = load ptr, ptr %cleanup.heap.slot.21
-  call void @free(ptr %cleanup.heap.ptr.8)
   call void @"kira_release_contents_GraphicsApplication"(ptr %local.storage.0)
   ret void
 }
 
-define void @"kira_native_impl_8"(i64 %arg0, i64 %arg1) {
+define void @"kira_native_impl_5"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsApplication
@@ -1381,21 +1301,21 @@ entry:
   store %t.sapp_desc zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = ptrtoint ptr @"kira_native_impl_9" to i64
+  %r1 = ptrtoint ptr @"kira_native_impl_6" to i64
   %field.base.2 = inttoptr i64 %r0 to ptr
   %field.ptr.2 = getelementptr inbounds %t.sapp_desc, ptr %field.base.2, i32 0, i32 5
   %r2 = ptrtoint ptr %field.ptr.2 to i64
   %store.ptr.1 = inttoptr i64 %r2 to ptr
   %store.rawptr.1 = inttoptr i64 %r1 to ptr
   store ptr %store.rawptr.1, ptr %store.ptr.1
-  %r3 = ptrtoint ptr @"kira_native_impl_10" to i64
+  %r3 = ptrtoint ptr @"kira_native_impl_7" to i64
   %field.base.4 = inttoptr i64 %r0 to ptr
   %field.ptr.4 = getelementptr inbounds %t.sapp_desc, ptr %field.base.4, i32 0, i32 6
   %r4 = ptrtoint ptr %field.ptr.4 to i64
   %store.ptr.3 = inttoptr i64 %r4 to ptr
   %store.rawptr.3 = inttoptr i64 %r3 to ptr
   store ptr %store.rawptr.3, ptr %store.ptr.3
-  %r5 = ptrtoint ptr @"kira_native_impl_11" to i64
+  %r5 = ptrtoint ptr @"kira_native_impl_8" to i64
   %field.base.6 = inttoptr i64 %r0 to ptr
   %field.ptr.6 = getelementptr inbounds %t.sapp_desc, ptr %field.base.6, i32 0, i32 7
   %r6 = ptrtoint ptr %field.ptr.6 to i64
@@ -1466,14 +1386,14 @@ entry:
   %copy.val.25 = load %t.sapp_desc, ptr %copy.src.0
   store %t.sapp_desc %copy.val.25, ptr %copy.dst.25
   %r26 = load i64, ptr %local2
-  %call.arg.233.0 = inttoptr i64 %r26 to ptr
-  call void @"sapp_run"(ptr %call.arg.233.0)
+  %call.arg.230.0 = inttoptr i64 %r26 to ptr
+  call void @"sapp_run"(ptr %call.arg.230.0)
   %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.0
   call void @free(ptr %cleanup.heap.ptr.0)
   ret void
 }
 
-define void @"kira_native_impl_9"(i64 %arg0) {
+define void @"kira_native_impl_6"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -1558,7 +1478,7 @@ entry:
   ret void
 }
 
-define void @"kira_native_impl_10"(i64 %arg0) {
+define void @"kira_native_impl_7"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -1647,7 +1567,7 @@ entry:
   %copy.val.12 = load %t.Graphics, ptr %copy.src.8
   store %t.Graphics %copy.val.12, ptr %copy.dst.12
   %r13 = load i64, ptr %local4
-  %r14 = call i64 @"kira_native_impl_430"(i64 %r13)
+  %r14 = call i64 @"kira_native_impl_427"(i64 %r13)
   %cleanup.call.ptr.14 = inttoptr i64 %r14 to ptr
   store ptr %cleanup.call.ptr.14, ptr %cleanup.heap.slot.14
   %r15 = load i64, ptr %local5
@@ -1678,7 +1598,7 @@ entry:
   %rt.pack.4.0.1 = insertvalue %kira.bridge.value %rt.pack.4.0.0, i64 %r23, 2
   store %kira.bridge.value %rt.pack.4.0.1, ptr %rt.slot.4.0
   %rt.result.4 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 79, ptr %rt.args.4, i32 1, ptr %rt.result.4)
+  call void @"kira_hybrid_call_runtime"(i32 76, ptr %rt.args.4, i32 1, ptr %rt.result.4)
   call void @"kg_sample_lifetime_frame"()
   %r24 = load i64, ptr %local1
   %native.state.get.ptr.25 = inttoptr i64 %r24 to ptr
@@ -1695,7 +1615,7 @@ entry:
   ret void
 }
 
-define void @"kira_native_impl_11"(i64 %arg0) {
+define void @"kira_native_impl_8"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -1782,7 +1702,7 @@ entry:
   ret void
 }
 
-define i64 @"kira_native_impl_54"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3) {
+define i64 @"kira_native_impl_51"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca i64
@@ -1808,17 +1728,17 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r3, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r3, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.14.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.14.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.14.0, i64 %call.arg.str.len.0
+  %call.arg.11.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.11.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.11.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.7 = call i32 @"kg_begin_float_buffer_upload"(ptr %call.arg.14.0, i64 %r4, i64 %r5, i64 %r6)
+  %call.int.7 = call i32 @"kg_begin_float_buffer_upload"(ptr %call.arg.11.0, i64 %r4, i64 %r5, i64 %r6)
   %r7.sext = sext i32 %call.int.7 to i64
   %r7 = add i64 %r7.sext, 0
   ret i64 %r7
 }
 
-define void @"kira_native_impl_55"(i64 %arg0, i64 %arg1, double %arg2) {
+define void @"kira_native_impl_52"(i64 %arg0, i64 %arg1, double %arg2) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -1832,24 +1752,24 @@ entry:
   %r1 = load i64, ptr %local0
   %r2 = load i64, ptr %local3
   %r3 = load double, ptr %local2
-  %call.arg.15.0 = trunc i64 %r1 to i32
-  call void @"kg_set_float_buffer_upload_value"(i32 %call.arg.15.0, i64 %r2, double %r3)
+  %call.arg.12.0 = trunc i64 %r1 to i32
+  call void @"kg_set_float_buffer_upload_value"(i32 %call.arg.12.0, i64 %r2, double %r3)
   ret void
 }
 
-define i64 @"kira_native_impl_56"(i64 %arg0) {
+define i64 @"kira_native_impl_53"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
-  %call.arg.16.0 = trunc i64 %r0 to i32
-  %call.int.1 = call i32 @"kg_finalize_float_buffer_upload"(i32 %call.arg.16.0)
+  %call.arg.13.0 = trunc i64 %r0 to i32
+  %call.int.1 = call i32 @"kg_finalize_float_buffer_upload"(i32 %call.arg.13.0)
   %r1.sext = sext i32 %call.int.1 to i64
   %r1 = add i64 %r1.sext, 0
   ret i64 %r1
 }
 
-define i64 @"kira_native_impl_57"(%kira.string %arg0, i64 %arg1, i64 %arg2) {
+define i64 @"kira_native_impl_54"(%kira.string %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca i64
@@ -1869,17 +1789,17 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r2, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r2, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.17.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.17.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.17.0, i64 %call.arg.str.len.0
+  %call.arg.14.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.14.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.14.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.5 = call i32 @"kg_begin_index_buffer_upload"(ptr %call.arg.17.0, i64 %r3, i64 %r4)
+  %call.int.5 = call i32 @"kg_begin_index_buffer_upload"(ptr %call.arg.14.0, i64 %r3, i64 %r4)
   %r5.sext = sext i32 %call.int.5 to i64
   %r5 = add i64 %r5.sext, 0
   ret i64 %r5
 }
 
-define void @"kira_native_impl_58"(i64 %arg0, i64 %arg1, i64 %arg2) {
+define void @"kira_native_impl_55"(i64 %arg0, i64 %arg1, i64 %arg2) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -1896,24 +1816,24 @@ entry:
   %r2 = load i64, ptr %local0
   %r3 = load i64, ptr %local3
   %r4 = load i64, ptr %local4
-  %call.arg.18.0 = trunc i64 %r2 to i32
-  call void @"kg_set_index_buffer_upload_value"(i32 %call.arg.18.0, i64 %r3, i64 %r4)
+  %call.arg.15.0 = trunc i64 %r2 to i32
+  call void @"kg_set_index_buffer_upload_value"(i32 %call.arg.15.0, i64 %r3, i64 %r4)
   ret void
 }
 
-define i64 @"kira_native_impl_59"(i64 %arg0) {
+define i64 @"kira_native_impl_56"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
-  %call.arg.19.0 = trunc i64 %r0 to i32
-  %call.int.1 = call i32 @"kg_finalize_index_buffer_upload"(i32 %call.arg.19.0)
+  %call.arg.16.0 = trunc i64 %r0 to i32
+  %call.int.1 = call i32 @"kg_finalize_index_buffer_upload"(i32 %call.arg.16.0)
   %r1.sext = sext i32 %call.int.1 to i64
   %r1 = add i64 %r1.sext, 0
   ret i64 %r1
 }
 
-define void @"kira_native_impl_60"(i64 %arg0) {
+define void @"kira_native_impl_57"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
@@ -1923,14 +1843,14 @@ entry:
   br i1 %r2, label %kira_label_0, label %kira_label_1
 kira_label_0:
   %r3 = load i64, ptr %local0
-  %call.arg.20.0 = trunc i64 %r3 to i32
-  call void @"kg_destroy_buffer_id"(i32 %call.arg.20.0)
+  %call.arg.17.0 = trunc i64 %r3 to i32
+  call void @"kg_destroy_buffer_id"(i32 %call.arg.17.0)
   br label %kira_label_1
 kira_label_1:
   ret void
 }
 
-define i1 @"kira_native_impl_65"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, double %arg7, double %arg8, double %arg9, double %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15, i64 %arg16, i64 %arg17, i64 %arg18, double %arg19, i64 %arg20, i64 %arg21, i64 %arg22, i64 %arg23, i64 %arg24, i64 %arg25, i64 %arg26) {
+define i1 @"kira_native_impl_62"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, double %arg7, double %arg8, double %arg9, double %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15, i64 %arg16, i64 %arg17, i64 %arg18, double %arg19, i64 %arg20, i64 %arg21, i64 %arg22, i64 %arg23, i64 %arg24, i64 %arg25, i64 %arg26) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca i64
@@ -2016,15 +1936,15 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.30.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.30.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.30.0, i64 %call.arg.str.len.0
+  %call.arg.27.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.27.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.27.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.arg.30.2 = trunc i64 %r2 to i32
-  %call.arg.30.12 = trunc i64 %r12 to i32
-  %call.arg.30.16 = trunc i64 %r16 to i32
-  %call.arg.30.22 = trunc i64 %r22 to i32
-  %call.int.27 = call i32 @"kg_begin_render_pass"(ptr %call.arg.30.0, i64 %r1, i32 %call.arg.30.2, i64 %r3, i64 %r4, i64 %r5, i64 %r6, double %r7, double %r8, double %r9, double %r10, i64 %r11, i32 %call.arg.30.12, i64 %r13, i64 %r14, i64 %r15, i32 %call.arg.30.16, i64 %r17, i64 %r18, double %r19, i64 %r20, i64 %r21, i32 %call.arg.30.22, i64 %r23, i64 %r24, i64 %r25, i64 %r26)
+  %call.arg.27.2 = trunc i64 %r2 to i32
+  %call.arg.27.12 = trunc i64 %r12 to i32
+  %call.arg.27.16 = trunc i64 %r16 to i32
+  %call.arg.27.22 = trunc i64 %r22 to i32
+  %call.int.27 = call i32 @"kg_begin_render_pass"(ptr %call.arg.27.0, i64 %r1, i32 %call.arg.27.2, i64 %r3, i64 %r4, i64 %r5, i64 %r6, double %r7, double %r8, double %r9, double %r10, i64 %r11, i32 %call.arg.27.12, i64 %r13, i64 %r14, i64 %r15, i32 %call.arg.27.16, i64 %r17, i64 %r18, double %r19, i64 %r20, i64 %r21, i32 %call.arg.27.22, i64 %r23, i64 %r24, i64 %r25, i64 %r26)
   %r27.sext = sext i32 %call.int.27 to i64
   %r27 = add i64 %r27.sext, 0
   %r28 = add i64 0, 0
@@ -2032,7 +1952,7 @@ entry:
   ret i1 %r29
 }
 
-define i1 @"kira_native_impl_66"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7, i64 %arg8, i64 %arg9, i64 %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15) {
+define i1 @"kira_native_impl_63"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7, i64 %arg8, i64 %arg9, i64 %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -2082,14 +2002,14 @@ entry:
   %r13 = load i64, ptr %local13
   %r14 = load i64, ptr %local14
   %r15 = load i64, ptr %local15
-  %call.arg.31.0 = trunc i64 %r0 to i32
-  %call.arg.31.1 = trunc i64 %r1 to i32
-  %call.arg.31.3 = trunc i64 %r3 to i32
-  %call.arg.31.5 = trunc i64 %r5 to i32
-  %call.arg.31.7 = trunc i64 %r7 to i32
-  %call.arg.31.9 = trunc i64 %r9 to i32
-  %call.arg.31.11 = trunc i64 %r11 to i32
-  %call.int.16 = call i32 @"kg_apply_pipeline_bindings_and_draw"(i32 %call.arg.31.0, i32 %call.arg.31.1, i64 %r2, i32 %call.arg.31.3, i64 %r4, i32 %call.arg.31.5, i64 %r6, i32 %call.arg.31.7, i64 %r8, i32 %call.arg.31.9, i64 %r10, i32 %call.arg.31.11, i64 %r12, i64 %r13, i64 %r14, i64 %r15)
+  %call.arg.28.0 = trunc i64 %r0 to i32
+  %call.arg.28.1 = trunc i64 %r1 to i32
+  %call.arg.28.3 = trunc i64 %r3 to i32
+  %call.arg.28.5 = trunc i64 %r5 to i32
+  %call.arg.28.7 = trunc i64 %r7 to i32
+  %call.arg.28.9 = trunc i64 %r9 to i32
+  %call.arg.28.11 = trunc i64 %r11 to i32
+  %call.int.16 = call i32 @"kg_apply_pipeline_bindings_and_draw"(i32 %call.arg.28.0, i32 %call.arg.28.1, i64 %r2, i32 %call.arg.28.3, i64 %r4, i32 %call.arg.28.5, i64 %r6, i32 %call.arg.28.7, i64 %r8, i32 %call.arg.28.9, i64 %r10, i32 %call.arg.28.11, i64 %r12, i64 %r13, i64 %r14, i64 %r15)
   %r16.sext = sext i32 %call.int.16 to i64
   %r16 = add i64 %r16.sext, 0
   %r17 = add i64 0, 0
@@ -2097,19 +2017,19 @@ entry:
   ret i1 %r18
 }
 
-define void @"kira_native_impl_67"() {
+define void @"kira_native_impl_64"() {
 entry:
   call void @"kg_end_pass_and_commit"()
   ret void
 }
 
-define void @"kira_native_impl_68"() {
+define void @"kira_native_impl_65"() {
 entry:
   call void @"sapp_request_quit"()
   ret void
 }
 
-define void @"kira_native_impl_69"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7) {
+define void @"kira_native_impl_66"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -2150,14 +2070,14 @@ entry:
   %r10 = load i64, ptr %local10
   %r11 = load i64, ptr %local11
   %r12 = load i64, ptr %local12
-  %call.arg.32.0 = trunc i64 %r5 to i32
-  %call.arg.32.1 = trunc i64 %r6 to i32
-  %call.arg.32.3 = trunc i64 %r8 to i32
-  call void @"kg_log_submit_state"(i32 %call.arg.32.0, i32 %call.arg.32.1, i64 %r7, i32 %call.arg.32.3, i64 %r9, i64 %r10, i64 %r11, i64 %r12)
+  %call.arg.29.0 = trunc i64 %r5 to i32
+  %call.arg.29.1 = trunc i64 %r6 to i32
+  %call.arg.29.3 = trunc i64 %r8 to i32
+  call void @"kg_log_submit_state"(i32 %call.arg.29.0, i32 %call.arg.29.1, i64 %r7, i32 %call.arg.29.3, i64 %r9, i64 %r10, i64 %r11, i64 %r12)
   ret void
 }
 
-define i64 @"kira_native_impl_70"(i64 %arg0, %kira.string %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7, i64 %arg8, i64 %arg9, i64 %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15, i64 %arg16, i64 %arg17, i64 %arg18, i64 %arg19, i64 %arg20, i64 %arg21, i64 %arg22, i64 %arg23, i64 %arg24, i64 %arg25, i64 %arg26) {
+define i64 @"kira_native_impl_67"(i64 %arg0, %kira.string %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6, i64 %arg7, i64 %arg8, i64 %arg9, i64 %arg10, i64 %arg11, i64 %arg12, i64 %arg13, i64 %arg14, i64 %arg15, i64 %arg16, i64 %arg17, i64 %arg18, i64 %arg19, i64 %arg20, i64 %arg21, i64 %arg22, i64 %arg23, i64 %arg24, i64 %arg25, i64 %arg26) {
 entry:
   %local0 = alloca i64
   %local1 = alloca %kira.string
@@ -2240,21 +2160,21 @@ entry:
   %r24 = load i64, ptr %local24
   %r25 = load i64, ptr %local25
   %r26 = load i64, ptr %local26
-  %call.arg.47.0 = trunc i64 %r0 to i32
+  %call.arg.44.0 = trunc i64 %r0 to i32
   %call.arg.str.ptr.0 = extractvalue %kira.string %r1, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r1, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.47.1 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.47.1, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.47.1, i64 %call.arg.str.len.0
+  %call.arg.44.1 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.44.1, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.44.1, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.27 = call i32 @"kg_make_pipeline_detailed"(i32 %call.arg.47.0, ptr %call.arg.47.1, i64 %r2, i64 %r3, i64 %r4, i64 %r5, i64 %r6, i64 %r7, i64 %r8, i64 %r9, i64 %r10, i64 %r11, i64 %r12, i64 %r13, i64 %r14, i64 %r15, i64 %r16, i64 %r17, i64 %r18, i64 %r19, i64 %r20, i64 %r21, i64 %r22, i64 %r23, i64 %r24, i64 %r25, i64 %r26)
+  %call.int.27 = call i32 @"kg_make_pipeline_detailed"(i32 %call.arg.44.0, ptr %call.arg.44.1, i64 %r2, i64 %r3, i64 %r4, i64 %r5, i64 %r6, i64 %r7, i64 %r8, i64 %r9, i64 %r10, i64 %r11, i64 %r12, i64 %r13, i64 %r14, i64 %r15, i64 %r16, i64 %r17, i64 %r18, i64 %r19, i64 %r20, i64 %r21, i64 %r22, i64 %r23, i64 %r24, i64 %r25, i64 %r26)
   %r27.sext = sext i32 %call.int.27 to i64
   %r27 = add i64 %r27.sext, 0
   ret i64 %r27
 }
 
-define void @"kira_native_impl_72"(i64 %arg0) {
+define void @"kira_native_impl_69"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
@@ -2264,14 +2184,14 @@ entry:
   br i1 %r2, label %kira_label_0, label %kira_label_1
 kira_label_0:
   %r3 = load i64, ptr %local0
-  %call.arg.40.0 = trunc i64 %r3 to i32
-  call void @"kg_destroy_pipeline_id"(i32 %call.arg.40.0)
+  %call.arg.37.0 = trunc i64 %r3 to i32
+  call void @"kg_destroy_pipeline_id"(i32 %call.arg.37.0)
   br label %kira_label_1
 kira_label_1:
   ret void
 }
 
-define i64 @"kira_native_impl_73"(%kira.string %arg0, %kira.string %arg1, %kira.string %arg2, %kira.string %arg3, %kira.string %arg4) {
+define i64 @"kira_native_impl_70"(%kira.string %arg0, %kira.string %arg1, %kira.string %arg2, %kira.string %arg3, %kira.string %arg4) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca %kira.string
@@ -2291,45 +2211,45 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.48.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.48.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.48.0, i64 %call.arg.str.len.0
+  %call.arg.45.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.45.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.45.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
   %call.arg.str.ptr.1 = extractvalue %kira.string %r1, 0
   %call.arg.str.len.1 = extractvalue %kira.string %r1, 1
   %call.arg.str.alloclen.1 = add i64 %call.arg.str.len.1, 1
-  %call.arg.48.1 = call ptr @malloc(i64 %call.arg.str.alloclen.1)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.48.1, ptr %call.arg.str.ptr.1, i64 %call.arg.str.len.1, i1 false)
-  %call.arg.str.null.1 = getelementptr inbounds i8, ptr %call.arg.48.1, i64 %call.arg.str.len.1
+  %call.arg.45.1 = call ptr @malloc(i64 %call.arg.str.alloclen.1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.45.1, ptr %call.arg.str.ptr.1, i64 %call.arg.str.len.1, i1 false)
+  %call.arg.str.null.1 = getelementptr inbounds i8, ptr %call.arg.45.1, i64 %call.arg.str.len.1
   store i8 0, ptr %call.arg.str.null.1
   %call.arg.str.ptr.2 = extractvalue %kira.string %r2, 0
   %call.arg.str.len.2 = extractvalue %kira.string %r2, 1
   %call.arg.str.alloclen.2 = add i64 %call.arg.str.len.2, 1
-  %call.arg.48.2 = call ptr @malloc(i64 %call.arg.str.alloclen.2)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.48.2, ptr %call.arg.str.ptr.2, i64 %call.arg.str.len.2, i1 false)
-  %call.arg.str.null.2 = getelementptr inbounds i8, ptr %call.arg.48.2, i64 %call.arg.str.len.2
+  %call.arg.45.2 = call ptr @malloc(i64 %call.arg.str.alloclen.2)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.45.2, ptr %call.arg.str.ptr.2, i64 %call.arg.str.len.2, i1 false)
+  %call.arg.str.null.2 = getelementptr inbounds i8, ptr %call.arg.45.2, i64 %call.arg.str.len.2
   store i8 0, ptr %call.arg.str.null.2
   %call.arg.str.ptr.3 = extractvalue %kira.string %r3, 0
   %call.arg.str.len.3 = extractvalue %kira.string %r3, 1
   %call.arg.str.alloclen.3 = add i64 %call.arg.str.len.3, 1
-  %call.arg.48.3 = call ptr @malloc(i64 %call.arg.str.alloclen.3)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.48.3, ptr %call.arg.str.ptr.3, i64 %call.arg.str.len.3, i1 false)
-  %call.arg.str.null.3 = getelementptr inbounds i8, ptr %call.arg.48.3, i64 %call.arg.str.len.3
+  %call.arg.45.3 = call ptr @malloc(i64 %call.arg.str.alloclen.3)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.45.3, ptr %call.arg.str.ptr.3, i64 %call.arg.str.len.3, i1 false)
+  %call.arg.str.null.3 = getelementptr inbounds i8, ptr %call.arg.45.3, i64 %call.arg.str.len.3
   store i8 0, ptr %call.arg.str.null.3
   %call.arg.str.ptr.4 = extractvalue %kira.string %r4, 0
   %call.arg.str.len.4 = extractvalue %kira.string %r4, 1
   %call.arg.str.alloclen.4 = add i64 %call.arg.str.len.4, 1
-  %call.arg.48.4 = call ptr @malloc(i64 %call.arg.str.alloclen.4)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.48.4, ptr %call.arg.str.ptr.4, i64 %call.arg.str.len.4, i1 false)
-  %call.arg.str.null.4 = getelementptr inbounds i8, ptr %call.arg.48.4, i64 %call.arg.str.len.4
+  %call.arg.45.4 = call ptr @malloc(i64 %call.arg.str.alloclen.4)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.45.4, ptr %call.arg.str.ptr.4, i64 %call.arg.str.len.4, i1 false)
+  %call.arg.str.null.4 = getelementptr inbounds i8, ptr %call.arg.45.4, i64 %call.arg.str.len.4
   store i8 0, ptr %call.arg.str.null.4
-  %call.int.5 = call i32 @"kg_make_shader"(ptr %call.arg.48.0, ptr %call.arg.48.1, ptr %call.arg.48.2, ptr %call.arg.48.3, ptr %call.arg.48.4)
+  %call.int.5 = call i32 @"kg_make_shader"(ptr %call.arg.45.0, ptr %call.arg.45.1, ptr %call.arg.45.2, ptr %call.arg.45.3, ptr %call.arg.45.4)
   %r5.sext = sext i32 %call.int.5 to i64
   %r5 = add i64 %r5.sext, 0
   ret i64 %r5
 }
 
-define i64 @"kira_native_impl_74"(%kira.string %arg0, %kira.string %arg1, %kira.string %arg2) {
+define i64 @"kira_native_impl_71"(%kira.string %arg0, %kira.string %arg1, %kira.string %arg2) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca %kira.string
@@ -2343,31 +2263,31 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.49.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.49.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.49.0, i64 %call.arg.str.len.0
+  %call.arg.46.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.46.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.46.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
   %call.arg.str.ptr.1 = extractvalue %kira.string %r1, 0
   %call.arg.str.len.1 = extractvalue %kira.string %r1, 1
   %call.arg.str.alloclen.1 = add i64 %call.arg.str.len.1, 1
-  %call.arg.49.1 = call ptr @malloc(i64 %call.arg.str.alloclen.1)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.49.1, ptr %call.arg.str.ptr.1, i64 %call.arg.str.len.1, i1 false)
-  %call.arg.str.null.1 = getelementptr inbounds i8, ptr %call.arg.49.1, i64 %call.arg.str.len.1
+  %call.arg.46.1 = call ptr @malloc(i64 %call.arg.str.alloclen.1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.46.1, ptr %call.arg.str.ptr.1, i64 %call.arg.str.len.1, i1 false)
+  %call.arg.str.null.1 = getelementptr inbounds i8, ptr %call.arg.46.1, i64 %call.arg.str.len.1
   store i8 0, ptr %call.arg.str.null.1
   %call.arg.str.ptr.2 = extractvalue %kira.string %r2, 0
   %call.arg.str.len.2 = extractvalue %kira.string %r2, 1
   %call.arg.str.alloclen.2 = add i64 %call.arg.str.len.2, 1
-  %call.arg.49.2 = call ptr @malloc(i64 %call.arg.str.alloclen.2)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.49.2, ptr %call.arg.str.ptr.2, i64 %call.arg.str.len.2, i1 false)
-  %call.arg.str.null.2 = getelementptr inbounds i8, ptr %call.arg.49.2, i64 %call.arg.str.len.2
+  %call.arg.46.2 = call ptr @malloc(i64 %call.arg.str.alloclen.2)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.46.2, ptr %call.arg.str.ptr.2, i64 %call.arg.str.len.2, i1 false)
+  %call.arg.str.null.2 = getelementptr inbounds i8, ptr %call.arg.46.2, i64 %call.arg.str.len.2
   store i8 0, ptr %call.arg.str.null.2
-  %call.int.3 = call i32 @"kg_make_ksl_shader"(ptr %call.arg.49.0, ptr %call.arg.49.1, ptr %call.arg.49.2)
+  %call.int.3 = call i32 @"kg_make_ksl_shader"(ptr %call.arg.46.0, ptr %call.arg.46.1, ptr %call.arg.46.2)
   %r3.sext = sext i32 %call.int.3 to i64
   %r3 = add i64 %r3.sext, 0
   ret i64 %r3
 }
 
-define void @"kira_native_impl_75"(i64 %arg0) {
+define void @"kira_native_impl_72"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
@@ -2377,14 +2297,14 @@ entry:
   br i1 %r2, label %kira_label_0, label %kira_label_1
 kira_label_0:
   %r3 = load i64, ptr %local0
-  %call.arg.46.0 = trunc i64 %r3 to i32
-  call void @"kg_destroy_shader_id"(i32 %call.arg.46.0)
+  %call.arg.43.0 = trunc i64 %r3 to i32
+  call void @"kg_destroy_shader_id"(i32 %call.arg.43.0)
   br label %kira_label_1
 kira_label_1:
   ret void
 }
 
-define i64 @"kira_native_impl_76"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6) {
+define i64 @"kira_native_impl_73"(%kira.string %arg0, i64 %arg1, i64 %arg2, i64 %arg3, i64 %arg4, i64 %arg5, i64 %arg6) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca i64
@@ -2428,17 +2348,17 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r6, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r6, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.28.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.28.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.28.0, i64 %call.arg.str.len.0
+  %call.arg.25.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.25.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.25.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.13 = call i32 @"kg_create_texture_id"(ptr %call.arg.28.0, i64 %r7, i64 %r8, i64 %r9, i64 %r10, i64 %r11, i64 %r12)
+  %call.int.13 = call i32 @"kg_create_texture_id"(ptr %call.arg.25.0, i64 %r7, i64 %r8, i64 %r9, i64 %r10, i64 %r11, i64 %r12)
   %r13.sext = sext i32 %call.int.13 to i64
   %r13 = add i64 %r13.sext, 0
   ret i64 %r13
 }
 
-define void @"kira_native_impl_77"(i64 %arg0) {
+define void @"kira_native_impl_74"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
@@ -2448,14 +2368,14 @@ entry:
   br i1 %r2, label %kira_label_0, label %kira_label_1
 kira_label_0:
   %r3 = load i64, ptr %local0
-  %call.arg.29.0 = trunc i64 %r3 to i32
-  call void @"kg_destroy_texture_id"(i32 %call.arg.29.0)
+  %call.arg.26.0 = trunc i64 %r3 to i32
+  call void @"kg_destroy_texture_id"(i32 %call.arg.26.0)
   br label %kira_label_1
 kira_label_1:
   ret void
 }
 
-define void @"kira_native_impl_78"(%kira.string %arg0) {
+define void @"kira_native_impl_75"(%kira.string %arg0) {
 entry:
   %local0 = alloca %kira.string
   store %kira.string %arg0, ptr %local0
@@ -2467,111 +2387,21 @@ entry:
   ret void
 }
 
-define i64 @"kira_native_impl_85"() {
-entry:
-  %cleanup.heap.slot.0 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.0
-  %cleanup.heap.slot.1 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.1
-  %alloc.size.ptr.0 = getelementptr %t.GraphicsBuffer, ptr null, i32 1
-  %alloc.size.0 = ptrtoint ptr %alloc.size.ptr.0 to i64
-  %alloc.empty.0 = icmp eq i64 %alloc.size.0, 0
-  %alloc.bytes.0 = select i1 %alloc.empty.0, i64 1, i64 %alloc.size.0
-  %alloc.ptr.0 = call ptr @malloc(i64 %alloc.bytes.0)
-  store %t.GraphicsBuffer zeroinitializer, ptr %alloc.ptr.0
-  %r0 = ptrtoint ptr %alloc.ptr.0 to i64
-  store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %alloc.size.ptr.1 = getelementptr %t.BackendBufferHandle, ptr null, i32 1
-  %alloc.size.1 = ptrtoint ptr %alloc.size.ptr.1 to i64
-  %alloc.empty.1 = icmp eq i64 %alloc.size.1, 0
-  %alloc.bytes.1 = select i1 %alloc.empty.1, i64 1, i64 %alloc.size.1
-  %alloc.ptr.1 = call ptr @malloc(i64 %alloc.bytes.1)
-  store %t.BackendBufferHandle zeroinitializer, ptr %alloc.ptr.1
-  %r1 = ptrtoint ptr %alloc.ptr.1 to i64
-  store ptr %alloc.ptr.1, ptr %cleanup.heap.slot.1
-  %r2 = add i64 0, 0
-  %field.base.3 = inttoptr i64 %r1 to ptr
-  %field.ptr.3 = getelementptr inbounds %t.BackendBufferHandle, ptr %field.base.3, i32 0, i32 0
-  %r3 = ptrtoint ptr %field.ptr.3 to i64
-  %store.ptr.2 = inttoptr i64 %r3 to ptr
-  %store.cast.2 = trunc i64 %r2 to i32
-  store i32 %store.cast.2, ptr %store.ptr.2
-  %field.base.4 = inttoptr i64 %r0 to ptr
-  %field.ptr.4 = getelementptr inbounds %t.GraphicsBuffer, ptr %field.base.4, i32 0, i32 0
-  %r4 = ptrtoint ptr %field.ptr.4 to i64
-  %copy.dst.4 = inttoptr i64 %r4 to ptr
-  %copy.src.1 = inttoptr i64 %r1 to ptr
-  %copy.val.4 = load %t.BackendBufferHandle, ptr %copy.src.1
-  store %t.BackendBufferHandle %copy.val.4, ptr %copy.dst.4
-  %r5 = add i64 0, 0
-  %field.base.6 = inttoptr i64 %r0 to ptr
-  %field.ptr.6 = getelementptr inbounds %t.GraphicsBuffer, ptr %field.base.6, i32 0, i32 1
-  %r6 = ptrtoint ptr %field.ptr.6 to i64
-  %store.ptr.5 = inttoptr i64 %r6 to ptr
-  %store.cast.5 = trunc i64 %r5 to i32
-  store i32 %store.cast.5, ptr %store.ptr.5
-  %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.1
-  call void @free(ptr %cleanup.heap.ptr.0)
-  ret i64 %r0
-}
-
-define i64 @"kira_native_impl_89"() {
+define i64 @"kira_native_impl_92"() {
 entry:
   %r0 = add i64 0, 1
-  ret i64 %r0
-}
-
-define i64 @"kira_native_impl_95"() {
-entry:
-  %r0 = add i64 0, 1
-  ret i64 %r0
-}
-
-define i64 @"kira_native_impl_98"() {
-entry:
-  %r0 = add i64 0, 1
-  ret i64 %r0
-}
-
-define i64 @"kira_native_impl_100"() {
-entry:
-  %r0 = add i64 0, 3
-  ret i64 %r0
-}
-
-define i64 @"kira_native_impl_101"() {
-entry:
-  %r0 = add i64 0, 1
-  ret i64 %r0
-}
-
-define i64 @"kira_native_impl_104"() {
-entry:
-  %r0 = add i64 0, 1
-  ret i64 %r0
-}
-
-define i64 @"kira_native_impl_114"() {
-entry:
-  %r0 = add i64 0, 6
-  ret i64 %r0
-}
-
-define i64 @"kira_native_impl_115"() {
-entry:
-  %r0 = add i64 0, 0
   ret i64 %r0
 }
 
 define i64 @"kira_native_impl_118"() {
 entry:
-  %r0 = add i64 0, 1
+  %r0 = add i64 0, 2
   ret i64 %r0
 }
 
-define i64 @"kira_native_impl_121"() {
+define i64 @"kira_native_impl_119"() {
 entry:
-  %r0 = add i64 0, 2
+  %r0 = add i64 0, 1
   ret i64 %r0
 }
 
@@ -2581,19 +2411,13 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_native_impl_125"() {
+define i64 @"kira_native_impl_124"() {
 entry:
   %r0 = add i64 0, 1
   ret i64 %r0
 }
 
-define i64 @"kira_native_impl_127"() {
-entry:
-  %r0 = add i64 0, 1
-  ret i64 %r0
-}
-
-define i1 @"kira_native_impl_429"(i64 %arg0, i64 %arg1, %kira.string %arg2, %kira.string %arg3) {
+define i1 @"kira_native_impl_426"(i64 %arg0, i64 %arg1, %kira.string %arg2, %kira.string %arg3) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -2616,18 +2440,18 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r2, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r2, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.45.1 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.45.1, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.45.1, i64 %call.arg.str.len.0
+  %call.arg.42.1 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.42.1, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.42.1, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
   %call.arg.str.ptr.1 = extractvalue %kira.string %r3, 0
   %call.arg.str.len.1 = extractvalue %kira.string %r3, 1
   %call.arg.str.alloclen.1 = add i64 %call.arg.str.len.1, 1
-  %call.arg.45.2 = call ptr @malloc(i64 %call.arg.str.alloclen.1)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.45.2, ptr %call.arg.str.ptr.1, i64 %call.arg.str.len.1, i1 false)
-  %call.arg.str.null.1 = getelementptr inbounds i8, ptr %call.arg.45.2, i64 %call.arg.str.len.1
+  %call.arg.42.2 = call ptr @malloc(i64 %call.arg.str.alloclen.1)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.42.2, ptr %call.arg.str.ptr.1, i64 %call.arg.str.len.1, i1 false)
+  %call.arg.str.null.1 = getelementptr inbounds i8, ptr %call.arg.42.2, i64 %call.arg.str.len.1
   store i8 0, ptr %call.arg.str.null.1
-  %call.int.4 = call i32 @"kg_run_lifetime_stress"(i64 %r1, ptr %call.arg.45.1, ptr %call.arg.45.2)
+  %call.int.4 = call i32 @"kg_run_lifetime_stress"(i64 %r1, ptr %call.arg.42.1, ptr %call.arg.42.2)
   %r4.sext = sext i32 %call.int.4 to i64
   %r4 = add i64 %r4.sext, 0
   %r5 = add i64 0, 0
@@ -2635,7 +2459,7 @@ entry:
   ret i1 %r6
 }
 
-define i64 @"kira_native_impl_430"(i64 %arg0) {
+define i64 @"kira_native_impl_427"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -2871,7 +2695,7 @@ entry:
   %store.ptr.65 = inttoptr i64 %r66 to ptr
   %store.bool.65 = zext i1 %r65 to i8
   store i8 %store.bool.65, ptr %store.ptr.65
-  %r67 = call i64 @"kira_native_impl_121"()
+  %r67 = call i64 @"kira_native_impl_118"()
   %field.base.68 = inttoptr i64 %r0 to ptr
   %field.ptr.68 = getelementptr inbounds %t.GraphicsFrame, ptr %field.base.68, i32 0, i32 33
   %r68 = ptrtoint ptr %field.ptr.68 to i64
@@ -2910,7 +2734,7 @@ entry:
   %store.bool.77 = zext i1 %r77 to i8
   store i8 %store.bool.77, ptr %store.ptr.77
   %rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 175, ptr null, i32 0, ptr %rt.result.0)
+  call void @"kira_hybrid_call_runtime"(i32 172, ptr null, i32 0, ptr %rt.result.0)
   %rt.result.load.0 = load %kira.bridge.value, ptr %rt.result.0
   %r79 = extractvalue %kira.bridge.value %rt.result.load.0, 2
   %field.base.80 = inttoptr i64 %r0 to ptr
@@ -2957,55 +2781,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_native_impl_168"() {
-entry:
-  %cleanup.heap.slot.0 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.0
-  %cleanup.heap.slot.1 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.1
-  %alloc.size.ptr.0 = getelementptr %t.RenderPipeline, ptr null, i32 1
-  %alloc.size.0 = ptrtoint ptr %alloc.size.ptr.0 to i64
-  %alloc.empty.0 = icmp eq i64 %alloc.size.0, 0
-  %alloc.bytes.0 = select i1 %alloc.empty.0, i64 1, i64 %alloc.size.0
-  %alloc.ptr.0 = call ptr @malloc(i64 %alloc.bytes.0)
-  store %t.RenderPipeline zeroinitializer, ptr %alloc.ptr.0
-  %r0 = ptrtoint ptr %alloc.ptr.0 to i64
-  store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %alloc.size.ptr.1 = getelementptr %t.BackendPipelineHandle, ptr null, i32 1
-  %alloc.size.1 = ptrtoint ptr %alloc.size.ptr.1 to i64
-  %alloc.empty.1 = icmp eq i64 %alloc.size.1, 0
-  %alloc.bytes.1 = select i1 %alloc.empty.1, i64 1, i64 %alloc.size.1
-  %alloc.ptr.1 = call ptr @malloc(i64 %alloc.bytes.1)
-  store %t.BackendPipelineHandle zeroinitializer, ptr %alloc.ptr.1
-  %r1 = ptrtoint ptr %alloc.ptr.1 to i64
-  store ptr %alloc.ptr.1, ptr %cleanup.heap.slot.1
-  %r2 = add i64 0, 0
-  %field.base.3 = inttoptr i64 %r1 to ptr
-  %field.ptr.3 = getelementptr inbounds %t.BackendPipelineHandle, ptr %field.base.3, i32 0, i32 0
-  %r3 = ptrtoint ptr %field.ptr.3 to i64
-  %store.ptr.2 = inttoptr i64 %r3 to ptr
-  %store.cast.2 = trunc i64 %r2 to i32
-  store i32 %store.cast.2, ptr %store.ptr.2
-  %field.base.4 = inttoptr i64 %r0 to ptr
-  %field.ptr.4 = getelementptr inbounds %t.RenderPipeline, ptr %field.base.4, i32 0, i32 0
-  %r4 = ptrtoint ptr %field.ptr.4 to i64
-  %copy.dst.4 = inttoptr i64 %r4 to ptr
-  %copy.src.1 = inttoptr i64 %r1 to ptr
-  %copy.val.4 = load %t.BackendPipelineHandle, ptr %copy.src.1
-  store %t.BackendPipelineHandle %copy.val.4, ptr %copy.dst.4
-  %r5 = add i64 0, 0
-  %field.base.6 = inttoptr i64 %r0 to ptr
-  %field.ptr.6 = getelementptr inbounds %t.RenderPipeline, ptr %field.base.6, i32 0, i32 1
-  %r6 = ptrtoint ptr %field.ptr.6 to i64
-  %store.ptr.5 = inttoptr i64 %r6 to ptr
-  %store.cast.5 = trunc i64 %r5 to i32
-  store i32 %store.cast.5, ptr %store.ptr.5
-  %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.1
-  call void @free(ptr %cleanup.heap.ptr.0)
-  ret i64 %r0
-}
-
-define void @"kira_native_impl_169"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4) {
+define void @"kira_native_impl_166"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4) {
 entry:
   %local0 = alloca double
   %local1 = alloca double
@@ -3026,13 +2802,13 @@ entry:
   ret void
 }
 
-define void @"kira_native_impl_170"() {
+define void @"kira_native_impl_167"() {
 entry:
   call void @"kg_ui_pop_clip"()
   ret void
 }
 
-define void @"kira_native_impl_171"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9, double %arg10, double %arg11, double %arg12, double %arg13) {
+define void @"kira_native_impl_168"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9, double %arg10, double %arg11, double %arg12, double %arg13) {
 entry:
   %local0 = alloca double
   %local1 = alloca double
@@ -3080,7 +2856,7 @@ entry:
   ret void
 }
 
-define void @"kira_native_impl_172"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9, double %arg10, double %arg11, double %arg12, double %arg13) {
+define void @"kira_native_impl_169"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9, double %arg10, double %arg11, double %arg12, double %arg13) {
 entry:
   %local0 = alloca double
   %local1 = alloca double
@@ -3128,7 +2904,7 @@ entry:
   ret void
 }
 
-define void @"kira_native_impl_173"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9) {
+define void @"kira_native_impl_170"(double %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9) {
 entry:
   %local0 = alloca double
   %local1 = alloca double
@@ -3164,7 +2940,7 @@ entry:
   ret void
 }
 
-define void @"kira_native_impl_174"(%kira.string %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9) {
+define void @"kira_native_impl_171"(%kira.string %arg0, double %arg1, double %arg2, double %arg3, double %arg4, double %arg5, double %arg6, double %arg7, double %arg8, double %arg9) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca double
@@ -3199,63 +2975,15 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.39.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.39.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.39.0, i64 %call.arg.str.len.0
+  %call.arg.36.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.36.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.36.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  call void @"kg_ui_draw_text"(ptr %call.arg.39.0, double %r1, double %r2, double %r3, double %r4, double %r5, double %r6, double %r7, double %r8, double %r9)
+  call void @"kg_ui_draw_text"(ptr %call.arg.36.0, double %r1, double %r2, double %r3, double %r4, double %r5, double %r6, double %r7, double %r8, double %r9)
   ret void
 }
 
-define i64 @"kira_native_impl_178"() {
-entry:
-  %cleanup.heap.slot.0 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.0
-  %cleanup.heap.slot.1 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.1
-  %alloc.size.ptr.0 = getelementptr %t.GraphicsShader, ptr null, i32 1
-  %alloc.size.0 = ptrtoint ptr %alloc.size.ptr.0 to i64
-  %alloc.empty.0 = icmp eq i64 %alloc.size.0, 0
-  %alloc.bytes.0 = select i1 %alloc.empty.0, i64 1, i64 %alloc.size.0
-  %alloc.ptr.0 = call ptr @malloc(i64 %alloc.bytes.0)
-  store %t.GraphicsShader zeroinitializer, ptr %alloc.ptr.0
-  %r0 = ptrtoint ptr %alloc.ptr.0 to i64
-  store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %alloc.size.ptr.1 = getelementptr %t.BackendShaderHandle, ptr null, i32 1
-  %alloc.size.1 = ptrtoint ptr %alloc.size.ptr.1 to i64
-  %alloc.empty.1 = icmp eq i64 %alloc.size.1, 0
-  %alloc.bytes.1 = select i1 %alloc.empty.1, i64 1, i64 %alloc.size.1
-  %alloc.ptr.1 = call ptr @malloc(i64 %alloc.bytes.1)
-  store %t.BackendShaderHandle zeroinitializer, ptr %alloc.ptr.1
-  %r1 = ptrtoint ptr %alloc.ptr.1 to i64
-  store ptr %alloc.ptr.1, ptr %cleanup.heap.slot.1
-  %r2 = add i64 0, 0
-  %field.base.3 = inttoptr i64 %r1 to ptr
-  %field.ptr.3 = getelementptr inbounds %t.BackendShaderHandle, ptr %field.base.3, i32 0, i32 0
-  %r3 = ptrtoint ptr %field.ptr.3 to i64
-  %store.ptr.2 = inttoptr i64 %r3 to ptr
-  %store.cast.2 = trunc i64 %r2 to i32
-  store i32 %store.cast.2, ptr %store.ptr.2
-  %field.base.4 = inttoptr i64 %r0 to ptr
-  %field.ptr.4 = getelementptr inbounds %t.GraphicsShader, ptr %field.base.4, i32 0, i32 0
-  %r4 = ptrtoint ptr %field.ptr.4 to i64
-  %copy.dst.4 = inttoptr i64 %r4 to ptr
-  %copy.src.1 = inttoptr i64 %r1 to ptr
-  %copy.val.4 = load %t.BackendShaderHandle, ptr %copy.src.1
-  store %t.BackendShaderHandle %copy.val.4, ptr %copy.dst.4
-  %r5 = add i64 0, 0
-  %field.base.6 = inttoptr i64 %r0 to ptr
-  %field.ptr.6 = getelementptr inbounds %t.GraphicsShader, ptr %field.base.6, i32 0, i32 1
-  %r6 = ptrtoint ptr %field.ptr.6 to i64
-  %store.ptr.5 = inttoptr i64 %r6 to ptr
-  %store.cast.5 = trunc i64 %r5 to i32
-  store i32 %store.cast.5, ptr %store.ptr.5
-  %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.1
-  call void @free(ptr %cleanup.heap.ptr.0)
-  ret i64 %r0
-}
-
-define i64 @"kira_native_impl_179"() {
+define i64 @"kira_native_impl_176"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -3303,7 +3031,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_native_impl_181"(%kira.string %arg0, i64 %arg1) {
+define i64 @"kira_native_impl_178"(%kira.string %arg0, i64 %arg1) {
 entry:
   %local0 = alloca %kira.string
   %local1 = alloca i64
@@ -3317,17 +3045,17 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r1, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r1, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.21.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.21.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.21.0, i64 %call.arg.str.len.0
+  %call.arg.18.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.18.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.18.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.3 = call i32 @"kg_create_uniform_id"(ptr %call.arg.21.0, i64 %r2)
+  %call.int.3 = call i32 @"kg_create_uniform_id"(ptr %call.arg.18.0, i64 %r2)
   %r3.sext = sext i32 %call.int.3 to i64
   %r3 = add i64 %r3.sext, 0
   ret i64 %r3
 }
 
-define void @"kira_native_impl_182"(i64 %arg0, i64 %arg1) {
+define void @"kira_native_impl_179"(i64 %arg0, i64 %arg1) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsUniform
@@ -3373,8 +3101,8 @@ kira_label_1:
   %array.get.val.0 = load %kira.bridge.value, ptr %array.get.val.ptr.0
   %array.get.bits.0 = extractvalue %kira.bridge.value %array.get.val.0, 2
   %r12 = bitcast i64 %array.get.bits.0 to double
-  %call.arg.22.0 = trunc i64 %r8 to i32
-  call void @"kg_set_uniform_float"(i32 %call.arg.22.0, i64 %r9, double %r12)
+  %call.arg.19.0 = trunc i64 %r8 to i32
+  call void @"kg_set_uniform_float"(i32 %call.arg.19.0, i64 %r9, double %r12)
   %r13 = load i64, ptr %local2
   %r14 = add i64 0, 1
   %r15 = add i64 %r13, %r14
@@ -3393,22 +3121,22 @@ kira_label_2:
   %load.raw.20 = load i32, ptr %load.ptr.20
   %r20 = sext i32 %load.raw.20 to i64
   %r21 = load i64, ptr %local4
-  %call.arg.23.0 = trunc i64 %r20 to i32
-  call i32 @"kg_finish_uniform_update"(i32 %call.arg.23.0, i64 %r21)
+  %call.arg.20.0 = trunc i64 %r20 to i32
+  call i32 @"kg_finish_uniform_update"(i32 %call.arg.20.0, i64 %r21)
   ret void
 }
 
-define void @"kira_native_impl_183"(i64 %arg0) {
+define void @"kira_native_impl_180"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
-  %call.arg.24.0 = trunc i64 %r0 to i32
-  call void @"kg_destroy_uniform_id"(i32 %call.arg.24.0)
+  %call.arg.21.0 = trunc i64 %r0 to i32
+  call void @"kg_destroy_uniform_id"(i32 %call.arg.21.0)
   ret void
 }
 
-define i64 @"kira_native_impl_184"(%kira.string %arg0) {
+define i64 @"kira_native_impl_181"(%kira.string %arg0) {
 entry:
   %local0 = alloca %kira.string
   store %kira.string %arg0, ptr %local0
@@ -3416,17 +3144,17 @@ entry:
   %call.arg.str.ptr.0 = extractvalue %kira.string %r0, 0
   %call.arg.str.len.0 = extractvalue %kira.string %r0, 1
   %call.arg.str.alloclen.0 = add i64 %call.arg.str.len.0, 1
-  %call.arg.25.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
-  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.25.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
-  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.25.0, i64 %call.arg.str.len.0
+  %call.arg.22.0 = call ptr @malloc(i64 %call.arg.str.alloclen.0)
+  call void @llvm.memcpy.p0.p0.i64(ptr %call.arg.22.0, ptr %call.arg.str.ptr.0, i64 %call.arg.str.len.0, i1 false)
+  %call.arg.str.null.0 = getelementptr inbounds i8, ptr %call.arg.22.0, i64 %call.arg.str.len.0
   store i8 0, ptr %call.arg.str.null.0
-  %call.int.1 = call i32 @"kg_create_bind_group_id"(ptr %call.arg.25.0)
+  %call.int.1 = call i32 @"kg_create_bind_group_id"(ptr %call.arg.22.0)
   %r1.sext = sext i32 %call.int.1 to i64
   %r1 = add i64 %r1.sext, 0
   ret i64 %r1
 }
 
-define void @"kira_native_impl_185"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3) {
+define void @"kira_native_impl_182"(i64 %arg0, i64 %arg1, i64 %arg2, i64 %arg3) {
 entry:
   %local0 = alloca i64
   %local1 = alloca i64
@@ -3446,23 +3174,23 @@ entry:
   %r3 = load i64, ptr %local4
   %r4 = load i64, ptr %local5
   %r5 = load i64, ptr %local3
-  %call.arg.26.0 = trunc i64 %r2 to i32
-  %call.arg.26.3 = trunc i64 %r5 to i32
-  call i32 @"kg_set_bind_group_uniform"(i32 %call.arg.26.0, i64 %r3, i64 %r4, i32 %call.arg.26.3)
+  %call.arg.23.0 = trunc i64 %r2 to i32
+  %call.arg.23.3 = trunc i64 %r5 to i32
+  call i32 @"kg_set_bind_group_uniform"(i32 %call.arg.23.0, i64 %r3, i64 %r4, i32 %call.arg.23.3)
   ret void
 }
 
-define void @"kira_native_impl_186"(i64 %arg0) {
+define void @"kira_native_impl_183"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
-  %call.arg.27.0 = trunc i64 %r0 to i32
-  call void @"kg_destroy_bind_group_id"(i32 %call.arg.27.0)
+  %call.arg.24.0 = trunc i64 %r0 to i32
+  call void @"kg_destroy_bind_group_id"(i32 %call.arg.24.0)
   ret void
 }
 
-define i64 @"kira_native_impl_187"() {
+define i64 @"kira_native_impl_184"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -3476,13 +3204,13 @@ entry:
   store %t.RenderTarget zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = call i64 @"kira_native_impl_127"()
+  %r1 = call i64 @"kira_native_impl_124"()
   %field.base.2 = inttoptr i64 %r0 to ptr
   %field.ptr.2 = getelementptr inbounds %t.RenderTarget, ptr %field.base.2, i32 0, i32 0
   %r2 = ptrtoint ptr %field.ptr.2 to i64
   %store.ptr.1 = inttoptr i64 %r2 to ptr
   store i64 %r1, ptr %store.ptr.1
-  %r3 = call i64 @"kira_native_impl_179"()
+  %r3 = call i64 @"kira_native_impl_176"()
   %cleanup.call.ptr.3 = inttoptr i64 %r3 to ptr
   store ptr %cleanup.call.ptr.3, ptr %cleanup.heap.slot.3
   %field.base.4 = inttoptr i64 %r0 to ptr
@@ -3509,7 +3237,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_native_impl_188"() {
+define i64 @"kira_native_impl_185"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -3523,7 +3251,7 @@ entry:
   store %t.DepthAttachment zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = call i64 @"kira_native_impl_179"()
+  %r1 = call i64 @"kira_native_impl_176"()
   %cleanup.call.ptr.1 = inttoptr i64 %r1 to ptr
   store ptr %cleanup.call.ptr.1, ptr %cleanup.heap.slot.1
   %field.base.2 = inttoptr i64 %r0 to ptr
@@ -3533,13 +3261,13 @@ entry:
   %copy.src.1 = inttoptr i64 %r1 to ptr
   %copy.val.2 = load %t.GraphicsTexture, ptr %copy.src.1
   store %t.GraphicsTexture %copy.val.2, ptr %copy.dst.2
-  %r3 = call i64 @"kira_native_impl_122"()
+  %r3 = call i64 @"kira_native_impl_119"()
   %field.base.4 = inttoptr i64 %r0 to ptr
   %field.ptr.4 = getelementptr inbounds %t.DepthAttachment, ptr %field.base.4, i32 0, i32 1
   %r4 = ptrtoint ptr %field.ptr.4 to i64
   %store.ptr.3 = inttoptr i64 %r4 to ptr
   store i64 %r3, ptr %store.ptr.3
-  %r5 = call i64 @"kira_native_impl_125"()
+  %r5 = call i64 @"kira_native_impl_122"()
   %field.base.6 = inttoptr i64 %r0 to ptr
   %field.ptr.6 = getelementptr inbounds %t.DepthAttachment, ptr %field.base.6, i32 0, i32 2
   %r6 = ptrtoint ptr %field.ptr.6 to i64
@@ -3563,7 +3291,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_native_impl_190"() {
+define i64 @"kira_native_impl_187"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -3577,7 +3305,7 @@ entry:
   store %t.StencilAttachment zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = call i64 @"kira_native_impl_179"()
+  %r1 = call i64 @"kira_native_impl_176"()
   %cleanup.call.ptr.1 = inttoptr i64 %r1 to ptr
   store ptr %cleanup.call.ptr.1, ptr %cleanup.heap.slot.1
   %field.base.2 = inttoptr i64 %r0 to ptr
@@ -3587,13 +3315,13 @@ entry:
   %copy.src.1 = inttoptr i64 %r1 to ptr
   %copy.val.2 = load %t.GraphicsTexture, ptr %copy.src.1
   store %t.GraphicsTexture %copy.val.2, ptr %copy.dst.2
-  %r3 = call i64 @"kira_native_impl_122"()
+  %r3 = call i64 @"kira_native_impl_119"()
   %field.base.4 = inttoptr i64 %r0 to ptr
   %field.ptr.4 = getelementptr inbounds %t.StencilAttachment, ptr %field.base.4, i32 0, i32 1
   %r4 = ptrtoint ptr %field.ptr.4 to i64
   %store.ptr.3 = inttoptr i64 %r4 to ptr
   store i64 %r3, ptr %store.ptr.3
-  %r5 = call i64 @"kira_native_impl_125"()
+  %r5 = call i64 @"kira_native_impl_122"()
   %field.base.6 = inttoptr i64 %r0 to ptr
   %field.ptr.6 = getelementptr inbounds %t.StencilAttachment, ptr %field.base.6, i32 0, i32 2
   %r6 = ptrtoint ptr %field.ptr.6 to i64
@@ -3617,7 +3345,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_native_impl_191"() {
+define i64 @"kira_native_impl_188"() {
 entry:
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
@@ -3631,13 +3359,13 @@ entry:
   store %t.RenderTarget zeroinitializer, ptr %alloc.ptr.0
   %r0 = ptrtoint ptr %alloc.ptr.0 to i64
   store ptr %alloc.ptr.0, ptr %cleanup.heap.slot.0
-  %r1 = call i64 @"kira_native_impl_127"()
+  %r1 = call i64 @"kira_native_impl_124"()
   %field.base.2 = inttoptr i64 %r0 to ptr
   %field.ptr.2 = getelementptr inbounds %t.RenderTarget, ptr %field.base.2, i32 0, i32 0
   %r2 = ptrtoint ptr %field.ptr.2 to i64
   %store.ptr.1 = inttoptr i64 %r2 to ptr
   store i64 %r1, ptr %store.ptr.1
-  %r3 = call i64 @"kira_native_impl_179"()
+  %r3 = call i64 @"kira_native_impl_176"()
   %cleanup.call.ptr.3 = inttoptr i64 %r3 to ptr
   store ptr %cleanup.call.ptr.3, ptr %cleanup.heap.slot.3
   %field.base.4 = inttoptr i64 %r0 to ptr
@@ -3664,7 +3392,7 @@ entry:
   ret i64 %r0
 }
 
-define i64 @"kira_native_impl_192"(i64 %arg0) {
+define i64 @"kira_native_impl_189"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Color
@@ -3720,7 +3448,7 @@ entry:
   store %t.ColorAttachment zeroinitializer, ptr %alloc.ptr.6
   %r6 = ptrtoint ptr %alloc.ptr.6 to i64
   store ptr %alloc.ptr.6, ptr %cleanup.heap.slot.6
-  %r7 = call i64 @"kira_native_impl_191"()
+  %r7 = call i64 @"kira_native_impl_188"()
   %cleanup.call.ptr.7 = inttoptr i64 %r7 to ptr
   store ptr %cleanup.call.ptr.7, ptr %cleanup.heap.slot.7
   %field.base.8 = inttoptr i64 %r6 to ptr
@@ -3730,13 +3458,13 @@ entry:
   %copy.src.7 = inttoptr i64 %r7 to ptr
   %copy.val.8 = load %t.RenderTarget, ptr %copy.src.7
   store %t.RenderTarget %copy.val.8, ptr %copy.dst.8
-  %r9 = call i64 @"kira_native_impl_122"()
+  %r9 = call i64 @"kira_native_impl_119"()
   %field.base.10 = inttoptr i64 %r6 to ptr
   %field.ptr.10 = getelementptr inbounds %t.ColorAttachment, ptr %field.base.10, i32 0, i32 1
   %r10 = ptrtoint ptr %field.ptr.10 to i64
   %store.ptr.9 = inttoptr i64 %r10 to ptr
   store i64 %r9, ptr %store.ptr.9
-  %r11 = call i64 @"kira_native_impl_125"()
+  %r11 = call i64 @"kira_native_impl_122"()
   %field.base.12 = inttoptr i64 %r6 to ptr
   %field.ptr.12 = getelementptr inbounds %t.ColorAttachment, ptr %field.base.12, i32 0, i32 2
   %r12 = ptrtoint ptr %field.ptr.12 to i64
@@ -3750,7 +3478,7 @@ entry:
   %copy.src.13 = inttoptr i64 %r13 to ptr
   %copy.val.14 = load %t.Color, ptr %copy.src.13
   store %t.Color %copy.val.14, ptr %copy.dst.14
-  %r15 = call i64 @"kira_native_impl_187"()
+  %r15 = call i64 @"kira_native_impl_184"()
   %cleanup.call.ptr.15 = inttoptr i64 %r15 to ptr
   store ptr %cleanup.call.ptr.15, ptr %cleanup.heap.slot.15
   %field.base.16 = inttoptr i64 %r6 to ptr
@@ -3787,7 +3515,7 @@ entry:
   store %t.ColorAttachment zeroinitializer, ptr %alloc.ptr.20
   %r20 = ptrtoint ptr %alloc.ptr.20 to i64
   store ptr %alloc.ptr.20, ptr %cleanup.heap.slot.20
-  %r21 = call i64 @"kira_native_impl_191"()
+  %r21 = call i64 @"kira_native_impl_188"()
   %cleanup.call.ptr.21 = inttoptr i64 %r21 to ptr
   store ptr %cleanup.call.ptr.21, ptr %cleanup.heap.slot.21
   %field.base.22 = inttoptr i64 %r20 to ptr
@@ -3797,13 +3525,13 @@ entry:
   %copy.src.21 = inttoptr i64 %r21 to ptr
   %copy.val.22 = load %t.RenderTarget, ptr %copy.src.21
   store %t.RenderTarget %copy.val.22, ptr %copy.dst.22
-  %r23 = call i64 @"kira_native_impl_122"()
+  %r23 = call i64 @"kira_native_impl_119"()
   %field.base.24 = inttoptr i64 %r20 to ptr
   %field.ptr.24 = getelementptr inbounds %t.ColorAttachment, ptr %field.base.24, i32 0, i32 1
   %r24 = ptrtoint ptr %field.ptr.24 to i64
   %store.ptr.23 = inttoptr i64 %r24 to ptr
   store i64 %r23, ptr %store.ptr.23
-  %r25 = call i64 @"kira_native_impl_125"()
+  %r25 = call i64 @"kira_native_impl_122"()
   %field.base.26 = inttoptr i64 %r20 to ptr
   %field.ptr.26 = getelementptr inbounds %t.ColorAttachment, ptr %field.base.26, i32 0, i32 2
   %r26 = ptrtoint ptr %field.ptr.26 to i64
@@ -3817,7 +3545,7 @@ entry:
   %copy.src.27 = inttoptr i64 %r27 to ptr
   %copy.val.28 = load %t.Color, ptr %copy.src.27
   store %t.Color %copy.val.28, ptr %copy.dst.28
-  %r29 = call i64 @"kira_native_impl_187"()
+  %r29 = call i64 @"kira_native_impl_184"()
   %cleanup.call.ptr.29 = inttoptr i64 %r29 to ptr
   store ptr %cleanup.call.ptr.29, ptr %cleanup.heap.slot.29
   %field.base.30 = inttoptr i64 %r20 to ptr
@@ -3848,7 +3576,7 @@ entry:
   %store.ptr.34 = inttoptr i64 %r35 to ptr
   %store.bool.34 = zext i1 %r34 to i8
   store i8 %store.bool.34, ptr %store.ptr.34
-  %r36 = call i64 @"kira_native_impl_188"()
+  %r36 = call i64 @"kira_native_impl_185"()
   %cleanup.call.ptr.36 = inttoptr i64 %r36 to ptr
   store ptr %cleanup.call.ptr.36, ptr %cleanup.heap.slot.36
   %field.base.37 = inttoptr i64 %r0 to ptr
@@ -3865,7 +3593,7 @@ entry:
   %store.ptr.38 = inttoptr i64 %r39 to ptr
   %store.bool.38 = zext i1 %r38 to i8
   store i8 %store.bool.38, ptr %store.ptr.38
-  %r40 = call i64 @"kira_native_impl_190"()
+  %r40 = call i64 @"kira_native_impl_187"()
   %cleanup.call.ptr.40 = inttoptr i64 %r40 to ptr
   store ptr %cleanup.call.ptr.40, ptr %cleanup.heap.slot.40
   %field.base.41 = inttoptr i64 %r0 to ptr
@@ -3899,489 +3627,18 @@ entry:
   ret i64 %r0
 }
 
-define void @"kira_native_impl_445"(i64 %arg0) {
-entry:
-  %local0 = alloca i64
-  %local.storage.0 = alloca %t.Graphics
-  store %t.Graphics zeroinitializer, ptr %local.storage.0
-  %local.storage.int.0 = ptrtoint ptr %local.storage.0 to i64
-  store i64 %local.storage.int.0, ptr %local0
-  %local1 = alloca i64
-  %cleanup.heap.slot.0 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.0
-  %cleanup.heap.slot.4 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.4
-  %cleanup.heap.slot.5 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.5
-  %cleanup.heap.slot.16 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.16
-  %cleanup.heap.slot.18 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.18
-  %cleanup.heap.slot.19 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.19
-  %cleanup.heap.slot.28 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.28
-  %cleanup.heap.slot.30 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.30
-  %cleanup.heap.slot.31 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.31
-  %cleanup.heap.slot.35 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.35
-  %cleanup.heap.slot.37 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.37
-  %cleanup.heap.slot.42 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.42
-  %cleanup.heap.slot.45 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.45
-  %cleanup.heap.slot.52 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.52
-  %cleanup.heap.slot.62 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.62
-  %cleanup.heap.slot.68 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.68
-  %cleanup.heap.slot.72 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.72
-  store i64 %arg0, ptr %local0
-  %r0 = load i64, ptr %local0
-  %field.base.1 = inttoptr i64 %r0 to ptr
-  %field.ptr.1 = getelementptr inbounds %t.Graphics, ptr %field.base.1, i32 0, i32 0
-  %r1 = ptrtoint ptr %field.ptr.1 to i64
-  %load.ptr.2 = inttoptr i64 %r1 to ptr
-  %load.rawptr.2 = load ptr, ptr %load.ptr.2
-  %r2 = ptrtoint ptr %load.rawptr.2 to i64
-  %native.recover.state.3 = inttoptr i64 %r2 to ptr
-  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8814238373109695030)
-  %r3 = ptrtoint ptr %native.recover.payload.3 to i64
-  store i64 %r3, ptr %local1
-  %r4 = load i64, ptr %local0
-  %alloc.size.ptr.5 = getelementptr %t.ShaderDescriptor, ptr null, i32 1
-  %alloc.size.5 = ptrtoint ptr %alloc.size.ptr.5 to i64
-  %alloc.empty.5 = icmp eq i64 %alloc.size.5, 0
-  %alloc.bytes.5 = select i1 %alloc.empty.5, i64 1, i64 %alloc.size.5
-  %alloc.ptr.5 = call ptr @malloc(i64 %alloc.bytes.5)
-  store %t.ShaderDescriptor zeroinitializer, ptr %alloc.ptr.5
-  %r5 = ptrtoint ptr %alloc.ptr.5 to i64
-  store ptr %alloc.ptr.5, ptr %cleanup.heap.slot.5
-  %r6 = load %kira.string, ptr @kira_str_2
-  %field.base.7 = inttoptr i64 %r5 to ptr
-  %field.ptr.7 = getelementptr inbounds %t.ShaderDescriptor, ptr %field.base.7, i32 0, i32 0
-  %r7 = ptrtoint ptr %field.ptr.7 to i64
-  %store.ptr.6 = inttoptr i64 %r7 to ptr
-  store %kira.string %r6, ptr %store.ptr.6
-  %r8 = load %kira.string, ptr @kira_str_3
-  %field.base.9 = inttoptr i64 %r5 to ptr
-  %field.ptr.9 = getelementptr inbounds %t.ShaderDescriptor, ptr %field.base.9, i32 0, i32 1
-  %r9 = ptrtoint ptr %field.ptr.9 to i64
-  %store.ptr.8 = inttoptr i64 %r9 to ptr
-  store %kira.string %r8, ptr %store.ptr.8
-  %r10 = load %kira.string, ptr @kira_str_4
-  %field.base.11 = inttoptr i64 %r5 to ptr
-  %field.ptr.11 = getelementptr inbounds %t.ShaderDescriptor, ptr %field.base.11, i32 0, i32 2
-  %r11 = ptrtoint ptr %field.ptr.11 to i64
-  %store.ptr.10 = inttoptr i64 %r11 to ptr
-  store %kira.string %r10, ptr %store.ptr.10
-  %r12 = load %kira.string, ptr @kira_str_5
-  %field.base.13 = inttoptr i64 %r5 to ptr
-  %field.ptr.13 = getelementptr inbounds %t.ShaderDescriptor, ptr %field.base.13, i32 0, i32 3
-  %r13 = ptrtoint ptr %field.ptr.13 to i64
-  %store.ptr.12 = inttoptr i64 %r13 to ptr
-  store %kira.string %r12, ptr %store.ptr.12
-  %r14 = load %kira.string, ptr @kira_str_6
-  %field.base.15 = inttoptr i64 %r5 to ptr
-  %field.ptr.15 = getelementptr inbounds %t.ShaderDescriptor, ptr %field.base.15, i32 0, i32 4
-  %r15 = ptrtoint ptr %field.ptr.15 to i64
-  %store.ptr.14 = inttoptr i64 %r15 to ptr
-  store %kira.string %r14, ptr %store.ptr.14
-  %rt.args.0 = alloca [2 x %kira.bridge.value]
-  %rt.slot.0.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.0, i64 0, i64 0
-  %rt.pack.0.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.0.0.1 = insertvalue %kira.bridge.value %rt.pack.0.0.0, i64 %r4, 2
-  store %kira.bridge.value %rt.pack.0.0.1, ptr %rt.slot.0.0
-  %rt.slot.0.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.0, i64 0, i64 1
-  %rt.pack.0.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.0.1.1 = insertvalue %kira.bridge.value %rt.pack.0.1.0, i64 %r5, 2
-  store %kira.bridge.value %rt.pack.0.1.1, ptr %rt.slot.0.1
-  %rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 412, ptr %rt.args.0, i32 2, ptr %rt.result.0)
-  %rt.result.load.0 = load %kira.bridge.value, ptr %rt.result.0
-  %r16 = extractvalue %kira.bridge.value %rt.result.load.0, 2
-  %r17 = load i64, ptr %local1
-  %native.state.set.ptr.16 = inttoptr i64 %r17 to ptr
-  %native.state.set.slot.16 = getelementptr inbounds %kira.bridge.value, ptr %native.state.set.ptr.16, i64 0
-  %native.state.set.pack.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %native.state.set.struct.src.1 = inttoptr i64 %r16 to ptr
-  %native.state.set.struct.value.1 = load %t.GraphicsShader, ptr %native.state.set.struct.src.1
-  %native.state.set.struct.size.ptr.1 = getelementptr %t.GraphicsShader, ptr null, i32 1
-  %native.state.set.struct.size.1 = ptrtoint ptr %native.state.set.struct.size.ptr.1 to i64
-  %native.state.set.struct.copy.1 = call ptr @malloc(i64 %native.state.set.struct.size.1)
-  store %t.GraphicsShader %native.state.set.struct.value.1, ptr %native.state.set.struct.copy.1
-  %native.state.set.struct.ptrint.1 = ptrtoint ptr %native.state.set.struct.copy.1 to i64
-  %native.state.set.pack.1 = insertvalue %kira.bridge.value %native.state.set.pack.1.0, i64 %native.state.set.struct.ptrint.1, 2
-  store %kira.bridge.value %native.state.set.pack.1, ptr %native.state.set.slot.16
-  %r18 = load i64, ptr %local0
-  %alloc.size.ptr.19 = getelementptr %t.BufferDescriptor, ptr null, i32 1
-  %alloc.size.19 = ptrtoint ptr %alloc.size.ptr.19 to i64
-  %alloc.empty.19 = icmp eq i64 %alloc.size.19, 0
-  %alloc.bytes.19 = select i1 %alloc.empty.19, i64 1, i64 %alloc.size.19
-  %alloc.ptr.19 = call ptr @malloc(i64 %alloc.bytes.19)
-  store %t.BufferDescriptor zeroinitializer, ptr %alloc.ptr.19
-  %r19 = ptrtoint ptr %alloc.ptr.19 to i64
-  store ptr %alloc.ptr.19, ptr %cleanup.heap.slot.19
-  %r20 = load %kira.string, ptr @kira_str_7
-  %field.base.21 = inttoptr i64 %r19 to ptr
-  %field.ptr.21 = getelementptr inbounds %t.BufferDescriptor, ptr %field.base.21, i32 0, i32 0
-  %r21 = ptrtoint ptr %field.ptr.21 to i64
-  %store.ptr.20 = inttoptr i64 %r21 to ptr
-  store %kira.string %r20, ptr %store.ptr.20
-  %r22 = call i64 @"kira_native_impl_89"()
-  %field.base.23 = inttoptr i64 %r19 to ptr
-  %field.ptr.23 = getelementptr inbounds %t.BufferDescriptor, ptr %field.base.23, i32 0, i32 1
-  %r23 = ptrtoint ptr %field.ptr.23 to i64
-  %store.ptr.22 = inttoptr i64 %r23 to ptr
-  store i64 %r22, ptr %store.ptr.22
-  %r24 = add i64 0, 8
-  %field.base.25 = inttoptr i64 %r19 to ptr
-  %field.ptr.25 = getelementptr inbounds %t.BufferDescriptor, ptr %field.base.25, i32 0, i32 2
-  %r25 = ptrtoint ptr %field.ptr.25 to i64
-  %store.ptr.24 = inttoptr i64 %r25 to ptr
-  store i64 %r24, ptr %store.ptr.24
-  %rt.result.2 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 0, ptr null, i32 0, ptr %rt.result.2)
-  %rt.result.load.2 = load %kira.bridge.value, ptr %rt.result.2
-  %r26 = extractvalue %kira.bridge.value %rt.result.load.2, 2
-  %field.base.27 = inttoptr i64 %r19 to ptr
-  %field.ptr.27 = getelementptr inbounds %t.BufferDescriptor, ptr %field.base.27, i32 0, i32 3
-  %r27 = ptrtoint ptr %field.ptr.27 to i64
-  %store.ptr.26 = inttoptr i64 %r27 to ptr
-  %store.arrayptr.26 = inttoptr i64 %r26 to ptr
-  store ptr %store.arrayptr.26, ptr %store.ptr.26
-  %rt.args.3 = alloca [2 x %kira.bridge.value]
-  %rt.slot.3.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.3, i64 0, i64 0
-  %rt.pack.3.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.3.0.1 = insertvalue %kira.bridge.value %rt.pack.3.0.0, i64 %r18, 2
-  store %kira.bridge.value %rt.pack.3.0.1, ptr %rt.slot.3.0
-  %rt.slot.3.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.3, i64 0, i64 1
-  %rt.pack.3.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.3.1.1 = insertvalue %kira.bridge.value %rt.pack.3.1.0, i64 %r19, 2
-  store %kira.bridge.value %rt.pack.3.1.1, ptr %rt.slot.3.1
-  %rt.result.3 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 418, ptr %rt.args.3, i32 2, ptr %rt.result.3)
-  %rt.result.load.3 = load %kira.bridge.value, ptr %rt.result.3
-  %r28 = extractvalue %kira.bridge.value %rt.result.load.3, 2
-  %r29 = load i64, ptr %local1
-  %native.state.set.ptr.28 = inttoptr i64 %r29 to ptr
-  %native.state.set.slot.28 = getelementptr inbounds %kira.bridge.value, ptr %native.state.set.ptr.28, i64 2
-  %native.state.set.pack.4.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %native.state.set.struct.src.4 = inttoptr i64 %r28 to ptr
-  %native.state.set.struct.value.4 = load %t.GraphicsBuffer, ptr %native.state.set.struct.src.4
-  %native.state.set.struct.size.ptr.4 = getelementptr %t.GraphicsBuffer, ptr null, i32 1
-  %native.state.set.struct.size.4 = ptrtoint ptr %native.state.set.struct.size.ptr.4 to i64
-  %native.state.set.struct.copy.4 = call ptr @malloc(i64 %native.state.set.struct.size.4)
-  store %t.GraphicsBuffer %native.state.set.struct.value.4, ptr %native.state.set.struct.copy.4
-  %native.state.set.struct.ptrint.4 = ptrtoint ptr %native.state.set.struct.copy.4 to i64
-  %native.state.set.pack.4 = insertvalue %kira.bridge.value %native.state.set.pack.4.0, i64 %native.state.set.struct.ptrint.4, 2
-  store %kira.bridge.value %native.state.set.pack.4, ptr %native.state.set.slot.28
-  %r30 = load i64, ptr %local0
-  %alloc.size.ptr.31 = getelementptr %t.RenderPipelineDescriptor, ptr null, i32 1
-  %alloc.size.31 = ptrtoint ptr %alloc.size.ptr.31 to i64
-  %alloc.empty.31 = icmp eq i64 %alloc.size.31, 0
-  %alloc.bytes.31 = select i1 %alloc.empty.31, i64 1, i64 %alloc.size.31
-  %alloc.ptr.31 = call ptr @malloc(i64 %alloc.bytes.31)
-  store %t.RenderPipelineDescriptor zeroinitializer, ptr %alloc.ptr.31
-  %r31 = ptrtoint ptr %alloc.ptr.31 to i64
-  store ptr %alloc.ptr.31, ptr %cleanup.heap.slot.31
-  %r32 = load %kira.string, ptr @kira_str_8
-  %field.base.33 = inttoptr i64 %r31 to ptr
-  %field.ptr.33 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.33, i32 0, i32 0
-  %r33 = ptrtoint ptr %field.ptr.33 to i64
-  %store.ptr.32 = inttoptr i64 %r33 to ptr
-  store %kira.string %r32, ptr %store.ptr.32
-  %r34 = load i64, ptr %local1
-  %native.state.get.ptr.35 = inttoptr i64 %r34 to ptr
-  %native.state.get.slot.35 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.35, i64 0
-  %native.state.get.val.5 = load %kira.bridge.value, ptr %native.state.get.slot.35
-  %r35 = extractvalue %kira.bridge.value %native.state.get.val.5, 2
-  %field.base.36 = inttoptr i64 %r31 to ptr
-  %field.ptr.36 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.36, i32 0, i32 1
-  %r36 = ptrtoint ptr %field.ptr.36 to i64
-  %copy.dst.36 = inttoptr i64 %r36 to ptr
-  %copy.src.35 = inttoptr i64 %r35 to ptr
-  %copy.val.36 = load %t.GraphicsShader, ptr %copy.src.35
-  store %t.GraphicsShader %copy.val.36, ptr %copy.dst.36
-  %rt.result.6 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 1, ptr null, i32 0, ptr %rt.result.6)
-  %rt.result.load.6 = load %kira.bridge.value, ptr %rt.result.6
-  %r37 = extractvalue %kira.bridge.value %rt.result.load.6, 2
-  %field.base.38 = inttoptr i64 %r31 to ptr
-  %field.ptr.38 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.38, i32 0, i32 2
-  %r38 = ptrtoint ptr %field.ptr.38 to i64
-  %copy.dst.38 = inttoptr i64 %r38 to ptr
-  %copy.src.37 = inttoptr i64 %r37 to ptr
-  %copy.val.38 = load %t.VertexLayout, ptr %copy.src.37
-  store %t.VertexLayout %copy.val.38, ptr %copy.dst.38
-  %r39 = add i64 0, 1
-  %alloc.array.ptr.40 = call ptr @"kira_array_alloc"(i64 %r39)
-  %r40 = ptrtoint ptr %alloc.array.ptr.40 to i64
-  %r41 = add i64 0, 0
-  %alloc.size.ptr.42 = getelementptr %t.ColorTargetDescriptor, ptr null, i32 1
-  %alloc.size.42 = ptrtoint ptr %alloc.size.ptr.42 to i64
-  %alloc.empty.42 = icmp eq i64 %alloc.size.42, 0
-  %alloc.bytes.42 = select i1 %alloc.empty.42, i64 1, i64 %alloc.size.42
-  %alloc.ptr.42 = call ptr @malloc(i64 %alloc.bytes.42)
-  store %t.ColorTargetDescriptor zeroinitializer, ptr %alloc.ptr.42
-  %r42 = ptrtoint ptr %alloc.ptr.42 to i64
-  store ptr %alloc.ptr.42, ptr %cleanup.heap.slot.42
-  %r43 = call i64 @"kira_native_impl_98"()
-  %field.base.44 = inttoptr i64 %r42 to ptr
-  %field.ptr.44 = getelementptr inbounds %t.ColorTargetDescriptor, ptr %field.base.44, i32 0, i32 0
-  %r44 = ptrtoint ptr %field.ptr.44 to i64
-  %store.ptr.43 = inttoptr i64 %r44 to ptr
-  store i64 %r43, ptr %store.ptr.43
-  %alloc.size.ptr.45 = getelementptr %t.BlendState, ptr null, i32 1
-  %alloc.size.45 = ptrtoint ptr %alloc.size.ptr.45 to i64
-  %alloc.empty.45 = icmp eq i64 %alloc.size.45, 0
-  %alloc.bytes.45 = select i1 %alloc.empty.45, i64 1, i64 %alloc.size.45
-  %alloc.ptr.45 = call ptr @malloc(i64 %alloc.bytes.45)
-  store %t.BlendState zeroinitializer, ptr %alloc.ptr.45
-  %r45 = ptrtoint ptr %alloc.ptr.45 to i64
-  store ptr %alloc.ptr.45, ptr %cleanup.heap.slot.45
-  %r46 = add i1 0, 0
-  %field.base.47 = inttoptr i64 %r45 to ptr
-  %field.ptr.47 = getelementptr inbounds %t.BlendState, ptr %field.base.47, i32 0, i32 0
-  %r47 = ptrtoint ptr %field.ptr.47 to i64
-  %store.ptr.46 = inttoptr i64 %r47 to ptr
-  %store.bool.46 = zext i1 %r46 to i8
-  store i8 %store.bool.46, ptr %store.ptr.46
-  %r48 = call i64 @"kira_native_impl_104"()
-  %field.base.49 = inttoptr i64 %r45 to ptr
-  %field.ptr.49 = getelementptr inbounds %t.BlendState, ptr %field.base.49, i32 0, i32 1
-  %r49 = ptrtoint ptr %field.ptr.49 to i64
-  %store.ptr.48 = inttoptr i64 %r49 to ptr
-  store i64 %r48, ptr %store.ptr.48
-  %field.base.50 = inttoptr i64 %r42 to ptr
-  %field.ptr.50 = getelementptr inbounds %t.ColorTargetDescriptor, ptr %field.base.50, i32 0, i32 1
-  %r50 = ptrtoint ptr %field.ptr.50 to i64
-  %copy.dst.50 = inttoptr i64 %r50 to ptr
-  %copy.src.45 = inttoptr i64 %r45 to ptr
-  %copy.val.50 = load %t.BlendState, ptr %copy.src.45
-  store %t.BlendState %copy.val.50, ptr %copy.dst.50
-  %array.set.ptr.42 = inttoptr i64 %r40 to ptr
-  %array.set.pack.7.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %array.set.pack.7 = insertvalue %kira.bridge.value %array.set.pack.7.0, i64 %r42, 2
-  %array.set.pack.ptr.7 = alloca %kira.bridge.value
-  store %kira.bridge.value %array.set.pack.7, ptr %array.set.pack.ptr.7
-  call void @"kira_array_store"(ptr %array.set.ptr.42, i64 %r41, ptr %array.set.pack.ptr.7)
-  %field.base.51 = inttoptr i64 %r31 to ptr
-  %field.ptr.51 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.51, i32 0, i32 3
-  %r51 = ptrtoint ptr %field.ptr.51 to i64
-  %store.ptr.40 = inttoptr i64 %r51 to ptr
-  %store.arrayptr.40 = inttoptr i64 %r40 to ptr
-  store ptr %store.arrayptr.40, ptr %store.ptr.40
-  %alloc.size.ptr.52 = getelementptr %t.DepthStencilDescriptor, ptr null, i32 1
-  %alloc.size.52 = ptrtoint ptr %alloc.size.ptr.52 to i64
-  %alloc.empty.52 = icmp eq i64 %alloc.size.52, 0
-  %alloc.bytes.52 = select i1 %alloc.empty.52, i64 1, i64 %alloc.size.52
-  %alloc.ptr.52 = call ptr @malloc(i64 %alloc.bytes.52)
-  store %t.DepthStencilDescriptor zeroinitializer, ptr %alloc.ptr.52
-  %r52 = ptrtoint ptr %alloc.ptr.52 to i64
-  store ptr %alloc.ptr.52, ptr %cleanup.heap.slot.52
-  %r53 = add i1 0, 0
-  %field.base.54 = inttoptr i64 %r52 to ptr
-  %field.ptr.54 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.54, i32 0, i32 0
-  %r54 = ptrtoint ptr %field.ptr.54 to i64
-  %store.ptr.53 = inttoptr i64 %r54 to ptr
-  %store.bool.53 = zext i1 %r53 to i8
-  store i8 %store.bool.53, ptr %store.ptr.53
-  %r55 = add i1 0, 0
-  %field.base.56 = inttoptr i64 %r52 to ptr
-  %field.ptr.56 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.56, i32 0, i32 1
-  %r56 = ptrtoint ptr %field.ptr.56 to i64
-  %store.ptr.55 = inttoptr i64 %r56 to ptr
-  %store.bool.55 = zext i1 %r55 to i8
-  store i8 %store.bool.55, ptr %store.ptr.55
-  %r57 = call i64 @"kira_native_impl_114"()
-  %field.base.58 = inttoptr i64 %r52 to ptr
-  %field.ptr.58 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.58, i32 0, i32 2
-  %r58 = ptrtoint ptr %field.ptr.58 to i64
-  %store.ptr.57 = inttoptr i64 %r58 to ptr
-  store i64 %r57, ptr %store.ptr.57
-  %r59 = call i64 @"kira_native_impl_100"()
-  %field.base.60 = inttoptr i64 %r52 to ptr
-  %field.ptr.60 = getelementptr inbounds %t.DepthStencilDescriptor, ptr %field.base.60, i32 0, i32 3
-  %r60 = ptrtoint ptr %field.ptr.60 to i64
-  %store.ptr.59 = inttoptr i64 %r60 to ptr
-  store i64 %r59, ptr %store.ptr.59
-  %field.base.61 = inttoptr i64 %r31 to ptr
-  %field.ptr.61 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.61, i32 0, i32 4
-  %r61 = ptrtoint ptr %field.ptr.61 to i64
-  %copy.dst.61 = inttoptr i64 %r61 to ptr
-  %copy.src.52 = inttoptr i64 %r52 to ptr
-  %copy.val.61 = load %t.DepthStencilDescriptor, ptr %copy.src.52
-  store %t.DepthStencilDescriptor %copy.val.61, ptr %copy.dst.61
-  %alloc.size.ptr.62 = getelementptr %t.RasterizationDescriptor, ptr null, i32 1
-  %alloc.size.62 = ptrtoint ptr %alloc.size.ptr.62 to i64
-  %alloc.empty.62 = icmp eq i64 %alloc.size.62, 0
-  %alloc.bytes.62 = select i1 %alloc.empty.62, i64 1, i64 %alloc.size.62
-  %alloc.ptr.62 = call ptr @malloc(i64 %alloc.bytes.62)
-  store %t.RasterizationDescriptor zeroinitializer, ptr %alloc.ptr.62
-  %r62 = ptrtoint ptr %alloc.ptr.62 to i64
-  store ptr %alloc.ptr.62, ptr %cleanup.heap.slot.62
-  %r63 = call i64 @"kira_native_impl_115"()
-  %field.base.64 = inttoptr i64 %r62 to ptr
-  %field.ptr.64 = getelementptr inbounds %t.RasterizationDescriptor, ptr %field.base.64, i32 0, i32 0
-  %r64 = ptrtoint ptr %field.ptr.64 to i64
-  %store.ptr.63 = inttoptr i64 %r64 to ptr
-  store i64 %r63, ptr %store.ptr.63
-  %r65 = call i64 @"kira_native_impl_118"()
-  %field.base.66 = inttoptr i64 %r62 to ptr
-  %field.ptr.66 = getelementptr inbounds %t.RasterizationDescriptor, ptr %field.base.66, i32 0, i32 1
-  %r66 = ptrtoint ptr %field.ptr.66 to i64
-  %store.ptr.65 = inttoptr i64 %r66 to ptr
-  store i64 %r65, ptr %store.ptr.65
-  %field.base.67 = inttoptr i64 %r31 to ptr
-  %field.ptr.67 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.67, i32 0, i32 5
-  %r67 = ptrtoint ptr %field.ptr.67 to i64
-  %copy.dst.67 = inttoptr i64 %r67 to ptr
-  %copy.src.62 = inttoptr i64 %r62 to ptr
-  %copy.val.67 = load %t.RasterizationDescriptor, ptr %copy.src.62
-  store %t.RasterizationDescriptor %copy.val.67, ptr %copy.dst.67
-  %alloc.size.ptr.68 = getelementptr %t.PrimitiveDescriptor, ptr null, i32 1
-  %alloc.size.68 = ptrtoint ptr %alloc.size.ptr.68 to i64
-  %alloc.empty.68 = icmp eq i64 %alloc.size.68, 0
-  %alloc.bytes.68 = select i1 %alloc.empty.68, i64 1, i64 %alloc.size.68
-  %alloc.ptr.68 = call ptr @malloc(i64 %alloc.bytes.68)
-  store %t.PrimitiveDescriptor zeroinitializer, ptr %alloc.ptr.68
-  %r68 = ptrtoint ptr %alloc.ptr.68 to i64
-  store ptr %alloc.ptr.68, ptr %cleanup.heap.slot.68
-  %r69 = call i64 @"kira_native_impl_101"()
-  %field.base.70 = inttoptr i64 %r68 to ptr
-  %field.ptr.70 = getelementptr inbounds %t.PrimitiveDescriptor, ptr %field.base.70, i32 0, i32 0
-  %r70 = ptrtoint ptr %field.ptr.70 to i64
-  %store.ptr.69 = inttoptr i64 %r70 to ptr
-  store i64 %r69, ptr %store.ptr.69
-  %field.base.71 = inttoptr i64 %r31 to ptr
-  %field.ptr.71 = getelementptr inbounds %t.RenderPipelineDescriptor, ptr %field.base.71, i32 0, i32 6
-  %r71 = ptrtoint ptr %field.ptr.71 to i64
-  %copy.dst.71 = inttoptr i64 %r71 to ptr
-  %copy.src.68 = inttoptr i64 %r68 to ptr
-  %copy.val.71 = load %t.PrimitiveDescriptor, ptr %copy.src.68
-  store %t.PrimitiveDescriptor %copy.val.71, ptr %copy.dst.71
-  %rt.args.8 = alloca [2 x %kira.bridge.value]
-  %rt.slot.8.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.8, i64 0, i64 0
-  %rt.pack.8.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.8.0.1 = insertvalue %kira.bridge.value %rt.pack.8.0.0, i64 %r30, 2
-  store %kira.bridge.value %rt.pack.8.0.1, ptr %rt.slot.8.0
-  %rt.slot.8.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.8, i64 0, i64 1
-  %rt.pack.8.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.8.1.1 = insertvalue %kira.bridge.value %rt.pack.8.1.0, i64 %r31, 2
-  store %kira.bridge.value %rt.pack.8.1.1, ptr %rt.slot.8.1
-  %rt.result.8 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 415, ptr %rt.args.8, i32 2, ptr %rt.result.8)
-  %rt.result.load.8 = load %kira.bridge.value, ptr %rt.result.8
-  %r72 = extractvalue %kira.bridge.value %rt.result.load.8, 2
-  %r73 = load i64, ptr %local1
-  %native.state.set.ptr.72 = inttoptr i64 %r73 to ptr
-  %native.state.set.slot.72 = getelementptr inbounds %kira.bridge.value, ptr %native.state.set.ptr.72, i64 1
-  %native.state.set.pack.9.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %native.state.set.struct.src.9 = inttoptr i64 %r72 to ptr
-  %native.state.set.struct.value.9 = load %t.RenderPipeline, ptr %native.state.set.struct.src.9
-  %native.state.set.struct.size.ptr.9 = getelementptr %t.RenderPipeline, ptr null, i32 1
-  %native.state.set.struct.size.9 = ptrtoint ptr %native.state.set.struct.size.ptr.9 to i64
-  %native.state.set.struct.copy.9 = call ptr @malloc(i64 %native.state.set.struct.size.9)
-  store %t.RenderPipeline %native.state.set.struct.value.9, ptr %native.state.set.struct.copy.9
-  %native.state.set.struct.ptrint.9 = ptrtoint ptr %native.state.set.struct.copy.9 to i64
-  %native.state.set.pack.9 = insertvalue %kira.bridge.value %native.state.set.pack.9.0, i64 %native.state.set.struct.ptrint.9, 2
-  store %kira.bridge.value %native.state.set.pack.9, ptr %native.state.set.slot.72
-  %cleanup.heap.ptr.10 = load ptr, ptr %cleanup.heap.slot.5
-  call void @free(ptr %cleanup.heap.ptr.10)
-  %cleanup.heap.ptr.11 = load ptr, ptr %cleanup.heap.slot.19
-  call void @free(ptr %cleanup.heap.ptr.11)
-  %cleanup.heap.ptr.12 = load ptr, ptr %cleanup.heap.slot.31
-  call void @free(ptr %cleanup.heap.ptr.12)
-  %cleanup.heap.ptr.13 = load ptr, ptr %cleanup.heap.slot.45
-  call void @free(ptr %cleanup.heap.ptr.13)
-  %cleanup.heap.ptr.14 = load ptr, ptr %cleanup.heap.slot.52
-  call void @free(ptr %cleanup.heap.ptr.14)
-  %cleanup.heap.ptr.15 = load ptr, ptr %cleanup.heap.slot.62
-  call void @free(ptr %cleanup.heap.ptr.15)
-  %cleanup.heap.ptr.16 = load ptr, ptr %cleanup.heap.slot.68
-  call void @free(ptr %cleanup.heap.ptr.16)
-  ret void
-}
-
-define void @"kira_native_impl_447"(i64 %arg0, i64 %arg1, i64 %arg2) {
+define void @"kira_native_impl_443"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.RenderEncoder
   store %t.RenderEncoder zeroinitializer, ptr %local.storage.0
   %local.storage.int.0 = ptrtoint ptr %local.storage.0 to i64
   store i64 %local.storage.int.0, ptr %local0
-  %local1 = alloca i64
-  %local.storage.1 = alloca %t.RenderPipeline
-  store %t.RenderPipeline zeroinitializer, ptr %local.storage.1
-  %local.storage.int.1 = ptrtoint ptr %local.storage.1 to i64
-  store i64 %local.storage.int.1, ptr %local1
-  %local2 = alloca i64
-  %local.storage.2 = alloca %t.GraphicsBuffer
-  store %t.GraphicsBuffer zeroinitializer, ptr %local.storage.2
-  %local.storage.int.2 = ptrtoint ptr %local.storage.2 to i64
-  store i64 %local.storage.int.2, ptr %local2
-  %cleanup.heap.slot.0 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.0
-  %cleanup.heap.slot.1 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.1
-  %cleanup.heap.slot.2 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.2
-  %cleanup.heap.slot.3 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.3
-  %cleanup.heap.slot.4 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.4
   store i64 %arg0, ptr %local0
-  store i64 %arg1, ptr %local1
-  store i64 %arg2, ptr %local2
-  %r0 = load i64, ptr %local0
-  %r1 = load i64, ptr %local1
-  %rt.args.0 = alloca [2 x %kira.bridge.value]
-  %rt.slot.0.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.0, i64 0, i64 0
-  %rt.pack.0.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.0.0.1 = insertvalue %kira.bridge.value %rt.pack.0.0.0, i64 %r0, 2
-  store %kira.bridge.value %rt.pack.0.0.1, ptr %rt.slot.0.0
-  %rt.slot.0.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.0, i64 0, i64 1
-  %rt.pack.0.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.0.1.1 = insertvalue %kira.bridge.value %rt.pack.0.1.0, i64 %r1, 2
-  store %kira.bridge.value %rt.pack.0.1.1, ptr %rt.slot.0.1
-  %rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 431, ptr %rt.args.0, i32 2, ptr %rt.result.0)
-  %r2 = load i64, ptr %local0
-  %r3 = load i64, ptr %local2
-  %rt.args.1 = alloca [2 x %kira.bridge.value]
-  %rt.slot.1.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.1, i64 0, i64 0
-  %rt.pack.1.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.1.0.1 = insertvalue %kira.bridge.value %rt.pack.1.0.0, i64 %r2, 2
-  store %kira.bridge.value %rt.pack.1.0.1, ptr %rt.slot.1.0
-  %rt.slot.1.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.1, i64 0, i64 1
-  %rt.pack.1.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.1.1.1 = insertvalue %kira.bridge.value %rt.pack.1.1.0, i64 %r3, 2
-  store %kira.bridge.value %rt.pack.1.1.1, ptr %rt.slot.1.1
-  %rt.result.1 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 432, ptr %rt.args.1, i32 2, ptr %rt.result.1)
-  %r4 = load i64, ptr %local0
-  %r5 = add i64 0, 3
-  %rt.args.2 = alloca [2 x %kira.bridge.value]
-  %rt.slot.2.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.2, i64 0, i64 0
-  %rt.pack.2.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.2.0.1 = insertvalue %kira.bridge.value %rt.pack.2.0.0, i64 %r4, 2
-  store %kira.bridge.value %rt.pack.2.0.1, ptr %rt.slot.2.0
-  %rt.slot.2.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.2, i64 0, i64 1
-  %rt.pack.2.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %rt.pack.2.1.1 = insertvalue %kira.bridge.value %rt.pack.2.1.0, i64 %r5, 2
-  store %kira.bridge.value %rt.pack.2.1.1, ptr %rt.slot.2.1
-  %rt.result.2 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 435, ptr %rt.args.2, i32 2, ptr %rt.result.2)
   ret void
 }
 
-define void @"kira_native_impl_446"(i64 %arg0) {
+define void @"kira_native_impl_442"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.GraphicsFrame
@@ -4390,42 +3647,26 @@ entry:
   store i64 %local.storage.int.0, ptr %local0
   %local1 = alloca i64
   %local2 = alloca i64
-  %local.storage.2 = alloca %t.RenderPassDescriptor
-  store %t.RenderPassDescriptor zeroinitializer, ptr %local.storage.2
+  %local.storage.2 = alloca %t.Graphics
+  store %t.Graphics zeroinitializer, ptr %local.storage.2
   %local.storage.int.2 = ptrtoint ptr %local.storage.2 to i64
   store i64 %local.storage.int.2, ptr %local2
-  %local3 = alloca i64
-  %local.storage.3 = alloca %t.RenderPipeline
-  store %t.RenderPipeline zeroinitializer, ptr %local.storage.3
-  %local.storage.int.3 = ptrtoint ptr %local.storage.3 to i64
-  store i64 %local.storage.int.3, ptr %local3
-  %local4 = alloca i64
-  %local.storage.4 = alloca %t.GraphicsBuffer
-  store %t.GraphicsBuffer zeroinitializer, ptr %local.storage.4
-  %local.storage.int.4 = ptrtoint ptr %local.storage.4 to i64
-  store i64 %local.storage.int.4, ptr %local4
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
-  %cleanup.heap.slot.4 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.4
-  %cleanup.heap.slot.5 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.5
   %cleanup.heap.slot.7 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.7
   %cleanup.heap.slot.8 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.8
-  %cleanup.heap.slot.10 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.10
-  %cleanup.heap.slot.11 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.11
   %cleanup.heap.slot.12 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.12
   %cleanup.heap.slot.13 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.13
-  %cleanup.heap.slot.15 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.15
-  %cleanup.heap.slot.16 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.16
+  %cleanup.heap.slot.21 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.21
+  %cleanup.heap.slot.22 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.22
+  %cleanup.heap.slot.32 = alloca ptr
+  store ptr null, ptr %cleanup.heap.slot.32
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
   %field.base.1 = inttoptr i64 %r0 to ptr
@@ -4435,79 +3676,132 @@ entry:
   %load.rawptr.2 = load ptr, ptr %load.ptr.2
   %r2 = ptrtoint ptr %load.rawptr.2 to i64
   %native.recover.state.3 = inttoptr i64 %r2 to ptr
-  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8814238373109695030)
+  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 4943524695424902447)
   %r3 = ptrtoint ptr %native.recover.payload.3 to i64
   store i64 %r3, ptr %local1
-  %rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 2, ptr null, i32 0, ptr %rt.result.0)
-  %rt.result.load.0 = load %kira.bridge.value, ptr %rt.result.0
-  %r4 = extractvalue %kira.bridge.value %rt.result.load.0, 2
-  %r5 = load i64, ptr %local2
-  %copy.dst.5 = inttoptr i64 %r5 to ptr
-  %copy.src.4 = inttoptr i64 %r4 to ptr
-  %copy.val.5 = load %t.RenderPassDescriptor, ptr %copy.src.4
-  store %t.RenderPassDescriptor %copy.val.5, ptr %copy.dst.5
-  %r6 = load i64, ptr %local1
-  %native.state.get.ptr.7 = inttoptr i64 %r6 to ptr
-  %native.state.get.slot.7 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.7, i64 1
-  %native.state.get.val.1 = load %kira.bridge.value, ptr %native.state.get.slot.7
-  %r7 = extractvalue %kira.bridge.value %native.state.get.val.1, 2
-  %r8 = load i64, ptr %local3
-  %copy.dst.8 = inttoptr i64 %r8 to ptr
+  %r4 = load i64, ptr %local1
+  %native.state.get.ptr.5 = inttoptr i64 %r4 to ptr
+  %native.state.get.slot.5 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.5, i64 0
+  %native.state.get.val.0 = load %kira.bridge.value, ptr %native.state.get.slot.5
+  %native.state.get.word.0 = extractvalue %kira.bridge.value %native.state.get.val.0, 2
+  %r5 = trunc i64 %native.state.get.word.0 to i1
+  %r6 = xor i1 %r5, true
+  br i1 %r6, label %kira_label_0, label %kira_label_1
+kira_label_0:
+  %alloc.size.ptr.7 = getelementptr %t.Graphics, ptr null, i32 1
+  %alloc.size.7 = ptrtoint ptr %alloc.size.ptr.7 to i64
+  %alloc.empty.7 = icmp eq i64 %alloc.size.7, 0
+  %alloc.bytes.7 = select i1 %alloc.empty.7, i64 1, i64 %alloc.size.7
+  %alloc.ptr.7 = call ptr @malloc(i64 %alloc.bytes.7)
+  store %t.Graphics zeroinitializer, ptr %alloc.ptr.7
+  %r7 = ptrtoint ptr %alloc.ptr.7 to i64
+  store ptr %alloc.ptr.7, ptr %cleanup.heap.slot.7
+  %r8 = load i64, ptr %local0
+  %field.base.9 = inttoptr i64 %r8 to ptr
+  %field.ptr.9 = getelementptr inbounds %t.GraphicsFrame, ptr %field.base.9, i32 0, i32 43
+  %r9 = ptrtoint ptr %field.ptr.9 to i64
+  %load.ptr.10 = inttoptr i64 %r9 to ptr
+  %load.rawptr.10 = load ptr, ptr %load.ptr.10
+  %r10 = ptrtoint ptr %load.rawptr.10 to i64
+  %field.base.11 = inttoptr i64 %r7 to ptr
+  %field.ptr.11 = getelementptr inbounds %t.Graphics, ptr %field.base.11, i32 0, i32 0
+  %r11 = ptrtoint ptr %field.ptr.11 to i64
+  %store.ptr.10 = inttoptr i64 %r11 to ptr
+  %store.rawptr.10 = inttoptr i64 %r10 to ptr
+  store ptr %store.rawptr.10, ptr %store.ptr.10
+  %r12 = load i64, ptr %local2
+  %copy.dst.12 = inttoptr i64 %r12 to ptr
   %copy.src.7 = inttoptr i64 %r7 to ptr
-  %copy.val.8 = load %t.RenderPipeline, ptr %copy.src.7
-  store %t.RenderPipeline %copy.val.8, ptr %copy.dst.8
-  %r9 = load i64, ptr %local1
-  %native.state.get.ptr.10 = inttoptr i64 %r9 to ptr
-  %native.state.get.slot.10 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.10, i64 2
-  %native.state.get.val.2 = load %kira.bridge.value, ptr %native.state.get.slot.10
-  %r10 = extractvalue %kira.bridge.value %native.state.get.val.2, 2
-  %r11 = load i64, ptr %local4
-  %copy.dst.11 = inttoptr i64 %r11 to ptr
-  %copy.src.10 = inttoptr i64 %r10 to ptr
-  %copy.val.11 = load %t.GraphicsBuffer, ptr %copy.src.10
-  store %t.GraphicsBuffer %copy.val.11, ptr %copy.dst.11
-  %r12 = load i64, ptr %local0
+  %copy.val.12 = load %t.Graphics, ptr %copy.src.7
+  store %t.Graphics %copy.val.12, ptr %copy.dst.12
   %r13 = load i64, ptr %local2
-  %r15 = load i64, ptr %local3
-  %r16 = load i64, ptr %local4
-  %closure.size.ptr.14 = getelementptr [2 x %kira.bridge.value], ptr null, i32 1
-  %closure.captures.size.14 = ptrtoint ptr %closure.size.ptr.14 to i64
-  %closure.size.14 = add i64 16, %closure.captures.size.14
-  %closure.ptr.14 = call ptr @malloc(i64 %closure.size.14)
-  store i64 447, ptr %closure.ptr.14
-  %closure.count.ptr.14 = getelementptr inbounds i64, ptr %closure.ptr.14, i64 1
-  store i64 2, ptr %closure.count.ptr.14
-  %closure.slots.14 = getelementptr inbounds i8, ptr %closure.ptr.14, i64 16
-  %closure.slot.14.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots.14, i64 0
-  %closure.pack.14.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %closure.pack.14.0 = insertvalue %kira.bridge.value %closure.pack.14.0.0, i64 %r15, 2
-  store %kira.bridge.value %closure.pack.14.0, ptr %closure.slot.14.0
-  %closure.slot.14.1 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots.14, i64 1
-  %closure.pack.14.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %closure.pack.14.1 = insertvalue %kira.bridge.value %closure.pack.14.1.0, i64 %r16, 2
-  store %kira.bridge.value %closure.pack.14.1, ptr %closure.slot.14.1
-  %closure.raw.14 = ptrtoint ptr %closure.ptr.14 to i64
-  %r14 = or i64 %closure.raw.14, -9223372036854775808
+  %r14 = add i64 0, 200
+  %r15 = load %kira.string, ptr @kira_str_2
+  %r16 = load %kira.string, ptr @kira_str_3
+  %r17 = call i1 @"kira_native_impl_426"(i64 %r13, i64 %r14, %kira.string %r15, %kira.string %r16)
+  %r18 = load i64, ptr %local1
+  %native.state.set.ptr.17 = inttoptr i64 %r18 to ptr
+  %native.state.set.slot.17 = getelementptr inbounds %kira.bridge.value, ptr %native.state.set.ptr.17, i64 1
+  %native.state.set.pack.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 4, 0
+  %native.state.set.bool.1 = zext i1 %r17 to i64
+  %native.state.set.pack.1 = insertvalue %kira.bridge.value %native.state.set.pack.1.0, i64 %native.state.set.bool.1, 2
+  store %kira.bridge.value %native.state.set.pack.1, ptr %native.state.set.slot.17
+  %r19 = add i1 0, 1
+  %r20 = load i64, ptr %local1
+  %native.state.set.ptr.19 = inttoptr i64 %r20 to ptr
+  %native.state.set.slot.19 = getelementptr inbounds %kira.bridge.value, ptr %native.state.set.ptr.19, i64 0
+  %native.state.set.pack.2.0 = insertvalue %kira.bridge.value zeroinitializer, i8 4, 0
+  %native.state.set.bool.2 = zext i1 %r19 to i64
+  %native.state.set.pack.2 = insertvalue %kira.bridge.value %native.state.set.pack.2.0, i64 %native.state.set.bool.2, 2
+  store %kira.bridge.value %native.state.set.pack.2, ptr %native.state.set.slot.19
+  br label %kira_label_1
+kira_label_1:
+  %r21 = load i64, ptr %local0
+  %alloc.size.ptr.22 = getelementptr %t.Color, ptr null, i32 1
+  %alloc.size.22 = ptrtoint ptr %alloc.size.ptr.22 to i64
+  %alloc.empty.22 = icmp eq i64 %alloc.size.22, 0
+  %alloc.bytes.22 = select i1 %alloc.empty.22, i64 1, i64 %alloc.size.22
+  %alloc.ptr.22 = call ptr @malloc(i64 %alloc.bytes.22)
+  store %t.Color zeroinitializer, ptr %alloc.ptr.22
+  %r22 = ptrtoint ptr %alloc.ptr.22 to i64
+  store ptr %alloc.ptr.22, ptr %cleanup.heap.slot.22
+  %r23 = fadd double 0.0, 0.0
+  %field.base.24 = inttoptr i64 %r22 to ptr
+  %field.ptr.24 = getelementptr inbounds %t.Color, ptr %field.base.24, i32 0, i32 0
+  %r24 = ptrtoint ptr %field.ptr.24 to i64
+  %store.ptr.23 = inttoptr i64 %r24 to ptr
+  store double %r23, ptr %store.ptr.23
+  %r25 = fadd double 0.0, 0.0
+  %field.base.26 = inttoptr i64 %r22 to ptr
+  %field.ptr.26 = getelementptr inbounds %t.Color, ptr %field.base.26, i32 0, i32 1
+  %r26 = ptrtoint ptr %field.ptr.26 to i64
+  %store.ptr.25 = inttoptr i64 %r26 to ptr
+  store double %r25, ptr %store.ptr.25
+  %r27 = fadd double 0.0, 0.0
+  %field.base.28 = inttoptr i64 %r22 to ptr
+  %field.ptr.28 = getelementptr inbounds %t.Color, ptr %field.base.28, i32 0, i32 2
+  %r28 = ptrtoint ptr %field.ptr.28 to i64
+  %store.ptr.27 = inttoptr i64 %r28 to ptr
+  store double %r27, ptr %store.ptr.27
+  %r29 = fadd double 0.0, 1.0
+  %field.base.30 = inttoptr i64 %r22 to ptr
+  %field.ptr.30 = getelementptr inbounds %t.Color, ptr %field.base.30, i32 0, i32 3
+  %r30 = ptrtoint ptr %field.ptr.30 to i64
+  %store.ptr.29 = inttoptr i64 %r30 to ptr
+  store double %r29, ptr %store.ptr.29
+  %r31 = add i64 0, 443
   %rt.args.3 = alloca [3 x %kira.bridge.value]
   %rt.slot.3.0 = getelementptr inbounds [3 x %kira.bridge.value], ptr %rt.args.3, i64 0, i64 0
   %rt.pack.3.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.3.0.1 = insertvalue %kira.bridge.value %rt.pack.3.0.0, i64 %r12, 2
+  %rt.pack.3.0.1 = insertvalue %kira.bridge.value %rt.pack.3.0.0, i64 %r21, 2
   store %kira.bridge.value %rt.pack.3.0.1, ptr %rt.slot.3.0
   %rt.slot.3.1 = getelementptr inbounds [3 x %kira.bridge.value], ptr %rt.args.3, i64 0, i64 1
   %rt.pack.3.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.3.1.1 = insertvalue %kira.bridge.value %rt.pack.3.1.0, i64 %r13, 2
+  %rt.pack.3.1.1 = insertvalue %kira.bridge.value %rt.pack.3.1.0, i64 %r22, 2
   store %kira.bridge.value %rt.pack.3.1.1, ptr %rt.slot.3.1
   %rt.slot.3.2 = getelementptr inbounds [3 x %kira.bridge.value], ptr %rt.args.3, i64 0, i64 2
   %rt.pack.3.2.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.3.2.1 = insertvalue %kira.bridge.value %rt.pack.3.2.0, i64 %r14, 2
+  %rt.pack.3.2.1 = insertvalue %kira.bridge.value %rt.pack.3.2.0, i64 %r31, 2
   store %kira.bridge.value %rt.pack.3.2.1, ptr %rt.slot.3.2
   %rt.result.3 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 408, ptr %rt.args.3, i32 3, ptr %rt.result.3)
+  call void @"kira_hybrid_call_runtime"(i32 407, ptr %rt.args.3, i32 3, ptr %rt.result.3)
+  %r32 = load i64, ptr %local0
+  %rt.args.4 = alloca [1 x %kira.bridge.value]
+  %rt.slot.4.0 = getelementptr inbounds [1 x %kira.bridge.value], ptr %rt.args.4, i64 0, i64 0
+  %rt.pack.4.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
+  %rt.pack.4.0.1 = insertvalue %kira.bridge.value %rt.pack.4.0.0, i64 %r32, 2
+  store %kira.bridge.value %rt.pack.4.0.1, ptr %rt.slot.4.0
+  %rt.result.4 = alloca %kira.bridge.value
+  call void @"kira_hybrid_call_runtime"(i32 408, ptr %rt.args.4, i32 1, ptr %rt.result.4)
+  %cleanup.heap.ptr.5 = load ptr, ptr %cleanup.heap.slot.7
+  call void @free(ptr %cleanup.heap.ptr.5)
+  %cleanup.heap.ptr.6 = load ptr, ptr %cleanup.heap.slot.22
+  call void @free(ptr %cleanup.heap.ptr.6)
+  call void @"kira_release_contents_Graphics"(ptr %local.storage.2)
   ret void
 }
 
-define void @"kira_native_impl_448"(i64 %arg0) {
+define void @"kira_native_impl_444"(i64 %arg0) {
 entry:
   %local0 = alloca i64
   %local.storage.0 = alloca %t.Graphics
@@ -4517,18 +3811,6 @@ entry:
   %local1 = alloca i64
   %cleanup.heap.slot.0 = alloca ptr
   store ptr null, ptr %cleanup.heap.slot.0
-  %cleanup.heap.slot.4 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.4
-  %cleanup.heap.slot.6 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.6
-  %cleanup.heap.slot.7 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.7
-  %cleanup.heap.slot.9 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.9
-  %cleanup.heap.slot.10 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.10
-  %cleanup.heap.slot.12 = alloca ptr
-  store ptr null, ptr %cleanup.heap.slot.12
   store i64 %arg0, ptr %local0
   %r0 = load i64, ptr %local0
   %field.base.1 = inttoptr i64 %r0 to ptr
@@ -4538,60 +3820,31 @@ entry:
   %load.rawptr.2 = load ptr, ptr %load.ptr.2
   %r2 = ptrtoint ptr %load.rawptr.2 to i64
   %native.recover.state.3 = inttoptr i64 %r2 to ptr
-  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 8814238373109695030)
+  %native.recover.payload.3 = call ptr @"kira_native_state_recover"(ptr %native.recover.state.3, i64 4943524695424902447)
   %r3 = ptrtoint ptr %native.recover.payload.3 to i64
   store i64 %r3, ptr %local1
-  %r4 = load i64, ptr %local0
-  %r5 = load i64, ptr %local1
-  %native.state.get.ptr.6 = inttoptr i64 %r5 to ptr
-  %native.state.get.slot.6 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.6, i64 2
-  %native.state.get.val.0 = load %kira.bridge.value, ptr %native.state.get.slot.6
-  %r6 = extractvalue %kira.bridge.value %native.state.get.val.0, 2
-  %rt.args.1 = alloca [2 x %kira.bridge.value]
-  %rt.slot.1.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.1, i64 0, i64 0
-  %rt.pack.1.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.1.0.1 = insertvalue %kira.bridge.value %rt.pack.1.0.0, i64 %r4, 2
-  store %kira.bridge.value %rt.pack.1.0.1, ptr %rt.slot.1.0
-  %rt.slot.1.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.1, i64 0, i64 1
-  %rt.pack.1.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.1.1.1 = insertvalue %kira.bridge.value %rt.pack.1.1.0, i64 %r6, 2
-  store %kira.bridge.value %rt.pack.1.1.1, ptr %rt.slot.1.1
-  %rt.result.1 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 420, ptr %rt.args.1, i32 2, ptr %rt.result.1)
-  %r7 = load i64, ptr %local0
-  %r8 = load i64, ptr %local1
-  %native.state.get.ptr.9 = inttoptr i64 %r8 to ptr
-  %native.state.get.slot.9 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.9, i64 1
-  %native.state.get.val.2 = load %kira.bridge.value, ptr %native.state.get.slot.9
-  %r9 = extractvalue %kira.bridge.value %native.state.get.val.2, 2
-  %rt.args.3 = alloca [2 x %kira.bridge.value]
-  %rt.slot.3.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.3, i64 0, i64 0
-  %rt.pack.3.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.3.0.1 = insertvalue %kira.bridge.value %rt.pack.3.0.0, i64 %r7, 2
-  store %kira.bridge.value %rt.pack.3.0.1, ptr %rt.slot.3.0
-  %rt.slot.3.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.3, i64 0, i64 1
-  %rt.pack.3.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.3.1.1 = insertvalue %kira.bridge.value %rt.pack.3.1.0, i64 %r9, 2
-  store %kira.bridge.value %rt.pack.3.1.1, ptr %rt.slot.3.1
-  %rt.result.3 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 417, ptr %rt.args.3, i32 2, ptr %rt.result.3)
-  %r10 = load i64, ptr %local0
-  %r11 = load i64, ptr %local1
-  %native.state.get.ptr.12 = inttoptr i64 %r11 to ptr
-  %native.state.get.slot.12 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.12, i64 0
-  %native.state.get.val.4 = load %kira.bridge.value, ptr %native.state.get.slot.12
-  %r12 = extractvalue %kira.bridge.value %native.state.get.val.4, 2
-  %rt.args.5 = alloca [2 x %kira.bridge.value]
-  %rt.slot.5.0 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.5, i64 0, i64 0
-  %rt.pack.5.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.5.0.1 = insertvalue %kira.bridge.value %rt.pack.5.0.0, i64 %r10, 2
-  store %kira.bridge.value %rt.pack.5.0.1, ptr %rt.slot.5.0
-  %rt.slot.5.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %rt.args.5, i64 0, i64 1
-  %rt.pack.5.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %rt.pack.5.1.1 = insertvalue %kira.bridge.value %rt.pack.5.1.0, i64 %r12, 2
-  store %kira.bridge.value %rt.pack.5.1.1, ptr %rt.slot.5.1
-  %rt.result.5 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 414, ptr %rt.args.5, i32 2, ptr %rt.result.5)
+  %r4 = load i64, ptr %local1
+  %native.state.get.ptr.5 = inttoptr i64 %r4 to ptr
+  %native.state.get.slot.5 = getelementptr inbounds %kira.bridge.value, ptr %native.state.get.ptr.5, i64 1
+  %native.state.get.val.0 = load %kira.bridge.value, ptr %native.state.get.slot.5
+  %native.state.get.word.0 = extractvalue %kira.bridge.value %native.state.get.val.0, 2
+  %r5 = trunc i64 %native.state.get.word.0 to i1
+  br i1 %r5, label %kira_label_0, label %kira_label_1
+kira_label_0:
+  %r6 = load %kira.string, ptr @kira_str_4
+  %print.str.ptr.1 = extractvalue %kira.string %r6, 0
+  %print.str.len.1 = extractvalue %kira.string %r6, 1
+  call void @"kira_native_write_string"(ptr %print.str.ptr.1, i64 %print.str.len.1)
+  call void @"kira_native_write_newline"()
+  br label %kira_label_2
+kira_label_1:
+  %r7 = load %kira.string, ptr @kira_str_5
+  %print.str.ptr.2 = extractvalue %kira.string %r7, 0
+  %print.str.len.2 = extractvalue %kira.string %r7, 1
+  call void @"kira_native_write_string"(ptr %print.str.ptr.2, i64 %print.str.len.2)
+  call void @"kira_native_write_newline"()
+  br label %kira_label_2
+kira_label_2:
   ret void
 }
 
@@ -4601,10 +3854,9 @@ entry:
   br i1 %dispatch.is_direct, label %dispatch.direct, label %dispatch.closure
 dispatch.direct:
   switch i64 %function_id, label %dispatch.default [
-    i64 4, label %dispatch.case.0
-    i64 6, label %dispatch.case.1
-    i64 445, label %dispatch.case.2
-    i64 448, label %dispatch.case.3
+    i64 1, label %dispatch.case.0
+    i64 3, label %dispatch.case.1
+    i64 444, label %dispatch.case.2
   ]
 dispatch.case.0:
   %dispatch.rt.args.0 = alloca [1 x %kira.bridge.value]
@@ -4613,7 +3865,7 @@ dispatch.case.0:
   %dispatch.rt.pack.0.0.1 = insertvalue %kira.bridge.value %dispatch.rt.pack.0.0.0, i64 %arg0, 2
   store %kira.bridge.value %dispatch.rt.pack.0.0.1, ptr %dispatch.rt.slot.0.0
   %dispatch.rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 4, ptr %dispatch.rt.args.0, i32 1, ptr %dispatch.rt.result.0)
+  call void @"kira_hybrid_call_runtime"(i32 1, ptr %dispatch.rt.args.0, i32 1, ptr %dispatch.rt.result.0)
   ret void
 dispatch.case.1:
   %dispatch.rt.args.1 = alloca [1 x %kira.bridge.value]
@@ -4622,13 +3874,10 @@ dispatch.case.1:
   %dispatch.rt.pack.1.0.1 = insertvalue %kira.bridge.value %dispatch.rt.pack.1.0.0, i64 %arg0, 2
   store %kira.bridge.value %dispatch.rt.pack.1.0.1, ptr %dispatch.rt.slot.1.0
   %dispatch.rt.result.1 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 6, ptr %dispatch.rt.args.1, i32 1, ptr %dispatch.rt.result.1)
+  call void @"kira_hybrid_call_runtime"(i32 3, ptr %dispatch.rt.args.1, i32 1, ptr %dispatch.rt.result.1)
   ret void
 dispatch.case.2:
-  call void @"kira_native_impl_445"(i64 %arg0)
-  ret void
-dispatch.case.3:
-  call void @"kira_native_impl_448"(i64 %arg0)
+  call void @"kira_native_impl_444"(i64 %arg0)
   ret void
 dispatch.closure:
   %closure.raw = and i64 %function_id, 9223372036854775807
@@ -4636,14 +3885,14 @@ dispatch.closure:
   %closure.id = load i64, ptr %closure.ptr
   %closure.slots = getelementptr inbounds i8, ptr %closure.ptr, i64 16
   switch i64 %closure.id, label %dispatch.default [
-    i64 414, label %dispatch.closure.case.0
-    i64 416, label %dispatch.closure.case.1
-    i64 417, label %dispatch.closure.case.2
-    i64 420, label %dispatch.closure.case.3
-    i64 422, label %dispatch.closure.case.4
-    i64 423, label %dispatch.closure.case.5
-    i64 426, label %dispatch.closure.case.6
-    i64 428, label %dispatch.closure.case.7
+    i64 411, label %dispatch.closure.case.0
+    i64 413, label %dispatch.closure.case.1
+    i64 414, label %dispatch.closure.case.2
+    i64 417, label %dispatch.closure.case.3
+    i64 419, label %dispatch.closure.case.4
+    i64 420, label %dispatch.closure.case.5
+    i64 423, label %dispatch.closure.case.6
+    i64 425, label %dispatch.closure.case.7
   ]
 dispatch.closure.case.0:
   %closure.slot.0.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4657,7 +3906,7 @@ dispatch.closure.case.0:
   %closure.rt.slot.0.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.0, i64 0, i64 1
   store %kira.bridge.value %closure.value.0.0, ptr %closure.rt.slot.0.1
   %closure.rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 414, ptr %closure.rt.args.0, i32 2, ptr %closure.rt.result.0)
+  call void @"kira_hybrid_call_runtime"(i32 411, ptr %closure.rt.args.0, i32 2, ptr %closure.rt.result.0)
   ret void
 dispatch.closure.case.1:
   %closure.slot.1.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4671,7 +3920,7 @@ dispatch.closure.case.1:
   %closure.rt.slot.1.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.1, i64 0, i64 1
   store %kira.bridge.value %closure.value.1.0, ptr %closure.rt.slot.1.1
   %closure.rt.result.1 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 416, ptr %closure.rt.args.1, i32 2, ptr %closure.rt.result.1)
+  call void @"kira_hybrid_call_runtime"(i32 413, ptr %closure.rt.args.1, i32 2, ptr %closure.rt.result.1)
   ret void
 dispatch.closure.case.2:
   %closure.slot.2.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4685,7 +3934,7 @@ dispatch.closure.case.2:
   %closure.rt.slot.2.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.2, i64 0, i64 1
   store %kira.bridge.value %closure.value.2.0, ptr %closure.rt.slot.2.1
   %closure.rt.result.2 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 417, ptr %closure.rt.args.2, i32 2, ptr %closure.rt.result.2)
+  call void @"kira_hybrid_call_runtime"(i32 414, ptr %closure.rt.args.2, i32 2, ptr %closure.rt.result.2)
   ret void
 dispatch.closure.case.3:
   %closure.slot.3.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4699,7 +3948,7 @@ dispatch.closure.case.3:
   %closure.rt.slot.3.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.3, i64 0, i64 1
   store %kira.bridge.value %closure.value.3.0, ptr %closure.rt.slot.3.1
   %closure.rt.result.3 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 420, ptr %closure.rt.args.3, i32 2, ptr %closure.rt.result.3)
+  call void @"kira_hybrid_call_runtime"(i32 417, ptr %closure.rt.args.3, i32 2, ptr %closure.rt.result.3)
   ret void
 dispatch.closure.case.4:
   %closure.slot.4.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4718,7 +3967,7 @@ dispatch.closure.case.4:
   %closure.rt.slot.4.2 = getelementptr inbounds [3 x %kira.bridge.value], ptr %closure.rt.args.4, i64 0, i64 2
   store %kira.bridge.value %closure.value.4.1, ptr %closure.rt.slot.4.2
   %closure.rt.result.4 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 422, ptr %closure.rt.args.4, i32 3, ptr %closure.rt.result.4)
+  call void @"kira_hybrid_call_runtime"(i32 419, ptr %closure.rt.args.4, i32 3, ptr %closure.rt.result.4)
   ret void
 dispatch.closure.case.5:
   %closure.slot.5.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4732,7 +3981,7 @@ dispatch.closure.case.5:
   %closure.rt.slot.5.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.5, i64 0, i64 1
   store %kira.bridge.value %closure.value.5.0, ptr %closure.rt.slot.5.1
   %closure.rt.result.5 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 423, ptr %closure.rt.args.5, i32 2, ptr %closure.rt.result.5)
+  call void @"kira_hybrid_call_runtime"(i32 420, ptr %closure.rt.args.5, i32 2, ptr %closure.rt.result.5)
   ret void
 dispatch.closure.case.6:
   %closure.slot.6.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4746,7 +3995,7 @@ dispatch.closure.case.6:
   %closure.rt.slot.6.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.6, i64 0, i64 1
   store %kira.bridge.value %closure.value.6.0, ptr %closure.rt.slot.6.1
   %closure.rt.result.6 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 426, ptr %closure.rt.args.6, i32 2, ptr %closure.rt.result.6)
+  call void @"kira_hybrid_call_runtime"(i32 423, ptr %closure.rt.args.6, i32 2, ptr %closure.rt.result.6)
   ret void
 dispatch.closure.case.7:
   %closure.slot.7.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4760,7 +4009,7 @@ dispatch.closure.case.7:
   %closure.rt.slot.7.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.7, i64 0, i64 1
   store %kira.bridge.value %closure.value.7.0, ptr %closure.rt.slot.7.1
   %closure.rt.result.7 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 428, ptr %closure.rt.args.7, i32 2, ptr %closure.rt.result.7)
+  call void @"kira_hybrid_call_runtime"(i32 425, ptr %closure.rt.args.7, i32 2, ptr %closure.rt.result.7)
   ret void
 dispatch.default:
   unreachable
@@ -4772,12 +4021,12 @@ entry:
   br i1 %dispatch.is_direct, label %dispatch.direct, label %dispatch.closure
 dispatch.direct:
   switch i64 %function_id, label %dispatch.default [
-    i64 5, label %dispatch.case.0
-    i64 64, label %dispatch.case.1
-    i64 79, label %dispatch.case.2
-    i64 407, label %dispatch.case.3
-    i64 411, label %dispatch.case.4
-    i64 446, label %dispatch.case.5
+    i64 2, label %dispatch.case.0
+    i64 61, label %dispatch.case.1
+    i64 76, label %dispatch.case.2
+    i64 404, label %dispatch.case.3
+    i64 408, label %dispatch.case.4
+    i64 442, label %dispatch.case.5
   ]
 dispatch.case.0:
   %dispatch.rt.args.0 = alloca [1 x %kira.bridge.value]
@@ -4786,7 +4035,7 @@ dispatch.case.0:
   %dispatch.rt.pack.0.0.1 = insertvalue %kira.bridge.value %dispatch.rt.pack.0.0.0, i64 %arg0, 2
   store %kira.bridge.value %dispatch.rt.pack.0.0.1, ptr %dispatch.rt.slot.0.0
   %dispatch.rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 5, ptr %dispatch.rt.args.0, i32 1, ptr %dispatch.rt.result.0)
+  call void @"kira_hybrid_call_runtime"(i32 2, ptr %dispatch.rt.args.0, i32 1, ptr %dispatch.rt.result.0)
   ret void
 dispatch.case.1:
   %dispatch.rt.args.1 = alloca [1 x %kira.bridge.value]
@@ -4795,7 +4044,7 @@ dispatch.case.1:
   %dispatch.rt.pack.1.0.1 = insertvalue %kira.bridge.value %dispatch.rt.pack.1.0.0, i64 %arg0, 2
   store %kira.bridge.value %dispatch.rt.pack.1.0.1, ptr %dispatch.rt.slot.1.0
   %dispatch.rt.result.1 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 64, ptr %dispatch.rt.args.1, i32 1, ptr %dispatch.rt.result.1)
+  call void @"kira_hybrid_call_runtime"(i32 61, ptr %dispatch.rt.args.1, i32 1, ptr %dispatch.rt.result.1)
   ret void
 dispatch.case.2:
   %dispatch.rt.args.2 = alloca [1 x %kira.bridge.value]
@@ -4804,7 +4053,7 @@ dispatch.case.2:
   %dispatch.rt.pack.2.0.1 = insertvalue %kira.bridge.value %dispatch.rt.pack.2.0.0, i64 %arg0, 2
   store %kira.bridge.value %dispatch.rt.pack.2.0.1, ptr %dispatch.rt.slot.2.0
   %dispatch.rt.result.2 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 79, ptr %dispatch.rt.args.2, i32 1, ptr %dispatch.rt.result.2)
+  call void @"kira_hybrid_call_runtime"(i32 76, ptr %dispatch.rt.args.2, i32 1, ptr %dispatch.rt.result.2)
   ret void
 dispatch.case.3:
   %dispatch.rt.args.3 = alloca [1 x %kira.bridge.value]
@@ -4813,7 +4062,7 @@ dispatch.case.3:
   %dispatch.rt.pack.3.0.1 = insertvalue %kira.bridge.value %dispatch.rt.pack.3.0.0, i64 %arg0, 2
   store %kira.bridge.value %dispatch.rt.pack.3.0.1, ptr %dispatch.rt.slot.3.0
   %dispatch.rt.result.3 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 407, ptr %dispatch.rt.args.3, i32 1, ptr %dispatch.rt.result.3)
+  call void @"kira_hybrid_call_runtime"(i32 404, ptr %dispatch.rt.args.3, i32 1, ptr %dispatch.rt.result.3)
   ret void
 dispatch.case.4:
   %dispatch.rt.args.4 = alloca [1 x %kira.bridge.value]
@@ -4822,10 +4071,10 @@ dispatch.case.4:
   %dispatch.rt.pack.4.0.1 = insertvalue %kira.bridge.value %dispatch.rt.pack.4.0.0, i64 %arg0, 2
   store %kira.bridge.value %dispatch.rt.pack.4.0.1, ptr %dispatch.rt.slot.4.0
   %dispatch.rt.result.4 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 411, ptr %dispatch.rt.args.4, i32 1, ptr %dispatch.rt.result.4)
+  call void @"kira_hybrid_call_runtime"(i32 408, ptr %dispatch.rt.args.4, i32 1, ptr %dispatch.rt.result.4)
   ret void
 dispatch.case.5:
-  call void @"kira_native_impl_446"(i64 %arg0)
+  call void @"kira_native_impl_442"(i64 %arg0)
   ret void
 dispatch.closure:
   %closure.raw = and i64 %function_id, 9223372036854775807
@@ -4833,8 +4082,8 @@ dispatch.closure:
   %closure.id = load i64, ptr %closure.ptr
   %closure.slots = getelementptr inbounds i8, ptr %closure.ptr, i64 16
   switch i64 %closure.id, label %dispatch.default [
-    i64 408, label %dispatch.closure.case.0
-    i64 410, label %dispatch.closure.case.1
+    i64 405, label %dispatch.closure.case.0
+    i64 407, label %dispatch.closure.case.1
   ]
 dispatch.closure.case.0:
   %closure.slot.0.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4853,7 +4102,7 @@ dispatch.closure.case.0:
   %closure.rt.slot.0.2 = getelementptr inbounds [3 x %kira.bridge.value], ptr %closure.rt.args.0, i64 0, i64 2
   store %kira.bridge.value %closure.value.0.1, ptr %closure.rt.slot.0.2
   %closure.rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 408, ptr %closure.rt.args.0, i32 3, ptr %closure.rt.result.0)
+  call void @"kira_hybrid_call_runtime"(i32 405, ptr %closure.rt.args.0, i32 3, ptr %closure.rt.result.0)
   ret void
 dispatch.closure.case.1:
   %closure.slot.1.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4872,7 +4121,7 @@ dispatch.closure.case.1:
   %closure.rt.slot.1.2 = getelementptr inbounds [3 x %kira.bridge.value], ptr %closure.rt.args.1, i64 0, i64 2
   store %kira.bridge.value %closure.value.1.1, ptr %closure.rt.slot.1.2
   %closure.rt.result.1 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 410, ptr %closure.rt.args.1, i32 3, ptr %closure.rt.result.1)
+  call void @"kira_hybrid_call_runtime"(i32 407, ptr %closure.rt.args.1, i32 3, ptr %closure.rt.result.1)
   ret void
 dispatch.default:
   unreachable
@@ -4884,7 +4133,8 @@ entry:
   br i1 %dispatch.is_direct, label %dispatch.direct, label %dispatch.closure
 dispatch.direct:
   switch i64 %function_id, label %dispatch.default [
-    i64 440, label %dispatch.case.0
+    i64 437, label %dispatch.case.0
+    i64 443, label %dispatch.case.1
   ]
 dispatch.case.0:
   %dispatch.rt.args.0 = alloca [1 x %kira.bridge.value]
@@ -4893,7 +4143,10 @@ dispatch.case.0:
   %dispatch.rt.pack.0.0.1 = insertvalue %kira.bridge.value %dispatch.rt.pack.0.0.0, i64 %arg0, 2
   store %kira.bridge.value %dispatch.rt.pack.0.0.1, ptr %dispatch.rt.slot.0.0
   %dispatch.rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 440, ptr %dispatch.rt.args.0, i32 1, ptr %dispatch.rt.result.0)
+  call void @"kira_hybrid_call_runtime"(i32 437, ptr %dispatch.rt.args.0, i32 1, ptr %dispatch.rt.result.0)
+  ret void
+dispatch.case.1:
+  call void @"kira_native_impl_443"(i64 %arg0)
   ret void
 dispatch.closure:
   %closure.raw = and i64 %function_id, 9223372036854775807
@@ -4901,20 +4154,19 @@ dispatch.closure:
   %closure.id = load i64, ptr %closure.ptr
   %closure.slots = getelementptr inbounds i8, ptr %closure.ptr, i64 16
   switch i64 %closure.id, label %dispatch.default [
-    i64 431, label %dispatch.closure.case.0
-    i64 432, label %dispatch.closure.case.1
-    i64 433, label %dispatch.closure.case.2
-    i64 434, label %dispatch.closure.case.3
-    i64 435, label %dispatch.closure.case.4
-    i64 436, label %dispatch.closure.case.5
-    i64 437, label %dispatch.closure.case.6
-    i64 438, label %dispatch.closure.case.7
-    i64 439, label %dispatch.closure.case.8
-    i64 441, label %dispatch.closure.case.9
-    i64 442, label %dispatch.closure.case.10
-    i64 443, label %dispatch.closure.case.11
-    i64 444, label %dispatch.closure.case.12
-    i64 447, label %dispatch.closure.case.13
+    i64 428, label %dispatch.closure.case.0
+    i64 429, label %dispatch.closure.case.1
+    i64 430, label %dispatch.closure.case.2
+    i64 431, label %dispatch.closure.case.3
+    i64 432, label %dispatch.closure.case.4
+    i64 433, label %dispatch.closure.case.5
+    i64 434, label %dispatch.closure.case.6
+    i64 435, label %dispatch.closure.case.7
+    i64 436, label %dispatch.closure.case.8
+    i64 438, label %dispatch.closure.case.9
+    i64 439, label %dispatch.closure.case.10
+    i64 440, label %dispatch.closure.case.11
+    i64 441, label %dispatch.closure.case.12
   ]
 dispatch.closure.case.0:
   %closure.slot.0.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4928,7 +4180,7 @@ dispatch.closure.case.0:
   %closure.rt.slot.0.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.0, i64 0, i64 1
   store %kira.bridge.value %closure.value.0.0, ptr %closure.rt.slot.0.1
   %closure.rt.result.0 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 431, ptr %closure.rt.args.0, i32 2, ptr %closure.rt.result.0)
+  call void @"kira_hybrid_call_runtime"(i32 428, ptr %closure.rt.args.0, i32 2, ptr %closure.rt.result.0)
   ret void
 dispatch.closure.case.1:
   %closure.slot.1.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4942,7 +4194,7 @@ dispatch.closure.case.1:
   %closure.rt.slot.1.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.1, i64 0, i64 1
   store %kira.bridge.value %closure.value.1.0, ptr %closure.rt.slot.1.1
   %closure.rt.result.1 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 432, ptr %closure.rt.args.1, i32 2, ptr %closure.rt.result.1)
+  call void @"kira_hybrid_call_runtime"(i32 429, ptr %closure.rt.args.1, i32 2, ptr %closure.rt.result.1)
   ret void
 dispatch.closure.case.2:
   %closure.slot.2.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4961,7 +4213,7 @@ dispatch.closure.case.2:
   %closure.rt.slot.2.2 = getelementptr inbounds [3 x %kira.bridge.value], ptr %closure.rt.args.2, i64 0, i64 2
   store %kira.bridge.value %closure.value.2.1, ptr %closure.rt.slot.2.2
   %closure.rt.result.2 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 433, ptr %closure.rt.args.2, i32 3, ptr %closure.rt.result.2)
+  call void @"kira_hybrid_call_runtime"(i32 430, ptr %closure.rt.args.2, i32 3, ptr %closure.rt.result.2)
   ret void
 dispatch.closure.case.3:
   %closure.slot.3.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4980,7 +4232,7 @@ dispatch.closure.case.3:
   %closure.rt.slot.3.2 = getelementptr inbounds [3 x %kira.bridge.value], ptr %closure.rt.args.3, i64 0, i64 2
   store %kira.bridge.value %closure.value.3.1, ptr %closure.rt.slot.3.2
   %closure.rt.result.3 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 434, ptr %closure.rt.args.3, i32 3, ptr %closure.rt.result.3)
+  call void @"kira_hybrid_call_runtime"(i32 431, ptr %closure.rt.args.3, i32 3, ptr %closure.rt.result.3)
   ret void
 dispatch.closure.case.4:
   %closure.slot.4.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -4994,7 +4246,7 @@ dispatch.closure.case.4:
   %closure.rt.slot.4.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.4, i64 0, i64 1
   store %kira.bridge.value %closure.value.4.0, ptr %closure.rt.slot.4.1
   %closure.rt.result.4 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 435, ptr %closure.rt.args.4, i32 2, ptr %closure.rt.result.4)
+  call void @"kira_hybrid_call_runtime"(i32 432, ptr %closure.rt.args.4, i32 2, ptr %closure.rt.result.4)
   ret void
 dispatch.closure.case.5:
   %closure.slot.5.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -5008,7 +4260,7 @@ dispatch.closure.case.5:
   %closure.rt.slot.5.1 = getelementptr inbounds [2 x %kira.bridge.value], ptr %closure.rt.args.5, i64 0, i64 1
   store %kira.bridge.value %closure.value.5.0, ptr %closure.rt.slot.5.1
   %closure.rt.result.5 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 436, ptr %closure.rt.args.5, i32 2, ptr %closure.rt.result.5)
+  call void @"kira_hybrid_call_runtime"(i32 433, ptr %closure.rt.args.5, i32 2, ptr %closure.rt.result.5)
   ret void
 dispatch.closure.case.6:
   %closure.slot.6.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -5027,7 +4279,7 @@ dispatch.closure.case.6:
   %closure.rt.slot.6.2 = getelementptr inbounds [3 x %kira.bridge.value], ptr %closure.rt.args.6, i64 0, i64 2
   store %kira.bridge.value %closure.value.6.1, ptr %closure.rt.slot.6.2
   %closure.rt.result.6 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 437, ptr %closure.rt.args.6, i32 3, ptr %closure.rt.result.6)
+  call void @"kira_hybrid_call_runtime"(i32 434, ptr %closure.rt.args.6, i32 3, ptr %closure.rt.result.6)
   ret void
 dispatch.closure.case.7:
   %closure.slot.7.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -5046,7 +4298,7 @@ dispatch.closure.case.7:
   %closure.rt.slot.7.2 = getelementptr inbounds [3 x %kira.bridge.value], ptr %closure.rt.args.7, i64 0, i64 2
   store %kira.bridge.value %closure.value.7.1, ptr %closure.rt.slot.7.2
   %closure.rt.result.7 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 438, ptr %closure.rt.args.7, i32 3, ptr %closure.rt.result.7)
+  call void @"kira_hybrid_call_runtime"(i32 435, ptr %closure.rt.args.7, i32 3, ptr %closure.rt.result.7)
   ret void
 dispatch.closure.case.8:
   %closure.slot.8.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -5066,7 +4318,7 @@ dispatch.closure.case.8:
   %closure.rt.slot.8.2 = getelementptr inbounds [3 x %kira.bridge.value], ptr %closure.rt.args.8, i64 0, i64 2
   store %kira.bridge.value %closure.value.8.1, ptr %closure.rt.slot.8.2
   %closure.rt.result.8 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 439, ptr %closure.rt.args.8, i32 3, ptr %closure.rt.result.8)
+  call void @"kira_hybrid_call_runtime"(i32 436, ptr %closure.rt.args.8, i32 3, ptr %closure.rt.result.8)
   ret void
 dispatch.closure.case.9:
   %closure.slot.9.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -5102,7 +4354,7 @@ dispatch.closure.case.9:
   %closure.rt.slot.9.5 = getelementptr inbounds [6 x %kira.bridge.value], ptr %closure.rt.args.9, i64 0, i64 5
   store %kira.bridge.value %closure.value.9.4, ptr %closure.rt.slot.9.5
   %closure.rt.result.9 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 441, ptr %closure.rt.args.9, i32 6, ptr %closure.rt.result.9)
+  call void @"kira_hybrid_call_runtime"(i32 438, ptr %closure.rt.args.9, i32 6, ptr %closure.rt.result.9)
   ret void
 dispatch.closure.case.10:
   %closure.slot.10.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -5138,7 +4390,7 @@ dispatch.closure.case.10:
   %closure.rt.slot.10.5 = getelementptr inbounds [6 x %kira.bridge.value], ptr %closure.rt.args.10, i64 0, i64 5
   store %kira.bridge.value %closure.value.10.4, ptr %closure.rt.slot.10.5
   %closure.rt.result.10 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 442, ptr %closure.rt.args.10, i32 6, ptr %closure.rt.result.10)
+  call void @"kira_hybrid_call_runtime"(i32 439, ptr %closure.rt.args.10, i32 6, ptr %closure.rt.result.10)
   ret void
 dispatch.closure.case.11:
   %closure.slot.11.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -5172,7 +4424,7 @@ dispatch.closure.case.11:
   %closure.rt.slot.11.4 = getelementptr inbounds [5 x %kira.bridge.value], ptr %closure.rt.args.11, i64 0, i64 4
   store %kira.bridge.value %closure.value.11.3, ptr %closure.rt.slot.11.4
   %closure.rt.result.11 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 443, ptr %closure.rt.args.11, i32 5, ptr %closure.rt.result.11)
+  call void @"kira_hybrid_call_runtime"(i32 440, ptr %closure.rt.args.11, i32 5, ptr %closure.rt.result.11)
   ret void
 dispatch.closure.case.12:
   %closure.slot.12.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
@@ -5203,24 +4455,51 @@ dispatch.closure.case.12:
   %closure.rt.slot.12.4 = getelementptr inbounds [5 x %kira.bridge.value], ptr %closure.rt.args.12, i64 0, i64 4
   store %kira.bridge.value %closure.value.12.3, ptr %closure.rt.slot.12.4
   %closure.rt.result.12 = alloca %kira.bridge.value
-  call void @"kira_hybrid_call_runtime"(i32 444, ptr %closure.rt.args.12, i32 5, ptr %closure.rt.result.12)
-  ret void
-dispatch.closure.case.13:
-  %closure.slot.13.0 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 0
-  %closure.value.13.0 = load %kira.bridge.value, ptr %closure.slot.13.0
-  %closure.arg.13.0 = extractvalue %kira.bridge.value %closure.value.13.0, 2
-  %closure.slot.13.1 = getelementptr inbounds %kira.bridge.value, ptr %closure.slots, i64 1
-  %closure.value.13.1 = load %kira.bridge.value, ptr %closure.slot.13.1
-  %closure.arg.13.1 = extractvalue %kira.bridge.value %closure.value.13.1, 2
-  call void @"kira_native_impl_447"(i64 %arg0, i64 %closure.arg.13.0, i64 %closure.arg.13.1)
+  call void @"kira_hybrid_call_runtime"(i32 441, ptr %closure.rt.args.12, i32 5, ptr %closure.rt.result.12)
   ret void
 dispatch.default:
   unreachable
 }
 
-define void @"kira_native_fn_3"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_0"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  call void @"kira_native_impl_3"()
+  call void @"kira_native_impl_0"()
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
+  store %kira.bridge.value %bridge.out.0, ptr %out_result
+  ret void
+}
+
+define void @"kira_native_fn_5"(ptr %args, i32 %arg_count, ptr %out_result) {
+entry:
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
+  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
+  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
+  call void @"kira_native_impl_5"(i64 %bridge.word0.0, i64 %bridge.word0.1)
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
+  store %kira.bridge.value %bridge.out.0, ptr %out_result
+  ret void
+}
+
+define void @"kira_native_fn_6"(ptr %args, i32 %arg_count, ptr %out_result) {
+entry:
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  call void @"kira_native_impl_6"(i64 %bridge.word0.0)
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
+  store %kira.bridge.value %bridge.out.0, ptr %out_result
+  ret void
+}
+
+define void @"kira_native_fn_7"(ptr %args, i32 %arg_count, ptr %out_result) {
+entry:
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  call void @"kira_native_impl_7"(i64 %bridge.word0.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
@@ -5231,45 +4510,65 @@ entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
   %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  call void @"kira_native_impl_8"(i64 %bridge.word0.0)
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
+  store %kira.bridge.value %bridge.out.0, ptr %out_result
+  ret void
+}
+
+define void @"kira_native_fn_51"(ptr %args, i32 %arg_count, ptr %out_result) {
+entry:
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.ptrint.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  %bridge.len.0 = extractvalue %kira.bridge.value %bridge.load.0, 3
+  %bridge.ptr.0 = inttoptr i64 %bridge.ptrint.0 to ptr
+  %bridge.str.init.0 = insertvalue %kira.string zeroinitializer, ptr %bridge.ptr.0, 0
+  %bridge.str.0 = insertvalue %kira.string %bridge.str.init.0, i64 %bridge.len.0, 1
   %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
   %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
   %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
-  call void @"kira_native_impl_8"(i64 %bridge.word0.0, i64 %bridge.word0.1)
+  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
+  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
+  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
+  %bridge.slot.3 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 3
+  %bridge.load.3 = load %kira.bridge.value, ptr %bridge.slot.3
+  %bridge.word0.3 = extractvalue %kira.bridge.value %bridge.load.3, 2
+  %bridge.call = call i64 @"kira_native_impl_51"(%kira.string %bridge.str.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3)
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
+  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
+  store %kira.bridge.value %bridge.out.1, ptr %out_result
+  ret void
+}
+
+define void @"kira_native_fn_52"(ptr %args, i32 %arg_count, ptr %out_result) {
+entry:
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
+  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
+  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
+  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
+  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
+  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
+  %bridge.float64.2 = bitcast i64 %bridge.word0.2 to double
+  %bridge.float.2 = fadd double %bridge.float64.2, 0.0
+  call void @"kira_native_impl_52"(i64 %bridge.word0.0, i64 %bridge.word0.1, double %bridge.float.2)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_9"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_53"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
   %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_9"(i64 %bridge.word0.0)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
-  store %kira.bridge.value %bridge.out.0, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_10"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_10"(i64 %bridge.word0.0)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
-  store %kira.bridge.value %bridge.out.0, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_11"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_11"(i64 %bridge.word0.0)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
-  store %kira.bridge.value %bridge.out.0, ptr %out_result
+  %bridge.call = call i64 @"kira_native_impl_53"(i64 %bridge.word0.0)
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
+  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
+  store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
 }
 
@@ -5288,10 +4587,7 @@ entry:
   %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
   %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
   %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
-  %bridge.slot.3 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 3
-  %bridge.load.3 = load %kira.bridge.value, ptr %bridge.slot.3
-  %bridge.word0.3 = extractvalue %kira.bridge.value %bridge.load.3, 2
-  %bridge.call = call i64 @"kira_native_impl_54"(%kira.string %bridge.str.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3)
+  %bridge.call = call i64 @"kira_native_impl_54"(%kira.string %bridge.str.0, i64 %bridge.word0.1, i64 %bridge.word0.2)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
@@ -5309,9 +4605,7 @@ entry:
   %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
   %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
   %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
-  %bridge.float64.2 = bitcast i64 %bridge.word0.2 to double
-  %bridge.float.2 = fadd double %bridge.float64.2, 0.0
-  call void @"kira_native_impl_55"(i64 %bridge.word0.0, i64 %bridge.word0.1, double %bridge.float.2)
+  call void @"kira_native_impl_55"(i64 %bridge.word0.0, i64 %bridge.word0.1, i64 %bridge.word0.2)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
@@ -5333,65 +4627,14 @@ define void @"kira_native_fn_57"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.ptrint.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.len.0 = extractvalue %kira.bridge.value %bridge.load.0, 3
-  %bridge.ptr.0 = inttoptr i64 %bridge.ptrint.0 to ptr
-  %bridge.str.init.0 = insertvalue %kira.string zeroinitializer, ptr %bridge.ptr.0, 0
-  %bridge.str.0 = insertvalue %kira.string %bridge.str.init.0, i64 %bridge.len.0, 1
-  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
-  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
-  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
-  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
-  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
-  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
-  %bridge.call = call i64 @"kira_native_impl_57"(%kira.string %bridge.str.0, i64 %bridge.word0.1, i64 %bridge.word0.2)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_58"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
   %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
-  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
-  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
-  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
-  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
-  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
-  call void @"kira_native_impl_58"(i64 %bridge.word0.0, i64 %bridge.word0.1, i64 %bridge.word0.2)
+  call void @"kira_native_impl_57"(i64 %bridge.word0.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_59"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.call = call i64 @"kira_native_impl_59"(i64 %bridge.word0.0)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_60"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_60"(i64 %bridge.word0.0)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
-  store %kira.bridge.value %bridge.out.0, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_65"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_62"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
@@ -5488,7 +4731,7 @@ entry:
   %bridge.slot.26 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 26
   %bridge.load.26 = load %kira.bridge.value, ptr %bridge.slot.26
   %bridge.word0.26 = extractvalue %kira.bridge.value %bridge.load.26, 2
-  %bridge.call = call i1 @"kira_native_impl_65"(%kira.string %bridge.str.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3, i64 %bridge.word0.4, i64 %bridge.word0.5, i64 %bridge.word0.6, double %bridge.float.7, double %bridge.float.8, double %bridge.float.9, double %bridge.float.10, i64 %bridge.word0.11, i64 %bridge.word0.12, i64 %bridge.word0.13, i64 %bridge.word0.14, i64 %bridge.word0.15, i64 %bridge.word0.16, i64 %bridge.word0.17, i64 %bridge.word0.18, double %bridge.float.19, i64 %bridge.word0.20, i64 %bridge.word0.21, i64 %bridge.word0.22, i64 %bridge.word0.23, i64 %bridge.word0.24, i64 %bridge.word0.25, i64 %bridge.word0.26)
+  %bridge.call = call i1 @"kira_native_impl_62"(%kira.string %bridge.str.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3, i64 %bridge.word0.4, i64 %bridge.word0.5, i64 %bridge.word0.6, double %bridge.float.7, double %bridge.float.8, double %bridge.float.9, double %bridge.float.10, i64 %bridge.word0.11, i64 %bridge.word0.12, i64 %bridge.word0.13, i64 %bridge.word0.14, i64 %bridge.word0.15, i64 %bridge.word0.16, i64 %bridge.word0.17, i64 %bridge.word0.18, double %bridge.float.19, i64 %bridge.word0.20, i64 %bridge.word0.21, i64 %bridge.word0.22, i64 %bridge.word0.23, i64 %bridge.word0.24, i64 %bridge.word0.25, i64 %bridge.word0.26)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 4, 0
   %bridge.ret.bool = zext i1 %bridge.call to i64
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.ret.bool, 2
@@ -5496,7 +4739,7 @@ entry:
   ret void
 }
 
-define void @"kira_native_fn_66"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_63"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
@@ -5546,7 +4789,7 @@ entry:
   %bridge.slot.15 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 15
   %bridge.load.15 = load %kira.bridge.value, ptr %bridge.slot.15
   %bridge.word0.15 = extractvalue %kira.bridge.value %bridge.load.15, 2
-  %bridge.call = call i1 @"kira_native_impl_66"(i64 %bridge.word0.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3, i64 %bridge.word0.4, i64 %bridge.word0.5, i64 %bridge.word0.6, i64 %bridge.word0.7, i64 %bridge.word0.8, i64 %bridge.word0.9, i64 %bridge.word0.10, i64 %bridge.word0.11, i64 %bridge.word0.12, i64 %bridge.word0.13, i64 %bridge.word0.14, i64 %bridge.word0.15)
+  %bridge.call = call i1 @"kira_native_impl_63"(i64 %bridge.word0.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3, i64 %bridge.word0.4, i64 %bridge.word0.5, i64 %bridge.word0.6, i64 %bridge.word0.7, i64 %bridge.word0.8, i64 %bridge.word0.9, i64 %bridge.word0.10, i64 %bridge.word0.11, i64 %bridge.word0.12, i64 %bridge.word0.13, i64 %bridge.word0.14, i64 %bridge.word0.15)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 4, 0
   %bridge.ret.bool = zext i1 %bridge.call to i64
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.ret.bool, 2
@@ -5554,23 +4797,23 @@ entry:
   ret void
 }
 
-define void @"kira_native_fn_67"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_64"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  call void @"kira_native_impl_67"()
+  call void @"kira_native_impl_64"()
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_68"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_65"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  call void @"kira_native_impl_68"()
+  call void @"kira_native_impl_65"()
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_69"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_66"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
@@ -5596,13 +4839,13 @@ entry:
   %bridge.slot.7 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 7
   %bridge.load.7 = load %kira.bridge.value, ptr %bridge.slot.7
   %bridge.word0.7 = extractvalue %kira.bridge.value %bridge.load.7, 2
-  call void @"kira_native_impl_69"(i64 %bridge.word0.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3, i64 %bridge.word0.4, i64 %bridge.word0.5, i64 %bridge.word0.6, i64 %bridge.word0.7)
+  call void @"kira_native_impl_66"(i64 %bridge.word0.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3, i64 %bridge.word0.4, i64 %bridge.word0.5, i64 %bridge.word0.6, i64 %bridge.word0.7)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_70"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_67"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
@@ -5689,25 +4932,25 @@ entry:
   %bridge.slot.26 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 26
   %bridge.load.26 = load %kira.bridge.value, ptr %bridge.slot.26
   %bridge.word0.26 = extractvalue %kira.bridge.value %bridge.load.26, 2
-  %bridge.call = call i64 @"kira_native_impl_70"(i64 %bridge.word0.0, %kira.string %bridge.str.1, i64 %bridge.word0.2, i64 %bridge.word0.3, i64 %bridge.word0.4, i64 %bridge.word0.5, i64 %bridge.word0.6, i64 %bridge.word0.7, i64 %bridge.word0.8, i64 %bridge.word0.9, i64 %bridge.word0.10, i64 %bridge.word0.11, i64 %bridge.word0.12, i64 %bridge.word0.13, i64 %bridge.word0.14, i64 %bridge.word0.15, i64 %bridge.word0.16, i64 %bridge.word0.17, i64 %bridge.word0.18, i64 %bridge.word0.19, i64 %bridge.word0.20, i64 %bridge.word0.21, i64 %bridge.word0.22, i64 %bridge.word0.23, i64 %bridge.word0.24, i64 %bridge.word0.25, i64 %bridge.word0.26)
+  %bridge.call = call i64 @"kira_native_impl_67"(i64 %bridge.word0.0, %kira.string %bridge.str.1, i64 %bridge.word0.2, i64 %bridge.word0.3, i64 %bridge.word0.4, i64 %bridge.word0.5, i64 %bridge.word0.6, i64 %bridge.word0.7, i64 %bridge.word0.8, i64 %bridge.word0.9, i64 %bridge.word0.10, i64 %bridge.word0.11, i64 %bridge.word0.12, i64 %bridge.word0.13, i64 %bridge.word0.14, i64 %bridge.word0.15, i64 %bridge.word0.16, i64 %bridge.word0.17, i64 %bridge.word0.18, i64 %bridge.word0.19, i64 %bridge.word0.20, i64 %bridge.word0.21, i64 %bridge.word0.22, i64 %bridge.word0.23, i64 %bridge.word0.24, i64 %bridge.word0.25, i64 %bridge.word0.26)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_72"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_69"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
   %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_72"(i64 %bridge.word0.0)
+  call void @"kira_native_impl_69"(i64 %bridge.word0.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_73"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_70"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
@@ -5744,14 +4987,14 @@ entry:
   %bridge.ptr.4 = inttoptr i64 %bridge.ptrint.4 to ptr
   %bridge.str.init.4 = insertvalue %kira.string zeroinitializer, ptr %bridge.ptr.4, 0
   %bridge.str.4 = insertvalue %kira.string %bridge.str.init.4, i64 %bridge.len.4, 1
-  %bridge.call = call i64 @"kira_native_impl_73"(%kira.string %bridge.str.0, %kira.string %bridge.str.1, %kira.string %bridge.str.2, %kira.string %bridge.str.3, %kira.string %bridge.str.4)
+  %bridge.call = call i64 @"kira_native_impl_70"(%kira.string %bridge.str.0, %kira.string %bridge.str.1, %kira.string %bridge.str.2, %kira.string %bridge.str.3, %kira.string %bridge.str.4)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_74"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_71"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
@@ -5774,25 +5017,25 @@ entry:
   %bridge.ptr.2 = inttoptr i64 %bridge.ptrint.2 to ptr
   %bridge.str.init.2 = insertvalue %kira.string zeroinitializer, ptr %bridge.ptr.2, 0
   %bridge.str.2 = insertvalue %kira.string %bridge.str.init.2, i64 %bridge.len.2, 1
-  %bridge.call = call i64 @"kira_native_impl_74"(%kira.string %bridge.str.0, %kira.string %bridge.str.1, %kira.string %bridge.str.2)
+  %bridge.call = call i64 @"kira_native_impl_71"(%kira.string %bridge.str.0, %kira.string %bridge.str.1, %kira.string %bridge.str.2)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_75"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_72"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
   %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_75"(i64 %bridge.word0.0)
+  call void @"kira_native_impl_72"(i64 %bridge.word0.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_76"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_73"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
@@ -5819,25 +5062,25 @@ entry:
   %bridge.slot.6 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 6
   %bridge.load.6 = load %kira.bridge.value, ptr %bridge.slot.6
   %bridge.word0.6 = extractvalue %kira.bridge.value %bridge.load.6, 2
-  %bridge.call = call i64 @"kira_native_impl_76"(%kira.string %bridge.str.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3, i64 %bridge.word0.4, i64 %bridge.word0.5, i64 %bridge.word0.6)
+  %bridge.call = call i64 @"kira_native_impl_73"(%kira.string %bridge.str.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3, i64 %bridge.word0.4, i64 %bridge.word0.5, i64 %bridge.word0.6)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_77"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_74"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
   %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_77"(i64 %bridge.word0.0)
+  call void @"kira_native_impl_74"(i64 %bridge.word0.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_78"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_75"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
@@ -5846,87 +5089,15 @@ entry:
   %bridge.ptr.0 = inttoptr i64 %bridge.ptrint.0 to ptr
   %bridge.str.init.0 = insertvalue %kira.string zeroinitializer, ptr %bridge.ptr.0, 0
   %bridge.str.0 = insertvalue %kira.string %bridge.str.init.0, i64 %bridge.len.0, 1
-  call void @"kira_native_impl_78"(%kira.string %bridge.str.0)
+  call void @"kira_native_impl_75"(%kira.string %bridge.str.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_85"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_92"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  %bridge.call = call i64 @"kira_native_impl_85"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_89"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.call = call i64 @"kira_native_impl_89"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_95"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.call = call i64 @"kira_native_impl_95"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_98"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.call = call i64 @"kira_native_impl_98"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_100"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.call = call i64 @"kira_native_impl_100"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_101"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.call = call i64 @"kira_native_impl_101"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_104"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.call = call i64 @"kira_native_impl_104"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_114"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.call = call i64 @"kira_native_impl_114"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_115"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.call = call i64 @"kira_native_impl_115"()
+  %bridge.call = call i64 @"kira_native_impl_92"()
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
@@ -5942,9 +5113,9 @@ entry:
   ret void
 }
 
-define void @"kira_native_fn_121"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_119"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  %bridge.call = call i64 @"kira_native_impl_121"()
+  %bridge.call = call i64 @"kira_native_impl_119"()
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
@@ -5960,25 +5131,16 @@ entry:
   ret void
 }
 
-define void @"kira_native_fn_125"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_124"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  %bridge.call = call i64 @"kira_native_impl_125"()
+  %bridge.call = call i64 @"kira_native_impl_124"()
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_127"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.call = call i64 @"kira_native_impl_127"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_429"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_426"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
@@ -6000,7 +5162,7 @@ entry:
   %bridge.ptr.3 = inttoptr i64 %bridge.ptrint.3 to ptr
   %bridge.str.init.3 = insertvalue %kira.string zeroinitializer, ptr %bridge.ptr.3, 0
   %bridge.str.3 = insertvalue %kira.string %bridge.str.init.3, i64 %bridge.len.3, 1
-  %bridge.call = call i1 @"kira_native_impl_429"(i64 %bridge.word0.0, i64 %bridge.word0.1, %kira.string %bridge.str.2, %kira.string %bridge.str.3)
+  %bridge.call = call i1 @"kira_native_impl_426"(i64 %bridge.word0.0, i64 %bridge.word0.1, %kira.string %bridge.str.2, %kira.string %bridge.str.3)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 4, 0
   %bridge.ret.bool = zext i1 %bridge.call to i64
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.ret.bool, 2
@@ -6008,24 +5170,134 @@ entry:
   ret void
 }
 
-define void @"kira_native_fn_430"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_427"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
   %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.call = call i64 @"kira_native_impl_430"(i64 %bridge.word0.0)
+  %bridge.call = call i64 @"kira_native_impl_427"(i64 %bridge.word0.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
 }
 
+define void @"kira_native_fn_166"(ptr %args, i32 %arg_count, ptr %out_result) {
+entry:
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  %bridge.float64.0 = bitcast i64 %bridge.word0.0 to double
+  %bridge.float.0 = fadd double %bridge.float64.0, 0.0
+  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
+  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
+  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
+  %bridge.float64.1 = bitcast i64 %bridge.word0.1 to double
+  %bridge.float.1 = fadd double %bridge.float64.1, 0.0
+  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
+  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
+  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
+  %bridge.float64.2 = bitcast i64 %bridge.word0.2 to double
+  %bridge.float.2 = fadd double %bridge.float64.2, 0.0
+  %bridge.slot.3 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 3
+  %bridge.load.3 = load %kira.bridge.value, ptr %bridge.slot.3
+  %bridge.word0.3 = extractvalue %kira.bridge.value %bridge.load.3, 2
+  %bridge.float64.3 = bitcast i64 %bridge.word0.3 to double
+  %bridge.float.3 = fadd double %bridge.float64.3, 0.0
+  %bridge.slot.4 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 4
+  %bridge.load.4 = load %kira.bridge.value, ptr %bridge.slot.4
+  %bridge.word0.4 = extractvalue %kira.bridge.value %bridge.load.4, 2
+  %bridge.float64.4 = bitcast i64 %bridge.word0.4 to double
+  %bridge.float.4 = fadd double %bridge.float64.4, 0.0
+  call void @"kira_native_impl_166"(double %bridge.float.0, double %bridge.float.1, double %bridge.float.2, double %bridge.float.3, double %bridge.float.4)
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
+  store %kira.bridge.value %bridge.out.0, ptr %out_result
+  ret void
+}
+
+define void @"kira_native_fn_167"(ptr %args, i32 %arg_count, ptr %out_result) {
+entry:
+  call void @"kira_native_impl_167"()
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
+  store %kira.bridge.value %bridge.out.0, ptr %out_result
+  ret void
+}
+
 define void @"kira_native_fn_168"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  %bridge.call = call i64 @"kira_native_impl_168"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  %bridge.float64.0 = bitcast i64 %bridge.word0.0 to double
+  %bridge.float.0 = fadd double %bridge.float64.0, 0.0
+  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
+  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
+  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
+  %bridge.float64.1 = bitcast i64 %bridge.word0.1 to double
+  %bridge.float.1 = fadd double %bridge.float64.1, 0.0
+  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
+  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
+  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
+  %bridge.float64.2 = bitcast i64 %bridge.word0.2 to double
+  %bridge.float.2 = fadd double %bridge.float64.2, 0.0
+  %bridge.slot.3 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 3
+  %bridge.load.3 = load %kira.bridge.value, ptr %bridge.slot.3
+  %bridge.word0.3 = extractvalue %kira.bridge.value %bridge.load.3, 2
+  %bridge.float64.3 = bitcast i64 %bridge.word0.3 to double
+  %bridge.float.3 = fadd double %bridge.float64.3, 0.0
+  %bridge.slot.4 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 4
+  %bridge.load.4 = load %kira.bridge.value, ptr %bridge.slot.4
+  %bridge.word0.4 = extractvalue %kira.bridge.value %bridge.load.4, 2
+  %bridge.float64.4 = bitcast i64 %bridge.word0.4 to double
+  %bridge.float.4 = fadd double %bridge.float64.4, 0.0
+  %bridge.slot.5 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 5
+  %bridge.load.5 = load %kira.bridge.value, ptr %bridge.slot.5
+  %bridge.word0.5 = extractvalue %kira.bridge.value %bridge.load.5, 2
+  %bridge.float64.5 = bitcast i64 %bridge.word0.5 to double
+  %bridge.float.5 = fadd double %bridge.float64.5, 0.0
+  %bridge.slot.6 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 6
+  %bridge.load.6 = load %kira.bridge.value, ptr %bridge.slot.6
+  %bridge.word0.6 = extractvalue %kira.bridge.value %bridge.load.6, 2
+  %bridge.float64.6 = bitcast i64 %bridge.word0.6 to double
+  %bridge.float.6 = fadd double %bridge.float64.6, 0.0
+  %bridge.slot.7 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 7
+  %bridge.load.7 = load %kira.bridge.value, ptr %bridge.slot.7
+  %bridge.word0.7 = extractvalue %kira.bridge.value %bridge.load.7, 2
+  %bridge.float64.7 = bitcast i64 %bridge.word0.7 to double
+  %bridge.float.7 = fadd double %bridge.float64.7, 0.0
+  %bridge.slot.8 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 8
+  %bridge.load.8 = load %kira.bridge.value, ptr %bridge.slot.8
+  %bridge.word0.8 = extractvalue %kira.bridge.value %bridge.load.8, 2
+  %bridge.float64.8 = bitcast i64 %bridge.word0.8 to double
+  %bridge.float.8 = fadd double %bridge.float64.8, 0.0
+  %bridge.slot.9 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 9
+  %bridge.load.9 = load %kira.bridge.value, ptr %bridge.slot.9
+  %bridge.word0.9 = extractvalue %kira.bridge.value %bridge.load.9, 2
+  %bridge.float64.9 = bitcast i64 %bridge.word0.9 to double
+  %bridge.float.9 = fadd double %bridge.float64.9, 0.0
+  %bridge.slot.10 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 10
+  %bridge.load.10 = load %kira.bridge.value, ptr %bridge.slot.10
+  %bridge.word0.10 = extractvalue %kira.bridge.value %bridge.load.10, 2
+  %bridge.float64.10 = bitcast i64 %bridge.word0.10 to double
+  %bridge.float.10 = fadd double %bridge.float64.10, 0.0
+  %bridge.slot.11 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 11
+  %bridge.load.11 = load %kira.bridge.value, ptr %bridge.slot.11
+  %bridge.word0.11 = extractvalue %kira.bridge.value %bridge.load.11, 2
+  %bridge.float64.11 = bitcast i64 %bridge.word0.11 to double
+  %bridge.float.11 = fadd double %bridge.float64.11, 0.0
+  %bridge.slot.12 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 12
+  %bridge.load.12 = load %kira.bridge.value, ptr %bridge.slot.12
+  %bridge.word0.12 = extractvalue %kira.bridge.value %bridge.load.12, 2
+  %bridge.float64.12 = bitcast i64 %bridge.word0.12 to double
+  %bridge.float.12 = fadd double %bridge.float64.12, 0.0
+  %bridge.slot.13 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 13
+  %bridge.load.13 = load %kira.bridge.value, ptr %bridge.slot.13
+  %bridge.word0.13 = extractvalue %kira.bridge.value %bridge.load.13, 2
+  %bridge.float64.13 = bitcast i64 %bridge.word0.13 to double
+  %bridge.float.13 = fadd double %bridge.float64.13, 0.0
+  call void @"kira_native_impl_168"(double %bridge.float.0, double %bridge.float.1, double %bridge.float.2, double %bridge.float.3, double %bridge.float.4, double %bridge.float.5, double %bridge.float.6, double %bridge.float.7, double %bridge.float.8, double %bridge.float.9, double %bridge.float.10, double %bridge.float.11, double %bridge.float.12, double %bridge.float.13)
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
+  store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
@@ -6056,7 +5328,52 @@ entry:
   %bridge.word0.4 = extractvalue %kira.bridge.value %bridge.load.4, 2
   %bridge.float64.4 = bitcast i64 %bridge.word0.4 to double
   %bridge.float.4 = fadd double %bridge.float64.4, 0.0
-  call void @"kira_native_impl_169"(double %bridge.float.0, double %bridge.float.1, double %bridge.float.2, double %bridge.float.3, double %bridge.float.4)
+  %bridge.slot.5 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 5
+  %bridge.load.5 = load %kira.bridge.value, ptr %bridge.slot.5
+  %bridge.word0.5 = extractvalue %kira.bridge.value %bridge.load.5, 2
+  %bridge.float64.5 = bitcast i64 %bridge.word0.5 to double
+  %bridge.float.5 = fadd double %bridge.float64.5, 0.0
+  %bridge.slot.6 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 6
+  %bridge.load.6 = load %kira.bridge.value, ptr %bridge.slot.6
+  %bridge.word0.6 = extractvalue %kira.bridge.value %bridge.load.6, 2
+  %bridge.float64.6 = bitcast i64 %bridge.word0.6 to double
+  %bridge.float.6 = fadd double %bridge.float64.6, 0.0
+  %bridge.slot.7 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 7
+  %bridge.load.7 = load %kira.bridge.value, ptr %bridge.slot.7
+  %bridge.word0.7 = extractvalue %kira.bridge.value %bridge.load.7, 2
+  %bridge.float64.7 = bitcast i64 %bridge.word0.7 to double
+  %bridge.float.7 = fadd double %bridge.float64.7, 0.0
+  %bridge.slot.8 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 8
+  %bridge.load.8 = load %kira.bridge.value, ptr %bridge.slot.8
+  %bridge.word0.8 = extractvalue %kira.bridge.value %bridge.load.8, 2
+  %bridge.float64.8 = bitcast i64 %bridge.word0.8 to double
+  %bridge.float.8 = fadd double %bridge.float64.8, 0.0
+  %bridge.slot.9 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 9
+  %bridge.load.9 = load %kira.bridge.value, ptr %bridge.slot.9
+  %bridge.word0.9 = extractvalue %kira.bridge.value %bridge.load.9, 2
+  %bridge.float64.9 = bitcast i64 %bridge.word0.9 to double
+  %bridge.float.9 = fadd double %bridge.float64.9, 0.0
+  %bridge.slot.10 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 10
+  %bridge.load.10 = load %kira.bridge.value, ptr %bridge.slot.10
+  %bridge.word0.10 = extractvalue %kira.bridge.value %bridge.load.10, 2
+  %bridge.float64.10 = bitcast i64 %bridge.word0.10 to double
+  %bridge.float.10 = fadd double %bridge.float64.10, 0.0
+  %bridge.slot.11 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 11
+  %bridge.load.11 = load %kira.bridge.value, ptr %bridge.slot.11
+  %bridge.word0.11 = extractvalue %kira.bridge.value %bridge.load.11, 2
+  %bridge.float64.11 = bitcast i64 %bridge.word0.11 to double
+  %bridge.float.11 = fadd double %bridge.float64.11, 0.0
+  %bridge.slot.12 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 12
+  %bridge.load.12 = load %kira.bridge.value, ptr %bridge.slot.12
+  %bridge.word0.12 = extractvalue %kira.bridge.value %bridge.load.12, 2
+  %bridge.float64.12 = bitcast i64 %bridge.word0.12 to double
+  %bridge.float.12 = fadd double %bridge.float64.12, 0.0
+  %bridge.slot.13 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 13
+  %bridge.load.13 = load %kira.bridge.value, ptr %bridge.slot.13
+  %bridge.word0.13 = extractvalue %kira.bridge.value %bridge.load.13, 2
+  %bridge.float64.13 = bitcast i64 %bridge.word0.13 to double
+  %bridge.float.13 = fadd double %bridge.float64.13, 0.0
+  call void @"kira_native_impl_169"(double %bridge.float.0, double %bridge.float.1, double %bridge.float.2, double %bridge.float.3, double %bridge.float.4, double %bridge.float.5, double %bridge.float.6, double %bridge.float.7, double %bridge.float.8, double %bridge.float.9, double %bridge.float.10, double %bridge.float.11, double %bridge.float.12, double %bridge.float.13)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
@@ -6064,227 +5381,63 @@ entry:
 
 define void @"kira_native_fn_170"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  call void @"kira_native_impl_170"()
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  %bridge.float64.0 = bitcast i64 %bridge.word0.0 to double
+  %bridge.float.0 = fadd double %bridge.float64.0, 0.0
+  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
+  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
+  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
+  %bridge.float64.1 = bitcast i64 %bridge.word0.1 to double
+  %bridge.float.1 = fadd double %bridge.float64.1, 0.0
+  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
+  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
+  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
+  %bridge.float64.2 = bitcast i64 %bridge.word0.2 to double
+  %bridge.float.2 = fadd double %bridge.float64.2, 0.0
+  %bridge.slot.3 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 3
+  %bridge.load.3 = load %kira.bridge.value, ptr %bridge.slot.3
+  %bridge.word0.3 = extractvalue %kira.bridge.value %bridge.load.3, 2
+  %bridge.float64.3 = bitcast i64 %bridge.word0.3 to double
+  %bridge.float.3 = fadd double %bridge.float64.3, 0.0
+  %bridge.slot.4 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 4
+  %bridge.load.4 = load %kira.bridge.value, ptr %bridge.slot.4
+  %bridge.word0.4 = extractvalue %kira.bridge.value %bridge.load.4, 2
+  %bridge.float64.4 = bitcast i64 %bridge.word0.4 to double
+  %bridge.float.4 = fadd double %bridge.float64.4, 0.0
+  %bridge.slot.5 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 5
+  %bridge.load.5 = load %kira.bridge.value, ptr %bridge.slot.5
+  %bridge.word0.5 = extractvalue %kira.bridge.value %bridge.load.5, 2
+  %bridge.float64.5 = bitcast i64 %bridge.word0.5 to double
+  %bridge.float.5 = fadd double %bridge.float64.5, 0.0
+  %bridge.slot.6 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 6
+  %bridge.load.6 = load %kira.bridge.value, ptr %bridge.slot.6
+  %bridge.word0.6 = extractvalue %kira.bridge.value %bridge.load.6, 2
+  %bridge.float64.6 = bitcast i64 %bridge.word0.6 to double
+  %bridge.float.6 = fadd double %bridge.float64.6, 0.0
+  %bridge.slot.7 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 7
+  %bridge.load.7 = load %kira.bridge.value, ptr %bridge.slot.7
+  %bridge.word0.7 = extractvalue %kira.bridge.value %bridge.load.7, 2
+  %bridge.float64.7 = bitcast i64 %bridge.word0.7 to double
+  %bridge.float.7 = fadd double %bridge.float64.7, 0.0
+  %bridge.slot.8 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 8
+  %bridge.load.8 = load %kira.bridge.value, ptr %bridge.slot.8
+  %bridge.word0.8 = extractvalue %kira.bridge.value %bridge.load.8, 2
+  %bridge.float64.8 = bitcast i64 %bridge.word0.8 to double
+  %bridge.float.8 = fadd double %bridge.float64.8, 0.0
+  %bridge.slot.9 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 9
+  %bridge.load.9 = load %kira.bridge.value, ptr %bridge.slot.9
+  %bridge.word0.9 = extractvalue %kira.bridge.value %bridge.load.9, 2
+  %bridge.float64.9 = bitcast i64 %bridge.word0.9 to double
+  %bridge.float.9 = fadd double %bridge.float64.9, 0.0
+  call void @"kira_native_impl_170"(double %bridge.float.0, double %bridge.float.1, double %bridge.float.2, double %bridge.float.3, double %bridge.float.4, double %bridge.float.5, double %bridge.float.6, double %bridge.float.7, double %bridge.float.8, double %bridge.float.9)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
 define void @"kira_native_fn_171"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.float64.0 = bitcast i64 %bridge.word0.0 to double
-  %bridge.float.0 = fadd double %bridge.float64.0, 0.0
-  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
-  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
-  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
-  %bridge.float64.1 = bitcast i64 %bridge.word0.1 to double
-  %bridge.float.1 = fadd double %bridge.float64.1, 0.0
-  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
-  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
-  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
-  %bridge.float64.2 = bitcast i64 %bridge.word0.2 to double
-  %bridge.float.2 = fadd double %bridge.float64.2, 0.0
-  %bridge.slot.3 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 3
-  %bridge.load.3 = load %kira.bridge.value, ptr %bridge.slot.3
-  %bridge.word0.3 = extractvalue %kira.bridge.value %bridge.load.3, 2
-  %bridge.float64.3 = bitcast i64 %bridge.word0.3 to double
-  %bridge.float.3 = fadd double %bridge.float64.3, 0.0
-  %bridge.slot.4 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 4
-  %bridge.load.4 = load %kira.bridge.value, ptr %bridge.slot.4
-  %bridge.word0.4 = extractvalue %kira.bridge.value %bridge.load.4, 2
-  %bridge.float64.4 = bitcast i64 %bridge.word0.4 to double
-  %bridge.float.4 = fadd double %bridge.float64.4, 0.0
-  %bridge.slot.5 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 5
-  %bridge.load.5 = load %kira.bridge.value, ptr %bridge.slot.5
-  %bridge.word0.5 = extractvalue %kira.bridge.value %bridge.load.5, 2
-  %bridge.float64.5 = bitcast i64 %bridge.word0.5 to double
-  %bridge.float.5 = fadd double %bridge.float64.5, 0.0
-  %bridge.slot.6 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 6
-  %bridge.load.6 = load %kira.bridge.value, ptr %bridge.slot.6
-  %bridge.word0.6 = extractvalue %kira.bridge.value %bridge.load.6, 2
-  %bridge.float64.6 = bitcast i64 %bridge.word0.6 to double
-  %bridge.float.6 = fadd double %bridge.float64.6, 0.0
-  %bridge.slot.7 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 7
-  %bridge.load.7 = load %kira.bridge.value, ptr %bridge.slot.7
-  %bridge.word0.7 = extractvalue %kira.bridge.value %bridge.load.7, 2
-  %bridge.float64.7 = bitcast i64 %bridge.word0.7 to double
-  %bridge.float.7 = fadd double %bridge.float64.7, 0.0
-  %bridge.slot.8 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 8
-  %bridge.load.8 = load %kira.bridge.value, ptr %bridge.slot.8
-  %bridge.word0.8 = extractvalue %kira.bridge.value %bridge.load.8, 2
-  %bridge.float64.8 = bitcast i64 %bridge.word0.8 to double
-  %bridge.float.8 = fadd double %bridge.float64.8, 0.0
-  %bridge.slot.9 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 9
-  %bridge.load.9 = load %kira.bridge.value, ptr %bridge.slot.9
-  %bridge.word0.9 = extractvalue %kira.bridge.value %bridge.load.9, 2
-  %bridge.float64.9 = bitcast i64 %bridge.word0.9 to double
-  %bridge.float.9 = fadd double %bridge.float64.9, 0.0
-  %bridge.slot.10 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 10
-  %bridge.load.10 = load %kira.bridge.value, ptr %bridge.slot.10
-  %bridge.word0.10 = extractvalue %kira.bridge.value %bridge.load.10, 2
-  %bridge.float64.10 = bitcast i64 %bridge.word0.10 to double
-  %bridge.float.10 = fadd double %bridge.float64.10, 0.0
-  %bridge.slot.11 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 11
-  %bridge.load.11 = load %kira.bridge.value, ptr %bridge.slot.11
-  %bridge.word0.11 = extractvalue %kira.bridge.value %bridge.load.11, 2
-  %bridge.float64.11 = bitcast i64 %bridge.word0.11 to double
-  %bridge.float.11 = fadd double %bridge.float64.11, 0.0
-  %bridge.slot.12 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 12
-  %bridge.load.12 = load %kira.bridge.value, ptr %bridge.slot.12
-  %bridge.word0.12 = extractvalue %kira.bridge.value %bridge.load.12, 2
-  %bridge.float64.12 = bitcast i64 %bridge.word0.12 to double
-  %bridge.float.12 = fadd double %bridge.float64.12, 0.0
-  %bridge.slot.13 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 13
-  %bridge.load.13 = load %kira.bridge.value, ptr %bridge.slot.13
-  %bridge.word0.13 = extractvalue %kira.bridge.value %bridge.load.13, 2
-  %bridge.float64.13 = bitcast i64 %bridge.word0.13 to double
-  %bridge.float.13 = fadd double %bridge.float64.13, 0.0
-  call void @"kira_native_impl_171"(double %bridge.float.0, double %bridge.float.1, double %bridge.float.2, double %bridge.float.3, double %bridge.float.4, double %bridge.float.5, double %bridge.float.6, double %bridge.float.7, double %bridge.float.8, double %bridge.float.9, double %bridge.float.10, double %bridge.float.11, double %bridge.float.12, double %bridge.float.13)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
-  store %kira.bridge.value %bridge.out.0, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_172"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.float64.0 = bitcast i64 %bridge.word0.0 to double
-  %bridge.float.0 = fadd double %bridge.float64.0, 0.0
-  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
-  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
-  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
-  %bridge.float64.1 = bitcast i64 %bridge.word0.1 to double
-  %bridge.float.1 = fadd double %bridge.float64.1, 0.0
-  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
-  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
-  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
-  %bridge.float64.2 = bitcast i64 %bridge.word0.2 to double
-  %bridge.float.2 = fadd double %bridge.float64.2, 0.0
-  %bridge.slot.3 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 3
-  %bridge.load.3 = load %kira.bridge.value, ptr %bridge.slot.3
-  %bridge.word0.3 = extractvalue %kira.bridge.value %bridge.load.3, 2
-  %bridge.float64.3 = bitcast i64 %bridge.word0.3 to double
-  %bridge.float.3 = fadd double %bridge.float64.3, 0.0
-  %bridge.slot.4 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 4
-  %bridge.load.4 = load %kira.bridge.value, ptr %bridge.slot.4
-  %bridge.word0.4 = extractvalue %kira.bridge.value %bridge.load.4, 2
-  %bridge.float64.4 = bitcast i64 %bridge.word0.4 to double
-  %bridge.float.4 = fadd double %bridge.float64.4, 0.0
-  %bridge.slot.5 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 5
-  %bridge.load.5 = load %kira.bridge.value, ptr %bridge.slot.5
-  %bridge.word0.5 = extractvalue %kira.bridge.value %bridge.load.5, 2
-  %bridge.float64.5 = bitcast i64 %bridge.word0.5 to double
-  %bridge.float.5 = fadd double %bridge.float64.5, 0.0
-  %bridge.slot.6 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 6
-  %bridge.load.6 = load %kira.bridge.value, ptr %bridge.slot.6
-  %bridge.word0.6 = extractvalue %kira.bridge.value %bridge.load.6, 2
-  %bridge.float64.6 = bitcast i64 %bridge.word0.6 to double
-  %bridge.float.6 = fadd double %bridge.float64.6, 0.0
-  %bridge.slot.7 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 7
-  %bridge.load.7 = load %kira.bridge.value, ptr %bridge.slot.7
-  %bridge.word0.7 = extractvalue %kira.bridge.value %bridge.load.7, 2
-  %bridge.float64.7 = bitcast i64 %bridge.word0.7 to double
-  %bridge.float.7 = fadd double %bridge.float64.7, 0.0
-  %bridge.slot.8 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 8
-  %bridge.load.8 = load %kira.bridge.value, ptr %bridge.slot.8
-  %bridge.word0.8 = extractvalue %kira.bridge.value %bridge.load.8, 2
-  %bridge.float64.8 = bitcast i64 %bridge.word0.8 to double
-  %bridge.float.8 = fadd double %bridge.float64.8, 0.0
-  %bridge.slot.9 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 9
-  %bridge.load.9 = load %kira.bridge.value, ptr %bridge.slot.9
-  %bridge.word0.9 = extractvalue %kira.bridge.value %bridge.load.9, 2
-  %bridge.float64.9 = bitcast i64 %bridge.word0.9 to double
-  %bridge.float.9 = fadd double %bridge.float64.9, 0.0
-  %bridge.slot.10 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 10
-  %bridge.load.10 = load %kira.bridge.value, ptr %bridge.slot.10
-  %bridge.word0.10 = extractvalue %kira.bridge.value %bridge.load.10, 2
-  %bridge.float64.10 = bitcast i64 %bridge.word0.10 to double
-  %bridge.float.10 = fadd double %bridge.float64.10, 0.0
-  %bridge.slot.11 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 11
-  %bridge.load.11 = load %kira.bridge.value, ptr %bridge.slot.11
-  %bridge.word0.11 = extractvalue %kira.bridge.value %bridge.load.11, 2
-  %bridge.float64.11 = bitcast i64 %bridge.word0.11 to double
-  %bridge.float.11 = fadd double %bridge.float64.11, 0.0
-  %bridge.slot.12 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 12
-  %bridge.load.12 = load %kira.bridge.value, ptr %bridge.slot.12
-  %bridge.word0.12 = extractvalue %kira.bridge.value %bridge.load.12, 2
-  %bridge.float64.12 = bitcast i64 %bridge.word0.12 to double
-  %bridge.float.12 = fadd double %bridge.float64.12, 0.0
-  %bridge.slot.13 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 13
-  %bridge.load.13 = load %kira.bridge.value, ptr %bridge.slot.13
-  %bridge.word0.13 = extractvalue %kira.bridge.value %bridge.load.13, 2
-  %bridge.float64.13 = bitcast i64 %bridge.word0.13 to double
-  %bridge.float.13 = fadd double %bridge.float64.13, 0.0
-  call void @"kira_native_impl_172"(double %bridge.float.0, double %bridge.float.1, double %bridge.float.2, double %bridge.float.3, double %bridge.float.4, double %bridge.float.5, double %bridge.float.6, double %bridge.float.7, double %bridge.float.8, double %bridge.float.9, double %bridge.float.10, double %bridge.float.11, double %bridge.float.12, double %bridge.float.13)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
-  store %kira.bridge.value %bridge.out.0, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_173"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.float64.0 = bitcast i64 %bridge.word0.0 to double
-  %bridge.float.0 = fadd double %bridge.float64.0, 0.0
-  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
-  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
-  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
-  %bridge.float64.1 = bitcast i64 %bridge.word0.1 to double
-  %bridge.float.1 = fadd double %bridge.float64.1, 0.0
-  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
-  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
-  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
-  %bridge.float64.2 = bitcast i64 %bridge.word0.2 to double
-  %bridge.float.2 = fadd double %bridge.float64.2, 0.0
-  %bridge.slot.3 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 3
-  %bridge.load.3 = load %kira.bridge.value, ptr %bridge.slot.3
-  %bridge.word0.3 = extractvalue %kira.bridge.value %bridge.load.3, 2
-  %bridge.float64.3 = bitcast i64 %bridge.word0.3 to double
-  %bridge.float.3 = fadd double %bridge.float64.3, 0.0
-  %bridge.slot.4 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 4
-  %bridge.load.4 = load %kira.bridge.value, ptr %bridge.slot.4
-  %bridge.word0.4 = extractvalue %kira.bridge.value %bridge.load.4, 2
-  %bridge.float64.4 = bitcast i64 %bridge.word0.4 to double
-  %bridge.float.4 = fadd double %bridge.float64.4, 0.0
-  %bridge.slot.5 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 5
-  %bridge.load.5 = load %kira.bridge.value, ptr %bridge.slot.5
-  %bridge.word0.5 = extractvalue %kira.bridge.value %bridge.load.5, 2
-  %bridge.float64.5 = bitcast i64 %bridge.word0.5 to double
-  %bridge.float.5 = fadd double %bridge.float64.5, 0.0
-  %bridge.slot.6 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 6
-  %bridge.load.6 = load %kira.bridge.value, ptr %bridge.slot.6
-  %bridge.word0.6 = extractvalue %kira.bridge.value %bridge.load.6, 2
-  %bridge.float64.6 = bitcast i64 %bridge.word0.6 to double
-  %bridge.float.6 = fadd double %bridge.float64.6, 0.0
-  %bridge.slot.7 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 7
-  %bridge.load.7 = load %kira.bridge.value, ptr %bridge.slot.7
-  %bridge.word0.7 = extractvalue %kira.bridge.value %bridge.load.7, 2
-  %bridge.float64.7 = bitcast i64 %bridge.word0.7 to double
-  %bridge.float.7 = fadd double %bridge.float64.7, 0.0
-  %bridge.slot.8 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 8
-  %bridge.load.8 = load %kira.bridge.value, ptr %bridge.slot.8
-  %bridge.word0.8 = extractvalue %kira.bridge.value %bridge.load.8, 2
-  %bridge.float64.8 = bitcast i64 %bridge.word0.8 to double
-  %bridge.float.8 = fadd double %bridge.float64.8, 0.0
-  %bridge.slot.9 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 9
-  %bridge.load.9 = load %kira.bridge.value, ptr %bridge.slot.9
-  %bridge.word0.9 = extractvalue %kira.bridge.value %bridge.load.9, 2
-  %bridge.float64.9 = bitcast i64 %bridge.word0.9 to double
-  %bridge.float.9 = fadd double %bridge.float64.9, 0.0
-  call void @"kira_native_impl_173"(double %bridge.float.0, double %bridge.float.1, double %bridge.float.2, double %bridge.float.3, double %bridge.float.4, double %bridge.float.5, double %bridge.float.6, double %bridge.float.7, double %bridge.float.8, double %bridge.float.9)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
-  store %kira.bridge.value %bridge.out.0, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_174"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
@@ -6338,16 +5491,35 @@ entry:
   %bridge.word0.9 = extractvalue %kira.bridge.value %bridge.load.9, 2
   %bridge.float64.9 = bitcast i64 %bridge.word0.9 to double
   %bridge.float.9 = fadd double %bridge.float64.9, 0.0
-  call void @"kira_native_impl_174"(%kira.string %bridge.str.0, double %bridge.float.1, double %bridge.float.2, double %bridge.float.3, double %bridge.float.4, double %bridge.float.5, double %bridge.float.6, double %bridge.float.7, double %bridge.float.8, double %bridge.float.9)
+  call void @"kira_native_impl_171"(%kira.string %bridge.str.0, double %bridge.float.1, double %bridge.float.2, double %bridge.float.3, double %bridge.float.4, double %bridge.float.5, double %bridge.float.6, double %bridge.float.7, double %bridge.float.8, double %bridge.float.9)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
+define void @"kira_native_fn_176"(ptr %args, i32 %arg_count, ptr %out_result) {
+entry:
+  %bridge.call = call i64 @"kira_native_impl_176"()
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
+  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
+  store %kira.bridge.value %bridge.out.1, ptr %out_result
+  ret void
+}
+
 define void @"kira_native_fn_178"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  %bridge.call = call i64 @"kira_native_impl_178"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.ptrint.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  %bridge.len.0 = extractvalue %kira.bridge.value %bridge.load.0, 3
+  %bridge.ptr.0 = inttoptr i64 %bridge.ptrint.0 to ptr
+  %bridge.str.init.0 = insertvalue %kira.string zeroinitializer, ptr %bridge.ptr.0, 0
+  %bridge.str.0 = insertvalue %kira.string %bridge.str.init.0, i64 %bridge.len.0, 1
+  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
+  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
+  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
+  %bridge.call = call i64 @"kira_native_impl_178"(%kira.string %bridge.str.0, i64 %bridge.word0.1)
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
@@ -6355,10 +5527,26 @@ entry:
 
 define void @"kira_native_fn_179"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  %bridge.call = call i64 @"kira_native_impl_179"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
+  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
+  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
+  call void @"kira_native_impl_179"(i64 %bridge.word0.0, i64 %bridge.word0.1)
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
+  store %kira.bridge.value %bridge.out.0, ptr %out_result
+  ret void
+}
+
+define void @"kira_native_fn_180"(ptr %args, i32 %arg_count, ptr %out_result) {
+entry:
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  call void @"kira_native_impl_180"(i64 %bridge.word0.0)
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
+  store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
@@ -6371,10 +5559,7 @@ entry:
   %bridge.ptr.0 = inttoptr i64 %bridge.ptrint.0 to ptr
   %bridge.str.init.0 = insertvalue %kira.string zeroinitializer, ptr %bridge.ptr.0, 0
   %bridge.str.0 = insertvalue %kira.string %bridge.str.init.0, i64 %bridge.len.0, 1
-  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
-  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
-  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
-  %bridge.call = call i64 @"kira_native_impl_181"(%kira.string %bridge.str.0, i64 %bridge.word0.1)
+  %bridge.call = call i64 @"kira_native_impl_181"(%kira.string %bridge.str.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
@@ -6389,7 +5574,13 @@ entry:
   %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
   %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
   %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
-  call void @"kira_native_impl_182"(i64 %bridge.word0.0, i64 %bridge.word0.1)
+  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
+  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
+  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
+  %bridge.slot.3 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 3
+  %bridge.load.3 = load %kira.bridge.value, ptr %bridge.slot.3
+  %bridge.word0.3 = extractvalue %kira.bridge.value %bridge.load.3, 2
+  call void @"kira_native_impl_182"(i64 %bridge.word0.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
@@ -6408,15 +5599,8 @@ entry:
 
 define void @"kira_native_fn_184"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.ptrint.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.len.0 = extractvalue %kira.bridge.value %bridge.load.0, 3
-  %bridge.ptr.0 = inttoptr i64 %bridge.ptrint.0 to ptr
-  %bridge.str.init.0 = insertvalue %kira.string zeroinitializer, ptr %bridge.ptr.0, 0
-  %bridge.str.0 = insertvalue %kira.string %bridge.str.init.0, i64 %bridge.len.0, 1
-  %bridge.call = call i64 @"kira_native_impl_184"(%kira.string %bridge.str.0)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 1, 0
+  %bridge.call = call i64 @"kira_native_impl_184"()
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
@@ -6424,32 +5608,10 @@ entry:
 
 define void @"kira_native_fn_185"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
-  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
-  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
-  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
-  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
-  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
-  %bridge.slot.3 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 3
-  %bridge.load.3 = load %kira.bridge.value, ptr %bridge.slot.3
-  %bridge.word0.3 = extractvalue %kira.bridge.value %bridge.load.3, 2
-  call void @"kira_native_impl_185"(i64 %bridge.word0.0, i64 %bridge.word0.1, i64 %bridge.word0.2, i64 %bridge.word0.3)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
-  store %kira.bridge.value %bridge.out.0, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_186"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_186"(i64 %bridge.word0.0)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
-  store %kira.bridge.value %bridge.out.0, ptr %out_result
+  %bridge.call = call i64 @"kira_native_impl_185"()
+  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
+  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
+  store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
 }
 
@@ -6471,81 +5633,46 @@ entry:
   ret void
 }
 
-define void @"kira_native_fn_190"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_189"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
-  %bridge.call = call i64 @"kira_native_impl_190"()
+  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
+  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
+  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
+  %bridge.call = call i64 @"kira_native_impl_189"(i64 %bridge.word0.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
   %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
   store %kira.bridge.value %bridge.out.1, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_191"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.call = call i64 @"kira_native_impl_191"()
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_192"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_443"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
   %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.call = call i64 @"kira_native_impl_192"(i64 %bridge.word0.0)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %bridge.out.1 = insertvalue %kira.bridge.value %bridge.out.0, i64 %bridge.call, 2
-  store %kira.bridge.value %bridge.out.1, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_445"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_445"(i64 %bridge.word0.0)
+  call void @"kira_native_impl_443"(i64 %bridge.word0.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_447"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_442"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
   %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  %bridge.slot.1 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 1
-  %bridge.load.1 = load %kira.bridge.value, ptr %bridge.slot.1
-  %bridge.word0.1 = extractvalue %kira.bridge.value %bridge.load.1, 2
-  %bridge.slot.2 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 2
-  %bridge.load.2 = load %kira.bridge.value, ptr %bridge.slot.2
-  %bridge.word0.2 = extractvalue %kira.bridge.value %bridge.load.2, 2
-  call void @"kira_native_impl_447"(i64 %bridge.word0.0, i64 %bridge.word0.1, i64 %bridge.word0.2)
+  call void @"kira_native_impl_442"(i64 %bridge.word0.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void
 }
 
-define void @"kira_native_fn_446"(ptr %args, i32 %arg_count, ptr %out_result) {
+define void @"kira_native_fn_444"(ptr %args, i32 %arg_count, ptr %out_result) {
 entry:
   %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
   %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
   %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_446"(i64 %bridge.word0.0)
-  %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
-  store %kira.bridge.value %bridge.out.0, ptr %out_result
-  ret void
-}
-
-define void @"kira_native_fn_448"(ptr %args, i32 %arg_count, ptr %out_result) {
-entry:
-  %bridge.slot.0 = getelementptr inbounds %kira.bridge.value, ptr %args, i64 0
-  %bridge.load.0 = load %kira.bridge.value, ptr %bridge.slot.0
-  %bridge.word0.0 = extractvalue %kira.bridge.value %bridge.load.0, 2
-  call void @"kira_native_impl_448"(i64 %bridge.word0.0)
+  call void @"kira_native_impl_444"(i64 %bridge.word0.0)
   %bridge.out.0 = insertvalue %kira.bridge.value zeroinitializer, i8 0, 0
   store %kira.bridge.value %bridge.out.0, ptr %out_result
   ret void

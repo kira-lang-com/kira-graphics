@@ -18,10 +18,10 @@ layout(location = 0) in vec3 kira_attr_position;
 layout(location = 1) in vec3 kira_attr_normal;
 out vec4 kira_varying_color;
 
-VertexOut LifetimeStress__vertex__entry(VertexIn input) {
+VertexOut LifetimeStress__vertex__entry(VertexIn kira_stage_input) {
     VertexOut result;
-    result.clip_position = vec4(input.position, 1);
-    result.color = vec4(input.normal.x, input.normal.y, input.normal.z, 1);
+    result.clip_position = vec4(kira_stage_input.position, 1);
+    result.color = vec4(kira_stage_input.normal.x, kira_stage_input.normal.y, kira_stage_input.normal.z, 1);
     return result;
 }
 
