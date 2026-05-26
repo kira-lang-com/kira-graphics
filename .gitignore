@@ -3,23 +3,8 @@ zig-out/
 .kira/
 .kira-build/
 
-examples/*/generated/*.kbc
-examples/*/generated/*.khm
-examples/*/generated/*.obj
-examples/*/generated/*.obj.ll
-examples/*/generated/*.lib
-examples/*/generated/*.dll
-examples/*/generated/*.exp
-examples/*/generated/*.bridge.obj
-examples/*/generated/*.run.*
-examples/*/generated/*.log
-examples/*/generated/*.txt
-examples/*/kira.lock
-tests/*/generated/
-tests/*/kira.lock
-tests/ksl_asset_probe.exp
-
-/generated/
+*generated/
+kira.lock
 
 *.kbc
 *.khm
