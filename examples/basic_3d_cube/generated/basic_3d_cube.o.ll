@@ -4781,7 +4781,14 @@ entry:
   store i64 %r13, ptr %store.ptr.13
   %array.set.ptr.6 = inttoptr i64 %r4 to ptr
   %array.set.pack.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %array.set.pack.0 = insertvalue %kira.bridge.value %array.set.pack.0.0, i64 %r6, 2
+  %array.set.struct.src.0 = inttoptr i64 %r6 to ptr
+  %array.set.struct.value.0 = load %t.VertexAttribute, ptr %array.set.struct.src.0
+  %array.set.struct.size.ptr.0 = getelementptr %t.VertexAttribute, ptr null, i32 1
+  %array.set.struct.size.0 = ptrtoint ptr %array.set.struct.size.ptr.0 to i64
+  %array.set.struct.copy.0 = call ptr @malloc(i64 %array.set.struct.size.0)
+  store %t.VertexAttribute %array.set.struct.value.0, ptr %array.set.struct.copy.0
+  %array.set.struct.ptrint.0 = ptrtoint ptr %array.set.struct.copy.0 to i64
+  %array.set.pack.0 = insertvalue %kira.bridge.value %array.set.pack.0.0, i64 %array.set.struct.ptrint.0, 2
   %array.set.pack.ptr.0 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.0, ptr %array.set.pack.ptr.0
   call void @"kira_array_store"(ptr %array.set.ptr.6, i64 %r5, ptr %array.set.pack.ptr.0)
@@ -4820,7 +4827,14 @@ entry:
   store i64 %r23, ptr %store.ptr.23
   %array.set.ptr.16 = inttoptr i64 %r4 to ptr
   %array.set.pack.1.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %array.set.pack.1 = insertvalue %kira.bridge.value %array.set.pack.1.0, i64 %r16, 2
+  %array.set.struct.src.1 = inttoptr i64 %r16 to ptr
+  %array.set.struct.value.1 = load %t.VertexAttribute, ptr %array.set.struct.src.1
+  %array.set.struct.size.ptr.1 = getelementptr %t.VertexAttribute, ptr null, i32 1
+  %array.set.struct.size.1 = ptrtoint ptr %array.set.struct.size.ptr.1 to i64
+  %array.set.struct.copy.1 = call ptr @malloc(i64 %array.set.struct.size.1)
+  store %t.VertexAttribute %array.set.struct.value.1, ptr %array.set.struct.copy.1
+  %array.set.struct.ptrint.1 = ptrtoint ptr %array.set.struct.copy.1 to i64
+  %array.set.pack.1 = insertvalue %kira.bridge.value %array.set.pack.1.0, i64 %array.set.struct.ptrint.1, 2
   %array.set.pack.ptr.1 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.1, ptr %array.set.pack.ptr.1
   call void @"kira_array_store"(ptr %array.set.ptr.16, i64 %r15, ptr %array.set.pack.ptr.1)
@@ -4830,6 +4844,10 @@ entry:
   %store.ptr.4 = inttoptr i64 %r25 to ptr
   %store.arrayptr.4 = inttoptr i64 %r4 to ptr
   store ptr %store.arrayptr.4, ptr %store.ptr.4
+  %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.6
+  call void @free(ptr %cleanup.heap.ptr.2)
+  %cleanup.heap.ptr.3 = load ptr, ptr %cleanup.heap.slot.16
+  call void @free(ptr %cleanup.heap.ptr.3)
   ret i64 %r0
 }
 
@@ -5421,7 +5439,14 @@ entry:
   store i8 %store.bool.25, ptr %store.ptr.25
   %array.set.ptr.6 = inttoptr i64 %r4 to ptr
   %array.set.pack.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %array.set.pack.0 = insertvalue %kira.bridge.value %array.set.pack.0.0, i64 %r6, 2
+  %array.set.struct.src.0 = inttoptr i64 %r6 to ptr
+  %array.set.struct.value.0 = load %t.ColorAttachment, ptr %array.set.struct.src.0
+  %array.set.struct.size.ptr.0 = getelementptr %t.ColorAttachment, ptr null, i32 1
+  %array.set.struct.size.0 = ptrtoint ptr %array.set.struct.size.ptr.0 to i64
+  %array.set.struct.copy.0 = call ptr @malloc(i64 %array.set.struct.size.0)
+  store %t.ColorAttachment %array.set.struct.value.0, ptr %array.set.struct.copy.0
+  %array.set.struct.ptrint.0 = ptrtoint ptr %array.set.struct.copy.0 to i64
+  %array.set.pack.0 = insertvalue %kira.bridge.value %array.set.pack.0.0, i64 %array.set.struct.ptrint.0, 2
   %array.set.pack.ptr.0 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.0, ptr %array.set.pack.ptr.0
   call void @"kira_array_store"(ptr %array.set.ptr.6, i64 %r5, ptr %array.set.pack.ptr.0)
@@ -5565,24 +5590,26 @@ entry:
   %store.ptr.58 = inttoptr i64 %r59 to ptr
   %store.bool.58 = zext i1 %r58 to i8
   store i8 %store.bool.58, ptr %store.ptr.58
-  %cleanup.heap.ptr.1 = load ptr, ptr %cleanup.heap.slot.7
+  %cleanup.heap.ptr.1 = load ptr, ptr %cleanup.heap.slot.6
   call void @free(ptr %cleanup.heap.ptr.1)
-  %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.13
+  %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.7
   call void @free(ptr %cleanup.heap.ptr.2)
-  %cleanup.heap.ptr.3 = load ptr, ptr %cleanup.heap.slot.23
+  %cleanup.heap.ptr.3 = load ptr, ptr %cleanup.heap.slot.13
   call void @free(ptr %cleanup.heap.ptr.3)
-  %cleanup.heap.ptr.4 = load ptr, ptr %cleanup.heap.slot.28
+  %cleanup.heap.ptr.4 = load ptr, ptr %cleanup.heap.slot.23
   call void @free(ptr %cleanup.heap.ptr.4)
-  %cleanup.heap.ptr.5 = load ptr, ptr %cleanup.heap.slot.29
+  %cleanup.heap.ptr.5 = load ptr, ptr %cleanup.heap.slot.28
   call void @free(ptr %cleanup.heap.ptr.5)
-  %cleanup.heap.ptr.6 = load ptr, ptr %cleanup.heap.slot.35
+  %cleanup.heap.ptr.6 = load ptr, ptr %cleanup.heap.slot.29
   call void @free(ptr %cleanup.heap.ptr.6)
-  %cleanup.heap.ptr.7 = load ptr, ptr %cleanup.heap.slot.45
+  %cleanup.heap.ptr.7 = load ptr, ptr %cleanup.heap.slot.35
   call void @free(ptr %cleanup.heap.ptr.7)
-  %cleanup.heap.ptr.8 = load ptr, ptr %cleanup.heap.slot.52
+  %cleanup.heap.ptr.8 = load ptr, ptr %cleanup.heap.slot.45
   call void @free(ptr %cleanup.heap.ptr.8)
-  %cleanup.heap.ptr.9 = load ptr, ptr %cleanup.heap.slot.56
+  %cleanup.heap.ptr.9 = load ptr, ptr %cleanup.heap.slot.52
   call void @free(ptr %cleanup.heap.ptr.9)
+  %cleanup.heap.ptr.10 = load ptr, ptr %cleanup.heap.slot.56
+  call void @free(ptr %cleanup.heap.ptr.10)
   ret i64 %r0
 }
 
@@ -10101,10 +10128,17 @@ kira_label_5:
   %copy.val.207 = load %t.RenderEncoder, ptr %copy.src.205
   store %t.RenderEncoder %copy.val.207, ptr %copy.dst.207
   %r208 = load i64, ptr %local3
-  %cleanup.heap.ptr.1 = load ptr, ptr %cleanup.heap.slot.203
-  call void @free(ptr %cleanup.heap.ptr.1)
+  %return.struct.src.1 = inttoptr i64 %r208 to ptr
+  %return.struct.value.1 = load %t.RenderEncoder, ptr %return.struct.src.1
+  %return.struct.size.ptr.1 = getelementptr %t.RenderEncoder, ptr null, i32 1
+  %return.struct.size.1 = ptrtoint ptr %return.struct.size.ptr.1 to i64
+  %return.struct.copy.1 = call ptr @malloc(i64 %return.struct.size.1)
+  store %t.RenderEncoder %return.struct.value.1, ptr %return.struct.copy.1
+  %return.struct.ptrint.1 = ptrtoint ptr %return.struct.copy.1 to i64
+  %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.203
+  call void @free(ptr %cleanup.heap.ptr.2)
   call void @"kira_release_contents_GraphicsFrame"(ptr %local.storage.0)
-  ret i64 %r208
+  ret i64 %return.struct.ptrint.1
 }
 
 define void @"kira_fn_415_GraphicsFrame.endPass"(i64 %arg0) {
@@ -10381,6 +10415,8 @@ entry:
   %r0 = load i64, ptr %local0
   %r1 = load i64, ptr %local1
   %r2 = call i64 @"kira_fn_414_GraphicsFrame.beginRenderPass"(i64 %r0, i64 %r1)
+  %cleanup.call.ptr.2 = inttoptr i64 %r2 to ptr
+  store ptr %cleanup.call.ptr.2, ptr %cleanup.heap.slot.2
   %r3 = load i64, ptr %local3
   %copy.dst.3 = inttoptr i64 %r3 to ptr
   %copy.src.2 = inttoptr i64 %r2 to ptr
@@ -10397,6 +10433,9 @@ entry:
   call void @"kira_callable_dispatch_45bbf038adba07d0"(i64 %r6, i64 %r7)
   %r8 = load i64, ptr %local0
   call void @"kira_fn_415_GraphicsFrame.endPass"(i64 %r8)
+  %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.2
+  call void @free(ptr %cleanup.heap.ptr.0)
+  call void @"kira_release_contents_RenderEncoder"(ptr %local.storage.4)
   ret void
 }
 
@@ -10428,6 +10467,8 @@ entry:
   %cleanup.call.ptr.2 = inttoptr i64 %r2 to ptr
   store ptr %cleanup.call.ptr.2, ptr %cleanup.heap.slot.2
   %r3 = call i64 @"kira_fn_414_GraphicsFrame.beginRenderPass"(i64 %r0, i64 %r2)
+  %cleanup.call.ptr.3 = inttoptr i64 %r3 to ptr
+  store ptr %cleanup.call.ptr.3, ptr %cleanup.heap.slot.3
   %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.2
   call void @free(ptr %cleanup.heap.ptr.0)
   ret i64 %r3
@@ -11203,11 +11244,18 @@ entry:
   %r19 = ptrtoint ptr %load.arrayptr.19 to i64
   call void @"kira_fn_430_Graphics.updateUniform"(i64 %r15, i64 %r16, i64 %r19)
   %r20 = load i64, ptr %local3
-  %cleanup.heap.ptr.0 = load ptr, ptr %cleanup.heap.slot.7
-  call void @free(ptr %cleanup.heap.ptr.0)
-  %cleanup.heap.ptr.1 = load ptr, ptr %cleanup.heap.slot.8
+  %return.struct.src.0 = inttoptr i64 %r20 to ptr
+  %return.struct.value.0 = load %t.GraphicsUniform, ptr %return.struct.src.0
+  %return.struct.size.ptr.0 = getelementptr %t.GraphicsUniform, ptr null, i32 1
+  %return.struct.size.0 = ptrtoint ptr %return.struct.size.ptr.0 to i64
+  %return.struct.copy.0 = call ptr @malloc(i64 %return.struct.size.0)
+  store %t.GraphicsUniform %return.struct.value.0, ptr %return.struct.copy.0
+  %return.struct.ptrint.0 = ptrtoint ptr %return.struct.copy.0 to i64
+  %cleanup.heap.ptr.1 = load ptr, ptr %cleanup.heap.slot.7
   call void @free(ptr %cleanup.heap.ptr.1)
-  ret i64 %r20
+  %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.8
+  call void @free(ptr %cleanup.heap.ptr.2)
+  ret i64 %return.struct.ptrint.0
 }
 
 define void @"kira_fn_430_Graphics.updateUniform"(i64 %arg0, i64 %arg1, i64 %arg2) {
@@ -19086,7 +19134,14 @@ entry:
   store i8 %store.bool.17, ptr %store.ptr.17
   %array.set.ptr.6 = inttoptr i64 %r4 to ptr
   %array.set.pack.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %array.set.pack.0 = insertvalue %kira.bridge.value %array.set.pack.0.0, i64 %r6, 2
+  %array.set.struct.src.0 = inttoptr i64 %r6 to ptr
+  %array.set.struct.value.0 = load %t.ColorAttachment, ptr %array.set.struct.src.0
+  %array.set.struct.size.ptr.0 = getelementptr %t.ColorAttachment, ptr null, i32 1
+  %array.set.struct.size.0 = ptrtoint ptr %array.set.struct.size.ptr.0 to i64
+  %array.set.struct.copy.0 = call ptr @malloc(i64 %array.set.struct.size.0)
+  store %t.ColorAttachment %array.set.struct.value.0, ptr %array.set.struct.copy.0
+  %array.set.struct.ptrint.0 = ptrtoint ptr %array.set.struct.copy.0 to i64
+  %array.set.pack.0 = insertvalue %kira.bridge.value %array.set.pack.0.0, i64 %array.set.struct.ptrint.0, 2
   %array.set.pack.ptr.0 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.0, ptr %array.set.pack.ptr.0
   call void @"kira_array_store"(ptr %array.set.ptr.6, i64 %r5, ptr %array.set.pack.ptr.0)
@@ -19199,20 +19254,22 @@ entry:
   %store.ptr.42 = inttoptr i64 %r43 to ptr
   %store.bool.42 = zext i1 %r42 to i8
   store i8 %store.bool.42, ptr %store.ptr.42
-  %cleanup.heap.ptr.1 = load ptr, ptr %cleanup.heap.slot.7
+  %cleanup.heap.ptr.1 = load ptr, ptr %cleanup.heap.slot.6
   call void @free(ptr %cleanup.heap.ptr.1)
-  %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.15
+  %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.7
   call void @free(ptr %cleanup.heap.ptr.2)
-  %cleanup.heap.ptr.3 = load ptr, ptr %cleanup.heap.slot.20
+  %cleanup.heap.ptr.3 = load ptr, ptr %cleanup.heap.slot.15
   call void @free(ptr %cleanup.heap.ptr.3)
-  %cleanup.heap.ptr.4 = load ptr, ptr %cleanup.heap.slot.21
+  %cleanup.heap.ptr.4 = load ptr, ptr %cleanup.heap.slot.20
   call void @free(ptr %cleanup.heap.ptr.4)
-  %cleanup.heap.ptr.5 = load ptr, ptr %cleanup.heap.slot.29
+  %cleanup.heap.ptr.5 = load ptr, ptr %cleanup.heap.slot.21
   call void @free(ptr %cleanup.heap.ptr.5)
-  %cleanup.heap.ptr.6 = load ptr, ptr %cleanup.heap.slot.36
+  %cleanup.heap.ptr.6 = load ptr, ptr %cleanup.heap.slot.29
   call void @free(ptr %cleanup.heap.ptr.6)
-  %cleanup.heap.ptr.7 = load ptr, ptr %cleanup.heap.slot.40
+  %cleanup.heap.ptr.7 = load ptr, ptr %cleanup.heap.slot.36
   call void @free(ptr %cleanup.heap.ptr.7)
+  %cleanup.heap.ptr.8 = load ptr, ptr %cleanup.heap.slot.40
+  call void @free(ptr %cleanup.heap.ptr.8)
   ret i64 %r0
 }
 
@@ -19516,6 +19573,8 @@ entry:
   %store.arrayptr.48 = inttoptr i64 %r48 to ptr
   store ptr %store.arrayptr.48, ptr %store.ptr.48
   %r50 = call i64 @"kira_fn_429_Graphics.createUniform"(i64 %r42, i64 %r43)
+  %cleanup.call.ptr.50 = inttoptr i64 %r50 to ptr
+  store ptr %cleanup.call.ptr.50, ptr %cleanup.heap.slot.50
   %r51 = load i64, ptr %local1
   %native.state.set.ptr.50 = inttoptr i64 %r51 to ptr
   %native.state.set.slot.50 = getelementptr inbounds %kira.bridge.value, ptr %native.state.set.ptr.50, i64 5
@@ -19558,6 +19617,8 @@ entry:
   %store.arrayptr.58 = inttoptr i64 %r58 to ptr
   store ptr %store.arrayptr.58, ptr %store.ptr.58
   %r60 = call i64 @"kira_fn_429_Graphics.createUniform"(i64 %r52, i64 %r53)
+  %cleanup.call.ptr.60 = inttoptr i64 %r60 to ptr
+  store ptr %cleanup.call.ptr.60, ptr %cleanup.heap.slot.60
   %r61 = load i64, ptr %local1
   %native.state.set.ptr.60 = inttoptr i64 %r61 to ptr
   %native.state.set.slot.60 = getelementptr inbounds %kira.bridge.value, ptr %native.state.set.ptr.60, i64 6
@@ -19600,6 +19661,8 @@ entry:
   %store.arrayptr.68 = inttoptr i64 %r68 to ptr
   store ptr %store.arrayptr.68, ptr %store.ptr.68
   %r70 = call i64 @"kira_fn_429_Graphics.createUniform"(i64 %r62, i64 %r63)
+  %cleanup.call.ptr.70 = inttoptr i64 %r70 to ptr
+  store ptr %cleanup.call.ptr.70, ptr %cleanup.heap.slot.70
   %r71 = load i64, ptr %local1
   %native.state.set.ptr.70 = inttoptr i64 %r71 to ptr
   %native.state.set.slot.70 = getelementptr inbounds %kira.bridge.value, ptr %native.state.set.ptr.70, i64 7
@@ -19770,7 +19833,14 @@ entry:
   store %t.BlendState %copy.val.113, ptr %copy.dst.113
   %array.set.ptr.105 = inttoptr i64 %r103 to ptr
   %array.set.pack.13.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %array.set.pack.13 = insertvalue %kira.bridge.value %array.set.pack.13.0, i64 %r105, 2
+  %array.set.struct.src.13 = inttoptr i64 %r105 to ptr
+  %array.set.struct.value.13 = load %t.ColorTargetDescriptor, ptr %array.set.struct.src.13
+  %array.set.struct.size.ptr.13 = getelementptr %t.ColorTargetDescriptor, ptr null, i32 1
+  %array.set.struct.size.13 = ptrtoint ptr %array.set.struct.size.ptr.13 to i64
+  %array.set.struct.copy.13 = call ptr @malloc(i64 %array.set.struct.size.13)
+  store %t.ColorTargetDescriptor %array.set.struct.value.13, ptr %array.set.struct.copy.13
+  %array.set.struct.ptrint.13 = ptrtoint ptr %array.set.struct.copy.13 to i64
+  %array.set.pack.13 = insertvalue %kira.bridge.value %array.set.pack.13.0, i64 %array.set.struct.ptrint.13, 2
   %array.set.pack.ptr.13 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.13, ptr %array.set.pack.ptr.13
   call void @"kira_array_store"(ptr %array.set.ptr.105, i64 %r104, ptr %array.set.pack.ptr.13)
@@ -19970,7 +20040,14 @@ entry:
   store %t.BlendState %copy.val.157, ptr %copy.dst.157
   %array.set.ptr.149 = inttoptr i64 %r147 to ptr
   %array.set.pack.16.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %array.set.pack.16 = insertvalue %kira.bridge.value %array.set.pack.16.0, i64 %r149, 2
+  %array.set.struct.src.16 = inttoptr i64 %r149 to ptr
+  %array.set.struct.value.16 = load %t.ColorTargetDescriptor, ptr %array.set.struct.src.16
+  %array.set.struct.size.ptr.16 = getelementptr %t.ColorTargetDescriptor, ptr null, i32 1
+  %array.set.struct.size.16 = ptrtoint ptr %array.set.struct.size.ptr.16 to i64
+  %array.set.struct.copy.16 = call ptr @malloc(i64 %array.set.struct.size.16)
+  store %t.ColorTargetDescriptor %array.set.struct.value.16, ptr %array.set.struct.copy.16
+  %array.set.struct.ptrint.16 = ptrtoint ptr %array.set.struct.copy.16 to i64
+  %array.set.pack.16 = insertvalue %kira.bridge.value %array.set.pack.16.0, i64 %array.set.struct.ptrint.16, 2
   %array.set.pack.ptr.16 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.16, ptr %array.set.pack.ptr.16
   call void @"kira_array_store"(ptr %array.set.ptr.149, i64 %r148, ptr %array.set.pack.ptr.16)
@@ -20113,44 +20190,54 @@ entry:
   call void @free(ptr %cleanup.heap.ptr.25)
   %cleanup.heap.ptr.26 = load ptr, ptr %cleanup.heap.slot.43
   call void @free(ptr %cleanup.heap.ptr.26)
-  %cleanup.heap.ptr.27 = load ptr, ptr %cleanup.heap.slot.53
+  %cleanup.heap.ptr.27 = load ptr, ptr %cleanup.heap.slot.50
   call void @free(ptr %cleanup.heap.ptr.27)
-  %cleanup.heap.ptr.28 = load ptr, ptr %cleanup.heap.slot.63
+  %cleanup.heap.ptr.28 = load ptr, ptr %cleanup.heap.slot.53
   call void @free(ptr %cleanup.heap.ptr.28)
-  %cleanup.heap.ptr.29 = load ptr, ptr %cleanup.heap.slot.77
+  %cleanup.heap.ptr.29 = load ptr, ptr %cleanup.heap.slot.60
   call void @free(ptr %cleanup.heap.ptr.29)
-  %cleanup.heap.ptr.30 = load ptr, ptr %cleanup.heap.slot.84
+  %cleanup.heap.ptr.30 = load ptr, ptr %cleanup.heap.slot.63
   call void @free(ptr %cleanup.heap.ptr.30)
-  %cleanup.heap.ptr.31 = load ptr, ptr %cleanup.heap.slot.91
+  %cleanup.heap.ptr.31 = load ptr, ptr %cleanup.heap.slot.70
   call void @free(ptr %cleanup.heap.ptr.31)
-  %cleanup.heap.ptr.32 = load ptr, ptr %cleanup.heap.slot.94
+  %cleanup.heap.ptr.32 = load ptr, ptr %cleanup.heap.slot.77
   call void @free(ptr %cleanup.heap.ptr.32)
-  %cleanup.heap.ptr.33 = load ptr, ptr %cleanup.heap.slot.100
+  %cleanup.heap.ptr.33 = load ptr, ptr %cleanup.heap.slot.84
   call void @free(ptr %cleanup.heap.ptr.33)
-  %cleanup.heap.ptr.34 = load ptr, ptr %cleanup.heap.slot.108
+  %cleanup.heap.ptr.34 = load ptr, ptr %cleanup.heap.slot.91
   call void @free(ptr %cleanup.heap.ptr.34)
-  %cleanup.heap.ptr.35 = load ptr, ptr %cleanup.heap.slot.115
+  %cleanup.heap.ptr.35 = load ptr, ptr %cleanup.heap.slot.94
   call void @free(ptr %cleanup.heap.ptr.35)
-  %cleanup.heap.ptr.36 = load ptr, ptr %cleanup.heap.slot.125
+  %cleanup.heap.ptr.36 = load ptr, ptr %cleanup.heap.slot.100
   call void @free(ptr %cleanup.heap.ptr.36)
-  %cleanup.heap.ptr.37 = load ptr, ptr %cleanup.heap.slot.131
+  %cleanup.heap.ptr.37 = load ptr, ptr %cleanup.heap.slot.105
   call void @free(ptr %cleanup.heap.ptr.37)
-  %cleanup.heap.ptr.38 = load ptr, ptr %cleanup.heap.slot.135
+  %cleanup.heap.ptr.38 = load ptr, ptr %cleanup.heap.slot.108
   call void @free(ptr %cleanup.heap.ptr.38)
-  %cleanup.heap.ptr.39 = load ptr, ptr %cleanup.heap.slot.138
+  %cleanup.heap.ptr.39 = load ptr, ptr %cleanup.heap.slot.115
   call void @free(ptr %cleanup.heap.ptr.39)
-  %cleanup.heap.ptr.40 = load ptr, ptr %cleanup.heap.slot.144
+  %cleanup.heap.ptr.40 = load ptr, ptr %cleanup.heap.slot.125
   call void @free(ptr %cleanup.heap.ptr.40)
-  %cleanup.heap.ptr.41 = load ptr, ptr %cleanup.heap.slot.152
+  %cleanup.heap.ptr.41 = load ptr, ptr %cleanup.heap.slot.131
   call void @free(ptr %cleanup.heap.ptr.41)
-  %cleanup.heap.ptr.42 = load ptr, ptr %cleanup.heap.slot.159
+  %cleanup.heap.ptr.42 = load ptr, ptr %cleanup.heap.slot.135
   call void @free(ptr %cleanup.heap.ptr.42)
-  %cleanup.heap.ptr.43 = load ptr, ptr %cleanup.heap.slot.169
+  %cleanup.heap.ptr.43 = load ptr, ptr %cleanup.heap.slot.138
   call void @free(ptr %cleanup.heap.ptr.43)
-  %cleanup.heap.ptr.44 = load ptr, ptr %cleanup.heap.slot.175
+  %cleanup.heap.ptr.44 = load ptr, ptr %cleanup.heap.slot.144
   call void @free(ptr %cleanup.heap.ptr.44)
-  %cleanup.heap.ptr.45 = load ptr, ptr %cleanup.heap.slot.179
+  %cleanup.heap.ptr.45 = load ptr, ptr %cleanup.heap.slot.149
   call void @free(ptr %cleanup.heap.ptr.45)
+  %cleanup.heap.ptr.46 = load ptr, ptr %cleanup.heap.slot.152
+  call void @free(ptr %cleanup.heap.ptr.46)
+  %cleanup.heap.ptr.47 = load ptr, ptr %cleanup.heap.slot.159
+  call void @free(ptr %cleanup.heap.ptr.47)
+  %cleanup.heap.ptr.48 = load ptr, ptr %cleanup.heap.slot.169
+  call void @free(ptr %cleanup.heap.ptr.48)
+  %cleanup.heap.ptr.49 = load ptr, ptr %cleanup.heap.slot.175
+  call void @free(ptr %cleanup.heap.ptr.49)
+  %cleanup.heap.ptr.50 = load ptr, ptr %cleanup.heap.slot.179
+  call void @free(ptr %cleanup.heap.ptr.50)
   ret void
 }
 

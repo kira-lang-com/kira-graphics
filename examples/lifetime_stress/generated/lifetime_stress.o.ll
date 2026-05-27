@@ -3497,7 +3497,14 @@ entry:
   store i8 %store.bool.17, ptr %store.ptr.17
   %array.set.ptr.6 = inttoptr i64 %r4 to ptr
   %array.set.pack.0.0 = insertvalue %kira.bridge.value zeroinitializer, i8 5, 0
-  %array.set.pack.0 = insertvalue %kira.bridge.value %array.set.pack.0.0, i64 %r6, 2
+  %array.set.struct.src.0 = inttoptr i64 %r6 to ptr
+  %array.set.struct.value.0 = load %t.ColorAttachment, ptr %array.set.struct.src.0
+  %array.set.struct.size.ptr.0 = getelementptr %t.ColorAttachment, ptr null, i32 1
+  %array.set.struct.size.0 = ptrtoint ptr %array.set.struct.size.ptr.0 to i64
+  %array.set.struct.copy.0 = call ptr @malloc(i64 %array.set.struct.size.0)
+  store %t.ColorAttachment %array.set.struct.value.0, ptr %array.set.struct.copy.0
+  %array.set.struct.ptrint.0 = ptrtoint ptr %array.set.struct.copy.0 to i64
+  %array.set.pack.0 = insertvalue %kira.bridge.value %array.set.pack.0.0, i64 %array.set.struct.ptrint.0, 2
   %array.set.pack.ptr.0 = alloca %kira.bridge.value
   store %kira.bridge.value %array.set.pack.0, ptr %array.set.pack.ptr.0
   call void @"kira_array_store"(ptr %array.set.ptr.6, i64 %r5, ptr %array.set.pack.ptr.0)
@@ -3610,20 +3617,22 @@ entry:
   %store.ptr.42 = inttoptr i64 %r43 to ptr
   %store.bool.42 = zext i1 %r42 to i8
   store i8 %store.bool.42, ptr %store.ptr.42
-  %cleanup.heap.ptr.1 = load ptr, ptr %cleanup.heap.slot.7
+  %cleanup.heap.ptr.1 = load ptr, ptr %cleanup.heap.slot.6
   call void @free(ptr %cleanup.heap.ptr.1)
-  %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.15
+  %cleanup.heap.ptr.2 = load ptr, ptr %cleanup.heap.slot.7
   call void @free(ptr %cleanup.heap.ptr.2)
-  %cleanup.heap.ptr.3 = load ptr, ptr %cleanup.heap.slot.20
+  %cleanup.heap.ptr.3 = load ptr, ptr %cleanup.heap.slot.15
   call void @free(ptr %cleanup.heap.ptr.3)
-  %cleanup.heap.ptr.4 = load ptr, ptr %cleanup.heap.slot.21
+  %cleanup.heap.ptr.4 = load ptr, ptr %cleanup.heap.slot.20
   call void @free(ptr %cleanup.heap.ptr.4)
-  %cleanup.heap.ptr.5 = load ptr, ptr %cleanup.heap.slot.29
+  %cleanup.heap.ptr.5 = load ptr, ptr %cleanup.heap.slot.21
   call void @free(ptr %cleanup.heap.ptr.5)
-  %cleanup.heap.ptr.6 = load ptr, ptr %cleanup.heap.slot.36
+  %cleanup.heap.ptr.6 = load ptr, ptr %cleanup.heap.slot.29
   call void @free(ptr %cleanup.heap.ptr.6)
-  %cleanup.heap.ptr.7 = load ptr, ptr %cleanup.heap.slot.40
+  %cleanup.heap.ptr.7 = load ptr, ptr %cleanup.heap.slot.36
   call void @free(ptr %cleanup.heap.ptr.7)
+  %cleanup.heap.ptr.8 = load ptr, ptr %cleanup.heap.slot.40
+  call void @free(ptr %cleanup.heap.ptr.8)
   ret i64 %r0
 }
 

@@ -17,7 +17,11 @@
 #include <unistd.h>
 #endif
 
-#if defined(__APPLE__)
+#if defined(__EMSCRIPTEN__)
+#ifndef SOKOL_WGPU
+#define SOKOL_WGPU
+#endif
+#elif defined(__APPLE__)
 #if TARGET_OS_IPHONE
 #ifndef SOKOL_METAL
 #define SOKOL_METAL
@@ -1118,6 +1122,25 @@ static char* kg_join_shader_path(const char* directory, const char* asset, const
     return path;
 }
 
+static char* kg_join_shader_entry(const char* asset, const char* stage) {
+    const char* safe_asset = (asset == NULL) ? "" : asset;
+    const char* safe_stage = (stage == NULL) ? "" : stage;
+    const size_t asset_length = strlen(safe_asset);
+    const size_t stage_length = strlen(safe_stage);
+    const char* suffix = "__main";
+    const size_t total = asset_length + 2 + stage_length + strlen(suffix) + 1;
+    char* entry = (char*)malloc(total);
+    if (entry == NULL) {
+        return NULL;
+    }
+    entry[0] = '\0';
+    strcat(entry, safe_asset);
+    strcat(entry, "__");
+    strcat(entry, safe_stage);
+    strcat(entry, suffix);
+    return entry;
+}
+
 static void kg_owned_text_deinit(kg_owned_text* text) {
     if (text == NULL) {
         return;
@@ -1788,12 +1811,22 @@ static uint32_t kg_uniform_mask_from_shader_source(const char* vertex_source, co
     return mask;
 }
 
-uint32_t kg_make_shader(const char* label, const char* vertex_source, const char* fragment_source, const char* vertex_path, const char* fragment_path) {
+static uint32_t kg_make_shader_with_entries(
+    const char* label,
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* vertex_path,
+    const char* fragment_path,
+    const char* vertex_entry,
+    const char* fragment_entry
+) {
     sg_shader_desc desc = {0};
     kg_owned_text prepared_vertex_source = kg_prepare_shader_source_for_sokol(kg_shader_source_owned(vertex_source, vertex_path));
     kg_owned_text prepared_fragment_source = kg_prepare_shader_source_for_sokol(kg_shader_source_owned(fragment_source, fragment_path));
     desc.vertex_func.source = prepared_vertex_source.ptr;
     desc.fragment_func.source = prepared_fragment_source.ptr;
+    desc.vertex_func.entry = (vertex_entry != NULL && vertex_entry[0] != '\0') ? vertex_entry : "main";
+    desc.fragment_func.entry = (fragment_entry != NULL && fragment_entry[0] != '\0') ? fragment_entry : "main";
     bool has_position_attribute = strstr(desc.vertex_func.source, "kira_attr_position") != NULL;
     bool has_normal_attribute = strstr(desc.vertex_func.source, "kira_attr_normal") != NULL;
     uint32_t required_uniform_mask = kg_uniform_mask_from_shader_source(desc.vertex_func.source, desc.fragment_func.source);
@@ -1815,13 +1848,37 @@ uint32_t kg_make_shader(const char* label, const char* vertex_source, const char
     return shader_id;
 }
 
+uint32_t kg_make_shader(const char* label, const char* vertex_source, const char* fragment_source, const char* vertex_path, const char* fragment_path) {
+    return kg_make_shader_with_entries(label, vertex_source, fragment_source, vertex_path, fragment_path, "main", "main");
+}
+
 uint32_t kg_make_ksl_shader(const char* label, const char* asset, const char* directory) {
+#if defined(SOKOL_WGPU)
+    char* vertex_path = kg_join_shader_path(directory, asset, ".vert.wgsl");
+    char* fragment_path = kg_join_shader_path(directory, asset, ".frag.wgsl");
+    char* vertex_entry = kg_join_shader_entry(asset, "vertex");
+    char* fragment_entry = kg_join_shader_entry(asset, "fragment");
+    uint32_t shader_id = kg_make_shader_with_entries(
+        label,
+        "",
+        "",
+        vertex_path ? vertex_path : "",
+        fragment_path ? fragment_path : "",
+        vertex_entry ? vertex_entry : "main",
+        fragment_entry ? fragment_entry : "main");
+    free(vertex_path);
+    free(fragment_path);
+    free(vertex_entry);
+    free(fragment_entry);
+    return shader_id;
+#else
     char* vertex_path = kg_join_shader_path(directory, asset, ".vert.glsl");
     char* fragment_path = kg_join_shader_path(directory, asset, ".frag.glsl");
     uint32_t shader_id = kg_make_shader(label, "", "", vertex_path ? vertex_path : "", fragment_path ? fragment_path : "");
     free(vertex_path);
     free(fragment_path);
     return shader_id;
+#endif
 }
 
 uint32_t kg_make_pipeline_detailed(
@@ -1853,7 +1910,9 @@ uint32_t kg_make_pipeline_detailed(
     int64_t front_face,
     int64_t topology
 ) {
-    sg_swapchain swapchain = sglue_swapchain();
+    const sg_pixel_format swapchain_color_format = _sglue_to_sgpixelformat(sapp_color_format());
+    const sg_pixel_format swapchain_depth_format = _sglue_to_sgpixelformat(sapp_depth_format());
+    const int swapchain_sample_count = sapp_sample_count();
     sg_pipeline_desc desc = {0};
     desc.shader.id = shader_id;
     desc.layout.buffers[0].stride = (int)vertex_stride;
@@ -1892,18 +1951,18 @@ uint32_t kg_make_pipeline_detailed(
 
     desc.color_count = (color_target_count > 0) ? (int)color_target_count : 1;
     if (desc.color_count > 0) {
-        desc.colors[0].pixel_format = (color_format == 1) ? swapchain.color_format : kg_pixel_format(color_format);
+        desc.colors[0].pixel_format = (color_format == 1) ? swapchain_color_format : kg_pixel_format(color_format);
         desc.colors[0].write_mask = SG_COLORMASK_RGBA;
         desc.colors[0].blend = kg_blend_state(blend_enabled != 0, blend_preset);
     }
     desc.primitive_type = kg_primitive_type(topology);
     desc.cull_mode = kg_cull_mode(cull_mode);
     desc.face_winding = kg_face_winding(front_face);
-    desc.sample_count = swapchain.sample_count;
+    desc.sample_count = swapchain_sample_count;
     desc.label = label;
 
     if (depth_enabled != 0) {
-        desc.depth.pixel_format = swapchain.depth_format;
+        desc.depth.pixel_format = swapchain_depth_format;
         desc.depth.compare = kg_compare_func(depth_compare);
         desc.depth.write_enabled = depth_write_enabled != 0;
     }
@@ -2337,9 +2396,11 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
     sg_apply_pipeline(pipeline);
 
     sg_bindings bindings = {0};
+    bool has_bindings = false;
     if (has_vertex_buffer != 0) {
         bindings.vertex_buffers[0].id = vertex_buffer_id;
         bindings.vertex_buffer_offsets[0] = 0;
+        has_bindings = true;
     } else if (kg_pipeline_has_position_attribute(pipeline_id)) {
         if (pipeline_id == kg_ui_demo_pipeline_id) {
             kg_ensure_ui_demo_vertex_buffer();
@@ -2349,12 +2410,16 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
             bindings.vertex_buffers[0] = kg_triangle_vertex_buffer;
         }
         bindings.vertex_buffer_offsets[0] = 0;
+        has_bindings = true;
     }
     if (has_index_buffer != 0) {
         bindings.index_buffer.id = index_buffer_id;
         bindings.index_buffer_offset = 0;
+        has_bindings = true;
     }
-    sg_apply_bindings(&bindings);
+    if (has_bindings) {
+        sg_apply_bindings(&bindings);
+    }
 
     uint32_t applied_uniform_mask = 0;
     uint32_t bind_group_ids[4] = { bind_group0_id, bind_group1_id, bind_group2_id, bind_group3_id };
