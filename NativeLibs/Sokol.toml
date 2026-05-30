@@ -30,6 +30,31 @@ static_lib = "../generated/native/aarch64-ios/libsokol.a"
 defines = ["SOKOL_METAL"]
 frameworks = ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"]
 
+[target.aarch64-ios-simulator]
+static_lib = "../generated/native/aarch64-ios-simulator/libsokol.a"
+defines = ["SOKOL_METAL"]
+frameworks = ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"]
+
+[target.aarch64-tvos-none]
+static_lib = "../generated/native/aarch64-tvos/libsokol.a"
+defines = ["SOKOL_METAL"]
+frameworks = ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"]
+
+[target.aarch64-tvos-simulator]
+static_lib = "../generated/native/aarch64-tvos-simulator/libsokol.a"
+defines = ["SOKOL_METAL"]
+frameworks = ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"]
+
+[target.aarch64-xros-none]
+static_lib = "../generated/native/aarch64-xros/libsokol.a"
+defines = ["SOKOL_METAL"]
+frameworks = ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"]
+
+[target.aarch64-xros-simulator]
+static_lib = "../generated/native/aarch64-xros-simulator/libsokol.a"
+defines = ["SOKOL_METAL"]
+frameworks = ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"]
+
 [target.x86_64-linux-gnu]
 static_lib = "../generated/native/x86_64-linux-gnu/libsokol.a"
 defines = ["SOKOL_GLCORE"]

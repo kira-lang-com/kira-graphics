@@ -9,6 +9,7 @@ function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         height: app.height
         sample_count: app.sampleCount
         window_title: app.title
+        high_dpi: true
     }
 
     sapp_run(move desc)
@@ -18,6 +19,7 @@ function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
 @Native
 function kiraGraphicsSokolInit(runtimeUserData: RawPtr): Void {
     kgSetup()
+    kiraGraphicsLiveBackendInitialized()
 
     var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
     let app = state.app

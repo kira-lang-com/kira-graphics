@@ -6316,8 +6316,32 @@ static void _sapp_gl_make_current(void) {
 // >>ios
 #if defined(_SAPP_IOS)
 
+// NOTE(kira): visionOS does not expose UIWindowScene.screen (API_UNAVAILABLE(visionos)).
+// These guarded helpers keep the iOS code path compiling for visionOS while leaving
+// macOS/iOS/tvOS behavior unchanged. Only compiled when TARGET_OS_VISION is set.
 _SOKOL_PRIVATE NSInteger _sapp_ios_max_fps(void) {
+    #if defined(TARGET_OS_VISION) && TARGET_OS_VISION
+    return 90;
+    #else
     return _sapp.ios.window.windowScene.screen.maximumFramesPerSecond;
+    #endif
+}
+
+_SOKOL_PRIVATE CGRect _sapp_ios_scene_bounds(UIWindowScene* scene) {
+    #if defined(TARGET_OS_VISION) && TARGET_OS_VISION
+    return scene.coordinateSpace.bounds;
+    #else
+    return scene.screen.bounds;
+    #endif
+}
+
+_SOKOL_PRIVATE float _sapp_ios_scene_scale(UIWindowScene* scene) {
+    #if defined(TARGET_OS_VISION) && TARGET_OS_VISION
+    (void)scene;
+    return 2.0f;
+    #else
+    return (float) scene.screen.nativeScale;
+    #endif
 }
 
 #if defined(SOKOL_METAL)
@@ -6426,7 +6450,7 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_stop_display_link(void) {
 _SOKOL_PRIVATE void _sapp_ios_mtl_init(UIWindowScene* windowScene) {
     _sapp.ios.mtl.device = MTLCreateSystemDefaultDevice();
 
-    _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:windowScene.screen.bounds];
+    _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:_sapp_ios_scene_bounds(windowScene)];
     _sapp.ios.view.userInteractionEnabled = YES;
     #if !defined(_SAPP_TVOS)
         _sapp.ios.view.multipleTouchEnabled = YES;
@@ -6478,7 +6502,7 @@ _SOKOL_PRIVATE bool _sapp_ios_mtl_update_framebuffer_dimensions(CGRect screen_re
 
 #if defined(SOKOL_GLES3)
 _SOKOL_PRIVATE void _sapp_ios_gles3_init(UIWindowScene* windowScene) {
-    const CGRect screen_rect = windowScene.screen.bounds;
+    const CGRect screen_rect = _sapp_ios_scene_bounds(windowScene);
     _sapp.ios.eagl_ctx = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
     _sapp.ios.view = [[_sapp_ios_view alloc] initWithFrame:screen_rect];
     _sapp.ios.view.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
@@ -6599,7 +6623,7 @@ _SOKOL_PRIVATE void _sapp_ios_touch_event(sapp_event_type type, NSSet<UITouch *>
 }
 
 _SOKOL_PRIVATE void _sapp_ios_update_dimensions(void) {
-    CGRect screen_rect = _sapp.ios.window.windowScene.screen.bounds;
+    CGRect screen_rect = _sapp_ios_scene_bounds(_sapp.ios.window.windowScene);
     _sapp.window_width = _sapp_roundf_gzero(screen_rect.size.width);
     _sapp.window_height = _sapp_roundf_gzero(screen_rect.size.height);
     #if defined(SOKOL_METAL)
@@ -6673,12 +6697,12 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 
 - (void)scene:(UIScene*)scene willConnectToSession:(UISceneSession*)session options:(UISceneConnectionOptions*)connectionOptions {
     UIWindowScene* windowScene = (UIWindowScene*)scene;
-    CGRect screen_rect = windowScene.screen.bounds;
+    CGRect screen_rect = _sapp_ios_scene_bounds(windowScene);
     _sapp.ios.window = [[UIWindow alloc] initWithWindowScene:windowScene];
     _sapp.window_width = _sapp_roundf_gzero(screen_rect.size.width);
     _sapp.window_height = _sapp_roundf_gzero(screen_rect.size.height);
     if (_sapp.desc.high_dpi) {
-        _sapp.dpi_scale = (float) windowScene.screen.nativeScale;
+        _sapp.dpi_scale = _sapp_ios_scene_scale(windowScene);
     } else {
         _sapp.dpi_scale = 1.0f;
     }
@@ -6731,7 +6755,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     if (_sapp.desc.ios.keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
-        CGRect view_frame = _sapp.ios.window.windowScene.screen.bounds;
+        CGRect view_frame = _sapp_ios_scene_bounds(_sapp.ios.window.windowScene);
         view_frame.size.height -= kbd_h;
         _sapp.ios.view.frame = view_frame;
     }
@@ -6740,7 +6764,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 - (void)keyboardWillBeHidden:(NSNotification*)notif {
     _sapp.onscreen_keyboard_shown = false;
     if (_sapp.desc.ios.keyboard_resizes_canvas) {
-        _sapp.ios.view.frame = _sapp.ios.window.windowScene.screen.bounds;
+        _sapp.ios.view.frame = _sapp_ios_scene_bounds(_sapp.ios.window.windowScene);
     }
 }
 - (void)keyboardDidChangeFrame:(NSNotification*)notif {
@@ -6749,7 +6773,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
     if (_sapp.onscreen_keyboard_shown && _sapp.desc.ios.keyboard_resizes_canvas) {
         NSDictionary* info = notif.userInfo;
         CGFloat kbd_h = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size.height;
-        CGRect view_frame = _sapp.ios.window.windowScene.screen.bounds;
+        CGRect view_frame = _sapp_ios_scene_bounds(_sapp.ios.window.windowScene);
         view_frame.size.height -= kbd_h;
         _sapp.ios.view.frame = view_frame;
     }

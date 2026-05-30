@@ -141,6 +141,8 @@ static int kg_current_pass_width = 0;
 static int kg_current_pass_height = 0;
 static bool kg_current_pass_active = false;
 static bool kg_live_first_frame_emitted = false;
+static bool kg_live_frame_submitted_emitted = false;
+static bool kg_live_visible_content_submitted_emitted = false;
 static bool kg_ui_draw_commands_submitted_this_frame = false;
 static bool kg_ui_draw_commands_emitted = false;
 static bool kg_ui_visible_content_emitted = false;
@@ -639,6 +641,37 @@ static void kg_ui_ensure_pipeline(void) {
 
     if (kg_ui_shader.id == 0) {
         sg_shader_desc shader_desc = {0};
+#if defined(SOKOL_METAL)
+        shader_desc.vertex_func.source =
+            "#include <metal_stdlib>\n"
+            "using namespace metal;\n"
+            "struct vs_in {\n"
+            "  float2 position [[attribute(0)]];\n"
+            "  float4 color [[attribute(1)]];\n"
+            "};\n"
+            "struct vs_out {\n"
+            "  float4 position [[position]];\n"
+            "  float4 color;\n"
+            "};\n"
+            "vertex vs_out vs_main(vs_in in [[stage_in]]) {\n"
+            "  vs_out out;\n"
+            "  out.position = float4(in.position, 0.0, 1.0);\n"
+            "  out.color = in.color;\n"
+            "  return out;\n"
+            "}\n";
+        shader_desc.vertex_func.entry = "vs_main";
+        shader_desc.fragment_func.source =
+            "#include <metal_stdlib>\n"
+            "using namespace metal;\n"
+            "struct fs_in {\n"
+            "  float4 position [[position]];\n"
+            "  float4 color;\n"
+            "};\n"
+            "fragment float4 fs_main(fs_in in [[stage_in]]) {\n"
+            "  return in.color;\n"
+            "}\n";
+        shader_desc.fragment_func.entry = "fs_main";
+#else
         shader_desc.vertex_func.source =
             "#version 330 core\n"
             "layout(location=0) in vec2 kira_attr_position;\n"
@@ -655,6 +688,7 @@ static void kg_ui_ensure_pipeline(void) {
             "void main() {\n"
             "  frag_color = v_color;\n"
             "}\n";
+#endif
         shader_desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
         shader_desc.attrs[0].glsl_name = "kira_attr_position";
         shader_desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
@@ -2527,11 +2561,19 @@ void kg_end_pass_and_commit(void) {
     }
     sg_end_pass();
     sg_commit();
+    if (!kg_live_frame_submitted_emitted) {
+        kg_live_frame_submitted_emitted = true;
+        kira_live_emit_log_line("live.kira_graphics.frame.submitted");
+    }
     if (!kg_live_first_frame_emitted) {
         kg_live_first_frame_emitted = true;
         kira_live_emit_first_frame();
     }
     if (kg_ui_draw_commands_submitted_this_frame) {
+        if (!kg_live_visible_content_submitted_emitted) {
+            kg_live_visible_content_submitted_emitted = true;
+            kira_live_emit_log_line("live.kira_graphics.visible_content.submitted");
+        }
         if (!kg_ui_draw_commands_emitted) {
             kg_ui_draw_commands_emitted = true;
             kira_live_emit_log_line("KIRA_UI_DRAW_COMMANDS_SUBMITTED");

@@ -1,6 +1,45 @@
 @FFI.Extern { library: sokol; symbol: kg_shader_source; abi: c; }
 function kgShaderSource(inlineSource: CString, path: CString): CString;
 
+@FFI.Extern { library: sokol; symbol: kira_live_emit_log_line; abi: c; }
+function kiraLiveEmitLogLine(line: CString): Void;
+
+@Native
+function kiraGraphicsLiveUiFoundationAppStarted(): Void {
+    kiraLiveEmitLogLine("live.ui_foundation.app.started")
+    return
+}
+
+@Native
+function kiraGraphicsLiveUiFoundationTreeBuilt(): Void {
+    kiraLiveEmitLogLine("live.ui_foundation.tree.built")
+    return
+}
+
+@Native
+function kiraGraphicsLiveUiFoundationRetainedTreeReady(): Void {
+    kiraLiveEmitLogLine("live.ui_foundation.retained_tree.ready")
+    return
+}
+
+@Native
+function kiraGraphicsLiveUiFoundationLayoutNonEmpty(): Void {
+    kiraLiveEmitLogLine("live.ui_foundation.layout.non_empty")
+    return
+}
+
+@Native
+function kiraGraphicsLiveUiFoundationRenderCommandsGenerated(): Void {
+    kiraLiveEmitLogLine("live.ui_foundation.render_commands.generated")
+    return
+}
+
+@Native
+function kiraGraphicsLiveBackendInitialized(): Void {
+    kiraLiveEmitLogLine("live.kira_graphics.backend.initialized")
+    return
+}
+
 @FFI.Extern { library: sokol; symbol: kg_setup; abi: c; }
 function kgSetup(): Void;
 
