@@ -1,0 +1,101 @@
+type VertexIn {
+    let position: Float2
+}
+
+type VertexOut {
+    @builtin(position)
+    let clip_position: Float4
+
+    let uv: Float2
+}
+
+type FragmentOut {
+    let color: Float4
+}
+
+function absolute(value: Float) -> Float {
+    if value < 0.0 { return 0.0 - value }
+    return value
+}
+
+function minimum(left: Float, right: Float) -> Float {
+    if left < right { return left }
+    return right
+}
+
+function maximum(left: Float, right: Float) -> Float {
+    if left > right { return left }
+    return right
+}
+
+function roundedBox(glassPoint: Float2, halfSize: Float2, radius: Float) -> Float {
+    let offset = Float2(
+        absolute(glassPoint.x) - halfSize.x + radius,
+        absolute(glassPoint.y) - halfSize.y + radius
+    )
+    let outside = Float2(maximum(offset.x, 0.0), maximum(offset.y, 0.0))
+    return minimum(maximum(offset.x, offset.y), 0.0) + length(outside) - radius
+}
+
+function refractionCurve(value: Float) -> Float {
+    let e = 2.718281828459045
+    return 1.0 - 2.3 * pow(5.2 * e, -6.9 * value - 0.7)
+}
+
+shader LiquidGlassComposite {
+    group Material {
+        texture tex0: Texture2d
+        texture tex1: Texture2d
+        sampler smp0: Sampler
+        sampler smp1: Sampler
+    }
+
+    vertex {
+        input VertexIn
+        output VertexOut
+
+        function entry(input: VertexIn) -> VertexOut {
+            let result: VertexOut
+            result.clip_position = Float4(input.position, 0.0, 1.0)
+            result.uv = input.position * 0.5 + Float2(0.5, 0.5)
+            return result
+        }
+    }
+
+    fragment {
+        input VertexOut
+        output FragmentOut
+
+        function entry(input: VertexOut) -> FragmentOut {
+            let result: FragmentOut
+            let scene = sample(tex0, smp0, input.uv)
+            let centerNdc = Float2(0.5, 0.5) * 2.0 - Float2(1.0, 1.0)
+            let halfSizeNdc = Float2(7.04 / (15.0 * (1600.0 / 900.0)), 8.0 / 15.0)
+            let glassPoint = ((input.uv * 2.0 - Float2(1.0, 1.0)) - centerNdc) / halfSizeNdc
+            let distance = roundedBox(glassPoint, Float2(1.0, 1.0), 30.0 * 0.01)
+            if distance > 0.0 {
+                result.color = scene
+                return result
+            }
+
+            let interiorDistance = 0.0 - distance
+            let samplePoint = glassPoint * pow(refractionCurve(interiorDistance), 1.0)
+            let targetNdc = samplePoint * halfSizeNdc + centerNdc
+            let coord = targetNdc * 0.5 + Float2(0.5, 0.5)
+            if maximum(coord.x, coord.y) > 1.0 {
+                result.color = Float4(1.0, 0.0, 1.0, 1.0)
+                return result
+            }
+            if minimum(coord.x, coord.y) < 0.0 {
+                result.color = Float4(1.0, 0.0, 1.0, 1.0)
+                return result
+            }
+
+            let glassUv = glassPoint * 0.5 + Float2(0.5, 0.5)
+            let glow = sin(atan2(glassUv.y * 2.0 - 1.0, glassUv.x * 2.0 - 1.0) - 0.5)
+            let multiplier = glow * 0.25 * smoothstep(0.5, -0.5, interiorDistance) + 1.0 + 0.0
+            result.color = sample(tex1, smp1, coord) * Float4(multiplier, multiplier, multiplier, 1.0)
+            return result
+        }
+    }
+}

@@ -52,6 +52,22 @@ function sokolSetBindGroupUniform(bindGroupId: U32, entryIndex: Int, uniformSlot
 }
 
 @Native
+function sokolSetBindGroupTexture(bindGroupId: U32, entryIndex: Int, textureSlot: Int, textureId: U32) {
+    let nativeEntryIndex: I64 = entryIndex
+    let nativeTextureSlot: I64 = textureSlot
+    kgSetBindGroupTexture(bindGroupId, nativeEntryIndex, nativeTextureSlot, textureId)
+    return
+}
+
+@Native
+function sokolSetBindGroupSampler(bindGroupId: U32, entryIndex: Int, samplerSlot: Int, samplerId: U32) {
+    let nativeEntryIndex: I64 = entryIndex
+    let nativeSamplerSlot: I64 = samplerSlot
+    kgSetBindGroupSampler(bindGroupId, nativeEntryIndex, nativeSamplerSlot, samplerId)
+    return
+}
+
+@Native
 function sokolDestroyBindGroupId(bindGroupId: U32) {
     kgDestroyBindGroupId(bindGroupId)
     return

@@ -111,6 +111,18 @@ class Graphics {
             sokolSetBindGroupUniform(bindGroupId, index, entry.uniformSlot, entry.uniform.id)
             index = index + 1
         }
+        index = 0
+        while index < descriptor.textureEntries.count {
+            let entry = descriptor.textureEntries[index]
+            sokolSetBindGroupTexture(bindGroupId, index, entry.textureSlot, entry.texture.id)
+            index = index + 1
+        }
+        index = 0
+        while index < descriptor.samplerEntries.count {
+            let entry = descriptor.samplerEntries[index]
+            sokolSetBindGroupSampler(bindGroupId, index, entry.samplerSlot, entry.sampler.id)
+            index = index + 1
+        }
         return BindGroup {
             handle: BackendBindGroupHandle {
                 id: bindGroupId
@@ -122,6 +134,18 @@ class Graphics {
     function createUniformBindGroup(label: borrow String, uniformSlot: Int, uniform: borrow GraphicsUniform) -> BindGroup {
         let bindGroupId = sokolCreateBindGroupId(label)
         sokolSetBindGroupUniform(bindGroupId, 0, uniformSlot, uniform.id)
+        return BindGroup {
+            handle: BackendBindGroupHandle {
+                id: bindGroupId
+            }
+            id: bindGroupId
+        }
+    }
+
+    function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroup {
+        let bindGroupId = sokolCreateBindGroupId(label)
+        sokolSetBindGroupTexture(bindGroupId, 0, textureSlot, texture.id)
+        sokolSetBindGroupSampler(bindGroupId, 0, samplerSlot, sampler.id)
         return BindGroup {
             handle: BackendBindGroupHandle {
                 id: bindGroupId
@@ -155,6 +179,37 @@ class Graphics {
 
     function destroyTexture(texture: borrow GraphicsTexture) {
         sokolDestroyTextureId(texture.id)
+        return
+    }
+
+    function createTextureFromFile(label: borrow String, path: borrow String) -> GraphicsTexture {
+        let textureId = sokolCreateTextureFromFileId(label, path)
+        return GraphicsTexture {
+            handle: BackendTextureHandle {
+                id: textureId
+            }
+            id: textureId
+        }
+    }
+
+    function createSampler(descriptor: borrow SamplerDescriptor) -> GraphicsSampler {
+        let samplerId = sokolCreateSamplerId(
+            descriptor.label,
+            descriptor.minFilter,
+            descriptor.magFilter,
+            descriptor.addressModeU,
+            descriptor.addressModeV
+        )
+        return GraphicsSampler {
+            handle: BackendSamplerHandle {
+                id: samplerId
+            }
+            id: samplerId
+        }
+    }
+
+    function destroySampler(sampler: borrow GraphicsSampler) {
+        sokolDestroySamplerId(sampler.id)
         return
     }
 

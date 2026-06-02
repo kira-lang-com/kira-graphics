@@ -59,6 +59,16 @@ function textureFormatDepth24Stencil8() -> Int {
 }
 
 @Native
+function textureFormatNone() -> Int {
+    return 0
+}
+
+@Native
+function textureFormatSwapchain() -> Int {
+    return -1
+}
+
+@Native
 function primitiveTopologyTriangleList() -> Int {
     return 1
 }

@@ -1,0 +1,306 @@
+import KiraGraphics
+
+struct LiquidGlassState {
+    var backgroundShader: GraphicsShader
+    var blurHorizontalShader: GraphicsShader
+    var blurVerticalShader: GraphicsShader
+    var compositeShader: GraphicsShader
+    var backgroundPipeline: RenderPipeline
+    var blurHorizontalPipeline: RenderPipeline
+    var blurVerticalPipeline: RenderPipeline
+    var compositePipeline: RenderPipeline
+    var vertices: GraphicsBuffer
+    var backgroundTexture: GraphicsTexture
+    var sceneTarget: GraphicsTexture
+    var blurIntermediate: GraphicsTexture
+    var blurFinal: GraphicsTexture
+    var sampler: GraphicsSampler
+    var backgroundBindings: BindGroup
+    var sceneBindings: BindGroup
+    var blurIntermediateBindings: BindGroup
+    var compositeBindings: BindGroup
+}
+
+function fullScreenVertices() -> [Float] {
+    return [
+        -1.0, -1.0,
+        3.0, -1.0,
+        -1.0, 3.0
+    ]
+}
+
+function fullScreenLayout() -> VertexLayout {
+    return VertexLayout {
+        stride: 8
+        attributes: [
+            VertexAttribute {
+                name: "position"
+                location: 0
+                format: vertexFormatFloat2()
+                offset: 0
+            }
+        ]
+    }
+}
+
+function makePipeline(graphics: borrow Graphics, label: String, shader: GraphicsShader, colorFormat: Int, depthFormat: Int) -> RenderPipeline {
+    return graphics.createRenderPipeline(RenderPipelineDescriptor {
+        label: label
+        shader: shader
+        vertexLayout: fullScreenLayout()
+        colorTargets: [
+            ColorTargetDescriptor {
+                format: colorFormat
+                blend: BlendState {
+                    enabled: false
+                    preset: blendPresetReplace()
+                }
+            }
+        ]
+        depthStencil: DepthStencilDescriptor {
+            depthEnabled: false
+            depthWriteEnabled: false
+            depthCompare: compareFunctionAlways()
+            format: depthFormat
+        }
+        rasterization: RasterizationDescriptor {
+            cullMode: cullModeNone()
+            frontFace: frontFaceCounterClockwise()
+        }
+        primitive: PrimitiveDescriptor {
+            topology: primitiveTopologyTriangleList()
+        }
+    })
+}
+
+function texturePass(label: String, texture: GraphicsTexture) -> RenderPassDescriptor {
+    return RenderPassDescriptor {
+        label: label
+        colorAttachments: [
+            ColorAttachment {
+                target: RenderTarget {
+                    kind: renderTargetKindTexture()
+                    texture: texture
+                    mipLevel: 0
+                    arrayLayer: 0
+                }
+                loadAction: loadActionClear()
+                storeAction: storeActionStore()
+                clearColor: Color {
+                    r: 0.0
+                    g: 0.0
+                    b: 0.0
+                    a: 1.0
+                }
+                resolveTarget: emptyRenderTarget()
+                hasResolveTarget: false
+            }
+        ]
+        primaryColorAttachment: ColorAttachment {
+            target: RenderTarget {
+                kind: renderTargetKindTexture()
+                texture: texture
+                mipLevel: 0
+                arrayLayer: 0
+            }
+            loadAction: loadActionClear()
+            storeAction: storeActionStore()
+            clearColor: Color {
+                r: 0.0
+                g: 0.0
+                b: 0.0
+                a: 1.0
+            }
+            resolveTarget: emptyRenderTarget()
+            hasResolveTarget: false
+        }
+        hasPrimaryColorAttachment: true
+        depthAttachment: emptyDepthAttachment()
+        hasDepthAttachment: false
+        stencilAttachment: emptyStencilAttachment()
+        hasStencilAttachment: false
+    }
+}
+
+function renderLiquidPass(frame: borrow GraphicsFrame, pass: RenderPassDescriptor, pipeline: RenderPipeline, vertices: GraphicsBuffer) {
+    let encoder = frame.beginRenderPass(pass)
+    encoder.setPipeline(pipeline)
+    encoder.setVertexBuffer(vertices)
+    encoder.draw(3)
+    frame.endPass()
+    return
+}
+
+function renderBoundPass(frame: borrow GraphicsFrame, pass: RenderPassDescriptor, pipeline: RenderPipeline, vertices: GraphicsBuffer, bindings: BindGroup) {
+    let encoder = frame.beginRenderPass(pass)
+    encoder.setPipeline(pipeline)
+    encoder.setVertexBuffer(vertices)
+    encoder.setBindGroup(0, bindings)
+    encoder.draw(3)
+    frame.endPass()
+    return
+}
+
+@Main
+@Native
+function main() {
+    var app = GraphicsApplication {
+        title: "Kira Graphics Liquid Glass"
+        width: 1600
+        height: 900
+        sampleCount: 1
+    }
+    let state = nativeState(LiquidGlassState {
+        backgroundShader: emptyGraphicsShader()
+        blurHorizontalShader: emptyGraphicsShader()
+        blurVerticalShader: emptyGraphicsShader()
+        compositeShader: emptyGraphicsShader()
+        backgroundPipeline: emptyRenderPipeline()
+        blurHorizontalPipeline: emptyRenderPipeline()
+        blurVerticalPipeline: emptyRenderPipeline()
+        compositePipeline: emptyRenderPipeline()
+        vertices: emptyGraphicsBuffer()
+        backgroundTexture: emptyGraphicsTexture()
+        sceneTarget: emptyGraphicsTexture()
+        blurIntermediate: emptyGraphicsTexture()
+        blurFinal: emptyGraphicsTexture()
+        sampler: emptyGraphicsSampler()
+        backgroundBindings: emptyBindGroup()
+        sceneBindings: emptyBindGroup()
+        blurIntermediateBindings: emptyBindGroup()
+        compositeBindings: emptyBindGroup()
+    })
+
+    app.onInit { graphics in
+        var liquid = nativeRecover<LiquidGlassState>(graphics.userData)
+        liquid.vertices = graphics.createBuffer(BufferDescriptor {
+            label: "liquid-glass-fullscreen-triangle"
+            usage: bufferUsageVertex()
+            stride: 8
+            data: fullScreenVertices()
+        })
+        liquid.backgroundTexture = graphics.createTextureFromFile("liquid-glass-cubes", "assets/background-cubes.jpg")
+        liquid.sceneTarget = graphics.createTexture(TextureDescriptor {
+            label: "liquid-glass-scene"
+            width: 1600
+            height: 900
+            format: textureFormatRgba8Unorm()
+            usage: textureUsageRenderTargetSampled()
+            sampleCount: 1
+            storageMode: attachmentStoragePersistent()
+        })
+        liquid.blurIntermediate = graphics.createTexture(TextureDescriptor {
+            label: "liquid-glass-blur-intermediate"
+            width: 800
+            height: 450
+            format: textureFormatRgba8Unorm()
+            usage: textureUsageRenderTargetSampled()
+            sampleCount: 1
+            storageMode: attachmentStoragePersistent()
+        })
+        liquid.blurFinal = graphics.createTexture(TextureDescriptor {
+            label: "liquid-glass-blur-final"
+            width: 800
+            height: 450
+            format: textureFormatRgba8Unorm()
+            usage: textureUsageRenderTargetSampled()
+            sampleCount: 1
+            storageMode: attachmentStoragePersistent()
+        })
+        liquid.sampler = graphics.createSampler(SamplerDescriptor {
+            label: "liquid-glass-linear-sampler"
+            minFilter: textureFilterLinear()
+            magFilter: textureFilterLinear()
+            addressModeU: textureAddressModeClampToEdge()
+            addressModeV: textureAddressModeClampToEdge()
+        })
+        liquid.backgroundShader = graphics.createShaderFromKsl(KslShaderDescriptor {
+            label: "liquid-glass-background-shader"
+            asset: "LiquidGlassBackground"
+        })
+        liquid.blurHorizontalShader = graphics.createShaderFromKsl(KslShaderDescriptor {
+            label: "liquid-glass-blur-horizontal-shader"
+            asset: "LiquidGlassBlurHorizontal"
+        })
+        liquid.blurVerticalShader = graphics.createShaderFromKsl(KslShaderDescriptor {
+            label: "liquid-glass-blur-vertical-shader"
+            asset: "LiquidGlassBlurVertical"
+        })
+        liquid.compositeShader = graphics.createShaderFromKsl(KslShaderDescriptor {
+            label: "liquid-glass-composite-shader"
+            asset: "LiquidGlassComposite"
+        })
+        liquid.backgroundPipeline = makePipeline(graphics, "liquid-glass-background", liquid.backgroundShader, textureFormatRgba8Unorm(), textureFormatNone())
+        liquid.blurHorizontalPipeline = makePipeline(graphics, "liquid-glass-blur-horizontal", liquid.blurHorizontalShader, textureFormatRgba8Unorm(), textureFormatNone())
+        liquid.blurVerticalPipeline = makePipeline(graphics, "liquid-glass-blur-vertical", liquid.blurVerticalShader, textureFormatRgba8Unorm(), textureFormatNone())
+        liquid.compositePipeline = makePipeline(graphics, "liquid-glass-composite", liquid.compositeShader, textureFormatSwapchain(), textureFormatDepth24Stencil8())
+        liquid.backgroundBindings = graphics.createTextureSamplerBindGroup("liquid-glass-background-bindings", 0, liquid.backgroundTexture, 0, liquid.sampler)
+        liquid.sceneBindings = graphics.createTextureSamplerBindGroup("liquid-glass-scene-bindings", 0, liquid.sceneTarget, 0, liquid.sampler)
+        liquid.blurIntermediateBindings = graphics.createTextureSamplerBindGroup("liquid-glass-blur-intermediate-bindings", 0, liquid.blurIntermediate, 0, liquid.sampler)
+        liquid.compositeBindings = graphics.createBindGroup(BindGroupDescriptor {
+            label: "liquid-glass-composite-bindings"
+            uniformEntries: []
+            textureEntries: [
+                TextureBindEntry {
+                    textureSlot: 0
+                    texture: liquid.sceneTarget
+                },
+                TextureBindEntry {
+                    textureSlot: 1
+                    texture: liquid.blurFinal
+                }
+            ]
+            samplerEntries: [
+                SamplerBindEntry {
+                    samplerSlot: 0
+                    sampler: liquid.sampler
+                },
+                SamplerBindEntry {
+                    samplerSlot: 1
+                    sampler: liquid.sampler
+                }
+            ]
+        })
+        return
+    }
+
+    app.onFrame { frame in
+        var liquid = nativeRecover<LiquidGlassState>(frame.userData)
+        renderBoundPass(frame, texturePass("liquid-glass-scene-pass", liquid.sceneTarget), liquid.backgroundPipeline, liquid.vertices, liquid.backgroundBindings)
+        renderBoundPass(frame, texturePass("liquid-glass-blur-horizontal-pass", liquid.blurIntermediate), liquid.blurHorizontalPipeline, liquid.vertices, liquid.sceneBindings)
+        renderBoundPass(frame, texturePass("liquid-glass-blur-vertical-pass", liquid.blurFinal), liquid.blurVerticalPipeline, liquid.vertices, liquid.blurIntermediateBindings)
+        renderBoundPass(frame, clearSwapchainRenderPass(Color {
+            r: 0.0
+            g: 0.0
+            b: 0.0
+            a: 1.0
+        }), liquid.compositePipeline, liquid.vertices, liquid.compositeBindings)
+        return
+    }
+
+    app.onCleanup { graphics in
+        var liquid = nativeRecover<LiquidGlassState>(graphics.userData)
+        graphics.destroyBindGroup(liquid.compositeBindings)
+        graphics.destroyBindGroup(liquid.blurIntermediateBindings)
+        graphics.destroyBindGroup(liquid.sceneBindings)
+        graphics.destroyBindGroup(liquid.backgroundBindings)
+        graphics.destroySampler(liquid.sampler)
+        graphics.destroyTexture(liquid.blurFinal)
+        graphics.destroyTexture(liquid.blurIntermediate)
+        graphics.destroyTexture(liquid.sceneTarget)
+        graphics.destroyTexture(liquid.backgroundTexture)
+        graphics.destroyBuffer(liquid.vertices)
+        graphics.destroyRenderPipeline(liquid.compositePipeline)
+        graphics.destroyRenderPipeline(liquid.blurVerticalPipeline)
+        graphics.destroyRenderPipeline(liquid.blurHorizontalPipeline)
+        graphics.destroyRenderPipeline(liquid.backgroundPipeline)
+        graphics.destroyShader(liquid.compositeShader)
+        graphics.destroyShader(liquid.blurVerticalShader)
+        graphics.destroyShader(liquid.blurHorizontalShader)
+        graphics.destroyShader(liquid.backgroundShader)
+        return
+    }
+
+    app.run(nativeUserData(state))
+    return
+}

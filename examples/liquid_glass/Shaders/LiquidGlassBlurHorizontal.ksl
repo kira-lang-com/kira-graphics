@@ -1,0 +1,56 @@
+type VertexIn {
+    let position: Float2
+}
+
+type VertexOut {
+    @builtin(position)
+    let clip_position: Float4
+
+    let uv: Float2
+}
+
+type FragmentOut {
+    let color: Float4
+}
+
+shader LiquidGlassBlurHorizontal {
+    group Material {
+        texture tex0: Texture2d
+        sampler smp0: Sampler
+    }
+
+    vertex {
+        input VertexIn
+        output VertexOut
+
+        function entry(input: VertexIn) -> VertexOut {
+            let result: VertexOut
+            result.clip_position = Float4(input.position, 0.0, 1.0)
+            result.uv = input.position * 0.5 + Float2(0.5, 0.5)
+            return result
+        }
+    }
+
+    fragment {
+        input VertexOut
+        output FragmentOut
+
+        function entry(input: VertexOut) -> FragmentOut {
+            let result: FragmentOut
+            let direction = Float2(2.0, 0.0)
+            let resolution = Float2(1600.0, 900.0)
+            let off1 = Float2(1.411764705882353, 1.411764705882353) * direction
+            let off2 = Float2(3.2941176470588234, 3.2941176470588234) * direction
+            let off3 = Float2(5.176470588235294, 5.176470588235294) * direction
+            result.color =
+                sample(tex0, smp0, input.uv) * 0.1964825501511404 +
+                sample(tex0, smp0, input.uv + off1 / resolution) * 0.2969069646728344 +
+                sample(tex0, smp0, input.uv - off1 / resolution) * 0.2969069646728344 +
+                sample(tex0, smp0, input.uv + off2 / resolution) * 0.09447039785044732 +
+                sample(tex0, smp0, input.uv - off2 / resolution) * 0.09447039785044732 +
+                sample(tex0, smp0, input.uv + off3 / resolution) * 0.010381362401148057 +
+                sample(tex0, smp0, input.uv - off3 / resolution) * 0.010381362401148057
+            return result
+        }
+    }
+}

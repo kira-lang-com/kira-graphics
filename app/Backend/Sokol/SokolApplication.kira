@@ -10,9 +10,18 @@ function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         sample_count: app.sampleCount
         window_title: app.title
         high_dpi: true
+        logger: sapp_logger {
+            func: kiraGraphicsSokolLog
+        }
     }
 
     sapp_run(move desc)
+    return
+}
+
+@Native
+function kiraGraphicsSokolLog(tag: CString, level: U32, itemId: U32, message: CString, lineNr: U32, filename: CString, userData: RawPtr): Void {
+    kgSappLog(tag, level, itemId, message, lineNr, filename, userData)
     return
 }
 

@@ -16,3 +16,25 @@ function sokolDestroyTextureId(textureId: U32): Void {
     }
     return
 }
+
+@Native
+function sokolCreateTextureFromFileId(label: borrow String, path: borrow String) -> U32 {
+    return kgCreateTextureFromFileId(label, path)
+}
+
+@Native
+function sokolCreateSamplerId(label: borrow String, minFilter: Int, magFilter: Int, addressModeU: Int, addressModeV: Int) -> U32 {
+    let nativeMinFilter: I64 = minFilter
+    let nativeMagFilter: I64 = magFilter
+    let nativeAddressModeU: I64 = addressModeU
+    let nativeAddressModeV: I64 = addressModeV
+    return kgCreateSamplerId(label, nativeMinFilter, nativeMagFilter, nativeAddressModeU, nativeAddressModeV)
+}
+
+@Native
+function sokolDestroySamplerId(samplerId: U32): Void {
+    if (samplerId != 0) {
+        kgDestroySamplerId(samplerId)
+    }
+    return
+}

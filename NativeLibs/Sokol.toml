@@ -62,3 +62,5 @@ system_libs = ["X11", "Xi", "Xcursor", "GL", "dl", "pthread", "m"]
 
 [target.x86_64-windows-msvc]
 static_lib = "../generated/native/x86_64-windows-msvc/sokol.lib"
+defines = ["SOKOL_GLCORE"]
+system_libs = ["opengl32"]

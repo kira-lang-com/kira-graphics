@@ -117,6 +117,7 @@ Public examples:
 - `examples/ksl_triangle`: KSL-backed triangle using `createShaderFromKsl(...)`.
 - `examples/basic_3d_cube`: vertex buffer, index buffer, depth texture, depth-enabled pipeline, and indexed draw.
 - `examples/runtime_entry`: callback-state lifecycle smoke test.
+- `examples/liquid_glass`: KSL liquid-glass render with sampled image and offscreen blur passes. On Windows, use `run_backend.ps1 opengl`, `directx`, or `vulkan`.
 
 Backend interop:
 

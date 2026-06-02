@@ -9,7 +9,19 @@ struct UniformBindEntry {
     var uniform: GraphicsUniform
 }
 
+struct TextureBindEntry {
+    var textureSlot: Int = 0
+    var texture: GraphicsTexture
+}
+
+struct SamplerBindEntry {
+    var samplerSlot: Int = 0
+    var sampler: GraphicsSampler
+}
+
 struct BindGroupDescriptor {
     var label: String = ""
     var uniformEntries: [UniformBindEntry]
+    var textureEntries: [TextureBindEntry]
+    var samplerEntries: [SamplerBindEntry]
 }

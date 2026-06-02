@@ -106,7 +106,7 @@ function main() {
             vertexLayout: triangleVertexLayout()
             colorTargets: [
                 ColorTargetDescriptor {
-                    format: textureFormatRgba8Unorm()
+                    format: textureFormatSwapchain()
                     blend: BlendState {
                         enabled: false
                         preset: blendPresetReplace()

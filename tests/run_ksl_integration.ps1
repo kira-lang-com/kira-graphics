@@ -57,7 +57,9 @@ function Assert-SampleLifecycle {
     Assert-Contains -Output $source -Needle "app.onInit" -Context $Path
     Assert-Contains -Output $source -Needle "app.onFrame" -Context $Path
     Assert-Contains -Output $source -Needle "app.onCleanup" -Context $Path
-    Assert-Contains -Output $source -Needle "renderPass" -Context $Path
+    if (-not ($source.Contains("renderPass") -or $source.Contains("beginRenderPass"))) {
+        throw "Expected 'renderPass' or 'beginRenderPass' in $Path. Actual output:`n$source"
+    }
     Assert-Contains -Output $source -Needle "setVertexBuffer" -Context $Path
     Assert-Contains -Output $source -Needle "createRenderPipeline" -Context $Path
     Assert-Contains -Output $source -Needle "app.run(nativeUserData" -Context $Path

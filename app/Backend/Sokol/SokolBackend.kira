@@ -4,6 +4,9 @@ function kgShaderSource(inlineSource: CString, path: CString): CString;
 @FFI.Extern { library: sokol; symbol: kira_live_emit_log_line; abi: c; }
 function kiraLiveEmitLogLine(line: CString): Void;
 
+@FFI.Extern { library: sokol; symbol: kg_sapp_log; abi: c; }
+function kgSappLog(tag: CString, level: U32, itemId: U32, message: CString, lineNr: U32, filename: CString, userData: RawPtr): Void;
+
 @Native
 function kiraGraphicsLiveUiFoundationAppStarted(): Void {
     kiraLiveEmitLogLine("live.ui_foundation.app.started")
@@ -82,6 +85,12 @@ function kgCreateBindGroupId(label: CString): U32;
 @FFI.Extern { library: sokol; symbol: kg_set_bind_group_uniform; abi: c; }
 function kgSetBindGroupUniform(bindGroupId: U32, entryIndex: I64, uniformSlot: I64, uniformId: U32): U32;
 
+@FFI.Extern { library: sokol; symbol: kg_set_bind_group_texture; abi: c; }
+function kgSetBindGroupTexture(bindGroupId: U32, entryIndex: I64, textureSlot: I64, textureId: U32): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_set_bind_group_sampler; abi: c; }
+function kgSetBindGroupSampler(bindGroupId: U32, entryIndex: I64, samplerSlot: I64, samplerId: U32): U32;
+
 @FFI.Extern { library: sokol; symbol: kg_destroy_bind_group_id; abi: c; }
 function kgDestroyBindGroupId(bindGroupId: U32): Void;
 
@@ -90,6 +99,15 @@ function kgCreateTextureId(label: CString, width: I64, height: I64, format: I64,
 
 @FFI.Extern { library: sokol; symbol: kg_destroy_texture_id; abi: c; }
 function kgDestroyTextureId(textureId: U32): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_create_texture_from_file_id; abi: c; }
+function kgCreateTextureFromFileId(label: CString, path: CString): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_create_sampler_id; abi: c; }
+function kgCreateSamplerId(label: CString, minFilter: I64, magFilter: I64, addressModeU: I64, addressModeV: I64): U32;
+
+@FFI.Extern { library: sokol; symbol: kg_destroy_sampler_id; abi: c; }
+function kgDestroySamplerId(samplerId: U32): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_begin_render_pass; abi: c; }
 function kgBeginRenderPass(label: CString, colorTargetKind: I64, colorTextureId: U32, colorMipLevel: I64, colorArrayLayer: I64, colorLoadAction: I64, colorStoreAction: I64, clearR: Float, clearG: Float, clearB: Float, clearA: Float, hasResolveTarget: I64, resolveTextureId: U32, resolveMipLevel: I64, resolveArrayLayer: I64, hasDepthAttachment: I64, depthTextureId: U32, depthLoadAction: I64, depthStoreAction: I64, clearDepth: Float, depthReadOnly: I64, hasStencilAttachment: I64, stencilTextureId: U32, stencilLoadAction: I64, stencilStoreAction: I64, clearStencil: I64, stencilReadOnly: I64): U32;

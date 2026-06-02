@@ -7,3 +7,11 @@ struct TextureDescriptor {
     var sampleCount: Int = 1
     var storageMode: Int
 }
+
+struct SamplerDescriptor {
+    var label: String = ""
+    var minFilter: Int
+    var magFilter: Int
+    var addressModeU: Int
+    var addressModeV: Int
+}

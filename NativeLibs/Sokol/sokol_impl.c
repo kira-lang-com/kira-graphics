@@ -8,6 +8,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+#ifndef M_PI_2
+#define M_PI_2 1.57079632679489661923
+#endif
 #if defined(_WIN32)
 #include <windows.h>
 #elif defined(__APPLE__)
@@ -31,6 +37,10 @@
 #define SOKOL_GLCORE
 #endif
 #endif
+#elif defined(_WIN32)
+#if !defined(SOKOL_GLCORE) && !defined(SOKOL_D3D11) && !defined(SOKOL_VULKAN)
+#define SOKOL_GLCORE
+#endif
 #elif defined(__linux__)
 #ifndef SOKOL_GLCORE
 #define SOKOL_GLCORE
@@ -40,9 +50,22 @@
 #include "sokol_app.h"
 #include "sokol_gfx.h"
 #include "sokol_glue.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "vendor/stb_image.h"
 
 void kira_live_emit_first_frame(void);
 void kira_live_emit_log_line(const char* line);
+
+void kg_sapp_log(const char* tag, uint32_t level, uint32_t item_id, const char* message, uint32_t line_nr, const char* filename, void* user_data) {
+    (void)item_id;
+    (void)user_data;
+    fprintf(stderr, "%s[%u] %s:%u: %s\n",
+        tag ? tag : "sapp",
+        level,
+        filename ? filename : "sokol_app.h",
+        line_nr,
+        message ? message : "Sokol app error");
+}
 
 static sg_buffer kg_triangle_vertex_buffer = {0};
 static sg_buffer kg_ui_demo_vertex_buffer = {0};
@@ -84,6 +107,7 @@ typedef struct {
     uint32_t image_id;
     uint32_t color_view_id;
     uint32_t depth_view_id;
+    uint32_t texture_view_id;
     int64_t width;
     int64_t height;
     int64_t sample_count;
@@ -106,6 +130,12 @@ typedef struct {
     uint32_t uniform_ids[4];
     int uniform_slots[4];
     int uniform_count;
+    uint32_t texture_ids[4];
+    int texture_slots[4];
+    int texture_count;
+    uint32_t sampler_ids[4];
+    int sampler_slots[4];
+    int sampler_count;
     char* label;
 } kg_bind_group_record;
 
@@ -113,6 +143,11 @@ typedef struct {
     const char* ptr;
     bool owned;
 } kg_owned_text;
+
+typedef struct {
+    void* ptr;
+    size_t size;
+} kg_owned_bytes;
 
 typedef struct {
     uint32_t buffers;
@@ -1117,6 +1152,14 @@ static sg_image_usage kg_image_usage(int64_t usage) {
     return result;
 }
 
+static sg_filter kg_filter(int64_t filter) {
+    return filter == 2 ? SG_FILTER_LINEAR : SG_FILTER_NEAREST;
+}
+
+static sg_wrap kg_wrap(int64_t address_mode) {
+    return address_mode == 1 ? SG_WRAP_CLAMP_TO_EDGE : SG_WRAP_REPEAT;
+}
+
 static char* kg_copy_string(const char* source) {
     if (source == NULL) {
         source = "";
@@ -1659,6 +1702,41 @@ uint32_t kg_set_bind_group_uniform(uint32_t bind_group_id, int64_t entry_index, 
     return 1;
 }
 
+uint32_t kg_set_bind_group_texture(uint32_t bind_group_id, int64_t entry_index, int64_t texture_slot, uint32_t texture_id) {
+    kg_bind_group_record* record = kg_find_bind_group(bind_group_id);
+    kg_texture_record* texture = kg_find_texture(texture_id);
+    if (record == NULL || texture == NULL || texture->texture_view_id == 0) {
+        printf("Kira Graphics: bind group %u cannot bind sampled texture %u\n", bind_group_id, texture_id);
+        return 0;
+    }
+    if (entry_index < 0 || entry_index >= 4 || texture_slot < 0 || texture_slot >= SG_MAX_VIEW_BINDSLOTS) {
+        return 0;
+    }
+    record->texture_ids[entry_index] = texture->texture_view_id;
+    record->texture_slots[entry_index] = (int)texture_slot;
+    if (entry_index + 1 > record->texture_count) {
+        record->texture_count = (int)entry_index + 1;
+    }
+    return 1;
+}
+
+uint32_t kg_set_bind_group_sampler(uint32_t bind_group_id, int64_t entry_index, int64_t sampler_slot, uint32_t sampler_id) {
+    kg_bind_group_record* record = kg_find_bind_group(bind_group_id);
+    if (record == NULL || sampler_id == 0) {
+        printf("Kira Graphics: bind group %u cannot bind sampler %u\n", bind_group_id, sampler_id);
+        return 0;
+    }
+    if (entry_index < 0 || entry_index >= 4 || sampler_slot < 0 || sampler_slot >= SG_MAX_SAMPLER_BINDSLOTS) {
+        return 0;
+    }
+    record->sampler_ids[entry_index] = sampler_id;
+    record->sampler_slots[entry_index] = (int)sampler_slot;
+    if (entry_index + 1 > record->sampler_count) {
+        record->sampler_count = (int)entry_index + 1;
+    }
+    return 1;
+}
+
 void kg_destroy_bind_group_id(uint32_t bind_group_id) {
     kg_bind_group_record* record = kg_find_bind_group(bind_group_id);
     if (record == NULL) {
@@ -1691,6 +1769,7 @@ uint32_t kg_create_texture_id(const char* label, int64_t width, int64_t height, 
 
     uint32_t color_view_id = 0;
     uint32_t depth_view_id = 0;
+    uint32_t texture_view_id = 0;
     if (usage == 2 || usage == 3) {
         sg_view_desc color_view_desc = {0};
         color_view_desc.color_attachment.image = image;
@@ -1715,12 +1794,29 @@ uint32_t kg_create_texture_id(const char* label, int64_t width, int64_t height, 
             return 0;
         }
     }
+    if (usage == 1 || usage == 3) {
+        sg_view_desc texture_view_desc = {0};
+        texture_view_desc.texture.image = image;
+        texture_view_desc.label = label;
+        texture_view_id = sg_make_view(&texture_view_desc).id;
+        kg_update_lifetime_peaks();
+        if (texture_view_id == 0) {
+            if (color_view_id != 0) {
+                sg_view color_view = { color_view_id };
+                sg_destroy_view(color_view);
+            }
+            sg_destroy_image(image);
+            kg_update_lifetime_peaks();
+            return 0;
+        }
+    }
 
     if (kg_texture_record_count < 64) {
         kg_texture_record* record = &kg_texture_records[kg_texture_record_count];
         record->image_id = image.id;
         record->color_view_id = color_view_id;
         record->depth_view_id = depth_view_id;
+        record->texture_view_id = texture_view_id;
         record->width = width;
         record->height = height;
         record->sample_count = sample_count;
@@ -1738,6 +1834,10 @@ uint32_t kg_create_texture_id(const char* label, int64_t width, int64_t height, 
     if (depth_view_id != 0) {
         sg_view depth_view = { depth_view_id };
         sg_destroy_view(depth_view);
+    }
+    if (texture_view_id != 0) {
+        sg_view texture_view = { texture_view_id };
+        sg_destroy_view(texture_view);
     }
     sg_destroy_image(image);
     kg_update_lifetime_peaks();
@@ -1758,11 +1858,97 @@ void kg_destroy_texture_id(uint32_t texture_id) {
             sg_view depth_view = { record->depth_view_id };
             sg_destroy_view(depth_view);
         }
+        if (record->texture_view_id != 0) {
+            sg_view texture_view = { record->texture_view_id };
+            sg_destroy_view(texture_view);
+        }
     }
     sg_image image = { texture_id };
     sg_destroy_image(image);
     kg_remove_texture(texture_id);
     kg_update_lifetime_peaks();
+}
+
+uint32_t kg_create_texture_from_file_id(const char* label, const char* path) {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_set_flip_vertically_on_load(1);
+    unsigned char* pixels = stbi_load(path, &width, &height, &channels, 4);
+    if (pixels == NULL) {
+        printf("Kira Graphics: could not load texture file %s\n", path);
+        return 0;
+    }
+
+    sg_image_desc desc = {0};
+    desc.type = SG_IMAGETYPE_2D;
+    desc.width = width;
+    desc.height = height;
+    desc.num_slices = 1;
+    desc.num_mipmaps = 1;
+    desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    desc.sample_count = 1;
+    desc.data.mip_levels[0] = (sg_range){ pixels, (size_t)width * (size_t)height * 4 };
+    desc.label = label;
+
+    sg_image image = sg_make_image(&desc);
+    stbi_image_free(pixels);
+    if (image.id == 0) {
+        return 0;
+    }
+    kg_update_lifetime_peaks();
+
+    sg_view_desc texture_view_desc = {0};
+    texture_view_desc.texture.image = image;
+    texture_view_desc.label = label;
+    uint32_t texture_view_id = sg_make_view(&texture_view_desc).id;
+    kg_update_lifetime_peaks();
+    if (texture_view_id == 0) {
+        sg_destroy_image(image);
+        kg_update_lifetime_peaks();
+        return 0;
+    }
+
+    if (kg_texture_record_count < 64) {
+        kg_texture_record* record = &kg_texture_records[kg_texture_record_count];
+        record->image_id = image.id;
+        record->texture_view_id = texture_view_id;
+        record->width = width;
+        record->height = height;
+        record->sample_count = 1;
+        record->format = 1;
+        record->usage = 1;
+        kg_texture_record_count += 1;
+        kg_update_lifetime_peaks();
+        return image.id;
+    }
+
+    sg_view texture_view = { texture_view_id };
+    sg_destroy_view(texture_view);
+    sg_destroy_image(image);
+    kg_update_lifetime_peaks();
+    return 0;
+}
+
+uint32_t kg_create_sampler_id(const char* label, int64_t min_filter, int64_t mag_filter, int64_t address_mode_u, int64_t address_mode_v) {
+    sg_sampler_desc desc = {0};
+    desc.min_filter = kg_filter(min_filter);
+    desc.mag_filter = kg_filter(mag_filter);
+    desc.mipmap_filter = kg_filter(min_filter);
+    desc.wrap_u = kg_wrap(address_mode_u);
+    desc.wrap_v = kg_wrap(address_mode_v);
+    desc.label = label;
+    sg_sampler sampler = sg_make_sampler(&desc);
+    kg_update_lifetime_peaks();
+    return sampler.id;
+}
+
+void kg_destroy_sampler_id(uint32_t sampler_id) {
+    if (sampler_id != 0) {
+        sg_sampler sampler = { sampler_id };
+        sg_destroy_sampler(sampler);
+        kg_update_lifetime_peaks();
+    }
 }
 
 static void kg_uniform_member(sg_shader_uniform_block* block, int index, sg_uniform_type type, const char* name) {
@@ -1832,6 +2018,30 @@ static uint32_t kg_configure_uniform_blocks(sg_shader_desc* desc, const char* ve
     return available_mask;
 }
 
+static void kg_configure_sampled_textures(sg_shader_desc* desc, const char* fragment_source) {
+    const char* names[2] = { "kira_tex0_smp0", "kira_tex1_smp1" };
+    const char* hlsl_names[2] = { "tex0.Sample(smp0", "tex1.Sample(smp1" };
+    for (int slot = 0; slot < 2; slot += 1) {
+        if (fragment_source == NULL ||
+            (strstr(fragment_source, names[slot]) == NULL && strstr(fragment_source, hlsl_names[slot]) == NULL)) {
+            continue;
+        }
+        desc->views[slot].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+        desc->views[slot].texture.image_type = SG_IMAGETYPE_2D;
+        desc->views[slot].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+        desc->views[slot].texture.hlsl_register_t_n = (uint8_t)slot;
+        desc->views[slot].texture.spirv_set1_binding_n = (uint8_t)slot;
+        desc->samplers[slot].stage = SG_SHADERSTAGE_FRAGMENT;
+        desc->samplers[slot].sampler_type = SG_SAMPLERTYPE_FILTERING;
+        desc->samplers[slot].hlsl_register_s_n = (uint8_t)slot;
+        desc->samplers[slot].spirv_set1_binding_n = (uint8_t)(slot + 2);
+        desc->texture_sampler_pairs[slot].stage = SG_SHADERSTAGE_FRAGMENT;
+        desc->texture_sampler_pairs[slot].view_slot = (uint8_t)slot;
+        desc->texture_sampler_pairs[slot].sampler_slot = (uint8_t)slot;
+        desc->texture_sampler_pairs[slot].glsl_name = names[slot];
+    }
+}
+
 static uint32_t kg_uniform_mask_from_shader_source(const char* vertex_source, const char* fragment_source) {
     uint32_t mask = 0;
     const bool has_scene = kg_shader_source_uses_resource(vertex_source, "scene") || kg_shader_source_uses_resource(fragment_source, "scene");
@@ -1861,24 +2071,112 @@ static uint32_t kg_make_shader_with_entries(
     desc.fragment_func.source = prepared_fragment_source.ptr;
     desc.vertex_func.entry = (vertex_entry != NULL && vertex_entry[0] != '\0') ? vertex_entry : "main";
     desc.fragment_func.entry = (fragment_entry != NULL && fragment_entry[0] != '\0') ? fragment_entry : "main";
-    bool has_position_attribute = strstr(desc.vertex_func.source, "kira_attr_position") != NULL;
-    bool has_normal_attribute = strstr(desc.vertex_func.source, "kira_attr_normal") != NULL;
+    bool has_position_attribute =
+        strstr(desc.vertex_func.source, "kira_attr_position") != NULL ||
+        strstr(desc.vertex_func.source, "position : TEXCOORD0") != NULL;
+    bool has_normal_attribute =
+        strstr(desc.vertex_func.source, "kira_attr_normal") != NULL ||
+        strstr(desc.vertex_func.source, "normal : TEXCOORD1") != NULL;
     uint32_t required_uniform_mask = kg_uniform_mask_from_shader_source(desc.vertex_func.source, desc.fragment_func.source);
     if (has_position_attribute) {
         desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
         desc.attrs[0].glsl_name = "kira_attr_position";
+        desc.attrs[0].hlsl_sem_name = "TEXCOORD";
+        desc.attrs[0].hlsl_sem_index = 0;
     }
     if (has_normal_attribute) {
         desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
         desc.attrs[1].glsl_name = "kira_attr_normal";
+        desc.attrs[1].hlsl_sem_name = "TEXCOORD";
+        desc.attrs[1].hlsl_sem_index = 1;
     }
     uint32_t available_uniform_mask = kg_configure_uniform_blocks(&desc, desc.vertex_func.source, desc.fragment_func.source);
+    kg_configure_sampled_textures(&desc, desc.fragment_func.source);
     desc.label = label;
     uint32_t shader_id = sg_make_shader(&desc).id;
     kg_record_shader(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask, available_uniform_mask);
     kg_update_lifetime_peaks();
     kg_owned_text_deinit(&prepared_vertex_source);
     kg_owned_text_deinit(&prepared_fragment_source);
+    return shader_id;
+}
+
+static kg_owned_bytes kg_shader_bytecode_owned(const char* path) {
+    const char* opened_path = path;
+    char* fallback_path = NULL;
+    FILE* file = fopen(path, "rb");
+    if (file == NULL) {
+        fallback_path = kg_project_relative_shader_path(path);
+        if (fallback_path != NULL) {
+            file = fopen(fallback_path, "rb");
+            if (file != NULL) {
+                opened_path = fallback_path;
+            }
+        }
+    }
+    if (file == NULL || fseek(file, 0, SEEK_END) != 0) {
+        if (file != NULL) fclose(file);
+        printf("Kira Graphics: could not open shader bytecode '%s'\n", path);
+        free(fallback_path);
+        return (kg_owned_bytes){ NULL, 0 };
+    }
+    const long length = ftell(file);
+    if (length <= 0) {
+        fclose(file);
+        printf("Kira Graphics: could not measure shader bytecode '%s'\n", opened_path);
+        free(fallback_path);
+        return (kg_owned_bytes){ NULL, 0 };
+    }
+    rewind(file);
+    void* buffer = malloc((size_t)length);
+    if (buffer == NULL) {
+        fclose(file);
+        free(fallback_path);
+        return (kg_owned_bytes){ NULL, 0 };
+    }
+    const size_t read_count = fread(buffer, 1, (size_t)length, file);
+    fclose(file);
+    free(fallback_path);
+    return (kg_owned_bytes){ buffer, read_count };
+}
+
+static uint32_t kg_make_spirv_shader(
+    const char* label,
+    const char* vertex_path,
+    const char* fragment_path,
+    const char* metadata_vertex_path,
+    const char* metadata_fragment_path,
+    const char* vertex_entry,
+    const char* fragment_entry
+) {
+    sg_shader_desc desc = {0};
+    kg_owned_bytes vertex_bytecode = kg_shader_bytecode_owned(vertex_path);
+    kg_owned_bytes fragment_bytecode = kg_shader_bytecode_owned(fragment_path);
+    kg_owned_text vertex_metadata = kg_shader_source_owned("", metadata_vertex_path);
+    kg_owned_text fragment_metadata = kg_shader_source_owned("", metadata_fragment_path);
+    desc.vertex_func.bytecode = (sg_range){ vertex_bytecode.ptr, vertex_bytecode.size };
+    desc.fragment_func.bytecode = (sg_range){ fragment_bytecode.ptr, fragment_bytecode.size };
+    desc.vertex_func.entry = vertex_entry;
+    desc.fragment_func.entry = fragment_entry;
+    const bool has_position_attribute = strstr(vertex_metadata.ptr, "position : TEXCOORD0") != NULL;
+    const bool has_normal_attribute = strstr(vertex_metadata.ptr, "normal : TEXCOORD1") != NULL;
+    if (has_position_attribute) {
+        desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+    }
+    if (has_normal_attribute) {
+        desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+    }
+    const uint32_t required_uniform_mask = kg_uniform_mask_from_shader_source(vertex_metadata.ptr, fragment_metadata.ptr);
+    const uint32_t available_uniform_mask = kg_configure_uniform_blocks(&desc, vertex_metadata.ptr, fragment_metadata.ptr);
+    kg_configure_sampled_textures(&desc, fragment_metadata.ptr);
+    desc.label = label;
+    const uint32_t shader_id = sg_make_shader(&desc).id;
+    kg_record_shader(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask, available_uniform_mask);
+    kg_update_lifetime_peaks();
+    free(vertex_bytecode.ptr);
+    free(fragment_bytecode.ptr);
+    kg_owned_text_deinit(&vertex_metadata);
+    kg_owned_text_deinit(&fragment_metadata);
     return shader_id;
 }
 
@@ -1890,6 +2188,46 @@ uint32_t kg_make_ksl_shader(const char* label, const char* asset, const char* di
 #if defined(SOKOL_WGPU)
     char* vertex_path = kg_join_shader_path(directory, asset, ".vert.wgsl");
     char* fragment_path = kg_join_shader_path(directory, asset, ".frag.wgsl");
+    char* vertex_entry = kg_join_shader_entry(asset, "vertex");
+    char* fragment_entry = kg_join_shader_entry(asset, "fragment");
+    uint32_t shader_id = kg_make_shader_with_entries(
+        label,
+        "",
+        "",
+        vertex_path ? vertex_path : "",
+        fragment_path ? fragment_path : "",
+        vertex_entry ? vertex_entry : "main",
+        fragment_entry ? fragment_entry : "main");
+    free(vertex_path);
+    free(fragment_path);
+    free(vertex_entry);
+    free(fragment_entry);
+    return shader_id;
+#elif defined(SOKOL_VULKAN)
+    char* vertex_path = kg_join_shader_path(directory, asset, ".vert.spv");
+    char* fragment_path = kg_join_shader_path(directory, asset, ".frag.spv");
+    char* metadata_vertex_path = kg_join_shader_path(directory, asset, ".vert.hlsl");
+    char* metadata_fragment_path = kg_join_shader_path(directory, asset, ".frag.hlsl");
+    char* vertex_entry = kg_join_shader_entry(asset, "vertex");
+    char* fragment_entry = kg_join_shader_entry(asset, "fragment");
+    uint32_t shader_id = kg_make_spirv_shader(
+        label,
+        vertex_path ? vertex_path : "",
+        fragment_path ? fragment_path : "",
+        metadata_vertex_path ? metadata_vertex_path : "",
+        metadata_fragment_path ? metadata_fragment_path : "",
+        "main",
+        "main");
+    free(vertex_path);
+    free(fragment_path);
+    free(metadata_vertex_path);
+    free(metadata_fragment_path);
+    free(vertex_entry);
+    free(fragment_entry);
+    return shader_id;
+#elif defined(SOKOL_D3D11)
+    char* vertex_path = kg_join_shader_path(directory, asset, ".vert.hlsl");
+    char* fragment_path = kg_join_shader_path(directory, asset, ".frag.hlsl");
     char* vertex_entry = kg_join_shader_entry(asset, "vertex");
     char* fragment_entry = kg_join_shader_entry(asset, "fragment");
     uint32_t shader_id = kg_make_shader_with_entries(
@@ -1985,7 +2323,7 @@ uint32_t kg_make_pipeline_detailed(
 
     desc.color_count = (color_target_count > 0) ? (int)color_target_count : 1;
     if (desc.color_count > 0) {
-        desc.colors[0].pixel_format = (color_format == 1) ? swapchain_color_format : kg_pixel_format(color_format);
+        desc.colors[0].pixel_format = (color_format == -1) ? swapchain_color_format : kg_pixel_format(color_format);
         desc.colors[0].write_mask = SG_COLORMASK_RGBA;
         desc.colors[0].blend = kg_blend_state(blend_enabled != 0, blend_preset);
     }
@@ -1995,8 +2333,8 @@ uint32_t kg_make_pipeline_detailed(
     desc.sample_count = swapchain_sample_count;
     desc.label = label;
 
+    desc.depth.pixel_format = (depth_format == 0) ? SG_PIXELFORMAT_NONE : swapchain_depth_format;
     if (depth_enabled != 0) {
-        desc.depth.pixel_format = swapchain_depth_format;
         desc.depth.compare = kg_compare_func(depth_compare);
         desc.depth.write_enabled = depth_write_enabled != 0;
     }
@@ -2451,13 +2789,31 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
         bindings.index_buffer_offset = 0;
         has_bindings = true;
     }
+    uint32_t bind_group_ids[4] = { bind_group0_id, bind_group1_id, bind_group2_id, bind_group3_id };
+    int64_t has_bind_groups[4] = { has_bind_group0, has_bind_group1, has_bind_group2, has_bind_group3 };
+    for (int group_index = 0; group_index < 4; group_index += 1) {
+        if (has_bind_groups[group_index] == 0) {
+            continue;
+        }
+        kg_bind_group_record* group = kg_find_bind_group(bind_group_ids[group_index]);
+        if (group == NULL) {
+            printf("Kira Graphics: bind group slot %d references missing bind group %u\n", group_index, bind_group_ids[group_index]);
+            return 0;
+        }
+        for (int entry_index = 0; entry_index < group->texture_count; entry_index += 1) {
+            bindings.views[group->texture_slots[entry_index]].id = group->texture_ids[entry_index];
+            has_bindings = true;
+        }
+        for (int entry_index = 0; entry_index < group->sampler_count; entry_index += 1) {
+            bindings.samplers[group->sampler_slots[entry_index]].id = group->sampler_ids[entry_index];
+            has_bindings = true;
+        }
+    }
     if (has_bindings) {
         sg_apply_bindings(&bindings);
     }
 
     uint32_t applied_uniform_mask = 0;
-    uint32_t bind_group_ids[4] = { bind_group0_id, bind_group1_id, bind_group2_id, bind_group3_id };
-    int64_t has_bind_groups[4] = { has_bind_group0, has_bind_group1, has_bind_group2, has_bind_group3 };
     for (int group_index = 0; group_index < 4; group_index += 1) {
         if (has_bind_groups[group_index] == 0) {
             continue;
