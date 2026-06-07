@@ -1,0 +1,274 @@
+enum GraphicsEventKind {
+    None
+    KeyDown
+    KeyUp
+    TextInput
+    PointerDown
+    PointerUp
+    PointerMoved
+    PointerEntered
+    PointerExited
+    Scroll
+    TouchesBegan
+    TouchesMoved
+    TouchesEnded
+    TouchesCancelled
+    Resized
+    Iconified
+    Restored
+    Focused
+    Unfocused
+    Suspended
+    Resumed
+    QuitRequested
+    ClipboardPasted
+    FilesDropped
+}
+
+enum GraphicsPointerButton {
+    None
+    Left
+    Right
+    Middle
+    Other
+}
+
+struct GraphicsModifierState {
+    let shift: Bool = false
+    let control: Bool = false
+    let alt: Bool = false
+    let superKey: Bool = false
+    let leftPointerButton: Bool = false
+    let rightPointerButton: Bool = false
+    let middlePointerButton: Bool = false
+}
+
+struct GraphicsEvent {
+    let kind: GraphicsEventKind = GraphicsEventKind.None
+    let frameCount: Int = 0
+    let keyCode: Int = 0
+    let textCodepoint: Int = 0
+    let keyRepeat: Bool = false
+    let modifiers: GraphicsModifierState = GraphicsModifierState {}
+    let pointerButton: GraphicsPointerButton = GraphicsPointerButton.None
+    let pointerX: Float = 0.0
+    let pointerY: Float = 0.0
+    let pointerDeltaX: Float = 0.0
+    let pointerDeltaY: Float = 0.0
+    let scrollX: Float = 0.0
+    let scrollY: Float = 0.0
+    let windowWidth: Int = 0
+    let windowHeight: Int = 0
+    let framebufferWidth: Int = 0
+    let framebufferHeight: Int = 0
+}
+
+function graphicsEventKindFromRaw(kind: Int) -> GraphicsEventKind {
+    if kind == 1 {
+        return GraphicsEventKind.KeyDown
+    }
+    if kind == 2 {
+        return GraphicsEventKind.KeyUp
+    }
+    if kind == 3 {
+        return GraphicsEventKind.TextInput
+    }
+    if kind == 4 {
+        return GraphicsEventKind.PointerDown
+    }
+    if kind == 5 {
+        return GraphicsEventKind.PointerUp
+    }
+    if kind == 6 {
+        return GraphicsEventKind.Scroll
+    }
+    if kind == 7 {
+        return GraphicsEventKind.PointerMoved
+    }
+    if kind == 8 {
+        return GraphicsEventKind.PointerEntered
+    }
+    if kind == 9 {
+        return GraphicsEventKind.PointerExited
+    }
+    if kind == 10 {
+        return GraphicsEventKind.TouchesBegan
+    }
+    if kind == 11 {
+        return GraphicsEventKind.TouchesMoved
+    }
+    if kind == 12 {
+        return GraphicsEventKind.TouchesEnded
+    }
+    if kind == 13 {
+        return GraphicsEventKind.TouchesCancelled
+    }
+    if kind == 14 {
+        return GraphicsEventKind.Resized
+    }
+    if kind == 15 {
+        return GraphicsEventKind.Iconified
+    }
+    if kind == 16 {
+        return GraphicsEventKind.Restored
+    }
+    if kind == 17 {
+        return GraphicsEventKind.Focused
+    }
+    if kind == 18 {
+        return GraphicsEventKind.Unfocused
+    }
+    if kind == 19 {
+        return GraphicsEventKind.Suspended
+    }
+    if kind == 20 {
+        return GraphicsEventKind.Resumed
+    }
+    if kind == 21 {
+        return GraphicsEventKind.QuitRequested
+    }
+    if kind == 22 {
+        return GraphicsEventKind.ClipboardPasted
+    }
+    if kind == 23 {
+        return GraphicsEventKind.FilesDropped
+    }
+    return GraphicsEventKind.None
+}
+
+function graphicsPointerButtonFromRaw(button: Int) -> GraphicsPointerButton {
+    if button == 0 {
+        return GraphicsPointerButton.Left
+    }
+    if button == 1 {
+        return GraphicsPointerButton.Right
+    }
+    if button == 2 {
+        return GraphicsPointerButton.Middle
+    }
+    if button < 0 || button == 256 {
+        return GraphicsPointerButton.None
+    }
+    return GraphicsPointerButton.Other
+}
+
+function graphicsModifierStateFromRaw(raw: Int) -> GraphicsModifierState {
+    let shift = (raw / 1) % 2 == 1
+    let control = (raw / 2) % 2 == 1
+    let alt = (raw / 4) % 2 == 1
+    let superKey = (raw / 8) % 2 == 1
+    let leftPointerButton = (raw / 256) % 2 == 1
+    let rightPointerButton = (raw / 512) % 2 == 1
+    let middlePointerButton = (raw / 1024) % 2 == 1
+    return GraphicsModifierState {
+        shift: shift
+        control: control
+        alt: alt
+        superKey: superKey
+        leftPointerButton: leftPointerButton
+        rightPointerButton: rightPointerButton
+        middlePointerButton: middlePointerButton
+    }
+}
+
+function graphicsEventUsesPointerPosition(kind: borrow GraphicsEventKind) -> Bool {
+    if kind == GraphicsEventKind.PointerDown {
+        return true
+    }
+    if kind == GraphicsEventKind.PointerUp {
+        return true
+    }
+    if kind == GraphicsEventKind.PointerMoved {
+        return true
+    }
+    if kind == GraphicsEventKind.PointerEntered {
+        return true
+    }
+    if kind == GraphicsEventKind.PointerExited {
+        return true
+    }
+    if kind == GraphicsEventKind.Scroll {
+        return true
+    }
+    if kind == GraphicsEventKind.TouchesBegan {
+        return true
+    }
+    if kind == GraphicsEventKind.TouchesMoved {
+        return true
+    }
+    if kind == GraphicsEventKind.TouchesEnded {
+        return true
+    }
+    if kind == GraphicsEventKind.TouchesCancelled {
+        return true
+    }
+    return false
+}
+
+
+@Native
+function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> GraphicsEvent {
+    let rawKind = kgEventType(eventPtr)
+    let rawModifiers = kgEventModifiers(eventPtr)
+    return GraphicsEvent {
+        kind: graphicsEventKindFromRaw(rawKind)
+        frameCount: kgEventFrameCount(eventPtr)
+        keyCode: kgEventKeyCode(eventPtr)
+        textCodepoint: kgEventCharCode(eventPtr)
+        keyRepeat: kgEventKeyRepeat(eventPtr) != 0
+        modifiers: graphicsModifierStateFromRaw(rawModifiers)
+        pointerButton: graphicsPointerButtonFromRaw(kgEventMouseButton(eventPtr))
+        pointerX: kgEventMouseX(eventPtr)
+        pointerY: kgEventMouseY(eventPtr)
+        pointerDeltaX: kgEventMouseDx(eventPtr)
+        pointerDeltaY: kgEventMouseDy(eventPtr)
+        scrollX: kgEventScrollX(eventPtr)
+        scrollY: kgEventScrollY(eventPtr)
+        windowWidth: kgEventWindowWidth(eventPtr)
+        windowHeight: kgEventWindowHeight(eventPtr)
+        framebufferWidth: kgEventFramebufferWidth(eventPtr)
+        framebufferHeight: kgEventFramebufferHeight(eventPtr)
+    }
+}
+
+@Native
+function graphicsStringFromCodepoint(codepoint: Int) -> String {
+    let nativeCodepoint: I64 = codepoint
+    let value: CString = kgCodepointUtf8(nativeCodepoint)
+    return value
+}
+
+@Native
+function graphicsAppendCodepoint(base: String, codepoint: Int) -> String {
+    let nativeCodepoint: I64 = codepoint
+    let value: CString = kgStringAppendCodepoint(base, nativeCodepoint)
+    return value
+}
+
+@Native
+function graphicsDropLastScalar(base: String) -> String {
+    let value: CString = kgStringDropLastScalar(base)
+    return value
+}
+
+@Native
+function graphicsShowKeyboard(show: Bool) {
+    sapp_show_keyboard(show)
+    return
+}
+
+@Native
+function graphicsKeyboardShown() -> Bool {
+    return sapp_keyboard_shown()
+}
+
+@Native
+function graphicsShowMouse(show: Bool) {
+    sapp_show_mouse(show)
+    return
+}
+
+@Native
+function graphicsMouseShown() -> Bool {
+    return sapp_mouse_shown()
+}

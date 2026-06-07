@@ -135,13 +135,14 @@ function cubeVertexLayout() -> VertexLayout {
     }
 }
 
-function cubeCamera() -> PerspectiveCamera {
+function cubeCamera(width: Float, height: Float) -> PerspectiveCamera {
+    let aspect = width / height
     return PerspectiveCamera {
         position: Float3 { x: 0.0 y: 0.0 z: 5.0 }
         target: Float3 { x: 0.0 y: 0.0 z: 0.0 }
         up: Float3 { x: 0.0 y: 1.0 z: 0.0 }
         fovYRadians: 0.7853982
-        aspect: 1.3333333
+        aspect: aspect
         nearPlane: 0.1
         farPlane: 100.0
     }
@@ -165,8 +166,8 @@ function cubeModelMatrix() -> Float4x4 {
     )
 }
 
-function cubeSceneUniformData() -> [Float] {
-    return sceneUniformData(sceneUniforms(cubeCamera(), cubeLight(), 0.25))
+function cubeSceneUniformData(width: Float, height: Float) -> [Float] {
+    return sceneUniformData(sceneUniforms(cubeCamera(width, height), cubeLight(), 0.25))
 }
 
 function cubeObjectUniformData() -> [Float] {
@@ -281,7 +282,7 @@ function main() {
         cubeState.sceneUniform = graphics.createUniform(UniformDescriptor {
             label: "SceneUniforms"
             expectedFloatCount: sceneUniformFloatCount()
-            data: cubeSceneUniformData()
+            data: cubeSceneUniformData(640.0, 480.0)
         })
 
         cubeState.objectUniform = graphics.createUniform(UniformDescriptor {
@@ -387,32 +388,21 @@ function main() {
         var cubeState = nativeRecover<CubeState>(frame.userData)
 
         let pass = cubeRenderPass()
-        let pipeline = cubeState.pipeline
-        let edgePipeline = cubeState.edgePipeline
-        let vertices = cubeState.vertices
-        let edges = cubeState.edges
-        let sceneBindGroup = cubeState.sceneBindGroup
-        let objectBindGroup = cubeState.objectBindGroup
-        let edgeBindGroup = cubeState.edgeBindGroup
-        let indexCount = cubeState.indexCount
-        let edgeVertexCount = cubeState.edgeVertexCount
-
-        updateGraphicsUniform(cubeState.sceneUniform, cubeSceneUniformData())
+        let encoder = frame.beginRenderPass(pass)
+        updateGraphicsUniform(cubeState.sceneUniform, cubeSceneUniformData(sapp_widthf(), sapp_heightf()))
         updateGraphicsUniform(cubeState.objectUniform, cubeObjectUniformData())
+        encoder.setPipeline(cubeState.pipeline)
+        encoder.setVertexBuffer(cubeState.vertices)
+        encoder.setBindGroup(0, cubeState.sceneBindGroup)
+        encoder.setBindGroup(1, cubeState.objectBindGroup)
+        encoder.draw(cubeState.indexCount)
 
-        frame.renderPass(pass) { encoder in
-            encoder.setPipeline(pipeline)
-            encoder.setVertexBuffer(vertices)
-            encoder.setBindGroup(0, sceneBindGroup)
-            encoder.setBindGroup(1, objectBindGroup)
-            encoder.draw(indexCount)
-
-            encoder.setPipeline(edgePipeline)
-            encoder.setVertexBuffer(edges)
-            encoder.setBindGroup(0, sceneBindGroup)
-            encoder.setBindGroup(1, edgeBindGroup)
-            encoder.draw(edgeVertexCount)
-        }
+        encoder.setPipeline(cubeState.edgePipeline)
+        encoder.setVertexBuffer(cubeState.edges)
+        encoder.setBindGroup(0, cubeState.sceneBindGroup)
+        encoder.setBindGroup(1, cubeState.edgeBindGroup)
+        encoder.draw(cubeState.edgeVertexCount)
+        frame.endPass()
 
         return
     }

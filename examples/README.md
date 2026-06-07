@@ -9,7 +9,7 @@
 - `ksl_triangle`: public Kira Graphics triangle using the existing KSL-generated GLSL directory.
 - `frame_api_triangle`: explicit `beginRenderPass` / `endPass` triangle using inline shader source.
 - `ui_demo`: centered rectangle with two small rectangles standing in for text.
-- `liquid_glass`: dependency-free KSL liquid-glass render with offscreen blur passes. On Windows, use `liquid_glass/run_backend.ps1 opengl`, `directx`, or `vulkan`. Vulkan requires `scoop install glslang vulkan` and the SDK layer registration script.
+- `liquid_glass`: dependency-free KSL liquid-glass render with offscreen blur passes. On Windows, use `liquid_glass/run_backend.ps1 opengl`, `directx`, or `vulkan`. On macOS/Linux, use `liquid_glass/run_backend.sh`; macOS defaults to `metal`. Vulkan requires `glslangValidator` plus a configured Vulkan SDK.
 
 ## Backend Interop
 

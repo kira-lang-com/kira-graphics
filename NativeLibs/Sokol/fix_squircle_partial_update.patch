@@ -1,0 +1,167 @@
+--- a/sokol_impl.c
++++ b/sokol_impl.c
+@@ -559,68 +559,6 @@
+ static double kg_eval_cubic_bezier(double p0, double p1, double p2, double p3, double t) {
+     double u = 1.0 - t;
+     return u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3;
+-}
+-
+-static int kg_ui_build_squircle_points(double x, double y, double w, double h, kg_ui_vertex* points, float r, float g, float b, float a) {
+-    if (w <= 0.0 || h <= 0.0) {
+-        return 0;
+-    }
+-
+-    /*
+-        Apple-style continuous squircle.
+-
+-        The previous implementation used a hard-coded n = 5 Lamé curve and
+-        called finite polygon sampling "infinite resolution". That gives a
+-        decent blob, but it is not the canonical mathematically smooth squircle.
+-
+-        This path is the analytic G-infinity squircle:
+-
+-            ((px - cx) / half_w)^4 + ((py - cy) / half_h)^4 = 1
+-
+-        Because the implicit curve is polynomial for positive half extents, the
+-        boundary is smooth everywhere and its curvature eases continuously across
+-        the whole contour. The parameterization below is derived from:
+-
+-            px = cx + half_w * sign(cos(theta)) * sqrt(abs(cos(theta)))
+-            py = cy + half_h * sign(sin(theta)) * sqrt(abs(sin(theta)))
+-
+-        That is the p = 4 superellipse / true squircle, not an arbitrary n = 5
+-        approximation. The renderer still receives a finite polygon because this
+-        immediate-mode backend draws triangles; the formula itself is exact.
+-    */
+-
+-    const double cx = x + w * 0.5;
+-    const double cy = y + h * 0.5;
+-    const double half_w = w * 0.5;
+-    const double half_h = h * 0.5;
+-
+-    double longest = w > h ? w : h;
+-    int seg_total = (int)ceil(longest * 0.50);
+-    if (seg_total < 96) {
+-        seg_total = 96;
+-    }
+-    if (seg_total > KG_UI_MAX_PATH_POINTS) {
+-        seg_total = KG_UI_MAX_PATH_POINTS;
+-    }
+-
+-    int count = 0;
+-    for (int i = 0; i < seg_total; i += 1) {
+-        const double theta = 2.0 * M_PI * (double)i / (double)seg_total;
+-        const double c = cos(theta);
+-        const double s = sin(theta);
+-
+-        const double sx = c < 0.0 ? -1.0 : 1.0;
+-        const double sy = s < 0.0 ? -1.0 : 1.0;
+-        const double nx = sx * sqrt(fabs(c));
+-        const double ny = sy * sqrt(fabs(s));
+-
+-        const double px = cx + half_w * nx;
+-        const double py = cy + half_h * ny;
+-
+-        points[count++] = (kg_ui_vertex){ kg_ui_ndc_x(px), kg_ui_ndc_y(py), r, g, b, a };
+-    }
+-
+-    return count;
+ }
+ 
+ static void kg_ui_draw_convex_path(const kg_ui_vertex* points, int count, double cx, double cy, float r, float g, float b, float a) {
+@@ -799,6 +737,95 @@
+     }
+ 
+     return count;
++}
++
++static void kg_ui_draw_path_surface(
++    bool squircle,
++    double x, double y, double w, double h,
++    double r, double g, double b, double a,
++    double border_r, double border_g, double border_b, double border_a,
++    double border_width, double radius
++) {
++    if (w <= 0.0 || h <= 0.0) {
++        return;
++    }
++
++    if (a > 0.0 || (border_width > 0.0 && border_a > 0.0)) {
++        kg_live_note_visible_ui_content();
++    }
++
++    kg_ui_vertex points[KG_UI_MAX_PATH_POINTS];
++
++    int count = squircle
++        ? kg_ui_build_squircle_points(
++            x, y, w, h,
++            radius,
++            points,
++            (float)border_r, (float)border_g, (float)border_b, (float)border_a
++        )
++        : kg_ui_build_rounded_rect_points(
++            x, y, w, h,
++            radius,
++            points,
++            (float)border_r, (float)border_g, (float)border_b, (float)border_a
++        );
++
++    if (border_width > 0.0 && border_a > 0.0) {
++        kg_ui_draw_convex_path(
++            points,
++            count,
++            x + w * 0.5,
++            y + h * 0.5,
++            (float)border_r,
++            (float)border_g,
++            (float)border_b,
++            (float)border_a
++        );
++    }
++
++    if (a <= 0.0) {
++        return;
++    }
++
++    double inset = border_width > 0.0 ? border_width : 0.0;
++    double inner_x = x + inset;
++    double inner_y = y + inset;
++    double inner_w = w - inset * 2.0;
++    double inner_h = h - inset * 2.0;
++
++    if (inner_w <= 0.0 || inner_h <= 0.0) {
++        return;
++    }
++
++    double inner_radius = radius - inset;
++    if (inner_radius < 0.0) {
++        inner_radius = 0.0;
++    }
++
++    count = squircle
++        ? kg_ui_build_squircle_points(
++            inner_x, inner_y, inner_w, inner_h,
++            inner_radius,
++            points,
++            (float)r, (float)g, (float)b, (float)a
++        )
++        : kg_ui_build_rounded_rect_points(
++            inner_x, inner_y, inner_w, inner_h,
++            inner_radius,
++            points,
++            (float)r, (float)g, (float)b, (float)a
++        );
++
++    kg_ui_draw_convex_path(
++        points,
++        count,
++        inner_x + inner_w * 0.5,
++        inner_y + inner_h * 0.5,
++        (float)r,
++        (float)g,
++        (float)b,
++        (float)a
++    );
+ }
+ 
+ static void kg_ui_ensure_pipeline(void) {

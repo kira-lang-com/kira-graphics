@@ -180,3 +180,63 @@ function kgMathCos(value: Float): Float;
 
 @FFI.Extern { library: sokol; symbol: kg_math_tan; abi: c; }
 function kgMathTan(value: Float): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_event_frame_count; abi: c; }
+function kgEventFrameCount(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_type; abi: c; }
+function kgEventType(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_key_code; abi: c; }
+function kgEventKeyCode(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_char_code; abi: c; }
+function kgEventCharCode(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_key_repeat; abi: c; }
+function kgEventKeyRepeat(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_modifiers; abi: c; }
+function kgEventModifiers(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_mouse_button; abi: c; }
+function kgEventMouseButton(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_mouse_x; abi: c; }
+function kgEventMouseX(eventPtr: borrow sapp_event_ptr): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_event_mouse_y; abi: c; }
+function kgEventMouseY(eventPtr: borrow sapp_event_ptr): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_event_mouse_dx; abi: c; }
+function kgEventMouseDx(eventPtr: borrow sapp_event_ptr): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_event_mouse_dy; abi: c; }
+function kgEventMouseDy(eventPtr: borrow sapp_event_ptr): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_event_scroll_x; abi: c; }
+function kgEventScrollX(eventPtr: borrow sapp_event_ptr): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_event_scroll_y; abi: c; }
+function kgEventScrollY(eventPtr: borrow sapp_event_ptr): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_event_window_width; abi: c; }
+function kgEventWindowWidth(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_window_height; abi: c; }
+function kgEventWindowHeight(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_framebuffer_width; abi: c; }
+function kgEventFramebufferWidth(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_framebuffer_height; abi: c; }
+function kgEventFramebufferHeight(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_codepoint_utf8; abi: c; }
+function kgCodepointUtf8(codepoint: I64): CString;
+
+@FFI.Extern { library: sokol; symbol: kg_string_append_codepoint; abi: c; }
+function kgStringAppendCodepoint(base: CString, codepoint: I64): CString;
+
+@FFI.Extern { library: sokol; symbol: kg_string_drop_last_scalar; abi: c; }
+function kgStringDropLastScalar(base: CString): CString;

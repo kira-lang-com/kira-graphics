@@ -133,14 +133,12 @@ function main() {
     app.onFrame { frame in
         var triangleState = nativeRecover<TriangleState>(frame.userData)
         let pass = trianglePass()
-        let pipeline = triangleState.pipeline
-        let vertices = triangleState.vertices
 
-        frame.renderPass(pass) { encoder in
-            encoder.setPipeline(pipeline)
-            encoder.setVertexBuffer(vertices)
-            encoder.draw(3)
-        }
+        let encoder = frame.beginRenderPass(pass)
+        encoder.setPipeline(triangleState.pipeline)
+        encoder.setVertexBuffer(triangleState.vertices)
+        encoder.draw(3)
+        frame.endPass()
         return
     }
 

@@ -14,6 +14,9 @@
 #ifndef M_PI_2
 #define M_PI_2 1.57079632679489661923
 #endif
+#ifndef M_SQRT2
+#define M_SQRT2 1.41421356237309504880
+#endif
 #if defined(_WIN32)
 #include <windows.h>
 #elif defined(__APPLE__)
@@ -516,7 +519,7 @@ static float kg_ui_ndc_y(double y) {
 static void kg_ui_draw_vertices(const kg_ui_vertex* vertices, int count);
 static void kg_live_note_visible_ui_content(void);
 
-#define KG_UI_MAX_PATH_POINTS 96
+#define KG_UI_MAX_PATH_POINTS 256
 #define KG_UI_MAX_PATH_VERTICES (KG_UI_MAX_PATH_POINTS * 3)
 
 static int kg_ui_build_rect_points(double x, double y, double w, double h, kg_ui_vertex* points, float r, float g, float b, float a) {
@@ -553,23 +556,9 @@ static int kg_ui_build_rounded_rect_points(double x, double y, double w, double 
     return count;
 }
 
-static int kg_ui_build_squircle_points(double x, double y, double w, double h, kg_ui_vertex* points, float r, float g, float b, float a) {
-    const int segments = 128;
-    const double exponent = 12.0;
-    const double cx = x + w * 0.5;
-    const double cy = y + h * 0.5;
-    const double half_w = w * 0.5;
-    const double half_h = h * 0.5;
-    int count = 0;
-    for (int i = 0; i < segments; i += 1) {
-        double t = -M_PI_2 + ((double)i / (double)segments) * (M_PI * 2.0);
-        double ct = cos(t);
-        double st = sin(t);
-        double px = cx + half_w * copysign(pow(fabs(ct), 2.0 / exponent), ct);
-        double py = cy + half_h * copysign(pow(fabs(st), 2.0 / exponent), st);
-        points[count++] = (kg_ui_vertex){ kg_ui_ndc_x(px), kg_ui_ndc_y(py), r, g, b, a };
-    }
-    return count;
+static double kg_eval_cubic_bezier(double p0, double p1, double p2, double p3, double t) {
+    double u = 1.0 - t;
+    return u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3;
 }
 
 static void kg_ui_draw_convex_path(const kg_ui_vertex* points, int count, double cx, double cy, float r, float g, float b, float a) {
@@ -620,9 +609,134 @@ static bool kg_ui_glyph_rows(char ch, uint8_t rows[7]) {
         case 'Y': { uint8_t v[7] = { 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04 }; memcpy(rows, v, 7); return true; }
         case 'Z': { uint8_t v[7] = { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F }; memcpy(rows, v, 7); return true; }
         case '-': { uint8_t v[7] = { 0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00 }; memcpy(rows, v, 7); return true; }
+        case '0': { uint8_t v[7] = { 0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
+        case '1': { uint8_t v[7] = { 0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E }; memcpy(rows, v, 7); return true; }
+        case '2': { uint8_t v[7] = { 0x0E, 0x02, 0x02, 0x04, 0x08, 0x10, 0x1F }; memcpy(rows, v, 7); return true; }
+        case '3': { uint8_t v[7] = { 0x0E, 0x02, 0x02, 0x04, 0x02, 0x02, 0x0E }; memcpy(rows, v, 7); return true; }
+        case '4': { uint8_t v[7] = { 0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02 }; memcpy(rows, v, 7); return true; }
+        case '5': { uint8_t v[7] = { 0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
+        case '6': { uint8_t v[7] = { 0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
+        case '7': { uint8_t v[7] = { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08 }; memcpy(rows, v, 7); return true; }
+        case '8': { uint8_t v[7] = { 0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
+        case '9': { uint8_t v[7] = { 0x0E, 0x11, 0x11, 0x1E, 0x01, 0x02, 0x0C }; memcpy(rows, v, 7); return true; }
+        case '.': { uint8_t v[7] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C }; memcpy(rows, v, 7); return true; }
+        case ',': { uint8_t v[7] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x08 }; memcpy(rows, v, 7); return true; }
+        case '!': { uint8_t v[7] = { 0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04 }; memcpy(rows, v, 7); return true; }
+        case '?': { uint8_t v[7] = { 0x0E, 0x11, 0x01, 0x06, 0x04, 0x00, 0x04 }; memcpy(rows, v, 7); return true; }
+        case ':': { uint8_t v[7] = { 0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00 }; memcpy(rows, v, 7); return true; }
+        case ';': { uint8_t v[7] = { 0x00, 0x04, 0x04, 0x00, 0x04, 0x04, 0x08 }; memcpy(rows, v, 7); return true; }
+        case '\'': { uint8_t v[7] = { 0x04, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00 }; memcpy(rows, v, 7); return true; }
+        case '"': { uint8_t v[7] = { 0x0A, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00 }; memcpy(rows, v, 7); return true; }
+        case '(': { uint8_t v[7] = { 0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02 }; memcpy(rows, v, 7); return true; }
+        case ')': { uint8_t v[7] = { 0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08 }; memcpy(rows, v, 7); return true; }
+        case '/': { uint8_t v[7] = { 0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10 }; memcpy(rows, v, 7); return true; }
+        case '\\':{ uint8_t v[7] = { 0x10, 0x08, 0x08, 0x04, 0x02, 0x02, 0x01 }; memcpy(rows, v, 7); return true; }
+        case '+': { uint8_t v[7] = { 0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00 }; memcpy(rows, v, 7); return true; }
+        case '=': { uint8_t v[7] = { 0x00, 0x00, 0x1F, 0x00, 0x1F, 0x00, 0x00 }; memcpy(rows, v, 7); return true; }
+        case '_': { uint8_t v[7] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F }; memcpy(rows, v, 7); return true; }
+        case '|': { uint8_t v[7] = { 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 }; memcpy(rows, v, 7); return true; }
+        case '#': { uint8_t v[7] = { 0x0A, 0x0A, 0x1F, 0x0A, 0x1F, 0x0A, 0x0A }; memcpy(rows, v, 7); return true; }
+        case '*': { uint8_t v[7] = { 0x00, 0x04, 0x15, 0x0E, 0x15, 0x04, 0x00 }; memcpy(rows, v, 7); return true; }
+        case '%': { uint8_t v[7] = { 0x11, 0x02, 0x04, 0x08, 0x11, 0x00, 0x00 }; memcpy(rows, v, 7); return true; }
         case ' ': memset(rows, 0, 7); return true;
         default: memset(rows, 0, 7); return false;
     }
+}
+
+static int kg_ui_build_squircle_points(
+    double x, double y, double w, double h,
+    double radius,
+    kg_ui_vertex* points,
+    float r, float g, float b, float a
+) {
+    if (w <= 0.0 || h <= 0.0) {
+        return 0;
+    }
+
+    double clamped = radius;
+    if (clamped < 0.0) clamped = 0.0;
+    if (clamped > w * 0.5) clamped = w * 0.5;
+    if (clamped > h * 0.5) clamped = h * 0.5;
+
+    if (clamped < 1.0) {
+        return kg_ui_build_rect_points(x, y, w, h, points, r, g, b, a);
+    }
+
+    /*
+        Radius-aware continuous squircle corner.
+
+        This preserves the normal rounded-rect contract:
+        - radius controls the corner size
+        - straight edges remain straight
+        - only the corner arc is replaced with a smooth p = 4 squircle curve
+
+        Corner equation:
+
+            |qx / radius|^4 + |qy / radius|^4 = 1
+
+        Parameterization:
+
+            qx = sign(cos(theta)) * radius * sqrt(abs(cos(theta)))
+            qy = sign(sin(theta)) * radius * sqrt(abs(sin(theta)))
+
+        The formula is exact. The returned points are just the tessellated
+        polygon used by this immediate-mode triangle renderer.
+    */
+
+    int segments = (int)ceil(clamped * 0.35);
+    if (segments < 18) {
+        segments = 18;
+    }
+    if (segments > 63) {
+        segments = 63;
+    }
+
+    const double starts[4] = { -M_PI_2, 0.0, M_PI_2, M_PI };
+    const double centers_x[4] = {
+        x + w - clamped,
+        x + w - clamped,
+        x + clamped,
+        x + clamped
+    };
+    const double centers_y[4] = {
+        y + clamped,
+        y + h - clamped,
+        y + h - clamped,
+        y + clamped
+    };
+
+    int count = 0;
+
+    for (int corner = 0; corner < 4; corner += 1) {
+        for (int step = 0; step <= segments; step += 1) {
+            if (count >= KG_UI_MAX_PATH_POINTS) {
+                return count;
+            }
+
+            const double t = (double)step / (double)segments;
+            const double theta = starts[corner] + t * M_PI_2;
+
+            const double c = cos(theta);
+            const double s = sin(theta);
+
+            const double sx = c < 0.0 ? -1.0 : 1.0;
+            const double sy = s < 0.0 ? -1.0 : 1.0;
+
+            const double qx = sx * clamped * sqrt(fabs(c));
+            const double qy = sy * clamped * sqrt(fabs(s));
+
+            const double px = centers_x[corner] + qx;
+            const double py = centers_y[corner] + qy;
+
+            points[count++] = (kg_ui_vertex){
+                kg_ui_ndc_x(px),
+                kg_ui_ndc_y(py),
+                r, g, b, a
+            };
+        }
+    }
+
+    return count;
 }
 
 static void kg_ui_draw_path_surface(
@@ -635,17 +749,38 @@ static void kg_ui_draw_path_surface(
     if (w <= 0.0 || h <= 0.0) {
         return;
     }
+
     if (a > 0.0 || (border_width > 0.0 && border_a > 0.0)) {
         kg_live_note_visible_ui_content();
     }
 
     kg_ui_vertex points[KG_UI_MAX_PATH_POINTS];
+
     int count = squircle
-        ? kg_ui_build_squircle_points(x, y, w, h, points, (float)border_r, (float)border_g, (float)border_b, (float)border_a)
-        : kg_ui_build_rounded_rect_points(x, y, w, h, radius, points, (float)border_r, (float)border_g, (float)border_b, (float)border_a);
+        ? kg_ui_build_squircle_points(
+            x, y, w, h,
+            radius,
+            points,
+            (float)border_r, (float)border_g, (float)border_b, (float)border_a
+        )
+        : kg_ui_build_rounded_rect_points(
+            x, y, w, h,
+            radius,
+            points,
+            (float)border_r, (float)border_g, (float)border_b, (float)border_a
+        );
 
     if (border_width > 0.0 && border_a > 0.0) {
-        kg_ui_draw_convex_path(points, count, x + w * 0.5, y + h * 0.5, (float)border_r, (float)border_g, (float)border_b, (float)border_a);
+        kg_ui_draw_convex_path(
+            points,
+            count,
+            x + w * 0.5,
+            y + h * 0.5,
+            (float)border_r,
+            (float)border_g,
+            (float)border_b,
+            (float)border_a
+        );
     }
 
     if (a <= 0.0) {
@@ -657,16 +792,40 @@ static void kg_ui_draw_path_surface(
     double inner_y = y + inset;
     double inner_w = w - inset * 2.0;
     double inner_h = h - inset * 2.0;
+
     if (inner_w <= 0.0 || inner_h <= 0.0) {
         return;
     }
 
     double inner_radius = radius - inset;
-    if (inner_radius < 0.0) inner_radius = 0.0;
+    if (inner_radius < 0.0) {
+        inner_radius = 0.0;
+    }
+
     count = squircle
-        ? kg_ui_build_squircle_points(inner_x, inner_y, inner_w, inner_h, points, (float)r, (float)g, (float)b, (float)a)
-        : kg_ui_build_rounded_rect_points(inner_x, inner_y, inner_w, inner_h, inner_radius, points, (float)r, (float)g, (float)b, (float)a);
-    kg_ui_draw_convex_path(points, count, inner_x + inner_w * 0.5, inner_y + inner_h * 0.5, (float)r, (float)g, (float)b, (float)a);
+        ? kg_ui_build_squircle_points(
+            inner_x, inner_y, inner_w, inner_h,
+            inner_radius,
+            points,
+            (float)r, (float)g, (float)b, (float)a
+        )
+        : kg_ui_build_rounded_rect_points(
+            inner_x, inner_y, inner_w, inner_h,
+            inner_radius,
+            points,
+            (float)r, (float)g, (float)b, (float)a
+        );
+
+    kg_ui_draw_convex_path(
+        points,
+        count,
+        inner_x + inner_w * 0.5,
+        inner_y + inner_h * 0.5,
+        (float)r,
+        (float)g,
+        (float)b,
+        (float)a
+    );
 }
 
 static void kg_ui_ensure_pipeline(void) {
@@ -838,6 +997,12 @@ void kg_ui_draw_surface(double x, double y, double w, double h, double r, double
 }
 
 void kg_ui_draw_squircle_surface(double x, double y, double w, double h, double r, double g, double b, double a, double border_r, double border_g, double border_b, double border_a, double border_width, double radius) {
+    static bool printed = false;
+    if (!printed) {
+        fprintf(stderr, "KiraGraphics: SQUIRCLE SURFACE CALLED w=%f h=%f radius=%f\n", w, h, radius);
+        printed = true;
+    }
+
     kg_ui_draw_path_surface(true, x, y, w, h, r, g, b, a, border_r, border_g, border_b, border_a, border_width, radius);
 }
 
@@ -855,13 +1020,14 @@ void kg_ui_draw_text(const char* text, double x, double y, double w, double h, d
         kg_live_note_visible_ui_content();
     }
     int len = (int)strlen(text);
-    if (len > 64) {
-        len = 64;
+    if (len > 256) {
+        len = 256;
     }
     double glyph_w = size * 0.48;
     double glyph_h = size * 0.74;
     double gap = size * 0.18;
-    double cursor = x;
+    double cursor = round(x);
+    double top = round(y + (h - glyph_h) * 0.5);
     kg_ui_vertex vertices[16384];
     int vertex_count = 0;
     for (int i = 0; i < len; i += 1) {
@@ -870,7 +1036,7 @@ void kg_ui_draw_text(const char* text, double x, double y, double w, double h, d
             cursor += glyph_w + gap;
             continue;
         }
-        if (cursor + glyph_w > x + w) {
+        if (cursor > x + w) {
             break;
         }
         uint8_t rows[7];
@@ -880,7 +1046,6 @@ void kg_ui_draw_text(const char* text, double x, double y, double w, double h, d
         }
         double pixel_w = glyph_w / 5.0;
         double pixel_h = glyph_h / 7.0;
-        double top = y + (h - glyph_h) * 0.5;
         for (int row = 0; row < 7; row += 1) {
             for (int col = 0; col < 5; col += 1) {
                 if ((rows[row] & (1 << (4 - col))) == 0) continue;
@@ -890,8 +1055,8 @@ void kg_ui_draw_text(const char* text, double x, double y, double w, double h, d
                 }
                 double px = cursor + col * pixel_w;
                 double py = top + row * pixel_h;
-                double pw = pixel_w * 0.82;
-                double ph = pixel_h * 0.82;
+                double pw = pixel_w * 0.94;
+                double ph = pixel_h * 0.94;
                 vertices[vertex_count++] = (kg_ui_vertex){ kg_ui_ndc_x(px), kg_ui_ndc_y(py), (float)r, (float)g, (float)b, (float)a };
                 vertices[vertex_count++] = (kg_ui_vertex){ kg_ui_ndc_x(px + pw), kg_ui_ndc_y(py), (float)r, (float)g, (float)b, (float)a };
                 vertices[vertex_count++] = (kg_ui_vertex){ kg_ui_ndc_x(px + pw), kg_ui_ndc_y(py + ph), (float)r, (float)g, (float)b, (float)a };
@@ -3039,4 +3204,159 @@ void kg_maybe_request_quit_after_frame(int64_t frame_index) {
     if (limit > 0 && frame_index >= limit) {
         sapp_request_quit();
     }
+}
+
+int64_t kg_event_frame_count(const sapp_event* event) {
+    return event ? (int64_t)event->frame_count : 0;
+}
+
+int64_t kg_event_type(const sapp_event* event) {
+    return event ? (int64_t)event->type : 0;
+}
+
+int64_t kg_event_key_code(const sapp_event* event) {
+    return event ? (int64_t)event->key_code : 0;
+}
+
+int64_t kg_event_char_code(const sapp_event* event) {
+    return event ? (int64_t)event->char_code : 0;
+}
+
+int64_t kg_event_key_repeat(const sapp_event* event) {
+    return event ? (int64_t)(event->key_repeat ? 1 : 0) : 0;
+}
+
+int64_t kg_event_modifiers(const sapp_event* event) {
+    return event ? (int64_t)event->modifiers : 0;
+}
+
+int64_t kg_event_mouse_button(const sapp_event* event) {
+    return event ? (int64_t)event->mouse_button : 256;
+}
+
+double kg_event_mouse_x(const sapp_event* event) {
+    return event ? (double)event->mouse_x : 0.0;
+}
+
+double kg_event_mouse_y(const sapp_event* event) {
+    return event ? (double)event->mouse_y : 0.0;
+}
+
+double kg_event_mouse_dx(const sapp_event* event) {
+    return event ? (double)event->mouse_dx : 0.0;
+}
+
+double kg_event_mouse_dy(const sapp_event* event) {
+    return event ? (double)event->mouse_dy : 0.0;
+}
+
+double kg_event_scroll_x(const sapp_event* event) {
+    return event ? (double)event->scroll_x : 0.0;
+}
+
+double kg_event_scroll_y(const sapp_event* event) {
+    return event ? (double)event->scroll_y : 0.0;
+}
+
+int64_t kg_event_window_width(const sapp_event* event) {
+    return event ? (int64_t)event->window_width : 0;
+}
+
+int64_t kg_event_window_height(const sapp_event* event) {
+    return event ? (int64_t)event->window_height : 0;
+}
+
+int64_t kg_event_framebuffer_width(const sapp_event* event) {
+    return event ? (int64_t)event->framebuffer_width : 0;
+}
+
+int64_t kg_event_framebuffer_height(const sapp_event* event) {
+    return event ? (int64_t)event->framebuffer_height : 0;
+}
+
+static void kg_encode_utf8_from_codepoint(int64_t codepoint, char out[8]) {
+    memset(out, 0, 8);
+    if (codepoint < 0) {
+        return;
+    }
+    if (codepoint <= 0x7F) {
+        out[0] = (char)codepoint;
+        out[1] = '\0';
+        return;
+    }
+    if (codepoint <= 0x7FF) {
+        out[0] = (char)(0xC0 | ((codepoint >> 6) & 0x1F));
+        out[1] = (char)(0x80 | (codepoint & 0x3F));
+        out[2] = '\0';
+        return;
+    }
+    if (codepoint <= 0xFFFF) {
+        out[0] = (char)(0xE0 | ((codepoint >> 12) & 0x0F));
+        out[1] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (codepoint & 0x3F));
+        out[3] = '\0';
+        return;
+    }
+    if (codepoint <= 0x10FFFF) {
+        out[0] = (char)(0xF0 | ((codepoint >> 18) & 0x07));
+        out[1] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
+        out[2] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+        out[3] = (char)(0x80 | (codepoint & 0x3F));
+        out[4] = '\0';
+    }
+}
+
+const char* kg_codepoint_utf8(int64_t codepoint) {
+    static char buffer[8];
+    kg_encode_utf8_from_codepoint(codepoint, buffer);
+    return buffer;
+}
+
+const char* kg_string_append_codepoint(const char* base, int64_t codepoint) {
+    static char buffer[4096];
+    char encoded[8];
+    kg_encode_utf8_from_codepoint(codepoint, encoded);
+    size_t base_len = base ? strlen(base) : 0;
+    size_t encoded_len = strlen(encoded);
+    if (base_len >= sizeof(buffer)) {
+        base_len = sizeof(buffer) - 1;
+    }
+    if (encoded_len > sizeof(buffer) - 1 - base_len) {
+        encoded_len = sizeof(buffer) - 1 - base_len;
+    }
+    if (base_len > 0 && base) {
+        memcpy(buffer, base, base_len);
+    }
+    if (encoded_len > 0) {
+        memcpy(buffer + base_len, encoded, encoded_len);
+    }
+    buffer[base_len + encoded_len] = '\0';
+    return buffer;
+}
+
+const char* kg_string_drop_last_scalar(const char* base) {
+    static char buffer[4096];
+    if (base == NULL) {
+        buffer[0] = '\0';
+        return buffer;
+    }
+    size_t len = strlen(base);
+    if (len >= sizeof(buffer)) {
+        len = sizeof(buffer) - 1;
+    }
+    memcpy(buffer, base, len);
+    buffer[len] = '\0';
+    if (len == 0) {
+        return buffer;
+    }
+    size_t index = len;
+    while (index > 0) {
+        index -= 1;
+        if ((buffer[index] & 0xC0) != 0x80) {
+            buffer[index] = '\0';
+            return buffer;
+        }
+    }
+    buffer[0] = '\0';
+    return buffer;
 }

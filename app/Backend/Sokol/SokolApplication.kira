@@ -4,12 +4,13 @@ function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         init_userdata_cb: kiraGraphicsSokolInit
         frame_userdata_cb: kiraGraphicsSokolFrame
         cleanup_userdata_cb: kiraGraphicsSokolCleanup
+        event_userdata_cb: kiraGraphicsSokolEvent
         user_data: runtimeUserData
         width: app.width
         height: app.height
         sample_count: app.sampleCount
         window_title: app.title
-        high_dpi: true
+        high_dpi: false
         logger: sapp_logger {
             func: kiraGraphicsSokolLog
         }
@@ -37,6 +38,16 @@ function kiraGraphicsSokolInit(runtimeUserData: RawPtr): Void {
         userData: state.userData
     }
     onInit(move graphics)
+    return
+}
+
+@Native
+function kiraGraphicsSokolEvent(eventPtr: sapp_event_ptr, runtimeUserData: RawPtr): Void {
+    var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    let app = state.app
+    let onEvent: (borrow GraphicsEvent) -> Void = app.eventHandler
+    let event = graphicsEventFromSapp(eventPtr)
+    onEvent(event)
     return
 }
 
