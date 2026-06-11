@@ -3,8 +3,11 @@ zig-out/
 .kira/
 .kira-build/
 
-*generated/
+**/generated/
 kira.lock
+
+*.ke
+*.key
 
 *.kbc
 *.khm

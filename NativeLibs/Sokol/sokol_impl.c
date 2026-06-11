@@ -931,12 +931,25 @@ static void kg_ui_ensure_pipeline(void) {
     }
 }
 
-static void kg_ui_draw_vertices(const kg_ui_vertex* vertices, int count) {
+// UI draw batching: kg_ui_draw_* calls queue triangles into a frame-local CPU
+// batch, and the batch is flushed as ONE buffer append + ONE draw call at
+// state-change boundaries (clip rect changes, non-UI pipeline draws, pass
+// end). The previous code issued sg_append_buffer + sg_apply_pipeline +
+// sg_apply_bindings + sg_draw PER PRIMITIVE — hundreds of tiny appends and
+// redundant state changes per UI frame, which capped complex frames far below
+// display refresh.
+#define KG_UI_BATCH_CAPACITY 65536
+static kg_ui_vertex kg_ui_batch[KG_UI_BATCH_CAPACITY];
+static int kg_ui_batch_count = 0;
+
+static void kg_ui_flush_batch(void) {
+    const int count = kg_ui_batch_count;
+    kg_ui_batch_count = 0;
     if (count <= 0) {
         return;
     }
     kg_ui_ensure_pipeline();
-    sg_range data = { vertices, (size_t)count * sizeof(kg_ui_vertex) };
+    sg_range data = { kg_ui_batch, (size_t)count * sizeof(kg_ui_vertex) };
     int offset = sg_append_buffer(kg_ui_vertex_buffer, &data);
     if (offset < 0) return;
     sg_apply_pipeline(kg_ui_pipeline);
@@ -945,6 +958,22 @@ static void kg_ui_draw_vertices(const kg_ui_vertex* vertices, int count) {
     bindings.vertex_buffer_offsets[0] = offset;
     sg_apply_bindings(&bindings);
     sg_draw(0, count, 1);
+}
+
+static void kg_ui_draw_vertices(const kg_ui_vertex* vertices, int count) {
+    if (count <= 0) {
+        return;
+    }
+    while (count > KG_UI_BATCH_CAPACITY) {
+        kg_ui_draw_vertices(vertices, KG_UI_BATCH_CAPACITY);
+        vertices += KG_UI_BATCH_CAPACITY;
+        count -= KG_UI_BATCH_CAPACITY;
+    }
+    if (kg_ui_batch_count + count > KG_UI_BATCH_CAPACITY) {
+        kg_ui_flush_batch();
+    }
+    memcpy(kg_ui_batch + kg_ui_batch_count, vertices, (size_t)count * sizeof(kg_ui_vertex));
+    kg_ui_batch_count += count;
 }
 
 static kg_ui_clip_rect kg_ui_intersect_clip(kg_ui_clip_rect a, kg_ui_clip_rect b) {
@@ -965,6 +994,8 @@ void kg_ui_push_clip(double x, double y, double w, double h, double radius) {
     if (kg_ui_clip_depth >= 32) {
         return;
     }
+    // Queued vertices belong to the previous scissor rect.
+    kg_ui_flush_batch();
     kg_ui_clip_rect clip = { x, y, w, h };
     if (kg_ui_clip_depth > 0) {
         clip = kg_ui_intersect_clip(kg_ui_clip_stack[kg_ui_clip_depth - 1], clip);
@@ -975,6 +1006,8 @@ void kg_ui_push_clip(double x, double y, double w, double h, double radius) {
 }
 
 void kg_ui_pop_clip(void) {
+    // Queued vertices belong to the previous scissor rect.
+    kg_ui_flush_batch();
     if (kg_ui_clip_depth <= 0) {
         sg_apply_scissor_rect(0, 0, kg_current_pass_width, kg_current_pass_height, true);
         return;
@@ -1028,7 +1061,9 @@ void kg_ui_draw_text(const char* text, double x, double y, double w, double h, d
     double gap = size * 0.18;
     double cursor = round(x);
     double top = round(y + (h - glyph_h) * 0.5);
-    kg_ui_vertex vertices[16384];
+    // Per-glyph scratch (max 5x7 pixels x 6 vertices); the batch in
+    // kg_ui_draw_vertices accumulates across glyphs and draw calls.
+    kg_ui_vertex vertices[210];
     int vertex_count = 0;
     for (int i = 0; i < len; i += 1) {
         char ch = (char)toupper((unsigned char)text[i]);
@@ -1049,10 +1084,6 @@ void kg_ui_draw_text(const char* text, double x, double y, double w, double h, d
         for (int row = 0; row < 7; row += 1) {
             for (int col = 0; col < 5; col += 1) {
                 if ((rows[row] & (1 << (4 - col))) == 0) continue;
-                if (vertex_count + 6 > 16384) {
-                    kg_ui_draw_vertices(vertices, vertex_count);
-                    vertex_count = 0;
-                }
                 double px = cursor + col * pixel_w;
                 double py = top + row * pixel_h;
                 double pw = pixel_w * 0.94;
@@ -1065,10 +1096,9 @@ void kg_ui_draw_text(const char* text, double x, double y, double w, double h, d
                 vertices[vertex_count++] = (kg_ui_vertex){ kg_ui_ndc_x(px), kg_ui_ndc_y(py + ph), (float)r, (float)g, (float)b, (float)a };
             }
         }
-        cursor += glyph_w + gap;
-    }
-    if (vertex_count > 0) {
         kg_ui_draw_vertices(vertices, vertex_count);
+        vertex_count = 0;
+        cursor += glyph_w + gap;
     }
 }
 
@@ -2769,6 +2799,8 @@ uint32_t kg_begin_render_pass(
     kg_current_pass_active = false;
     kg_current_pass_width = 0;
     kg_current_pass_height = 0;
+    // Stale UI vertices from a pass that never flushed must not leak into this pass.
+    kg_ui_batch_count = 0;
 
     sg_pass pass = {0};
     pass.label = label;
@@ -2906,6 +2938,8 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
     int64_t index_count,
     int64_t instance_count
 ) {
+    // UI batch vertices must hit the GPU before a foreign pipeline draws.
+    kg_ui_flush_batch();
     if (!kg_current_pass_active || !_sg.cur_pass.in_pass || !_sg.cur_pass.valid) {
         printf("Kira Graphics: draw skipped because no render pass is currently active\n");
         return 0;
@@ -3072,14 +3106,45 @@ void kg_log_submit_state(
     (void)instance_count;
 }
 
+// Frame-rate telemetry (KIRA_GRAPHICS_LOG_FPS=1): reports committed frames per
+// wall second so frame pacing regressions are measurable instead of eyeballed.
+static void kg_maybe_log_fps(void) {
+    static int enabled = -1;
+    if (enabled < 0) {
+        const char* flag = getenv("KIRA_GRAPHICS_LOG_FPS");
+        enabled = (flag != NULL && flag[0] != '\0' && flag[0] != '0') ? 1 : 0;
+    }
+    if (!enabled) {
+        return;
+    }
+    static uint64_t window_start_ns = 0;
+    static int frames = 0;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    const uint64_t now_ns = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+    if (window_start_ns == 0) {
+        window_start_ns = now_ns;
+    }
+    frames += 1;
+    const uint64_t elapsed_ns = now_ns - window_start_ns;
+    if (elapsed_ns >= 1000000000ull) {
+        const double fps = (double)frames * 1e9 / (double)elapsed_ns;
+        fprintf(stderr, "KiraGraphics: fps=%.1f frames=%d\n", fps, frames);
+        window_start_ns = now_ns;
+        frames = 0;
+    }
+}
+
 void kg_end_pass_and_commit(void) {
     if (!_sg.cur_pass.in_pass) {
         printf("Kira Graphics: end pass skipped because no render pass is currently active\n");
+        kg_ui_batch_count = 0;
         kg_current_pass_active = false;
         kg_current_pass_width = 0;
         kg_current_pass_height = 0;
         return;
     }
+    kg_ui_flush_batch();
     sg_end_pass();
     sg_commit();
     if (!kg_live_frame_submitted_emitted) {
@@ -3105,6 +3170,7 @@ void kg_end_pass_and_commit(void) {
         }
     }
     kg_ui_draw_commands_submitted_this_frame = false;
+    kg_maybe_log_fps();
     kg_current_pass_active = false;
     kg_current_pass_width = 0;
     kg_current_pass_height = 0;
