@@ -1102,6 +1102,78 @@ void kg_ui_draw_text(const char* text, double x, double y, double w, double h, d
     }
 }
 
+// Blit an 8-bit coverage bitmap (e.g. a FreeType-rasterized glyph) into the UI
+// batch as anti-aliased alpha-modulated quads. (x, y) is the top-left of the
+// bitmap in pass pixels; `coverage` is width*rows bytes with row stride `pitch`.
+// Each covered pixel becomes a 1px quad whose alpha is the coverage scaled by
+// the requested color alpha, so it composites through the existing immediate-2D
+// alpha blend exactly like the prior bitmap font, but with real glyph shapes.
+// This reuses the solid-color pipeline; a texture atlas is a later optimization.
+void kg_ui_blit_coverage(double x, double y, int width, int rows, int pitch,
+                         const unsigned char* coverage,
+                         double r, double g, double b, double a) {
+    if (coverage == NULL || width <= 0 || rows <= 0 || a <= 0.0) {
+        return;
+    }
+    // Row stride must cover the full width; a short or non-positive pitch (or a
+    // negative one cast to size_t) would index out of bounds below.
+    if (pitch < width) {
+        return;
+    }
+    kg_live_note_visible_ui_content();
+
+    const float cr = (float)r;
+    const float cg = (float)g;
+    const float cb = (float)b;
+    const double left = round(x);
+    const double top = round(y);
+
+    kg_ui_vertex vertices[1536]; // flushed when full
+    int vertex_count = 0;
+    const int capacity = (int)(sizeof(vertices) / sizeof(vertices[0]));
+
+    for (int ry = 0; ry < rows; ry += 1) {
+        const unsigned char* row = coverage + (size_t)ry * (size_t)pitch;
+        int cx = 0;
+        while (cx < width) {
+            unsigned char cov = row[cx];
+            if (cov < 8) {
+                cx += 1; // skip ~transparent pixels
+                continue;
+            }
+            // Merge the horizontal run of pixels sharing this coverage into a
+            // single quad. Glyph interiors are long runs of full coverage, so
+            // this cuts vertex traffic sharply with identical output.
+            int start = cx;
+            do {
+                cx += 1;
+            } while (cx < width && row[cx] == cov);
+            int run = cx - start;
+
+            float alpha = (float)(a * ((double)cov / 255.0));
+            double px = left + (double)start;
+            double py = top + (double)ry;
+            float x0 = kg_ui_ndc_x(px);
+            float y0 = kg_ui_ndc_y(py);
+            float x1 = kg_ui_ndc_x(px + (double)run);
+            float y1 = kg_ui_ndc_y(py + 1.0);
+            vertices[vertex_count++] = (kg_ui_vertex){ x0, y0, cr, cg, cb, alpha };
+            vertices[vertex_count++] = (kg_ui_vertex){ x1, y0, cr, cg, cb, alpha };
+            vertices[vertex_count++] = (kg_ui_vertex){ x1, y1, cr, cg, cb, alpha };
+            vertices[vertex_count++] = (kg_ui_vertex){ x0, y0, cr, cg, cb, alpha };
+            vertices[vertex_count++] = (kg_ui_vertex){ x1, y1, cr, cg, cb, alpha };
+            vertices[vertex_count++] = (kg_ui_vertex){ x0, y1, cr, cg, cb, alpha };
+            if (vertex_count + 6 > capacity) {
+                kg_ui_draw_vertices(vertices, vertex_count);
+                vertex_count = 0;
+            }
+        }
+    }
+    if (vertex_count > 0) {
+        kg_ui_draw_vertices(vertices, vertex_count);
+    }
+}
+
 static void kg_ensure_ui_demo_vertex_buffer(void) {
     if (kg_ui_demo_vertex_buffer.id != 0) {
         return;
