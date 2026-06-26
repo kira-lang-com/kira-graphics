@@ -10,7 +10,7 @@ defines = ["SOKOL_NO_ENTRY"]
 
 [autobinding]
 module = "sokol"
-output = "../app/sokol.kira"
+output = "../bindings/sokol/sokol.kira"
 headers = ["Sokol/sokol_app.h", "Sokol/sokol_gfx.h", "Sokol/sokol_glue.h"]
 
 [bindings]

@@ -1,0 +1,27 @@
+[library]
+name = "vulkan"
+link_mode = "dynamic"
+abi = "c"
+
+[headers]
+entrypoint = "${VULKAN_SDK}/Include/vulkan/vulkan.h"
+include_dirs = ["${VULKAN_SDK}/Include"]
+defines = ["VK_USE_PLATFORM_WIN32_KHR"]
+
+[autobinding]
+module = "vulkan"
+output = "../bindings/vulkan/vulkan.kira"
+headers = ["${VULKAN_SDK}/Include/vulkan/vulkan.h", "${VULKAN_SDK}/Include/vulkan/vulkan_core.h", "${VULKAN_SDK}/Include/vulkan/vulkan_win32.h"]
+
+[bindings]
+profile = "vulkan"
+mode = "all_public"
+
+[target.x86_64-windows-msvc]
+dynamic_lib = ""
+
+[target.x86_64-linux-gnu]
+dynamic_lib = ""
+
+[target.aarch64-macos-none]
+dynamic_lib = ""

@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#if !defined(_WIN32)
+#include <time.h>
+#endif
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -58,6 +61,24 @@
 
 void kira_live_emit_first_frame(void);
 void kira_live_emit_log_line(const char* line);
+
+static uint64_t kg_monotonic_now_ns(void) {
+#if defined(_WIN32)
+    static LARGE_INTEGER frequency;
+    static int frequency_initialized = 0;
+    if (!frequency_initialized) {
+        QueryPerformanceFrequency(&frequency);
+        frequency_initialized = 1;
+    }
+    LARGE_INTEGER counter;
+    QueryPerformanceCounter(&counter);
+    return (uint64_t)((double)counter.QuadPart * 1000000000.0 / (double)frequency.QuadPart);
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+#endif
+}
 
 void kg_sapp_log(const char* tag, uint32_t level, uint32_t item_id, const char* message, uint32_t line_nr, const char* filename, void* user_data) {
     (void)item_id;
@@ -539,13 +560,23 @@ static int kg_ui_build_rounded_rect_points(double x, double y, double w, double 
         return kg_ui_build_rect_points(x, y, w, h, points, r, g, b, a);
     }
 
-    const int segments = 8;
+    int segments = (int)ceil(clamped * 0.35);
+    if (segments < 18) {
+        segments = 18;
+    }
+    if (segments > 63) {
+        segments = 63;
+    }
+
     const double starts[4] = { -M_PI_2, 0.0, M_PI_2, M_PI };
     const double centers_x[4] = { x + w - clamped, x + w - clamped, x + clamped, x + clamped };
     const double centers_y[4] = { y + clamped, y + h - clamped, y + h - clamped, y + clamped };
     int count = 0;
     for (int corner = 0; corner < 4; corner += 1) {
         for (int step = 0; step <= segments; step += 1) {
+            if (count >= KG_UI_MAX_PATH_POINTS) {
+                return count;
+            }
             if (corner > 0 && step == 0) continue;
             double angle = starts[corner] + ((double)step / (double)segments) * M_PI_2;
             double px = centers_x[corner] + cos(angle) * clamped;
@@ -3191,9 +3222,7 @@ static void kg_maybe_log_fps(void) {
     }
     static uint64_t window_start_ns = 0;
     static int frames = 0;
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    const uint64_t now_ns = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+    const uint64_t now_ns = kg_monotonic_now_ns();
     if (window_start_ns == 0) {
         window_start_ns = now_ns;
     }
@@ -3388,6 +3417,24 @@ double kg_event_mouse_dy(const sapp_event* event) {
     return event ? (double)event->mouse_dy : 0.0;
 }
 
+int64_t kg_event_touch_count(const sapp_event* event) {
+    return event ? (int64_t)event->num_touches : 0;
+}
+
+double kg_event_touch_x(const sapp_event* event, int64_t index) {
+    if (event == NULL || index < 0 || index >= (int64_t)event->num_touches) {
+        return 0.0;
+    }
+    return (double)event->touches[index].pos_x;
+}
+
+double kg_event_touch_y(const sapp_event* event, int64_t index) {
+    if (event == NULL || index < 0 || index >= (int64_t)event->num_touches) {
+        return 0.0;
+    }
+    return (double)event->touches[index].pos_y;
+}
+
 double kg_event_scroll_x(const sapp_event* event) {
     return event ? (double)event->scroll_x : 0.0;
 }
@@ -3469,6 +3516,26 @@ const char* kg_string_append_codepoint(const char* base, int64_t codepoint) {
         memcpy(buffer + base_len, encoded, encoded_len);
     }
     buffer[base_len + encoded_len] = '\0';
+    return buffer;
+}
+
+const char* kg_string_concat(const char* a, const char* b) {
+    static char buffer[4096];
+    size_t a_len = a ? strlen(a) : 0;
+    size_t b_len = b ? strlen(b) : 0;
+    if (a_len >= sizeof(buffer)) {
+        a_len = sizeof(buffer) - 1;
+    }
+    if (b_len > sizeof(buffer) - 1 - a_len) {
+        b_len = sizeof(buffer) - 1 - a_len;
+    }
+    if (a_len > 0 && a) {
+        memcpy(buffer, a, a_len);
+    }
+    if (b_len > 0 && b) {
+        memcpy(buffer + a_len, b, b_len);
+    }
+    buffer[a_len + b_len] = '\0';
     return buffer;
 }
 

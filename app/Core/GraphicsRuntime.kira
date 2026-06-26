@@ -1,3 +1,4 @@
+@Native
 function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
     var runtimeState = nativeState(GraphicsAppRuntimeState {
         app: app
@@ -5,6 +6,16 @@ function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
         frameIndex: 0
     })
 
-    sokolRunApplication(app, nativeUserData(runtimeState))
+    let selection = validateGraphicsBackend(app.backend, app.platform)
+    if (!selection.supported) {
+        graphicsDiagnostic(selection.reason)
+        return
+    }
+
+    match app.backend {
+        Sokol -> sokolRunApplication(app, nativeUserData(runtimeState));
+        Vulkan -> graphicsDiagnostic("Kira Graphics Vulkan backend selected but no validated Vulkan runtime is linked");
+        DirectX12 -> graphicsDiagnostic("Kira Graphics DirectX 12 backend selected but no validated DirectX 12 runtime is linked");
+    }
     return
 }

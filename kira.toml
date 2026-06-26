@@ -4,7 +4,7 @@ version = "0.1.0"
 kind = "library"
 kira = "0.1.0"
 module_root = "KiraGraphics"
-native_libraries = ["NativeLibs/Sokol.toml"]
+native_libraries = ["NativeLibs/Sokol.toml", "NativeLibs/Vulkan.toml", "NativeLibs/DirectX12.toml"]
 
 [defaults]
 execution_mode = "vm"

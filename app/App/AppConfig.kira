@@ -19,6 +19,8 @@ struct GraphicsApplication {
     var width: Int = 640
     var height: Int = 480
     var sampleCount: Int = 1
+    var backend: GraphicsBackend = GraphicsBackend.Sokol
+    var platform: GraphicsPlatform = GraphicsPlatform.Unknown
     var initHandler: (Graphics) -> Void = graphicsApplicationDefaultInit
     var frameHandler: (borrow mut GraphicsFrame) -> Void = graphicsApplicationDefaultFrame
     var eventHandler: (borrow GraphicsEvent) -> Void = graphicsApplicationDefaultEvent

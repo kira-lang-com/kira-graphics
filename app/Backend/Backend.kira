@@ -1,4 +1,129 @@
-function graphicsBackendName() -> String {
-    return "sokol"
+enum GraphicsBackend {
+    Sokol
+    Vulkan
+    DirectX12
 }
 
+enum GraphicsPlatform {
+    Windows
+    Linux
+    MacOS
+    IOS
+    Web
+    Unknown
+}
+
+struct GraphicsBackendSelection {
+    var backend: GraphicsBackend = GraphicsBackend.Sokol
+    var platform: GraphicsPlatform = GraphicsPlatform.Unknown
+    var supported: Bool = true
+    var loaderName: String = ""
+    var requiredSymbolCount: Int = 0
+    var reason: String = ""
+}
+
+function defaultGraphicsBackend() -> GraphicsBackend {
+    return GraphicsBackend.Sokol
+}
+
+@Native
+function hostGraphicsPlatform() -> GraphicsPlatform {
+    return dynamicFfiHostPlatform()
+}
+
+function effectiveGraphicsPlatform(requested: GraphicsPlatform) -> GraphicsPlatform {
+    if requested == GraphicsPlatform.Unknown {
+        return hostGraphicsPlatform()
+    }
+    return requested
+}
+
+function graphicsBackendNameFor(backend: GraphicsBackend) -> String {
+    match backend {
+        Sokol -> return "sokol";
+        Vulkan -> return "vulkan";
+        DirectX12 -> return "directx12";
+    }
+    return "unknown"
+}
+
+function graphicsPlatformName(platform: GraphicsPlatform) -> String {
+    match platform {
+        Windows -> return "windows";
+        Linux -> return "linux";
+        MacOS -> return "macos";
+        IOS -> return "ios";
+        Web -> return "web";
+        Unknown -> return "unknown";
+    }
+    return "unknown"
+}
+
+@Native
+function validateGraphicsBackend(backend: GraphicsBackend, platform: GraphicsPlatform) -> GraphicsBackendSelection {
+    let resolvedPlatform = effectiveGraphicsPlatform(move platform)
+    match backend {
+        Sokol -> return GraphicsBackendSelection {
+            backend: move backend
+            platform: resolvedPlatform
+            supported: true
+            loaderName: "sokol"
+            requiredSymbolCount: 0
+            reason: ""
+        };
+        Vulkan -> return validateVulkanBackend(move resolvedPlatform);
+        DirectX12 -> return validateDirectX12Backend(move resolvedPlatform);
+    }
+}
+
+@Native
+function validateVulkanBackend(platform: GraphicsPlatform) -> GraphicsBackendSelection {
+    let contract = vulkanLoaderContract(platform)
+    let probe = vulkanRuntimeProbe(contract)
+    return GraphicsBackendSelection {
+        backend: GraphicsBackend.Vulkan
+        platform: contract.platform
+        supported: probe.supported
+        loaderName: contract.libraryName
+        requiredSymbolCount: contract.globalSymbolCount + contract.instanceSymbolCount + contract.deviceSymbolCount
+        reason: probe.reason
+    }
+}
+
+@Native
+function validateDirectX12Backend(platform: GraphicsPlatform) -> GraphicsBackendSelection {
+    let contract = directX12LoaderContract(platform)
+    let probe = directX12RuntimeProbe(contract)
+    return GraphicsBackendSelection {
+        backend: GraphicsBackend.DirectX12
+        platform: contract.platform
+        supported: probe.supported
+        loaderName: contract.d3d12LibraryName
+        requiredSymbolCount: contract.loaderSymbolCount
+        reason: probe.reason
+    }
+}
+
+function unsupportedBackend(backend: GraphicsBackend, platform: GraphicsPlatform, reason: String) -> GraphicsBackendSelection {
+    return GraphicsBackendSelection {
+        backend: backend
+        platform: platform
+        supported: false
+        reason: reason
+    }
+}
+
+function unsupportedBackendWithLoader(backend: GraphicsBackend, platform: GraphicsPlatform, loaderName: String, requiredSymbolCount: Int, reason: String) -> GraphicsBackendSelection {
+    return GraphicsBackendSelection {
+        backend: backend
+        platform: platform
+        supported: false
+        loaderName: loaderName
+        requiredSymbolCount: requiredSymbolCount
+        reason: reason
+    }
+}
+
+function graphicsBackendName() -> String {
+    return graphicsBackendNameFor(defaultGraphicsBackend())
+}

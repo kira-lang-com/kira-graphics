@@ -1,0 +1,65 @@
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_host_platform_code; abi: c; }
+function kiraDynamicHostPlatformCode(): U32;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_null_ptr; abi: c; }
+function kiraDynamicNullPtr(): RawPtr;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_ptr_is_null; abi: c; }
+function kiraDynamicPtrIsNull(ptr: RawPtr): Bool;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_library_open; abi: c; }
+function kiraDynamicLibraryOpen(name: CString): RawPtr;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_library_symbol; abi: c; }
+function kiraDynamicLibrarySymbol(library: RawPtr, name: CString): RawPtr;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_library_close; abi: c; }
+function kiraDynamicLibraryClose(library: RawPtr): Void;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
+function kiraDynamicAlloc(size: U64): RawPtr;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_free; abi: c; }
+function kiraDynamicFree(ptr: RawPtr): Void;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u32; abi: c; }
+function kiraDynamicReadU32(ptr: RawPtr): U32;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_ptr; abi: c; }
+function kiraDynamicReadPtr(ptr: RawPtr): RawPtr;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u8_at; abi: c; }
+function kiraDynamicWriteU8At(ptr: RawPtr, offset: U64, value: U8): Void;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u16_at; abi: c; }
+function kiraDynamicWriteU16At(ptr: RawPtr, offset: U64, value: U16): Void;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u32_at; abi: c; }
+function kiraDynamicWriteU32At(ptr: RawPtr, offset: U64, value: U32): Void;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_ptr; abi: c; }
+function kiraDynamicWritePtr(ptr: RawPtr, value: RawPtr): Void;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_ffi_last_error_code; abi: c; }
+function kiraDynamicFfiLastErrorCode(): I32;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_ffi_call_i32_ptr; abi: c; }
+function kiraDynamicFfiCallI32Ptr(functionPtr: RawPtr, arg0: RawPtr): I32;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_ffi_call_i32_ptr_u32_ptr_ptr; abi: c; }
+function kiraDynamicFfiCallI32PtrU32PtrPtr(functionPtr: RawPtr, arg0: RawPtr, arg1: U32, arg2: RawPtr, arg3: RawPtr): I32;
+
+@Native
+function dynamicFfiHostPlatform() -> GraphicsPlatform {
+    let code = kiraDynamicHostPlatformCode()
+    if code == 1 {
+        return GraphicsPlatform.Windows
+    }
+    if code == 2 {
+        return GraphicsPlatform.Linux
+    }
+    if code == 3 {
+        return GraphicsPlatform.MacOS
+    }
+    return GraphicsPlatform.Unknown
+}

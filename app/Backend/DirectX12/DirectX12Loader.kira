@@ -1,0 +1,245 @@
+struct DirectXGuid {
+    var data1: U32 = 0
+    var data2: U16 = 0
+    var data3: U16 = 0
+    var data4_0: U8 = 0
+    var data4_1: U8 = 0
+    var data4_2: U8 = 0
+    var data4_3: U8 = 0
+    var data4_4: U8 = 0
+    var data4_5: U8 = 0
+    var data4_6: U8 = 0
+    var data4_7: U8 = 0
+}
+
+struct DirectXHResult {
+    var value: I32 = 0
+}
+
+enum DirectXComInterfaceKind {
+    Unknown
+    Factory
+    Adapter
+    Device
+    CommandQueue
+    SwapChain
+}
+
+struct DirectXComInterface {
+    var name: String = ""
+    var kind: DirectXComInterfaceKind = DirectXComInterfaceKind.Unknown
+    var iid: DirectXGuid = DirectXGuid {}
+    var minimumVTableSlots: Int = 0
+    var ownsReference: Bool = true
+}
+
+struct DirectX12LoaderSymbol {
+    var libraryName: String = ""
+    var symbolName: String = ""
+    var abiName: String = "winapi"
+    var returnsHRESULT: Bool = true
+}
+
+struct DirectX12LoaderContract {
+    var platform: GraphicsPlatform = GraphicsPlatform.Unknown
+    var d3d12LibraryName: String = ""
+    var dxgiLibraryName: String = ""
+    var loaderSymbolCount: Int = 0
+    var coreInterfaceCount: Int = 0
+    var canAttemptLoad: Bool = false
+    var reason: String = ""
+}
+
+struct DirectX12RuntimeProbe {
+    var supported: Bool = false
+    var reason: String = ""
+}
+
+function directXGuid(
+    data1: U32,
+    data2: U16,
+    data3: U16,
+    data4_0: U8,
+    data4_1: U8,
+    data4_2: U8,
+    data4_3: U8,
+    data4_4: U8,
+    data4_5: U8,
+    data4_6: U8,
+    data4_7: U8
+) -> DirectXGuid {
+    return DirectXGuid {
+        data1: data1
+        data2: data2
+        data3: data3
+        data4_0: data4_0
+        data4_1: data4_1
+        data4_2: data4_2
+        data4_3: data4_3
+        data4_4: data4_4
+        data4_5: data4_5
+        data4_6: data4_6
+        data4_7: data4_7
+    }
+}
+
+function directX12LoaderSymbol(index: Int) -> DirectX12LoaderSymbol {
+    if index == 0 {
+        return DirectX12LoaderSymbol {
+            libraryName: "d3d12.dll"
+            symbolName: "D3D12CreateDevice"
+            abiName: "winapi"
+            returnsHRESULT: true
+        }
+    }
+    if index == 1 {
+        return DirectX12LoaderSymbol {
+            libraryName: "dxgi.dll"
+            symbolName: "CreateDXGIFactory2"
+            abiName: "winapi"
+            returnsHRESULT: true
+        }
+    }
+    if index == 2 {
+        return DirectX12LoaderSymbol {
+            libraryName: "d3d12.dll"
+            symbolName: "D3D12GetDebugInterface"
+            abiName: "winapi"
+            returnsHRESULT: true
+        }
+    }
+    return DirectX12LoaderSymbol {}
+}
+
+function directX12CoreInterface(index: Int) -> DirectXComInterface {
+    if index == 0 {
+        return DirectXComInterface {
+            name: "IDXGIFactory4"
+            kind: DirectXComInterfaceKind.Factory
+            iid: directXGuid(0x1bc6ea02, 0xef36, 0x464f, 0xbf, 0x0c, 0x21, 0xca, 0x39, 0xe5, 0x16, 0x8a)
+            minimumVTableSlots: 29
+            ownsReference: true
+        }
+    }
+    if index == 1 {
+        return DirectXComInterface {
+            name: "IDXGIAdapter1"
+            kind: DirectXComInterfaceKind.Adapter
+            iid: directXGuid(0x29038f61, 0x3839, 0x4626, 0x91, 0xfd, 0x08, 0x68, 0x79, 0x01, 0x1a, 0x05)
+            minimumVTableSlots: 10
+            ownsReference: true
+        }
+    }
+    if index == 2 {
+        return DirectXComInterface {
+            name: "ID3D12Device"
+            kind: DirectXComInterfaceKind.Device
+            iid: directXGuid(0x189819f1, 0x1db6, 0x4b57, 0xbe, 0x54, 0x18, 0x21, 0x33, 0x9b, 0x85, 0xf7)
+            minimumVTableSlots: 44
+            ownsReference: true
+        }
+    }
+    if index == 3 {
+        return DirectXComInterface {
+            name: "ID3D12CommandQueue"
+            kind: DirectXComInterfaceKind.CommandQueue
+            iid: directXGuid(0x0ec870a6, 0x5d7e, 0x4c22, 0x8c, 0xfc, 0x5b, 0xaa, 0xe0, 0x76, 0x16, 0xed)
+            minimumVTableSlots: 18
+            ownsReference: true
+        }
+    }
+    return DirectXComInterface {}
+}
+
+function directXHResultSucceeded(result: DirectXHResult) -> Bool {
+    return result.value >= 0
+}
+
+function directX12LoaderContract(platform: borrow GraphicsPlatform) -> DirectX12LoaderContract {
+    if platform == GraphicsPlatform.Windows {
+        return DirectX12LoaderContract {
+            platform: platform
+            d3d12LibraryName: "d3d12.dll"
+            dxgiLibraryName: "dxgi.dll"
+            loaderSymbolCount: 3
+            coreInterfaceCount: 4
+            canAttemptLoad: true
+            reason: "DirectX 12 loader can be probed through Kira dynamic FFI"
+        }
+    }
+    if platform == GraphicsPlatform.Unknown {
+        return DirectX12LoaderContract {
+            platform: platform
+            reason: "Kira Graphics cannot validate DirectX 12 without a concrete Windows platform"
+        }
+    }
+    return DirectX12LoaderContract {
+        platform: platform
+        reason: "DirectX 12 is only valid on Windows targets"
+    }
+}
+
+@Native
+function directX12WriteGuid(ptr: RawPtr, guid: DirectXGuid) {
+    kiraDynamicWriteU32At(ptr, 0, guid.data1)
+    kiraDynamicWriteU16At(ptr, 4, guid.data2)
+    kiraDynamicWriteU16At(ptr, 6, guid.data3)
+    kiraDynamicWriteU8At(ptr, 8, guid.data4_0)
+    kiraDynamicWriteU8At(ptr, 9, guid.data4_1)
+    kiraDynamicWriteU8At(ptr, 10, guid.data4_2)
+    kiraDynamicWriteU8At(ptr, 11, guid.data4_3)
+    kiraDynamicWriteU8At(ptr, 12, guid.data4_4)
+    kiraDynamicWriteU8At(ptr, 13, guid.data4_5)
+    kiraDynamicWriteU8At(ptr, 14, guid.data4_6)
+    kiraDynamicWriteU8At(ptr, 15, guid.data4_7)
+    return
+}
+
+@Native
+function directX12RuntimeProbe(contract: borrow DirectX12LoaderContract) -> DirectX12RuntimeProbe {
+    if !contract.canAttemptLoad {
+        return DirectX12RuntimeProbe {
+            supported: false
+            reason: contract.reason
+        }
+    }
+
+    let library = kiraDynamicLibraryOpen(contract.d3d12LibraryName)
+    let libraryMissing = kiraDynamicPtrIsNull(library)
+    if libraryMissing {
+        return DirectX12RuntimeProbe {
+            supported: false
+            reason: "DirectX 12 loader library could not be opened through Kira dynamic FFI"
+        }
+    }
+
+    let createDevice = kiraDynamicLibrarySymbol(library, "D3D12CreateDevice")
+    let createDeviceMissing = kiraDynamicPtrIsNull(createDevice)
+    if createDeviceMissing {
+        kiraDynamicLibraryClose(library)
+        return DirectX12RuntimeProbe {
+            supported: false
+            reason: "DirectX 12 loader is missing D3D12CreateDevice"
+        }
+    }
+
+    let deviceInterface = directX12CoreInterface(2)
+    let iidPtr = kiraDynamicAlloc(16)
+    directX12WriteGuid(iidPtr, deviceInterface.iid)
+    let status = kiraDynamicFfiCallI32PtrU32PtrPtr(createDevice, kiraDynamicNullPtr(), 0xb000, iidPtr, kiraDynamicNullPtr())
+    kiraDynamicFree(iidPtr)
+    kiraDynamicLibraryClose(library)
+
+    let succeeded = status >= 0
+    if succeeded {
+        return DirectX12RuntimeProbe {
+            supported: true
+            reason: "DirectX 12 feature-level validation responded through Kira LibFFI"
+        }
+    }
+
+    return DirectX12RuntimeProbe {
+        supported: false
+        reason: "D3D12CreateDevice returned a failing HRESULT through Kira LibFFI"
+    }
+}

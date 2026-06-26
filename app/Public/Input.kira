@@ -57,6 +57,7 @@ struct GraphicsEvent {
     let pointerDeltaY: Float = 0.0
     let scrollX: Float = 0.0
     let scrollY: Float = 0.0
+    let touchCount: Int = 0
     let windowWidth: Int = 0
     let windowHeight: Int = 0
     let framebufferWidth: Int = 0
@@ -206,10 +207,21 @@ function graphicsEventUsesPointerPosition(kind: borrow GraphicsEventKind) -> Boo
 }
 
 
+function graphicsRawKindIsTouch(rawKind: Int) -> Bool {
+    return rawKind >= 10 && rawKind <= 13
+}
+
 @Native
 function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> GraphicsEvent {
     let rawKind = kgEventType(eventPtr)
     let rawModifiers = kgEventModifiers(eventPtr)
+    let touchCount = kgEventTouchCount(eventPtr)
+    // Touch events carry their position in touches[0] rather than the mouse
+    // fields. Routing the primary touch into pointerX/Y lets the shared
+    // pointer hit-testing path drive hover/press/drag from touch input too.
+    let isTouch = graphicsRawKindIsTouch(rawKind) && touchCount > 0
+    let pointerX = isTouch ? kgEventTouchX(eventPtr, 0) : kgEventMouseX(eventPtr)
+    let pointerY = isTouch ? kgEventTouchY(eventPtr, 0) : kgEventMouseY(eventPtr)
     return GraphicsEvent {
         kind: graphicsEventKindFromRaw(rawKind)
         frameCount: kgEventFrameCount(eventPtr)
@@ -218,12 +230,13 @@ function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> GraphicsEvent
         keyRepeat: kgEventKeyRepeat(eventPtr) != 0
         modifiers: graphicsModifierStateFromRaw(rawModifiers)
         pointerButton: graphicsPointerButtonFromRaw(kgEventMouseButton(eventPtr))
-        pointerX: kgEventMouseX(eventPtr)
-        pointerY: kgEventMouseY(eventPtr)
+        pointerX: pointerX
+        pointerY: pointerY
         pointerDeltaX: kgEventMouseDx(eventPtr)
         pointerDeltaY: kgEventMouseDy(eventPtr)
         scrollX: kgEventScrollX(eventPtr)
         scrollY: kgEventScrollY(eventPtr)
+        touchCount: touchCount
         windowWidth: kgEventWindowWidth(eventPtr)
         windowHeight: kgEventWindowHeight(eventPtr)
         framebufferWidth: kgEventFramebufferWidth(eventPtr)
@@ -239,15 +252,21 @@ function graphicsStringFromCodepoint(codepoint: Int) -> String {
 }
 
 @Native
-function graphicsAppendCodepoint(base: String, codepoint: Int) -> String {
+function graphicsAppendCodepoint(base: borrow String, codepoint: Int) -> String {
     let nativeCodepoint: I64 = codepoint
     let value: CString = kgStringAppendCodepoint(base, nativeCodepoint)
     return value
 }
 
 @Native
-function graphicsDropLastScalar(base: String) -> String {
+function graphicsDropLastScalar(base: borrow String) -> String {
     let value: CString = kgStringDropLastScalar(base)
+    return value
+}
+
+@Native
+function graphicsStringConcat(a: borrow String, b: borrow String) -> String {
+    let value: CString = kgStringConcat(a, b)
     return value
 }
 

@@ -1,0 +1,290 @@
+enum VulkanSymbolScope {
+    Global
+    Instance
+    Device
+}
+
+struct VulkanLoaderSymbol {
+    var name: String = ""
+    var scope: VulkanSymbolScope = VulkanSymbolScope.Global
+    var required: Bool = true
+}
+
+struct VulkanSurfaceContract {
+    var platform: GraphicsPlatform = GraphicsPlatform.Unknown
+    var extensionName: String = ""
+    var createSurfaceSymbol: String = ""
+    var supported: Bool = false
+}
+
+struct VulkanLoaderContract {
+    var platform: GraphicsPlatform = GraphicsPlatform.Unknown
+    var libraryName: String = ""
+    var globalSymbolCount: Int = 0
+    var instanceSymbolCount: Int = 0
+    var deviceSymbolCount: Int = 0
+    var requiredExtensionCount: Int = 0
+    var surface: VulkanSurfaceContract = VulkanSurfaceContract {}
+    var canAttemptLoad: Bool = false
+    var reason: String = ""
+}
+
+struct VulkanRuntimeProbe {
+    var supported: Bool = false
+    var reason: String = ""
+}
+
+function vulkanLoaderLibraryName(platform: borrow GraphicsPlatform) -> String {
+    match platform {
+        Windows -> return "vulkan-1.dll";
+        Linux -> return "libvulkan.so.1";
+        MacOS -> return "libvulkan.1.dylib";
+        IOS -> return "libvulkan.1.dylib";
+        Web -> return "";
+        Unknown -> return "";
+    }
+    return ""
+}
+
+function vulkanGlobalSymbol(index: Int) -> VulkanLoaderSymbol {
+    if index == 0 {
+        return VulkanLoaderSymbol {
+            name: "vkGetInstanceProcAddr"
+            scope: VulkanSymbolScope.Global
+            required: true
+        }
+    }
+    if index == 1 {
+        return VulkanLoaderSymbol {
+            name: "vkEnumerateInstanceExtensionProperties"
+            scope: VulkanSymbolScope.Global
+            required: true
+        }
+    }
+    if index == 2 {
+        return VulkanLoaderSymbol {
+            name: "vkEnumerateInstanceLayerProperties"
+            scope: VulkanSymbolScope.Global
+            required: true
+        }
+    }
+    return VulkanLoaderSymbol {}
+}
+
+function vulkanInstanceSymbol(index: Int) -> VulkanLoaderSymbol {
+    if index == 0 {
+        return VulkanLoaderSymbol {
+            name: "vkCreateInstance"
+            scope: VulkanSymbolScope.Instance
+            required: true
+        }
+    }
+    if index == 1 {
+        return VulkanLoaderSymbol {
+            name: "vkDestroyInstance"
+            scope: VulkanSymbolScope.Instance
+            required: true
+        }
+    }
+    if index == 2 {
+        return VulkanLoaderSymbol {
+            name: "vkEnumeratePhysicalDevices"
+            scope: VulkanSymbolScope.Instance
+            required: true
+        }
+    }
+    if index == 3 {
+        return VulkanLoaderSymbol {
+            name: "vkGetPhysicalDeviceQueueFamilyProperties"
+            scope: VulkanSymbolScope.Instance
+            required: true
+        }
+    }
+    if index == 4 {
+        return VulkanLoaderSymbol {
+            name: "vkGetPhysicalDeviceSurfaceSupportKHR"
+            scope: VulkanSymbolScope.Instance
+            required: true
+        }
+    }
+    return VulkanLoaderSymbol {}
+}
+
+function vulkanDeviceSymbol(index: Int) -> VulkanLoaderSymbol {
+    if index == 0 {
+        return VulkanLoaderSymbol {
+            name: "vkCreateDevice"
+            scope: VulkanSymbolScope.Device
+            required: true
+        }
+    }
+    if index == 1 {
+        return VulkanLoaderSymbol {
+            name: "vkGetDeviceProcAddr"
+            scope: VulkanSymbolScope.Device
+            required: true
+        }
+    }
+    if index == 2 {
+        return VulkanLoaderSymbol {
+            name: "vkCreateSwapchainKHR"
+            scope: VulkanSymbolScope.Device
+            required: true
+        }
+    }
+    if index == 3 {
+        return VulkanLoaderSymbol {
+            name: "vkQueuePresentKHR"
+            scope: VulkanSymbolScope.Device
+            required: true
+        }
+    }
+    return VulkanLoaderSymbol {}
+}
+
+function vulkanSurfaceContract(platform: borrow GraphicsPlatform) -> VulkanSurfaceContract {
+    match platform {
+        Windows -> return VulkanSurfaceContract {
+            platform: platform
+            extensionName: "VK_KHR_win32_surface"
+            createSurfaceSymbol: "vkCreateWin32SurfaceKHR"
+            supported: true
+        };
+        Linux -> return VulkanSurfaceContract {
+            platform: platform
+            extensionName: "VK_KHR_xlib_surface"
+            createSurfaceSymbol: "vkCreateXlibSurfaceKHR"
+            supported: true
+        };
+        MacOS -> return VulkanSurfaceContract {
+            platform: platform
+            extensionName: "VK_EXT_metal_surface"
+            createSurfaceSymbol: "vkCreateMetalSurfaceEXT"
+            supported: false
+        };
+        IOS -> return VulkanSurfaceContract {
+            platform: platform
+            extensionName: "VK_EXT_metal_surface"
+            createSurfaceSymbol: "vkCreateMetalSurfaceEXT"
+            supported: false
+        };
+        Web -> return VulkanSurfaceContract {
+            platform: platform
+            extensionName: ""
+            createSurfaceSymbol: ""
+            supported: false
+        };
+        Unknown -> return VulkanSurfaceContract {
+            platform: platform
+            extensionName: ""
+            createSurfaceSymbol: ""
+            supported: false
+        };
+    }
+}
+
+function vulkanLoaderContract(platform: borrow GraphicsPlatform) -> VulkanLoaderContract {
+    match platform {
+        Windows -> return VulkanLoaderContract {
+            platform: platform
+            libraryName: vulkanLoaderLibraryName(platform)
+            globalSymbolCount: 3
+            instanceSymbolCount: 5
+            deviceSymbolCount: 4
+            requiredExtensionCount: 2
+            surface: vulkanSurfaceContract(platform)
+            canAttemptLoad: true
+            reason: "Vulkan loader can be probed through Kira dynamic FFI"
+        };
+        Linux -> return VulkanLoaderContract {
+            platform: platform
+            libraryName: vulkanLoaderLibraryName(platform)
+            globalSymbolCount: 3
+            instanceSymbolCount: 5
+            deviceSymbolCount: 4
+            requiredExtensionCount: 2
+            surface: vulkanSurfaceContract(platform)
+            canAttemptLoad: true
+            reason: "Vulkan loader can be probed through Kira dynamic FFI"
+        };
+        MacOS -> return VulkanLoaderContract {
+            platform: platform
+            libraryName: vulkanLoaderLibraryName(platform)
+            globalSymbolCount: 3
+            instanceSymbolCount: 5
+            deviceSymbolCount: 4
+            requiredExtensionCount: 2
+            surface: vulkanSurfaceContract(platform)
+            reason: "Vulkan on this platform requires an explicit portability layer and surface loader"
+        };
+        IOS -> return VulkanLoaderContract {
+            platform: platform
+            libraryName: vulkanLoaderLibraryName(platform)
+            globalSymbolCount: 3
+            instanceSymbolCount: 5
+            deviceSymbolCount: 4
+            requiredExtensionCount: 2
+            surface: vulkanSurfaceContract(platform)
+            reason: "Vulkan on this platform requires an explicit portability layer and surface loader"
+        };
+        Web -> return VulkanLoaderContract {
+            platform: platform
+            libraryName: vulkanLoaderLibraryName(platform)
+            surface: vulkanSurfaceContract(platform)
+            reason: "Vulkan is not a browser backend"
+        };
+        Unknown -> return VulkanLoaderContract {
+            platform: platform
+            libraryName: vulkanLoaderLibraryName(platform)
+            surface: vulkanSurfaceContract(platform)
+            reason: "Kira Graphics cannot validate Vulkan without a concrete platform"
+        };
+    }
+}
+
+@Native
+function vulkanRuntimeProbe(contract: borrow VulkanLoaderContract) -> VulkanRuntimeProbe {
+    if !contract.canAttemptLoad {
+        return VulkanRuntimeProbe {
+            supported: false
+            reason: contract.reason
+        }
+    }
+
+    let library = kiraDynamicLibraryOpen(contract.libraryName)
+    let libraryMissing = kiraDynamicPtrIsNull(library)
+    if libraryMissing {
+        return VulkanRuntimeProbe {
+            supported: false
+            reason: "Vulkan loader library could not be opened through Kira dynamic FFI"
+        }
+    }
+
+    let enumerateVersion = kiraDynamicLibrarySymbol(library, "vkEnumerateInstanceVersion")
+    let enumerateVersionMissing = kiraDynamicPtrIsNull(enumerateVersion)
+    if enumerateVersionMissing {
+        kiraDynamicLibraryClose(library)
+        return VulkanRuntimeProbe {
+            supported: false
+            reason: "Vulkan loader is missing vkEnumerateInstanceVersion"
+        }
+    }
+
+    let apiVersionPtr = kiraDynamicAlloc(4)
+    let status = kiraDynamicFfiCallI32Ptr(enumerateVersion, apiVersionPtr)
+    let apiVersion = kiraDynamicReadU32(apiVersionPtr)
+    kiraDynamicFree(apiVersionPtr)
+    kiraDynamicLibraryClose(library)
+
+    if status == 0 && apiVersion != 0 {
+        return VulkanRuntimeProbe {
+            supported: true
+            reason: "Vulkan loader responded through Kira LibFFI"
+        }
+    }
+
+    return VulkanRuntimeProbe {
+        supported: false
+        reason: "Vulkan loader returned a failing VkResult through Kira LibFFI"
+    }
+}

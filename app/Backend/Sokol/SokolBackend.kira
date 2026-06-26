@@ -214,6 +214,15 @@ function kgEventMouseDx(eventPtr: borrow sapp_event_ptr): Float;
 @FFI.Extern { library: sokol; symbol: kg_event_mouse_dy; abi: c; }
 function kgEventMouseDy(eventPtr: borrow sapp_event_ptr): Float;
 
+@FFI.Extern { library: sokol; symbol: kg_event_touch_count; abi: c; }
+function kgEventTouchCount(eventPtr: borrow sapp_event_ptr): I64;
+
+@FFI.Extern { library: sokol; symbol: kg_event_touch_x; abi: c; }
+function kgEventTouchX(eventPtr: borrow sapp_event_ptr, index: I64): Float;
+
+@FFI.Extern { library: sokol; symbol: kg_event_touch_y; abi: c; }
+function kgEventTouchY(eventPtr: borrow sapp_event_ptr, index: I64): Float;
+
 @FFI.Extern { library: sokol; symbol: kg_event_scroll_x; abi: c; }
 function kgEventScrollX(eventPtr: borrow sapp_event_ptr): Float;
 
@@ -240,3 +249,6 @@ function kgStringAppendCodepoint(base: CString, codepoint: I64): CString;
 
 @FFI.Extern { library: sokol; symbol: kg_string_drop_last_scalar; abi: c; }
 function kgStringDropLastScalar(base: CString): CString;
+
+@FFI.Extern { library: sokol; symbol: kg_string_concat; abi: c; }
+function kgStringConcat(a: CString, b: CString): CString;
