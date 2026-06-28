@@ -53,6 +53,14 @@ function metalMsgSendVoidU(obj: RawPtr, op: RawPtr, a: U64): Void;
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendTexDesc(cls: RawPtr, op: RawPtr, pixelFormat: U64, width: U64, height: U64, mipmapped: Bool): RawPtr;
 
+// (BOOL) -> void  (e.g. CAMetalLayer setFramebufferOnly:)
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendVoidB(obj: RawPtr, op: RawPtr, a: Bool): Void;
+
+// setDrawableSize: — CGSize is a two-double HFA, passed as two F64 scalars.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendVoid2F(obj: RawPtr, op: RawPtr, w: F64, h: F64): Void;
+
 // setClearColor: — MTLClearColor is an HFA of four doubles, passed as four F64
 // scalars (same v0-v3 registers on arm64), so no by-value struct is needed.
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
@@ -90,3 +98,5 @@ function metalMemReadU8(ptr: RawPtr, offset: U64): U8;
 function metalMemReadU32(ptr: RawPtr, offset: U64): U32;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_null_ptr; abi: c; }
 function metalNullPtr(): RawPtr;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_ptr_is_null; abi: c; }
+function metalPtrIsNull(ptr: RawPtr): Bool;

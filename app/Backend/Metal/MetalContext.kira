@@ -21,7 +21,9 @@
 //  32  encoder          (id<MTLRenderCommandEncoder>, per pass)
 //  40  width            (U64)
 //  48  height           (U64)
-function metalContextSize() -> U64 { return 56 }
+//  56  layer            (CAMetalLayer, null in offscreen mode)
+//  64  drawable         (id<CAMetalDrawable>, per pass in layer mode)
+function metalContextSize() -> U64 { return 72 }
 function metalOffsetDevice() -> U64 { return 0 }
 function metalOffsetQueue() -> U64 { return 8 }
 function metalOffsetColorTexture() -> U64 { return 16 }
@@ -29,6 +31,8 @@ function metalOffsetCommandBuffer() -> U64 { return 24 }
 function metalOffsetEncoder() -> U64 { return 32 }
 function metalOffsetWidth() -> U64 { return 40 }
 function metalOffsetHeight() -> U64 { return 48 }
+function metalOffsetLayer() -> U64 { return 56 }
+function metalOffsetDrawable() -> U64 { return 64 }
 
 // Metal enum constants we reference (kept local and explicit, not magic numbers
 // at the call sites).
@@ -47,7 +51,32 @@ function metalContextAlloc() -> RawPtr {
     let queue = metalMsgSend(device, metalSel("newCommandQueue"))
     metalMemWritePtr(ctx, metalOffsetDevice(), device)
     metalMemWritePtr(ctx, metalOffsetQueue(), queue)
+    // Null the surface slots so offscreen mode (no layer/drawable) is detectable.
+    metalMemWritePtr(ctx, metalOffsetLayer(), metalNullPtr())
+    metalMemWritePtr(ctx, metalOffsetDrawable(), metalNullPtr())
     return ctx
+}
+
+// Attach a CAMetalLayer surface (the real on-screen path, replacing the legacy
+// OpenGL layer). Today the layer is created standalone and verified by reading
+// the presented drawable back; the host runner attaches it to its NSView/UIView
+// in the on-screen integration. Switching a context to layer mode makes each pass
+// acquire and present a CAMetalLayer drawable instead of rendering to a fixed
+// offscreen texture.
+@Native
+function metalContextAttachLayer(ctx: RawPtr, width: Int, height: Int) {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let layerClass = metalObjcGetClass("CAMetalLayer")
+    let layerAlloc = metalMsgSend(layerClass, metalSel("alloc"))
+    let layer = metalMsgSend(layerAlloc, metalSel("init"))
+    metalMsgSendVoidP(layer, metalSel("setDevice:"), device)
+    metalMsgSendVoidU(layer, metalSel("setPixelFormat:"), metalPixelFormatBGRA8Unorm())
+    metalMsgSendVoidB(layer, metalSel("setFramebufferOnly:"), false)
+    metalMsgSendVoid2F(layer, metalSel("setDrawableSize:"), Float(width), Float(height))
+    metalMemWritePtr(ctx, metalOffsetLayer(), layer)
+    metalMemWriteU64(ctx, metalOffsetWidth(), width)
+    metalMemWriteU64(ctx, metalOffsetHeight(), height)
+    return
 }
 
 // Free the context block (the GPU objects are released by Metal's own lifetime
@@ -79,7 +108,18 @@ function metalContextAttachOffscreen(ctx: RawPtr, width: Int, height: Int) {
 @Native
 function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b: F64, a: F64) {
     let queue = metalMemReadPtr(ctx, metalOffsetQueue())
-    let texture = metalMemReadPtr(ctx, metalOffsetColorTexture())
+    // In layer mode, acquire the next CAMetalLayer drawable and render into its
+    // texture; in offscreen mode, render into the fixed offscreen texture. Either
+    // way the active texture is recorded at the colorTexture slot so readback
+    // (verification) targets exactly what was rendered.
+    let layer = metalMemReadPtr(ctx, metalOffsetLayer())
+    var texture = metalMemReadPtr(ctx, metalOffsetColorTexture())
+    if !metalPtrIsNull(layer) {
+        let drawable = metalMsgSend(layer, metalSel("nextDrawable"))
+        metalMemWritePtr(ctx, metalOffsetDrawable(), drawable)
+        texture = metalMsgSend(drawable, metalSel("texture"))
+        metalMemWritePtr(ctx, metalOffsetColorTexture(), texture)
+    }
     let rpClass = metalObjcGetClass("MTLRenderPassDescriptor")
     let rp = metalMsgSend(rpClass, metalSel("renderPassDescriptor"))
     let colorAttachments = metalMsgSend(rp, metalSel("colorAttachments"))
@@ -102,6 +142,12 @@ function metalContextEndAndCommit(ctx: RawPtr) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let commandBuffer = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
     metalMsgSendVoid(encoder, metalSel("endEncoding"))
+    // Present the drawable in layer mode before committing.
+    let drawable = metalMemReadPtr(ctx, metalOffsetDrawable())
+    if !metalPtrIsNull(drawable) {
+        metalMsgSendVoidP(commandBuffer, metalSel("presentDrawable:"), drawable)
+        metalMemWritePtr(ctx, metalOffsetDrawable(), metalNullPtr())
+    }
     metalMsgSendVoid(commandBuffer, metalSel("commit"))
     metalMsgSendVoid(commandBuffer, metalSel("waitUntilCompleted"))
     return

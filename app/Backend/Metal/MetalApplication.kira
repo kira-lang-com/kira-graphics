@@ -15,7 +15,7 @@
 @Native
 function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
     let ctxPtr = metalContextAlloc()
-    metalContextAttachOffscreen(ctxPtr, app.width, app.height)
+    metalContextAttachLayer(ctxPtr, app.width, app.height)
 
     kiraGraphicsLiveBackendInitialized()
 
