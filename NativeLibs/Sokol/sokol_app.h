@@ -5291,7 +5291,13 @@ _SOKOL_PRIVATE void _sapp_macos_gl_init(NSRect window_rect) {
         selector:@selector(timerFired:)
         userInfo:nil
         repeats:YES];
-    [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSDefaultRunLoopMode];
+    // Register in common modes (not just the default mode) so the frame-driver
+    // timer keeps firing while the run loop is in NSEventTrackingRunLoopMode
+    // during a live window resize. Otherwise the timer stops, -setNeedsDisplay
+    // is never called, and the window only repaints via AppKit's throttled
+    // -drawRect cadence (~10fps) for the duration of the drag. The Metal/WGPU
+    // paths already use common modes for their display link + fallback timer.
+    [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSRunLoopCommonModes];
     timer_obj = nil;
 }
 
@@ -5932,7 +5938,25 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
             placement = resizing_from_top ? NSViewLayerContentsPlacementBottomLeft : NSViewLayerContentsPlacementTopLeft;
         }
         _sapp.macos.view.layerContentsPlacement = placement;
+    #elif defined(SOKOL_GLCORE)
+        // Drop vsync for the duration of the live resize so -flushBuffer does not
+        // block on the display refresh while the drawable is being resized every
+        // frame. Without this, large/diagonal resizes stall to ~12-17fps because
+        // each swap waits a full refresh against a surface that is itself being
+        // reconfigured. Restored to the configured swap interval in
+        // -windowDidEndLiveResize. (A little tearing during the drag is fine.)
+        GLint zero_swap = 0;
+        [[_sapp.macos.view openGLContext] setValues:&zero_swap forParameter:NSOpenGLContextParameterSwapInterval];
     #endif
+}
+
+- (void)windowDidEndLiveResize:(NSNotification *)notification {
+    _SOKOL_UNUSED(notification);
+    #if defined(SOKOL_GLCORE)
+        GLint swap = (GLint)_sapp.swap_interval;
+        [[_sapp.macos.view openGLContext] setValues:&swap forParameter:NSOpenGLContextParameterSwapInterval];
+    #endif
+    _sapp_macos_update_dimensions();
 }
 
 - (void)windowDidResize:(NSNotification*)notification {
@@ -6050,7 +6074,17 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 #if defined(SOKOL_GLCORE)
 - (void)timerFired:(id)sender {
     _SOKOL_UNUSED(sender);
-    [self setNeedsDisplay:YES];
+    if ([self inLiveResize]) {
+        // During a live resize AppKit coalesces/throttles -drawRect, so going
+        // through -setNeedsDisplay caps the drag at ~10fps no matter how often
+        // the timer fires. Render directly here instead to track the drag at the
+        // timer rate. This is safe (unlike rendering from -windowDidResize)
+        // because vsync is disabled for the duration of the resize in
+        // -windowWillStartLiveResize, so the -flushBuffer swap does not block.
+        _sapp_macos_frame();
+    } else {
+        [self setNeedsDisplay:YES];
+    }
 }
 - (void)prepareOpenGL {
     [super prepareOpenGL];
@@ -14423,3 +14457,8 @@ SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
 }
 
 #endif /* SOKOL_APP_IMPL */
+
+
+
+
+
