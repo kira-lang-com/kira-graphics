@@ -45,6 +45,8 @@ class GraphicsFrame {
     var passSubmitted: Bool = false
     var shouldQuit: Bool = false
     var userData: RawPtr
+    var backend: GraphicsBackend = GraphicsBackend.Sokol
+    var metalContext: RawPtr
 
     function beginRenderPass(descriptor: borrow RenderPassDescriptor) -> RenderEncoder {
         var colorAttachment = descriptor.primaryColorAttachment
@@ -84,7 +86,12 @@ class GraphicsFrame {
         self.hasRenderPass = true
         self.shouldPresent = false
         self.passSubmitted = false
-        self.renderPassActive = sokolBeginRenderPassFromFrame(self)
+        match self.backend {
+            Metal -> self.renderPassActive = metalBeginRenderPassFromFrame(self, self.metalContext);
+            Sokol -> self.renderPassActive = sokolBeginRenderPassFromFrame(self);
+            Vulkan -> self.renderPassActive = sokolBeginRenderPassFromFrame(self);
+            DirectX12 -> self.renderPassActive = sokolBeginRenderPassFromFrame(self);
+        }
 
         if (!self.renderPassActive) {
             graphicsDiagnostic("Kira Graphics skipped render pass because the backend could not begin it")
@@ -110,7 +117,12 @@ class GraphicsFrame {
         self.shouldPresent = true
         self.passSubmitted = true
         if (self.renderPassActive) {
-            sokolEndPassAndCommitNative()
+            match self.backend {
+                Metal -> metalEndPassAndCommit(self.metalContext);
+                Sokol -> sokolEndPassAndCommitNative();
+                Vulkan -> sokolEndPassAndCommitNative();
+                DirectX12 -> sokolEndPassAndCommitNative();
+            }
         }
         self.renderPassActive = false
         self.currentEncoder = makeRenderEncoder()

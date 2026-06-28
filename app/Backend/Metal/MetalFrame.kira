@@ -1,0 +1,52 @@
+// Metal frame bridge: the seam the public GraphicsFrame dispatches to when its
+// backend is Metal. Mirrors the Sokol begin/end/submit contract but submits work
+// through the Metal context built from Objective-C messages.
+
+// The public descriptor layer uses Sokol-style load-action constants
+// (clear = 1, load = 2, dontCare = 3). Metal's MTLLoadAction values differ
+// (clear = 2, load = 1, dontCare = 0), so translate at the boundary.
+@Native
+function metalMapLoadAction(publicLoadAction: Int) -> U64 {
+    if publicLoadAction == 1 {
+        return metalLoadActionClear()
+    }
+    if publicLoadAction == 2 {
+        return metalLoadActionLoad()
+    }
+    return metalLoadActionClear()
+}
+
+// Begin the frame's render pass on the Metal context. Today this drives the
+// color clear; pipeline/buffer/draw encoding lands in later phases.
+@Native
+function metalBeginRenderPassFromFrame(frame: borrow GraphicsFrame, ctxPtr: RawPtr) -> Bool {
+    let load = metalMapLoadAction(frame.colorLoadAction)
+    metalContextBeginClear(ctxPtr, load, frame.clearR, frame.clearG, frame.clearB, frame.clearA)
+    return true
+}
+
+// End the current pass and submit it (offscreen: commit + wait).
+@Native
+function metalEndPassAndCommit(ctxPtr: RawPtr) {
+    metalContextEndAndCommit(ctxPtr)
+    return
+}
+
+// Frame submission hook. The clear pass already committed in endPass, so this is
+// a no-op for the current offscreen path; on-screen presentation will hook here.
+@Native
+function metalSubmitFrame(frame: borrow GraphicsFrame) {
+    return
+}
+
+// Headless verification: report the center pixel the GPU actually produced for
+// the frame, so an offscreen run proves real Kira-owned rendering (not a marker).
+@Native
+function metalReportCenterPixel(ctxPtr: RawPtr, width: Int, height: Int) {
+    let cx = width / 2
+    let cy = height / 2
+    let packed = metalContextReadPixel(ctxPtr, cx, cy)
+    print(packed)
+    return
+    // packed is little-endian BGRA: (A<<24)|(R<<16)|(G<<8)|B
+}

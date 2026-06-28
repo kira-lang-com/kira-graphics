@@ -1,0 +1,32 @@
+import KiraGraphics
+
+// Offscreen Metal clear through the real Kira Graphics public API.
+// Selects the from-scratch Metal backend (CAMetalLayer-class path, no Sokol);
+// the backend reports the center pixel it actually rendered so the run proves
+// real Kira-owned Metal rendering headlessly.
+@Main
+@Native
+function main() {
+    var app = GraphicsApplication {
+        title: "Kira Graphics Metal Clear"
+        width: 64
+        height: 64
+        sampleCount: 1
+        backend: GraphicsBackend.Metal
+    }
+
+    app.onFrame { frame in
+        frame.pass(Color {
+            r: 0.08
+            g: 0.12
+            b: 0.16
+            a: 1.0
+        }) { encoder in
+            return
+        }
+        return
+    }
+
+    app.run(0)
+    return
+}

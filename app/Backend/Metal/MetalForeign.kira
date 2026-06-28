@@ -1,0 +1,92 @@
+// Foreign surface for the Metal backend.
+//
+// Kira Graphics' Metal backend drives Metal, QuartzCore and AppKit/UIKit DIRECTLY
+// through the Objective-C runtime — there is no C/Objective-C shim. Every native
+// capability is reached as an `@FFI.Extern` here: the Objective-C runtime
+// (objc_getClass / sel_registerName / objc_msgSend), the one Metal C entry point
+// (MTLCreateSystemDefaultDevice), and the kira_runtime raw-memory helpers used to
+// build small by-reference structs (MTLRegion/MTLClearColor are handled inline as
+// scalar arguments) and to read pixels back.
+//
+// objc_msgSend is not variadic on arm64: each call must use the exact signature of
+// the target method. We therefore declare one typed alias per call SHAPE we use,
+// all bound to the single C symbol `objc_msgSend`. The Kira compiler shares one
+// LLVM global across these aliases (see the FFI dedup in kira_llvm_backend), and
+// the VM/libffi path binds each call by its own signature, so this is sound on both
+// the native and hybrid backends.
+
+// ---------------------------------------------------------------------------
+// Objective-C runtime primitives
+// ---------------------------------------------------------------------------
+
+@FFI.Extern { library: kira_metal; symbol: objc_getClass; abi: c; }
+function metalObjcGetClass(name: CString): RawPtr;
+
+@FFI.Extern { library: kira_metal; symbol: sel_registerName; abi: c; }
+function metalSel(name: CString): RawPtr;
+
+// ---------------------------------------------------------------------------
+// objc_msgSend, one typed alias per call shape
+// ---------------------------------------------------------------------------
+
+// () -> id / void
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSend(obj: RawPtr, op: RawPtr): RawPtr;
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendVoid(obj: RawPtr, op: RawPtr): Void;
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendU64(obj: RawPtr, op: RawPtr): U64;
+
+// (id) -> id / void
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendP(obj: RawPtr, op: RawPtr, a: RawPtr): RawPtr;
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendVoidP(obj: RawPtr, op: RawPtr, a: RawPtr): Void;
+
+// (NSUInteger) -> id / void
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendPU(obj: RawPtr, op: RawPtr, a: U64): RawPtr;
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendVoidU(obj: RawPtr, op: RawPtr, a: U64): Void;
+
+// MTLTextureDescriptor texture2DDescriptorWithPixelFormat:width:height:mipmapped:
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendTexDesc(cls: RawPtr, op: RawPtr, pixelFormat: U64, width: U64, height: U64, mipmapped: Bool): RawPtr;
+
+// setClearColor: — MTLClearColor is an HFA of four doubles, passed as four F64
+// scalars (same v0-v3 registers on arm64), so no by-value struct is needed.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendVoid4F(obj: RawPtr, op: RawPtr, r: F64, g: F64, b: F64, a: F64): Void;
+
+// getBytes:bytesPerRow:fromRegion:mipmapLevel: — MTLRegion (>16 bytes, not an HFA)
+// is passed by reference per AAPCS64, so `region` is a pointer to a 48-byte buffer.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendGetBytes(obj: RawPtr, op: RawPtr, bytes: RawPtr, bytesPerRow: U64, region: RawPtr, mipLevel: U64): Void;
+
+// ---------------------------------------------------------------------------
+// Metal C entry point (the only non-Objective-C Metal symbol)
+// ---------------------------------------------------------------------------
+
+@FFI.Extern { library: kira_metal; symbol: MTLCreateSystemDefaultDevice; abi: c; }
+function metalCreateSystemDefaultDevice(): RawPtr;
+
+// ---------------------------------------------------------------------------
+// kira_runtime raw memory helpers (build by-reference structs, read pixels)
+// ---------------------------------------------------------------------------
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
+function metalMemAlloc(size: U64): RawPtr;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_free; abi: c; }
+function metalMemFree(ptr: RawPtr): Void;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u64_at; abi: c; }
+function metalMemWriteU64(ptr: RawPtr, offset: U64, value: U64): Void;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_ptr_at; abi: c; }
+function metalMemWritePtr(ptr: RawPtr, offset: U64, value: RawPtr): Void;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_ptr_at; abi: c; }
+function metalMemReadPtr(ptr: RawPtr, offset: U64): RawPtr;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u8_at; abi: c; }
+function metalMemReadU8(ptr: RawPtr, offset: U64): U8;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u32_at; abi: c; }
+function metalMemReadU32(ptr: RawPtr, offset: U64): U32;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_null_ptr; abi: c; }
+function metalNullPtr(): RawPtr;

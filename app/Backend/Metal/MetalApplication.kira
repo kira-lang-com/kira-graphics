@@ -3,13 +3,48 @@
 // This backend talks to Metal, QuartzCore and AppKit/UIKit DIRECTLY through
 // Kira FFI (the Objective-C runtime: objc_getClass / sel_registerName /
 // objc_msgSend, plus MTLCreateSystemDefaultDevice). There is no C/Objective-C
-// shim: every native call below is an `@FFI.Extern` to a system symbol, invoked
-// from Kira. The `NativeLibs/Metal.toml` library carries only framework linkage.
+// shim: every native call is an `@FFI.Extern` to a system symbol, invoked from
+// Kira. The `NativeLibs/Metal.toml` library carries only framework linkage.
 //
-// Phase 0: skeleton only — the real driver lands in Phase 1.
+// Phase 1 (current): an offscreen path that creates a real Metal device, command
+// queue and render target, runs the app's onInit/onFrame through the public API,
+// submits the frame's clear through Metal, and reads the produced pixel back so
+// the run proves real Kira-owned rendering headlessly. The on-screen CAMetalLayer
+// surface + host run loop attach at this same seam next.
 
 @Native
 function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
-    graphicsDiagnostic("Kira Graphics Metal backend skeleton present (Phase 0); native rendering not yet wired")
+    let ctxPtr = metalContextAlloc()
+    metalContextAttachOffscreen(ctxPtr, app.width, app.height)
+
+    kiraGraphicsLiveBackendInitialized()
+
+    // Use the app's lifecycle handlers directly from the borrowed application.
+    // The recovered runtime state only carries the user pointer / frame index:
+    // closures captured in the app do not survive the nativeState round-trip on
+    // the hybrid backend, but the borrowed `app` retains them intact.
+    var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    let userData = state.userData
+
+    let onInit: (Graphics) -> Void = app.initHandler
+    let initGraphics = Graphics {
+        userData: userData
+        backend: GraphicsBackend.Metal
+        metalContext: ctxPtr
+    }
+    onInit(move initGraphics)
+
+    let onFrame: (borrow mut GraphicsFrame) -> Void = app.frameHandler
+    let frameGraphics = Graphics {
+        userData: userData
+        backend: GraphicsBackend.Metal
+        metalContext: ctxPtr
+    }
+    var frame = frameGraphics.frame()
+    onFrame(frame)
+    graphicsSubmitFrame(frame)
+
+    metalReportCenterPixel(ctxPtr, app.width, app.height)
+    metalContextFree(ctxPtr)
     return
 }

@@ -1,5 +1,7 @@
 class Graphics {
     var userData: RawPtr
+    var backend: GraphicsBackend = GraphicsBackend.Sokol
+    var metalContext: RawPtr
 
     function createShader(descriptor: borrow ShaderDescriptor) -> GraphicsShader {
         let shaderId = sokolCreateShaderId(descriptor.label, descriptor.vertexSource, descriptor.fragmentSource, descriptor.vertexPath, descriptor.fragmentPath)
@@ -266,6 +268,8 @@ class Graphics {
             passSubmitted: false
             shouldQuit: false
             userData: self.userData
+            backend: self.backend
+            metalContext: self.metalContext
         }
     }
 }

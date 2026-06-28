@@ -1,0 +1,130 @@
+// Metal rendering context, built entirely from Objective-C messages via FFI.
+//
+// The context owns the device and command queue, the current color target (an
+// offscreen texture today; a CAMetalLayer drawable once the host surface lands),
+// and the in-flight command buffer + render-command encoder for the active pass.
+//
+// The context is a small raw heap block whose handle (RawPtr) is threaded across
+// the begin/end seam. We deliberately store it as raw memory rather than a Kira
+// struct behind `nativeState`: a render pass begins in one `@Native` call and ends
+// in another (the public GraphicsFrame splits beginRenderPass/endPass across the
+// VM in hybrid mode), and the in-flight encoder/command-buffer pointers must
+// survive between those calls identically on the native and hybrid backends. A
+// raw block read/written through the kira_runtime pointer helpers gives that
+// persistence unconditionally.
+//
+// Layout (byte offsets into the block):
+//   0  device           (id<MTLDevice>)
+//   8  queue            (id<MTLCommandQueue>)
+//  16  colorTexture     (id<MTLTexture>)
+//  24  commandBuffer    (id<MTLCommandBuffer>, per pass)
+//  32  encoder          (id<MTLRenderCommandEncoder>, per pass)
+//  40  width            (U64)
+//  48  height           (U64)
+function metalContextSize() -> U64 { return 56 }
+function metalOffsetDevice() -> U64 { return 0 }
+function metalOffsetQueue() -> U64 { return 8 }
+function metalOffsetColorTexture() -> U64 { return 16 }
+function metalOffsetCommandBuffer() -> U64 { return 24 }
+function metalOffsetEncoder() -> U64 { return 32 }
+function metalOffsetWidth() -> U64 { return 40 }
+function metalOffsetHeight() -> U64 { return 48 }
+
+// Metal enum constants we reference (kept local and explicit, not magic numbers
+// at the call sites).
+function metalPixelFormatBGRA8Unorm() -> U64 { return 80 }
+function metalTextureUsageRenderTarget() -> U64 { return 4 }
+function metalStorageModeShared() -> U64 { return 0 }
+function metalLoadActionClear() -> U64 { return 2 }
+function metalLoadActionLoad() -> U64 { return 1 }
+function metalStoreActionStore() -> U64 { return 1 }
+
+// Allocate the context block and create the device + command queue.
+@Native
+function metalContextAlloc() -> RawPtr {
+    let ctx = metalMemAlloc(metalContextSize())
+    let device = metalCreateSystemDefaultDevice()
+    let queue = metalMsgSend(device, metalSel("newCommandQueue"))
+    metalMemWritePtr(ctx, metalOffsetDevice(), device)
+    metalMemWritePtr(ctx, metalOffsetQueue(), queue)
+    return ctx
+}
+
+// Free the context block (the GPU objects are released by Metal's own lifetime
+// management; this frees the host-side handle block).
+@Native
+function metalContextFree(ctx: RawPtr) {
+    metalMemFree(ctx)
+    return
+}
+
+// Allocate an offscreen BGRA8 render target and make it the context's color target.
+@Native
+function metalContextAttachOffscreen(ctx: RawPtr, width: Int, height: Int) {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let descClass = metalObjcGetClass("MTLTextureDescriptor")
+    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatBGRA8Unorm(), width, height, false)
+    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget())
+    metalMsgSendVoidU(desc, metalSel("setStorageMode:"), metalStorageModeShared())
+    let texture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
+    metalMemWritePtr(ctx, metalOffsetColorTexture(), texture)
+    metalMemWriteU64(ctx, metalOffsetWidth(), width)
+    metalMemWriteU64(ctx, metalOffsetHeight(), height)
+    return
+}
+
+// Begin a render pass that clears the color target to (r,g,b,a). Builds the
+// MTLRenderPassDescriptor, the color attachment, the command buffer and the
+// render-command encoder, leaving the encoder recorded on the context.
+@Native
+function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b: F64, a: F64) {
+    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
+    let texture = metalMemReadPtr(ctx, metalOffsetColorTexture())
+    let rpClass = metalObjcGetClass("MTLRenderPassDescriptor")
+    let rp = metalMsgSend(rpClass, metalSel("renderPassDescriptor"))
+    let colorAttachments = metalMsgSend(rp, metalSel("colorAttachments"))
+    let ca0 = metalMsgSendPU(colorAttachments, metalSel("objectAtIndexedSubscript:"), 0)
+    metalMsgSendVoidP(ca0, metalSel("setTexture:"), texture)
+    metalMsgSendVoidU(ca0, metalSel("setLoadAction:"), loadAction)
+    metalMsgSendVoidU(ca0, metalSel("setStoreAction:"), metalStoreActionStore())
+    metalMsgSendVoid4F(ca0, metalSel("setClearColor:"), r, g, b, a)
+
+    let commandBuffer = metalMsgSend(queue, metalSel("commandBuffer"))
+    let encoder = metalMsgSendP(commandBuffer, metalSel("renderCommandEncoderWithDescriptor:"), rp)
+    metalMemWritePtr(ctx, metalOffsetCommandBuffer(), commandBuffer)
+    metalMemWritePtr(ctx, metalOffsetEncoder(), encoder)
+    return
+}
+
+// End the current pass, submit it, and wait for completion (offscreen path).
+@Native
+function metalContextEndAndCommit(ctx: RawPtr) {
+    let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
+    let commandBuffer = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
+    metalMsgSendVoid(encoder, metalSel("endEncoding"))
+    metalMsgSendVoid(commandBuffer, metalSel("commit"))
+    metalMsgSendVoid(commandBuffer, metalSel("waitUntilCompleted"))
+    return
+}
+
+// Read back a single pixel from the color target. The four BGRA bytes are read as
+// one little-endian U32, i.e. (A << 24) | (R << 16) | (G << 8) | B, so callers can
+// unpack without extra FFI round-trips and we avoid any width-casting in the hot
+// readback path.
+@Native
+function metalContextReadPixel(ctx: RawPtr, x: Int, y: Int) -> U32 {
+    let texture = metalMemReadPtr(ctx, metalOffsetColorTexture())
+    let region = metalMemAlloc(48)
+    metalMemWriteU64(region, 0, x)
+    metalMemWriteU64(region, 8, y)
+    metalMemWriteU64(region, 16, 0)
+    metalMemWriteU64(region, 24, 1)
+    metalMemWriteU64(region, 32, 1)
+    metalMemWriteU64(region, 40, 1)
+    let px = metalMemAlloc(4)
+    metalMsgSendGetBytes(texture, metalSel("getBytes:bytesPerRow:fromRegion:mipmapLevel:"), px, 4, region, 0)
+    let packed = metalMemReadU32(px, 0)
+    metalMemFree(region)
+    metalMemFree(px)
+    return packed
+}

@@ -1,4 +1,9 @@
 function graphicsSubmitFrame(frame: borrow GraphicsFrame) {
-    sokolSubmitFrame(frame)
+    match frame.backend {
+        Metal -> metalSubmitFrame(frame);
+        Sokol -> sokolSubmitFrame(frame);
+        Vulkan -> sokolSubmitFrame(frame);
+        DirectX12 -> sokolSubmitFrame(frame);
+    }
     return
 }
