@@ -1,5 +1,6 @@
 enum GraphicsBackend {
     Sokol
+    Metal
     Vulkan
     DirectX12
 }
@@ -41,6 +42,7 @@ function effectiveGraphicsPlatform(requested: GraphicsPlatform) -> GraphicsPlatf
 function graphicsBackendNameFor(backend: GraphicsBackend) -> String {
     match backend {
         Sokol -> return "sokol";
+        Metal -> return "metal";
         Vulkan -> return "vulkan";
         DirectX12 -> return "directx12";
     }
@@ -71,9 +73,35 @@ function validateGraphicsBackend(backend: GraphicsBackend, platform: GraphicsPla
             requiredSymbolCount: 0
             reason: ""
         };
+        Metal -> return validateMetalBackend(move resolvedPlatform);
         Vulkan -> return validateVulkanBackend(move resolvedPlatform);
         DirectX12 -> return validateDirectX12Backend(move resolvedPlatform);
     }
+}
+
+@Native
+function validateMetalBackend(platform: GraphicsPlatform) -> GraphicsBackendSelection {
+    if platform == GraphicsPlatform.MacOS {
+        return GraphicsBackendSelection {
+            backend: GraphicsBackend.Metal
+            platform: platform
+            supported: true
+            loaderName: "metal"
+            requiredSymbolCount: 0
+            reason: ""
+        }
+    }
+    if platform == GraphicsPlatform.IOS {
+        return GraphicsBackendSelection {
+            backend: GraphicsBackend.Metal
+            platform: platform
+            supported: true
+            loaderName: "metal"
+            requiredSymbolCount: 0
+            reason: ""
+        }
+    }
+    return unsupportedBackend(GraphicsBackend.Metal, move platform, "Kira Graphics Metal backend is only supported on macOS and iOS")
 }
 
 @Native

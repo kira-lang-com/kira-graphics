@@ -1,0 +1,23 @@
+# Kira Graphics Metal backend — native linkage only.
+#
+# This library has NO sources: the Metal backend drives Metal, QuartzCore and
+# AppKit/UIKit DIRECTLY from Kira through the Objective-C runtime (objc_getClass,
+# sel_registerName, objc_msgSend) plus MTLCreateSystemDefaultDevice. There is no
+# C/Objective-C shim. This descriptor exists purely to link the system frameworks
+# and the Objective-C runtime, and to give the FFI a library handle to resolve
+# those symbols against.
+#
+# Apple-only: no simulator, tvOS, xrOS, or non-Apple targets.
+
+[library]
+name = "kira_metal"
+link_mode = "dynamic"
+abi = "c"
+
+[target.aarch64-macos-none]
+frameworks = ["Foundation", "QuartzCore", "Metal", "AppKit"]
+system_libs = ["objc"]
+
+[target.aarch64-ios-none]
+frameworks = ["Foundation", "QuartzCore", "Metal", "UIKit"]
+system_libs = ["objc"]

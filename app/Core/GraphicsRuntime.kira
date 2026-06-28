@@ -14,6 +14,7 @@ function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
 
     match app.backend {
         Sokol -> sokolRunApplication(app, nativeUserData(runtimeState));
+        Metal -> metalRunApplication(app, nativeUserData(runtimeState));
         Vulkan -> graphicsDiagnostic("Kira Graphics Vulkan backend selected but no validated Vulkan runtime is linked");
         DirectX12 -> graphicsDiagnostic("Kira Graphics DirectX 12 backend selected but no validated DirectX 12 runtime is linked");
     }

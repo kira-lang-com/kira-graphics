@@ -1,0 +1,15 @@
+// Kira Graphics Metal backend — application lifecycle.
+//
+// This backend talks to Metal, QuartzCore and AppKit/UIKit DIRECTLY through
+// Kira FFI (the Objective-C runtime: objc_getClass / sel_registerName /
+// objc_msgSend, plus MTLCreateSystemDefaultDevice). There is no C/Objective-C
+// shim: every native call below is an `@FFI.Extern` to a system symbol, invoked
+// from Kira. The `NativeLibs/Metal.toml` library carries only framework linkage.
+//
+// Phase 0: skeleton only — the real driver lands in Phase 1.
+
+@Native
+function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
+    graphicsDiagnostic("Kira Graphics Metal backend skeleton present (Phase 0); native rendering not yet wired")
+    return
+}
