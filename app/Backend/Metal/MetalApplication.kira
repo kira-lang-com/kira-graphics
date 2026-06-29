@@ -49,6 +49,13 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         let benchEnv = metalGetEnv("KIRA_METAL_BENCH")
         if !metalPtrIsNull(benchEnv) {
             let benchFrames = 180
+            // KIRA_METAL_RESIZE_BENCH cycles the offscreen size each frame so the app
+            // sees a changing viewport every frame — exercising the resize/rebuild path
+            // (no damage-skip) instead of the static re-present path. Re-attaching the
+            // offscreen target only allocates a native MTLTexture, so the Kira struct
+            // allocation count still reflects the per-frame rebuild work.
+            let resizeEnv = metalGetEnv("KIRA_METAL_RESIZE_BENCH")
+            let resizeBench = !metalPtrIsNull(resizeEnv)
             // Warm up one frame (first-touch caches, retained tree mount) before timing.
             let warmGraphics = Graphics {
                 userData: userData
@@ -61,6 +68,9 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             let startNs = metalClockNs(metalClockUptimeRaw())
             var bi = 0
             while bi < benchFrames {
+                if resizeBench {
+                    metalContextAttachOffscreen(ctxPtr, app.width + (bi % 120), app.height)
+                }
                 let benchGraphics = Graphics {
                     userData: userData
                     backend: GraphicsBackend.Metal
