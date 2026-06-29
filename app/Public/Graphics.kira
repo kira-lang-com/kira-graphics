@@ -4,6 +4,15 @@ class Graphics {
     var metalContext: RawPtr
 
     function createShader(descriptor: borrow ShaderDescriptor) -> GraphicsShader {
+        if self.backend == GraphicsBackend.Metal {
+            let metalShaderId = metalCreateShader(self.metalContext, descriptor.vertexSource)
+            return GraphicsShader {
+                handle: BackendShaderHandle {
+                    id: metalShaderId
+                }
+                id: metalShaderId
+            }
+        }
         let shaderId = sokolCreateShaderId(descriptor.label, descriptor.vertexSource, descriptor.fragmentSource, descriptor.vertexPath, descriptor.fragmentPath)
         return GraphicsShader {
             handle: BackendShaderHandle {
@@ -29,6 +38,15 @@ class Graphics {
     }
 
     function createRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> RenderPipeline {
+        if self.backend == GraphicsBackend.Metal {
+            let metalPipelineId = metalCreateRenderPipeline(self.metalContext, descriptor.shader.id, metalPixelFormatBGRA8Unorm())
+            return RenderPipeline {
+                handle: BackendPipelineHandle {
+                    id: metalPipelineId
+                }
+                id: metalPipelineId
+            }
+        }
         return sokolCreateRenderPipeline(descriptor)
     }
 
@@ -43,6 +61,15 @@ class Graphics {
     }
 
     function createBuffer(descriptor: borrow BufferDescriptor) -> GraphicsBuffer {
+        if self.backend == GraphicsBackend.Metal {
+            let metalBufferId = metalCreateVertexBuffer(self.metalContext, descriptor.data)
+            return GraphicsBuffer {
+                handle: BackendBufferHandle {
+                    id: metalBufferId
+                }
+                id: metalBufferId
+            }
+        }
         let uploadId = sokolBeginFloatBufferUpload(descriptor.label, descriptor.usage, descriptor.stride, descriptor.data.count)
         var index = 0
 

@@ -14,8 +14,19 @@
 
 @Native
 function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
+    // One autorelease pool around the whole run: the Metal shader compiler and the
+    // Foundation string/descriptor helpers create many autoreleased temporaries, and
+    // draining them at a single well-defined point keeps resource creation
+    // deterministic (a missing pool makes runtime shader compilation intermittently
+    // fail).
+    let pool = metalAutoreleasePoolPush()
+
+    // Headless verification renders to an offscreen target for deterministic
+    // pixel readback. The CAMetalLayer surface (metalContextAttachLayer) is the
+    // on-screen path the host runner drives once it provides an NSView/UIView;
+    // a presented drawable is owned by the compositor and is not read back.
     let ctxPtr = metalContextAlloc()
-    metalContextAttachLayer(ctxPtr, app.width, app.height)
+    metalContextAttachOffscreen(ctxPtr, app.width, app.height)
 
     kiraGraphicsLiveBackendInitialized()
 
@@ -46,5 +57,6 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
 
     metalReportCenterPixel(ctxPtr, app.width, app.height)
     metalContextFree(ctxPtr)
+    metalAutoreleasePoolPop(pool)
     return
 }

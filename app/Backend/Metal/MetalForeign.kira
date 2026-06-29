@@ -71,6 +71,42 @@ function metalMsgSendVoid4F(obj: RawPtr, op: RawPtr, r: F64, g: F64, b: F64, a: 
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendGetBytes(obj: RawPtr, op: RawPtr, bytes: RawPtr, bytesPerRow: U64, region: RawPtr, mipLevel: U64): Void;
 
+// (CString) -> id  — used for +[NSString stringWithUTF8String:]
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendStr(obj: RawPtr, op: RawPtr, s: CString): RawPtr;
+
+// (id, id) -> id  — e.g. newRenderPipelineStateWithDescriptor:error:
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendPP(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr): RawPtr;
+
+// (id, id, id) -> id  — e.g. newLibraryWithSource:options:error:
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendPPP(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr, c: RawPtr): RawPtr;
+
+// newBufferWithBytes:length:options: -> id
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendNewBuffer(obj: RawPtr, op: RawPtr, bytes: RawPtr, length: U64, options: U64): RawPtr;
+
+// setVertexBuffer:offset:atIndex:
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendSetVertexBuffer(obj: RawPtr, op: RawPtr, buffer: RawPtr, offset: U64, index: U64): Void;
+
+// drawPrimitives:vertexStart:vertexCount:
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendDrawPrimitives(obj: RawPtr, op: RawPtr, primitiveType: U64, vertexStart: U64, vertexCount: U64): Void;
+
+// drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendDrawIndexed(obj: RawPtr, op: RawPtr, primitiveType: U64, indexCount: U64, indexType: U64, indexBuffer: RawPtr, indexBufferOffset: U64): Void;
+
+// Objective-C autorelease pool (C functions in libobjc). The Metal shader compiler
+// and NSString helpers create many autoreleased temporaries; without a pool that is
+// undefined behaviour, so resource creation runs inside push/pop.
+@FFI.Extern { library: kira_metal; symbol: objc_autoreleasePoolPush; abi: c; }
+function metalAutoreleasePoolPush(): RawPtr;
+@FFI.Extern { library: kira_metal; symbol: objc_autoreleasePoolPop; abi: c; }
+function metalAutoreleasePoolPop(token: RawPtr): Void;
+
 // ---------------------------------------------------------------------------
 // Metal C entry point (the only non-Objective-C Metal symbol)
 // ---------------------------------------------------------------------------
@@ -96,6 +132,10 @@ function metalMemReadPtr(ptr: RawPtr, offset: U64): RawPtr;
 function metalMemReadU8(ptr: RawPtr, offset: U64): U8;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u32_at; abi: c; }
 function metalMemReadU32(ptr: RawPtr, offset: U64): U32;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u64_at; abi: c; }
+function metalMemReadU64(ptr: RawPtr, offset: U64): U64;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_f32_at; abi: c; }
+function metalMemWriteF32(ptr: RawPtr, offset: U64, value: F32): Void;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_null_ptr; abi: c; }
 function metalNullPtr(): RawPtr;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_ptr_is_null; abi: c; }

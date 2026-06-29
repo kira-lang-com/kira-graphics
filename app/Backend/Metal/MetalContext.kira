@@ -23,7 +23,9 @@
 //  48  height           (U64)
 //  56  layer            (CAMetalLayer, null in offscreen mode)
 //  64  drawable         (id<CAMetalDrawable>, per pass in layer mode)
-function metalContextSize() -> U64 { return 72 }
+//  72  registry         (raw block of resource pointers indexed by handle id)
+//  80  nextId           (U64, next resource handle id; id 0 is reserved/invalid)
+function metalContextSize() -> U64 { return 88 }
 function metalOffsetDevice() -> U64 { return 0 }
 function metalOffsetQueue() -> U64 { return 8 }
 function metalOffsetColorTexture() -> U64 { return 16 }
@@ -33,6 +35,37 @@ function metalOffsetWidth() -> U64 { return 40 }
 function metalOffsetHeight() -> U64 { return 48 }
 function metalOffsetLayer() -> U64 { return 56 }
 function metalOffsetDrawable() -> U64 { return 64 }
+function metalOffsetRegistry() -> U64 { return 72 }
+function metalOffsetNextId() -> U64 { return 80 }
+
+// The resource registry maps small integer handle ids (stored as U32 in the public
+// handle types) to the Objective-C resource pointers (MTLBuffer / MTLLibrary /
+// MTLRenderPipelineState / ...). A fixed-capacity pointer table is enough for the
+// resource counts a frame uses; ids start at 1 so 0 stays a sentinel.
+function metalRegistryCapacity() -> U64 { return 1024 }
+
+// Register an Objective-C resource pointer and return its handle id.
+@Native
+function metalRegister(ctx: RawPtr, object: RawPtr) -> Int {
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    let id = metalMemReadU64(ctx, metalOffsetNextId())
+    metalMemWritePtr(registry, id * 8, object)
+    metalMemWriteU64(ctx, metalOffsetNextId(), id + 1)
+    return id
+}
+
+// Resolve a handle id back to its Objective-C resource pointer.
+@Native
+function metalLookup(ctx: RawPtr, id: Int) -> RawPtr {
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    return metalMemReadPtr(registry, id * 8)
+}
+
+// True when a context handle is present (the Metal backend is active for a pass).
+@Native
+function metalContextActive(ctx: RawPtr) -> Bool {
+    return !metalPtrIsNull(ctx)
+}
 
 // Metal enum constants we reference (kept local and explicit, not magic numbers
 // at the call sites).
@@ -54,6 +87,10 @@ function metalContextAlloc() -> RawPtr {
     // Null the surface slots so offscreen mode (no layer/drawable) is detectable.
     metalMemWritePtr(ctx, metalOffsetLayer(), metalNullPtr())
     metalMemWritePtr(ctx, metalOffsetDrawable(), metalNullPtr())
+    // Resource registry: capacity pointers, ids starting at 1.
+    let registry = metalMemAlloc(metalRegistryCapacity() * 8)
+    metalMemWritePtr(ctx, metalOffsetRegistry(), registry)
+    metalMemWriteU64(ctx, metalOffsetNextId(), 1)
     return ctx
 }
 

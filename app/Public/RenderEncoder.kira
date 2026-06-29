@@ -9,6 +9,10 @@ struct RenderEncoderState {
     var pipelineId: U32 = 0
     var hasPipeline: Bool = false
     var passActive: Bool = false
+    // A non-null metalContext selects the Metal backend for draw encoding. (An
+    // enum field here proved unreliable to read back from nativeState storage; a
+    // pointer presence check is robust.)
+    var metalContext: RawPtr
 
     var vertexBufferId: U32 = 0
     var hasVertexBuffer: Bool = false
@@ -83,6 +87,10 @@ class RenderEncoder {
         state.indexCount = 0
         state.instanceCount = 1
         if (state.passActive && state.hasPipeline && state.pipelineId != 0) {
+            if metalContextActive(state.metalContext) {
+                metalEncoderDraw(state.metalContext, state.pipelineId, state.vertexBufferId, state.hasVertexBuffer, state.vertexCount, state.instanceCount)
+                return
+            }
             sokolApplyPipelineBindingsAndDrawFlat(
                 state.pipelineId,
                 state.vertexBufferId,
@@ -286,15 +294,22 @@ function sokolUiDrawText(content: borrow String, x: Float, y: Float, width: Floa
     return
 }
 
+@Native
 function makeRenderEncoder() -> RenderEncoder {
-    return makeRenderEncoderWithPassActive(false)
+    return makeRenderEncoderForBackend(false, metalNullPtr())
 }
 
+@Native
 function makeRenderEncoderWithPassActive(passActive: Bool) -> RenderEncoder {
+    return makeRenderEncoderForBackend(passActive, metalNullPtr())
+}
+
+function makeRenderEncoderForBackend(passActive: Bool, metalContext: RawPtr) -> RenderEncoder {
     let state = nativeState(RenderEncoderState {
         pipelineId: 0
         hasPipeline: false
         passActive: passActive
+        metalContext: metalContext
         vertexBufferId: 0
         hasVertexBuffer: false
         indexBufferId: 0

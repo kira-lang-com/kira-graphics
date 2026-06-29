@@ -1,0 +1,84 @@
+// Metal resource creation and draw encoding, built from Objective-C messages via
+// FFI. Shaders, vertex buffers and render pipeline states are created as real
+// Metal objects, registered in the context's id->pointer table, and resolved back
+// at draw time to encode onto the active render-command encoder.
+//
+// Shader entry points use the fixed names `v_main` / `f_main`; the supplied MSL
+// source is a single library containing both stages. (The KSL pipeline emits
+// `{Shader}__vertex__main` / `{Shader}__fragment__main`; wiring those configurable
+// names follows once the KSL .metal assets are loaded.)
+
+function metalPrimitiveTriangle() -> U64 { return 3 }
+
+// Compile an MSL source library and register it as a shader handle.
+@Native
+function metalCreateShader(ctx: RawPtr, source: borrow String) -> Int {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let nsstr = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), source)
+    let opts = metalMsgSend(metalMsgSend(metalObjcGetClass("MTLCompileOptions"), metalSel("alloc")), metalSel("init"))
+    let errSlot = metalMemAlloc(8)
+    metalMemWriteU64(errSlot, 0, 0)
+    let library = metalMsgSendPPP(device, metalSel("newLibraryWithSource:options:error:"), nsstr, opts, errSlot)
+    let id = metalRegister(ctx, library)
+    metalMemFree(errSlot)
+    return id
+}
+
+// Upload float vertex data into a new MTLBuffer and register it. Kira `Float` is a
+// double; the values are narrowed to 32-bit floats (the GPU vertex format) by the
+// F32 store at the FFI boundary.
+@Native
+function metalCreateVertexBuffer(ctx: RawPtr, data: borrow [Float]) -> Int {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let count = data.count
+    let bytes = metalMemAlloc(count * 4)
+    var i = 0
+    while i < count {
+        metalMemWriteF32(bytes, i * 4, data[i])
+        i = i + 1
+    }
+    let buffer = metalMsgSendNewBuffer(device, metalSel("newBufferWithBytes:length:options:"), bytes, count * 4, 0)
+    let id = metalRegister(ctx, buffer)
+    metalMemFree(bytes)
+    return id
+}
+
+// Build an MTLRenderPipelineState from a shader library and a color pixel format,
+// and register it.
+@Native
+function metalCreateRenderPipeline(ctx: RawPtr, shaderId: Int, colorFormat: U64) -> Int {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let library = metalLookup(ctx, shaderId)
+    let vname = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "v_main")
+    let fname = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "f_main")
+    let vfn = metalMsgSendP(library, metalSel("newFunctionWithName:"), vname)
+    let ffn = metalMsgSendP(library, metalSel("newFunctionWithName:"), fname)
+
+    let desc = metalMsgSend(metalMsgSend(metalObjcGetClass("MTLRenderPipelineDescriptor"), metalSel("alloc")), metalSel("init"))
+    metalMsgSendVoidP(desc, metalSel("setVertexFunction:"), vfn)
+    metalMsgSendVoidP(desc, metalSel("setFragmentFunction:"), ffn)
+    let colorAttachment = metalMsgSendPU(metalMsgSend(desc, metalSel("colorAttachments")), metalSel("objectAtIndexedSubscript:"), 0)
+    metalMsgSendVoidU(colorAttachment, metalSel("setPixelFormat:"), colorFormat)
+
+    let errSlot = metalMemAlloc(8)
+    metalMemWriteU64(errSlot, 0, 0)
+    let pipeline = metalMsgSendPP(device, metalSel("newRenderPipelineStateWithDescriptor:error:"), desc, errSlot)
+    let id = metalRegister(ctx, pipeline)
+    metalMemFree(errSlot)
+    return id
+}
+
+// Encode a non-indexed draw on the active render-command encoder: bind the pipeline
+// state, the vertex buffer (slot 0), then draw `vertexCount` triangle vertices.
+@Native
+function metalEncoderDraw(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, hasVertexBuffer: Bool, vertexCount: Int, instanceCount: Int) {
+    let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
+    let pipeline = metalLookup(ctx, pipelineId)
+    metalMsgSendVoidP(encoder, metalSel("setRenderPipelineState:"), pipeline)
+    if hasVertexBuffer {
+        let buffer = metalLookup(ctx, vertexBufferId)
+        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, 0, 0)
+    }
+    metalMsgSendDrawPrimitives(encoder, metalSel("drawPrimitives:vertexStart:vertexCount:"), metalPrimitiveTriangle(), 0, vertexCount)
+    return
+}

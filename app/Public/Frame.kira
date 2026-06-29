@@ -97,7 +97,7 @@ class GraphicsFrame {
             graphicsDiagnostic("Kira Graphics skipped render pass because the backend could not begin it")
         }
 
-        let encoder = makeRenderEncoderWithPassActive(self.renderPassActive)
+        let encoder = makeRenderEncoderForBackend(self.renderPassActive, self.metalContext)
         self.currentEncoder = encoder
         return encoder
     }

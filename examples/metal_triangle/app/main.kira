@@ -1,0 +1,153 @@
+import KiraGraphics
+
+// A real triangle through the from-scratch Metal backend (no shim): MSL shader
+// compiled at runtime, an MTLRenderPipelineState, a vertex MTLBuffer and a draw,
+// all driven from Kira via the Objective-C runtime. Rendered into a CAMetalLayer
+// drawable; the backend reads the center pixel back so the run proves the triangle
+// rasterized (center = triangle color, not the clear color).
+
+struct TriangleState {
+    var shader: GraphicsShader
+    var pipeline: RenderPipeline
+    var vertices: GraphicsBuffer
+}
+
+function triangleVertices() -> [Float] {
+    return [
+        0.0, 0.7,
+        0.7, -0.7,
+        -0.7, -0.7
+    ]
+}
+
+function triangleSource() -> String {
+    return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main() { return float4(1.0, 0.4, 0.1, 1.0); }\n"
+}
+
+function triangleLayout() -> VertexLayout {
+    return VertexLayout {
+        stride: 8
+        attributes: [
+            VertexAttribute {
+                name: "position"
+                location: 0
+                format: vertexFormatFloat2()
+                offset: 0
+            }
+        ]
+    }
+}
+
+function trianglePass() -> RenderPassDescriptor {
+    return RenderPassDescriptor {
+        label: "metal-triangle-pass"
+        colorAttachments: [
+            ColorAttachment {
+                target: swapchainRenderTarget()
+                loadAction: loadActionClear()
+                storeAction: storeActionStore()
+                clearColor: Color {
+                    r: 0.05
+                    g: 0.05
+                    b: 0.10
+                    a: 1.0
+                }
+                resolveTarget: emptyRenderTarget()
+                hasResolveTarget: false
+            }
+        ]
+        primaryColorAttachment: ColorAttachment {
+            target: swapchainRenderTarget()
+            loadAction: loadActionClear()
+            storeAction: storeActionStore()
+            clearColor: Color {
+                r: 0.05
+                g: 0.05
+                b: 0.10
+                a: 1.0
+            }
+            resolveTarget: emptyRenderTarget()
+            hasResolveTarget: false
+        }
+        hasPrimaryColorAttachment: true
+        depthAttachment: emptyDepthAttachment()
+        hasDepthAttachment: false
+        stencilAttachment: emptyStencilAttachment()
+        hasStencilAttachment: false
+    }
+}
+
+@Main
+@Native
+function main() {
+    var app = GraphicsApplication {
+        title: "Kira Graphics Metal Triangle"
+        width: 64
+        height: 64
+        sampleCount: 1
+        backend: GraphicsBackend.Metal
+    }
+    let state = nativeState(TriangleState {
+        shader: emptyGraphicsShader()
+        pipeline: emptyRenderPipeline()
+        vertices: emptyGraphicsBuffer()
+    })
+
+    app.onInit { graphics in
+        var triangleState = nativeRecover<TriangleState>(graphics.userData)
+        triangleState.shader = graphics.createShader(ShaderDescriptor {
+            label: "metal-triangle-shader"
+            vertexSource: triangleSource()
+            fragmentSource: ""
+            vertexPath: ""
+            fragmentPath: ""
+        })
+        triangleState.vertices = graphics.createBuffer(BufferDescriptor {
+            label: "metal-triangle-vertices"
+            usage: bufferUsageVertex()
+            stride: 8
+            data: triangleVertices()
+        })
+        triangleState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+            label: "metal-triangle-pipeline"
+            shader: triangleState.shader
+            vertexLayout: triangleLayout()
+            colorTargets: [
+                ColorTargetDescriptor {
+                    format: textureFormatSwapchain()
+                    blend: BlendState {
+                        enabled: false
+                        preset: blendPresetReplace()
+                    }
+                }
+            ]
+            depthStencil: DepthStencilDescriptor {
+                depthEnabled: false
+                depthWriteEnabled: false
+                depthCompare: compareFunctionAlways()
+                format: textureFormatDepth24Stencil8()
+            }
+            rasterization: RasterizationDescriptor {
+                cullMode: cullModeNone()
+                frontFace: frontFaceCounterClockwise()
+            }
+            primitive: PrimitiveDescriptor {
+                topology: primitiveTopologyTriangleList()
+            }
+        })
+        return
+    }
+
+    app.onFrame { frame in
+        var triangleState = nativeRecover<TriangleState>(frame.userData)
+        let encoder = frame.beginRenderPass(trianglePass())
+        encoder.setPipeline(triangleState.pipeline)
+        encoder.setVertexBuffer(triangleState.vertices)
+        encoder.draw(3)
+        frame.endPass()
+        return
+    }
+
+    app.run(nativeUserData(state))
+    return
+}
