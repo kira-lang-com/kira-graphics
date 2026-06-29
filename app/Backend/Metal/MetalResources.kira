@@ -122,6 +122,15 @@ function metalCreateDynamicBuffer(ctx: RawPtr, floatCount: Int) -> Int {
     return metalRegister(ctx, buffer)
 }
 
+// The CPU-visible contents pointer of a dynamic (shared) buffer. Stable for the
+// buffer's lifetime, so a caller can fetch it once and write vertices straight into
+// GPU-visible memory each frame (no per-element FFI marshalling through a Kira array).
+@Native
+function metalDynamicBufferContents(ctx: RawPtr, bufferId: Int) -> RawPtr {
+    let buffer = metalLookup(ctx, bufferId)
+    return metalMsgSend(buffer, metalSel("contents"))
+}
+
 // Overwrite the first `data.count` f32 slots of a dynamic buffer's shared contents.
 @Native
 function metalUpdateDynamicBuffer(ctx: RawPtr, bufferId: Int, data: borrow [Float]) {

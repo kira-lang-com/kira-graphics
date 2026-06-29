@@ -74,6 +74,8 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     var running = true
     while running {
         let framePool = metalAutoreleasePoolPush()
+        metalContextTickFrameTime(ctxPtr)
+        metalContextSyncViewportFromView(ctxPtr)
         let frameGraphics = Graphics {
             userData: userData
             backend: GraphicsBackend.Metal

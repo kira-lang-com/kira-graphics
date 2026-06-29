@@ -77,6 +77,16 @@ class Graphics {
         }
     }
 
+    // The CPU-visible contents pointer of a dynamic buffer, for callers that write
+    // vertices straight into GPU-visible memory (the UI compositor's hot path).
+    function dynamicBufferContents(buffer: borrow GraphicsBuffer) -> RawPtr {
+        if self.backend == GraphicsBackend.Metal {
+            return metalDynamicBufferContents(self.metalContext, buffer.id)
+        }
+        graphicsDiagnostic("Kira Graphics: dynamicBufferContents is only implemented on the Metal backend")
+        return self.metalContext
+    }
+
     // Overwrite the first data.count f32 slots of a dynamic buffer's contents.
     function updateDynamicBuffer(buffer: borrow GraphicsBuffer, data: borrow [Float]) {
         if self.backend == GraphicsBackend.Metal {

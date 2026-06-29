@@ -81,6 +81,23 @@ function metalMsgSendGetBytes(obj: RawPtr, op: RawPtr, bytes: RawPtr, bytesPerRo
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendStr(obj: RawPtr, op: RawPtr, s: CString): RawPtr;
 
+// () -> CGRect  — e.g. -[NSView bounds]. CGRect is an HFA of four doubles (origin.x,
+// origin.y, size.width, size.height), returned in v0-v3 per AAPCS64, so it maps to a
+// four-F64 struct return (no objc_msgSend_stret on arm64 for HFAs).
+@FFI.Struct { layout: c; }
+struct MetalCGRect {
+    var x: F64
+    var y: F64
+    var width: F64
+    var height: F64
+}
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendCGRect(obj: RawPtr, op: RawPtr): MetalCGRect;
+
+// () -> CGFloat  — e.g. -[NSWindow backingScaleFactor] (a single double).
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendF64(obj: RawPtr, op: RawPtr): F64;
+
 // (id, id) -> id  — e.g. newRenderPipelineStateWithDescriptor:error:
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendPP(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr): RawPtr;
@@ -149,6 +166,15 @@ function metalCreateSystemDefaultDevice(): RawPtr;
 // libc getenv — used to select the headless offscreen path for verification.
 @FFI.Extern { library: kira_metal; symbol: getenv; abi: c; }
 function metalGetEnv(name: CString): RawPtr;
+
+// clock_gettime_nsec_np — monotonic time in nanoseconds as a uint64_t, the
+// frame-timing clock for the on-screen run loop (drives the live FPS readout). An
+// INTEGER-return clock is used deliberately: a C function returning `double` hands the
+// value back in a floating-point register, which the FFI boundary does not marshal, so
+// CACurrentMediaTime-style seconds would read back as 0. CLOCK_UPTIME_RAW == 8.
+@FFI.Extern { library: kira_metal; symbol: clock_gettime_nsec_np; abi: c; }
+function metalClockNs(clockId: U32): U64;
+function metalClockUptimeRaw() -> U32 { return 8 }
 
 // ---------------------------------------------------------------------------
 // kira_runtime raw memory helpers (build by-reference structs, read pixels)

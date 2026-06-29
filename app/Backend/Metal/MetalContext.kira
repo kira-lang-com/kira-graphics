@@ -27,7 +27,10 @@
 //  80  nextId           (U64, next resource handle id; id 0 is reserved/invalid)
 //  88  depthTexture     (id<MTLTexture>, Depth32Float; null until attached)
 //  96  depthState       (id<MTLDepthStencilState>, less + write)
-function metalContextSize() -> U64 { return 104 }
+// 104  hostView         (NSView/UIView the layer is attached to; null in offscreen)
+// 112  lastFrameNs      (U64 nanoseconds; the previous frame's monotonic clock)
+// 120  frameDurationNs  (U64 nanoseconds; the most recent inter-frame delta, for FPS)
+function metalContextSize() -> U64 { return 128 }
 function metalOffsetDevice() -> U64 { return 0 }
 function metalOffsetQueue() -> U64 { return 8 }
 function metalOffsetColorTexture() -> U64 { return 16 }
@@ -41,6 +44,9 @@ function metalOffsetRegistry() -> U64 { return 72 }
 function metalOffsetNextId() -> U64 { return 80 }
 function metalOffsetDepthTexture() -> U64 { return 88 }
 function metalOffsetDepthState() -> U64 { return 96 }
+function metalOffsetHostView() -> U64 { return 104 }
+function metalOffsetLastFrameNs() -> U64 { return 112 }
+function metalOffsetFrameDurationNs() -> U64 { return 120 }
 
 // The resource registry maps small integer handle ids (stored as U32 in the public
 // handle types) to the Objective-C resource pointers (MTLBuffer / MTLLibrary /
@@ -69,6 +75,61 @@ function metalLookup(ctx: RawPtr, id: Int) -> RawPtr {
 @Native
 function metalContextActive(ctx: RawPtr) -> Bool {
     return !metalPtrIsNull(ctx)
+}
+
+// Sample the frame clock: record the delta since the previous tick as the current
+// frame duration (seconds). Called once per frame by the on-screen run loop; the live
+// FPS readout reads it back through metalContextFrameDuration.
+@Native
+function metalContextTickFrameTime(ctx: RawPtr) {
+    let now = metalClockNs(metalClockUptimeRaw())
+    let last = metalMemReadU64(ctx, metalOffsetLastFrameNs())
+    if last > 0 && now > last {
+        metalMemWriteU64(ctx, metalOffsetFrameDurationNs(), now - last)
+    }
+    metalMemWriteU64(ctx, metalOffsetLastFrameNs(), now)
+    return
+}
+
+// The most recent inter-frame delta in seconds (nanoseconds / 1e9), for the FPS
+// readout. The conversion is a normal Kira Float division — no floating-point value
+// crosses the FFI boundary.
+@Native
+function metalContextFrameDuration(ctx: RawPtr) -> Float {
+    let durNs = metalMemReadU64(ctx, metalOffsetFrameDurationNs())
+    return Float(durNs) / 1000000000.0
+}
+
+// Track the host view's current size: read its bounds (points), resize the
+// CAMetalLayer's drawable to match, and record the size as the context's
+// width/height so the next pass and the UI layout reflow to the live window size.
+// This is what makes interactive window resize work — called once per frame by the
+// on-screen run loop. Implausible sizes (a transient zero/huge bounds during a
+// resize) are ignored.
+@Native
+function metalContextSyncViewportFromView(ctx: RawPtr) {
+    let view = metalMemReadPtr(ctx, metalOffsetHostView())
+    if metalPtrIsNull(view) {
+        return
+    }
+    let bounds = metalMsgSendCGRect(view, metalSel("bounds"))
+    let w = Int(bounds.width)
+    let h = Int(bounds.height)
+    if w <= 0 || h <= 0 || w > 16384 || h > 16384 {
+        return
+    }
+    let curW = metalMemReadU64(ctx, metalOffsetWidth())
+    let curH = metalMemReadU64(ctx, metalOffsetHeight())
+    if w == curW && h == curH {
+        return
+    }
+    let layer = metalMemReadPtr(ctx, metalOffsetLayer())
+    if !metalPtrIsNull(layer) {
+        metalMsgSendVoid2F(layer, metalSel("setDrawableSize:"), Float(w), Float(h))
+    }
+    metalMemWriteU64(ctx, metalOffsetWidth(), w)
+    metalMemWriteU64(ctx, metalOffsetHeight(), h)
+    return
 }
 
 // Drawable dimensions recorded on the context (the UI layout/viewport source on the
@@ -118,6 +179,9 @@ function metalContextAlloc() -> RawPtr {
     metalMemWritePtr(ctx, metalOffsetDrawable(), metalNullPtr())
     metalMemWritePtr(ctx, metalOffsetDepthTexture(), metalNullPtr())
     metalMemWritePtr(ctx, metalOffsetDepthState(), metalNullPtr())
+    metalMemWritePtr(ctx, metalOffsetHostView(), metalNullPtr())
+    metalMemWriteU64(ctx, metalOffsetLastFrameNs(), 0)
+    metalMemWriteU64(ctx, metalOffsetFrameDurationNs(), 0)
     // Resource registry: capacity pointers, ids starting at 1.
     let registry = metalMemAlloc(metalRegistryCapacity() * 8)
     metalMemWritePtr(ctx, metalOffsetRegistry(), registry)
@@ -210,6 +274,7 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     metalMsgSendVoidB(viewPtr, metalSel("setWantsLayer:"), true)
     metalMsgSendVoidP(viewPtr, metalSel("setLayer:"), layer)
     metalMemWritePtr(ctx, metalOffsetLayer(), layer)
+    metalMemWritePtr(ctx, metalOffsetHostView(), viewPtr)
     metalMemWriteU64(ctx, metalOffsetWidth(), width)
     metalMemWriteU64(ctx, metalOffsetHeight(), height)
     return
