@@ -9,6 +9,7 @@
 // names follows once the KSL .metal assets are loaded.)
 
 function metalPrimitiveTriangle() -> U64 { return 3 }
+function metalIndexTypeUInt32() -> U64 { return 1 }
 
 // Compile an MSL source library and register it as a shader handle.
 @Native
@@ -35,6 +36,23 @@ function metalCreateVertexBuffer(ctx: RawPtr, data: borrow [Float]) -> Int {
     var i = 0
     while i < count {
         metalMemWriteF32(bytes, i * 4, data[i])
+        i = i + 1
+    }
+    let buffer = metalMsgSendNewBuffer(device, metalSel("newBufferWithBytes:length:options:"), bytes, count * 4, 0)
+    let id = metalRegister(ctx, buffer)
+    metalMemFree(bytes)
+    return id
+}
+
+// Upload integer index data into a new MTLBuffer as uint32 indices and register it.
+@Native
+function metalCreateIndexBuffer(ctx: RawPtr, data: borrow [Int]) -> Int {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let count = data.count
+    let bytes = metalMemAlloc(count * 4)
+    var i = 0
+    while i < count {
+        metalMemWriteU32(bytes, i * 4, data[i])
         i = i + 1
     }
     let buffer = metalMsgSendNewBuffer(device, metalSel("newBufferWithBytes:length:options:"), bytes, count * 4, 0)
@@ -80,5 +98,21 @@ function metalEncoderDraw(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, has
         metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, 0, 0)
     }
     metalMsgSendDrawPrimitives(encoder, metalSel("drawPrimitives:vertexStart:vertexCount:"), metalPrimitiveTriangle(), 0, vertexCount)
+    return
+}
+
+// Encode an indexed draw: bind the pipeline state and vertex buffer, then draw
+// `indexCount` triangle indices (uint32) from the index buffer.
+@Native
+function metalEncoderDrawIndexed(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, hasVertexBuffer: Bool, indexBufferId: Int, indexCount: Int, instanceCount: Int) {
+    let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
+    let pipeline = metalLookup(ctx, pipelineId)
+    metalMsgSendVoidP(encoder, metalSel("setRenderPipelineState:"), pipeline)
+    if hasVertexBuffer {
+        let buffer = metalLookup(ctx, vertexBufferId)
+        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, 0, 0)
+    }
+    let indexBuffer = metalLookup(ctx, indexBufferId)
+    metalMsgSendDrawIndexed(encoder, metalSel("drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:"), metalPrimitiveTriangle(), indexCount, metalIndexTypeUInt32(), indexBuffer, 0)
     return
 }

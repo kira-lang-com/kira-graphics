@@ -136,6 +136,8 @@ function metalMemReadU32(ptr: RawPtr, offset: U64): U32;
 function metalMemReadU64(ptr: RawPtr, offset: U64): U64;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_f32_at; abi: c; }
 function metalMemWriteF32(ptr: RawPtr, offset: U64, value: F32): Void;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u32_at; abi: c; }
+function metalMemWriteU32(ptr: RawPtr, offset: U64, value: U32): Void;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_null_ptr; abi: c; }
 function metalNullPtr(): RawPtr;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_ptr_is_null; abi: c; }

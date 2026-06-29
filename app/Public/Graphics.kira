@@ -88,6 +88,15 @@ class Graphics {
     }
 
     function createIndexBuffer(descriptor: borrow IndexBufferDescriptor) -> GraphicsBuffer {
+        if self.backend == GraphicsBackend.Metal {
+            let metalIndexId = metalCreateIndexBuffer(self.metalContext, descriptor.data)
+            return GraphicsBuffer {
+                handle: BackendBufferHandle {
+                    id: metalIndexId
+                }
+                id: metalIndexId
+            }
+        }
         let uploadId = sokolBeginIndexBufferUpload(descriptor.label, descriptor.usage, descriptor.data.count)
         var index = 0
 

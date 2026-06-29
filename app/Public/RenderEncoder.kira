@@ -119,6 +119,10 @@ class RenderEncoder {
         state.vertexCount = 0
         state.instanceCount = 1
         if (state.passActive && state.hasPipeline && state.pipelineId != 0) {
+            if metalContextActive(state.metalContext) {
+                metalEncoderDrawIndexed(state.metalContext, state.pipelineId, state.vertexBufferId, state.hasVertexBuffer, state.indexBufferId, state.indexCount, state.instanceCount)
+                return
+            }
             sokolApplyPipelineBindingsAndDrawFlat(
                 state.pipelineId,
                 state.vertexBufferId,

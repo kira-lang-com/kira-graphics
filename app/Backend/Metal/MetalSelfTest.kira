@@ -1,0 +1,102 @@
+// Self-test entry points for the Metal backend. Each renders a real frame through
+// the from-scratch Metal path (offscreen, for deterministic readback) and returns a
+// verdict, so the comptime `Test` harness (kik) can assert real Kira-owned Metal
+// rendering rather than a marker. These run on the hybrid runtime at build time.
+
+// Expected center pixel (0xAARRGGBB little-endian read as one U32) for a clear to
+// (0.25, 0.5, 0.75, 1.0): B=191, G=128, R=64, A=255.
+function metalSelfTestClearExpected() -> U32 { return 4282417343 }
+
+// Expected center pixel for the triangle fragment color (1.0, 0.4, 0.1, 1.0):
+// B=26, G=102, R=255, A=255.
+function metalSelfTestTriangleExpected() -> U32 { return 4294927898 }
+
+function metalSelfTestTriangleSource() -> String {
+    return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main() { return float4(1.0, 0.4, 0.1, 1.0); }\n"
+}
+
+function metalSelfTestTriangleVertices() -> [Float] {
+    return [
+        0.0, 0.7,
+        0.7, -0.7,
+        -0.7, -0.7
+    ]
+}
+
+// Render an offscreen clear and return the center pixel.
+@Native
+function metalSelfTestClearPixel() -> U32 {
+    let ctx = metalContextAlloc()
+    metalContextAttachOffscreen(ctx, 8, 8)
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.25, 0.5, 0.75, 1.0)
+    metalContextEndAndCommit(ctx)
+    let packed = metalContextReadPixel(ctx, 4, 4)
+    metalContextFree(ctx)
+    return packed
+}
+
+// Render an offscreen shader-driven triangle and return the center pixel.
+@Native
+function metalSelfTestTrianglePixel() -> U32 {
+    let pool = metalAutoreleasePoolPush()
+    let ctx = metalContextAlloc()
+    metalContextAttachOffscreen(ctx, 8, 8)
+    let shaderId = metalCreateShader(ctx, metalSelfTestTriangleSource())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm())
+    let vertexBufferId = metalCreateVertexBuffer(ctx, metalSelfTestTriangleVertices())
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.05, 0.05, 0.10, 1.0)
+    metalEncoderDraw(ctx, pipelineId, vertexBufferId, true, 3, 1)
+    metalContextEndAndCommit(ctx)
+    let packed = metalContextReadPixel(ctx, 4, 4)
+    metalContextFree(ctx)
+    metalAutoreleasePoolPop(pool)
+    return packed
+}
+
+function metalSelfTestQuadVertices() -> [Float] {
+    return [
+        -0.7, -0.7,
+        0.7, -0.7,
+        0.7, 0.7,
+        -0.7, 0.7
+    ]
+}
+
+function metalSelfTestQuadIndices() -> [Int] {
+    return [0, 1, 2, 0, 2, 3]
+}
+
+// Render an offscreen indexed quad (two triangles) and return the center pixel.
+@Native
+function metalSelfTestIndexedPixel() -> U32 {
+    let pool = metalAutoreleasePoolPush()
+    let ctx = metalContextAlloc()
+    metalContextAttachOffscreen(ctx, 8, 8)
+    let shaderId = metalCreateShader(ctx, metalSelfTestTriangleSource())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm())
+    let vertexBufferId = metalCreateVertexBuffer(ctx, metalSelfTestQuadVertices())
+    let indexBufferId = metalCreateIndexBuffer(ctx, metalSelfTestQuadIndices())
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.05, 0.05, 0.10, 1.0)
+    metalEncoderDrawIndexed(ctx, pipelineId, vertexBufferId, true, indexBufferId, 6, 1)
+    metalContextEndAndCommit(ctx)
+    let packed = metalContextReadPixel(ctx, 4, 4)
+    metalContextFree(ctx)
+    metalAutoreleasePoolPop(pool)
+    return packed
+}
+
+// Verdicts the kik Test harness asserts.
+@Native
+function metalSelfTestClearOk() -> Bool {
+    return metalSelfTestClearPixel() == metalSelfTestClearExpected()
+}
+
+@Native
+function metalSelfTestIndexedOk() -> Bool {
+    return metalSelfTestIndexedPixel() == metalSelfTestTriangleExpected()
+}
+
+@Native
+function metalSelfTestTriangleOk() -> Bool {
+    return metalSelfTestTrianglePixel() == metalSelfTestTriangleExpected()
+}

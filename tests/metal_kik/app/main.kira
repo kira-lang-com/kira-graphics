@@ -1,0 +1,15 @@
+// Metal backend test harness — Foundation `Test`-construct shape (kik).
+//
+// Each Test renders a real frame through the from-scratch Metal backend (offscreen,
+// for deterministic readback) and asserts the produced pixel, so the suite proves
+// real Kira-owned Metal rendering, not a marker. Run with:
+//
+//   KIRA_PURE_TEST=1 kira test --backend hybrid tests/metal_kik
+import Foundation
+import KiraGraphics
+
+@Main
+@Runtime
+function main() {
+    return
+}

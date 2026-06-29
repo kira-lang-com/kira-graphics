@@ -1,0 +1,16 @@
+// Metal render Tests. Names use the mtk / Mtk prefix.
+
+Test MtkClearRendersExactColor {
+    test { return metalSelfTestClearOk() }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test MtkTriangleRasterizes {
+    test { return metalSelfTestTriangleOk() }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test MtkIndexedQuadRasterizes {
+    test { return metalSelfTestIndexedOk() }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
