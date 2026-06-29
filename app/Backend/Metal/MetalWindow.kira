@@ -67,6 +67,74 @@ function metalPumpEvents(app: RawPtr) {
     return
 }
 
+// State the live-resize delegate needs to render a frame: the Metal context, the app
+// user data, and the frame handler captured from the running application.
+struct MetalLiveState {
+    var ctx: RawPtr
+    var userData: RawPtr
+    var onFrame: (borrow mut GraphicsFrame) -> Void
+}
+
+// Render exactly one frame at the current window size. Shared by the main loop's
+// resize path and the live-resize delegate so a drag produces real, re-laid-out
+// frames rather than a stretched still.
+@Native
+function metalLiveRenderFrame(statePtr: RawPtr) {
+    var state = nativeRecover<MetalLiveState>(statePtr)
+    let pool = metalAutoreleasePoolPush()
+    metalContextSyncViewportFromView(state.ctx)
+    metalContextTickFrameTime(state.ctx)
+    let graphics = Graphics {
+        userData: state.userData
+        backend: GraphicsBackend.Metal
+        metalContext: state.ctx
+    }
+    var frame = graphics.frame()
+    let onFrame = state.onFrame
+    onFrame(frame)
+    graphicsSubmitFrame(frame)
+    metalAutoreleasePoolPop(pool)
+    return
+}
+
+// The -windowDidResize: IMP. AppKit posts this repeatedly while the user drags the
+// window edge — inside its modal resize-tracking loop, where the manual Kira frame
+// loop is blocked — so rendering here makes the UI reflow live during the drag. The
+// live state is retrieved from the delegate it is associated with.
+@Native
+function metalResizeImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr): Void {
+    let value = metalObjcGetAssociatedObject(selfObj, metalSel("kiraLiveState"))
+    if metalPtrIsNull(value) {
+        return
+    }
+    let statePtr = metalMsgSend(value, metalSel("pointerValue"))
+    if metalPtrIsNull(statePtr) {
+        return
+    }
+    metalLiveRenderFrame(statePtr)
+    return
+}
+
+// Build (once) an NSWindowDelegate class whose -windowDidResize: is the Kira IMP
+// above, instantiate it, associate the live state with it, and set it as the window's
+// delegate. OBJC_ASSOCIATION_RETAIN_NONATOMIC = 1 keeps the NSValue (and thus the
+// state) alive for the app's lifetime.
+@Native
+function metalInstallResizeDelegate(window: RawPtr, statePtr: RawPtr) {
+    var cls = metalObjcGetClass("KiraMetalResizeDelegate")
+    if metalPtrIsNull(cls) {
+        cls = metalObjcAllocateClassPair(metalObjcGetClass("NSObject"), "KiraMetalResizeDelegate", 0)
+        let added = metalClassAddMethod(cls, metalSel("windowDidResize:"), metalResizeImp, "v@:@")
+        let ignored = added
+        metalObjcRegisterClassPair(cls)
+    }
+    let delegate = metalMsgSend(metalMsgSend(cls, metalSel("alloc")), metalSel("init"))
+    let value = metalMsgSendP(metalObjcGetClass("NSValue"), metalSel("valueWithPointer:"), statePtr)
+    metalObjcSetAssociatedObject(delegate, metalSel("kiraLiveState"), value, 1)
+    metalMsgSendVoidP(window, metalSel("setDelegate:"), delegate)
+    return
+}
+
 // Whether the content view's window is still on screen (false once closed).
 @Native
 function metalViewWindowVisible(view: RawPtr) -> Bool {

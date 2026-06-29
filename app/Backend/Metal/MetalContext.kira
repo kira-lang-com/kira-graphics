@@ -103,49 +103,97 @@ function metalContextFrameDuration(ctx: RawPtr) -> Float {
     return Float(durNs) / 1000000000.0
 }
 
-// Track the host view's current size: read its bounds (points), resize the
-// CAMetalLayer's drawable to match, and record the size as the context's
-// width/height so the next pass and the UI layout reflow to the live window size.
-// This is what makes interactive window resize work — called once per frame by the
-// on-screen run loop. Implausible sizes (a transient zero/huge bounds during a
-// resize) are ignored.
+// Decode a positive IEEE-754 double (its 64 bits read as a u64) to an Int with integer
+// arithmetic only. AppKit returns geometry as CGRect/CGFloat by value, which the FFI
+// does not marshal (struct and floating-point returns read back as 0), so the value is
+// fetched into a buffer via NSValue -getValue: and decoded here. 2^52 = 4503599627370496.
+// Implicit U64->Int coercion (an explicit Int(u64) cast does not lower; a return-typed
+// coercion does, as metalContextWidth relies on).
+@Native
+function metalU64ToInt(v: U64) -> Int {
+    return v
+}
+
+@Native
+function metalDoubleBitsToInt(bits: U64) -> Int {
+    let b = metalU64ToInt(bits)
+    if b <= 0 {
+        return 0
+    }
+    let topBits = b / 4503599627370496
+    let exp = topBits % 2048
+    if exp == 0 || exp == 2047 {
+        return 0
+    }
+    let mantissa = b % 4503599627370496
+    let frac = 1.0 + Float(mantissa) / 4503599627370496.0
+    var p = 1.0
+    var k = exp - 1023
+    while k > 0 {
+        p = p * 2.0
+        k = k - 1
+    }
+    while k < 0 {
+        p = p / 2.0
+        k = k + 1
+    }
+    return Int(frac * p)
+}
+
+// Track the host view's current size and the display's backing scale so the drawable is
+// sized in physical pixels at the live window size and the UI layout reflows on resize.
+// Called once per frame by the on-screen run loop. Geometry is read through KVC because
+// the direct CGRect/CGFloat message returns do not marshal across the FFI: -valueForKey:
+// returns an NSValue/NSNumber (a pointer), -getValue: writes the boxed NSRect's four
+// doubles into a buffer, and -integerValue returns the scale as a plain integer.
 @Native
 function metalContextSyncViewportFromView(ctx: RawPtr) {
     let view = metalMemReadPtr(ctx, metalOffsetHostView())
     if metalPtrIsNull(view) {
         return
     }
-    // bounds is in points (the layout/viewport unit); the CAMetalLayer drawable must be
-    // sized in PHYSICAL pixels (points x backing scale) or the frame is rendered at
-    // logical resolution and upscaled — blurry on a Retina display.
-    let bounds = metalMsgSendCGRect(view, metalSel("bounds"))
-    let w = Int(bounds.width)
-    let h = Int(bounds.height)
+    let boundsKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "bounds")
+    let value = metalMsgSendP(view, metalSel("valueForKey:"), boundsKey)
+    if metalPtrIsNull(value) {
+        return
+    }
+    let buf = metalMemAlloc(32)
+    metalMsgSendVoidP(value, metalSel("getValue:"), buf)
+    let w = metalDoubleBitsToInt(metalMemReadU64(buf, 16))
+    let h = metalDoubleBitsToInt(metalMemReadU64(buf, 24))
+    metalMemFree(buf)
     if w <= 0 || h <= 0 || w > 16384 || h > 16384 {
         return
     }
+
+    var scale = 1
+    let window = metalMsgSend(view, metalSel("window"))
+    if !metalPtrIsNull(window) {
+        let scaleKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "backingScaleFactor")
+        let scaleNum = metalMsgSendP(window, metalSel("valueForKey:"), scaleKey)
+        if !metalPtrIsNull(scaleNum) {
+            let s = metalU64ToInt(metalMsgSendU64(scaleNum, metalSel("integerValue")))
+            if s >= 1 && s <= 4 {
+                scale = s
+            }
+        }
+    }
+    let pw = w * scale
+    let ph = h * scale
+
     let curW = metalMemReadU64(ctx, metalOffsetWidth())
     let curH = metalMemReadU64(ctx, metalOffsetHeight())
     let curPhysical = metalMemReadU64(ctx, metalOffsetPhysicalWidth())
     if w == curW && h == curH && curPhysical != 0 {
         return
     }
-    let backing = metalMsgSendRectToBacking(view, metalSel("convertRectToBacking:"), bounds.x, bounds.y, bounds.width, bounds.height)
-    var pw = Int(backing.width)
-    var ph = Int(backing.height)
-    if pw <= 0 || ph <= 0 {
-        pw = w
-        ph = h
-    }
     let layer = metalMemReadPtr(ctx, metalOffsetLayer())
     if !metalPtrIsNull(layer) {
-        // A layer-hosting view does not auto-size its layer, so set the layer's frame
-        // to the view bounds (points) — otherwise the rendered content keeps its
-        // original size instead of growing/shrinking with the window. The drawable is
-        // sized in physical pixels and contentsScale carries the backing factor.
+        // Layer frame in points (so the content tracks the window), drawable in physical
+        // pixels and contentsScale the backing factor (so it is crisp at native res).
         metalMsgSendVoid4F(layer, metalSel("setFrame:"), 0.0, 0.0, Float(w), Float(h))
         metalMsgSendVoid2F(layer, metalSel("setDrawableSize:"), Float(pw), Float(ph))
-        metalMsgSendVoidF(layer, metalSel("setContentsScale:"), Float(pw) / Float(w))
+        metalMsgSendVoidF(layer, metalSel("setContentsScale:"), Float(scale))
     }
     metalMemWriteU64(ctx, metalOffsetWidth(), w)
     metalMemWriteU64(ctx, metalOffsetHeight(), h)
@@ -303,7 +351,18 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     let layer = metalMsgSend(metalMsgSend(layerClass, metalSel("alloc")), metalSel("init"))
     metalMsgSendVoidP(layer, metalSel("setDevice:"), device)
     metalMsgSendVoidU(layer, metalSel("setPixelFormat:"), metalPixelFormatBGRA8Unorm())
-    metalMsgSendVoid2F(layer, metalSel("setDrawableSize:"), Float(width), Float(height))
+    // Let Core Animation resize the layer (and thus its auto-sized drawable) with the
+    // view: kCALayerWidthSizable|kCALayerHeightSizable = 2|16. We do NOT pin
+    // drawableSize, so CAMetalLayer keeps it at bounds x contentsScale and updates it
+    // on resize; the actual pixel size is read back from the drawable's texture.
+    metalMsgSendVoidU(layer, metalSel("setAutoresizingMask:"), 18)
+    // During a live drag the Kira frame loop is blocked inside AppKit's modal resize
+    // tracking, so no new frame is presented until the drag ends. contentsGravity
+    // "resize" makes the last presented frame stretch to fill the growing/shrinking
+    // layer in the meantime, so the content visually tracks the window during the drag
+    // and snaps back to crisp native resolution when the loop resumes and re-renders.
+    let gravity = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "resize")
+    metalMsgSendVoidP(layer, metalSel("setContentsGravity:"), gravity)
     // Order matters: assign the layer FIRST, then turn on wantsLayer. This makes the
     // view layer-HOSTING (the CAMetalLayer is ours to drive) rather than layer-backed
     // (where AppKit owns the layer and would draw the view's opaque background over our

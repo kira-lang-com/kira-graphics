@@ -165,6 +165,29 @@ function metalAutoreleasePoolPush(): RawPtr;
 function metalAutoreleasePoolPop(token: RawPtr): Void;
 
 // ---------------------------------------------------------------------------
+// Objective-C runtime class construction — used to build an NSWindowDelegate whose
+// -windowDidResize: (an IMP that is a Kira @Native function, the same way the Sokol
+// callbacks are Kira functions) renders a frame DURING AppKit's modal live-resize
+// loop, where the manual Kira frame loop is otherwise blocked.
+// ---------------------------------------------------------------------------
+
+@FFI.Extern { library: kira_metal; symbol: objc_allocateClassPair; abi: c; }
+function metalObjcAllocateClassPair(superclass: RawPtr, name: CString, extraBytes: U64): RawPtr;
+@FFI.Extern { library: kira_metal; symbol: objc_registerClassPair; abi: c; }
+function metalObjcRegisterClassPair(cls: RawPtr): Void;
+@FFI.Extern { library: kira_metal; symbol: objc_setAssociatedObject; abi: c; }
+function metalObjcSetAssociatedObject(obj: RawPtr, key: RawPtr, value: RawPtr, policy: U64): Void;
+@FFI.Extern { library: kira_metal; symbol: objc_getAssociatedObject; abi: c; }
+function metalObjcGetAssociatedObject(obj: RawPtr, key: RawPtr): RawPtr;
+
+// The IMP signature for -windowDidResize: is void(id self, SEL _cmd, NSNotification*).
+@FFI.Callback { abi: c; params: [RawPtr, RawPtr, RawPtr]; result: Void; }
+struct metalImpCallback {}
+
+@FFI.Extern { library: kira_metal; symbol: class_addMethod; abi: c; }
+function metalClassAddMethod(cls: RawPtr, name: RawPtr, imp: metalImpCallback, types: CString): Bool;
+
+// ---------------------------------------------------------------------------
 // Metal C entry point (the only non-Objective-C Metal symbol)
 // ---------------------------------------------------------------------------
 

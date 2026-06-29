@@ -72,6 +72,23 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     onInit(move initGraphics)
 
     let onFrame: (borrow mut GraphicsFrame) -> Void = app.frameHandler
+
+    // Install a window-resize delegate so the UI reflows LIVE during a drag. While the
+    // user drags the window edge, AppKit runs a modal resize-tracking loop inside
+    // -sendEvent: that blocks this loop; the delegate's -windowDidResize: fires inside
+    // that modal loop and renders frames at the changing size. The live state carries
+    // the frame handler captured here.
+    let liveStorage = nativeState(MetalLiveState {
+        ctx: ctxPtr
+        userData: userData
+        onFrame: app.frameHandler
+    })
+    let liveHandle = nativeUserData(liveStorage)
+    let hostWindow = metalMsgSend(view, metalSel("window"))
+    if !metalPtrIsNull(hostWindow) {
+        metalInstallResizeDelegate(hostWindow, liveHandle)
+    }
+
     var running = true
     while running {
         let framePool = metalAutoreleasePoolPush()
