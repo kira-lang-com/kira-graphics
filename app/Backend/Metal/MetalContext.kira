@@ -437,7 +437,12 @@ function metalContextEndAndCommit(ctx: RawPtr) {
         metalMemWritePtr(ctx, metalOffsetDrawable(), metalNullPtr())
     }
     metalMsgSendVoid(commandBuffer, metalSel("commit"))
-    metalMsgSendVoid(commandBuffer, metalSel("waitUntilCompleted"))
+    // No waitUntilCompleted here: the on-screen path presents the drawable (which
+    // sequences its own work and never blocks), and the offscreen path only needs
+    // GPU completion when a pixel is read back — so the wait lives in
+    // metalContextReadPixel. Blocking every offscreen frame serialized CPU and GPU
+    // (no pipelining) — the resize-bench cost that does not exist on screen. The
+    // command buffer stays retained at metalOffsetCommandBuffer() for that wait.
     return
 }
 
@@ -447,6 +452,13 @@ function metalContextEndAndCommit(ctx: RawPtr) {
 // readback path.
 @Native
 function metalContextReadPixel(ctx: RawPtr, x: Int, y: Int) -> U32 {
+    // Block on the last submitted command buffer before reading its output (the
+    // per-frame wait was removed from metalContextEndAndCommit so offscreen frames
+    // pipeline; correctness for the readback path is restored here).
+    let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
+    if !metalPtrIsNull(pending) {
+        metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+    }
     let texture = metalMemReadPtr(ctx, metalOffsetColorTexture())
     let region = metalMemAlloc(48)
     metalMemWriteU64(region, 0, x)
