@@ -6,36 +6,61 @@
 // shim: every native call is an `@FFI.Extern` to a system symbol, invoked from
 // Kira. The `NativeLibs/Metal.toml` library carries only framework linkage.
 //
-// Phase 1 (current): an offscreen path that creates a real Metal device, command
-// queue and render target, runs the app's onInit/onFrame through the public API,
-// submits the frame's clear through Metal, and reads the produced pixel back so
-// the run proves real Kira-owned rendering headlessly. The on-screen CAMetalLayer
-// surface + host run loop attach at this same seam next.
+// By default this opens a real on-screen window with a CAMetalLayer and runs the
+// app's frame loop. Setting KIRA_METAL_OFFSCREEN renders one frame to an offscreen
+// target and reads the center pixel back instead, for deterministic headless
+// verification (the kik Test harness asserts pixels through the same paths via the
+// MetalSelfTest entry points).
 
 @Native
 function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
-    // One autorelease pool around the whole run: the Metal shader compiler and the
-    // Foundation string/descriptor helpers create many autoreleased temporaries, and
-    // draining them at a single well-defined point keeps resource creation
-    // deterministic (a missing pool makes runtime shader compilation intermittently
-    // fail).
+    // One autorelease pool around the whole run; per-frame pools drain inside the
+    // loop. The Metal shader compiler and Foundation helpers create many autoreleased
+    // temporaries, and draining them at well-defined points keeps resource creation
+    // deterministic and bounds memory over a long-running window.
     let pool = metalAutoreleasePoolPush()
-
-    // Headless verification renders to an offscreen target for deterministic
-    // pixel readback. The CAMetalLayer surface (metalContextAttachLayer) is the
-    // on-screen path the host runner drives once it provides an NSView/UIView;
-    // a presented drawable is owned by the compositor and is not read back.
     let ctxPtr = metalContextAlloc()
-    metalContextAttachOffscreen(ctxPtr, app.width, app.height)
 
-    kiraGraphicsLiveBackendInitialized()
-
-    // Use the app's lifecycle handlers directly from the borrowed application.
-    // The recovered runtime state only carries the user pointer / frame index:
-    // closures captured in the app do not survive the nativeState round-trip on
-    // the hybrid backend, but the borrowed `app` retains them intact.
+    // The recovered runtime state only carries the user pointer; lifecycle handlers
+    // come directly from the borrowed application (closures captured in the app do
+    // not survive the nativeState round-trip on the hybrid backend, but the borrowed
+    // `app` retains them intact).
     var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
     let userData = state.userData
+
+    let offscreenEnv = metalGetEnv("KIRA_METAL_OFFSCREEN")
+    if !metalPtrIsNull(offscreenEnv) {
+        metalContextAttachOffscreen(ctxPtr, app.width, app.height)
+        kiraGraphicsLiveBackendInitialized()
+
+        let onInitOffscreen: (Graphics) -> Void = app.initHandler
+        let initGraphicsOffscreen = Graphics {
+            userData: userData
+            backend: GraphicsBackend.Metal
+            metalContext: ctxPtr
+        }
+        onInitOffscreen(move initGraphicsOffscreen)
+
+        let onFrameOffscreen: (borrow mut GraphicsFrame) -> Void = app.frameHandler
+        let frameGraphicsOffscreen = Graphics {
+            userData: userData
+            backend: GraphicsBackend.Metal
+            metalContext: ctxPtr
+        }
+        var frameOffscreen = frameGraphicsOffscreen.frame()
+        onFrameOffscreen(frameOffscreen)
+        graphicsSubmitFrame(frameOffscreen)
+        metalReportCenterPixel(ctxPtr, app.width, app.height)
+        metalContextFree(ctxPtr)
+        metalAutoreleasePoolPop(pool)
+        return
+    }
+
+    // On-screen: create a window + CAMetalLayer, run the frame loop until the app
+    // requests quit or the window is closed.
+    let view = metalCreateWindow(app.width, app.height, app.title)
+    metalContextAttachLayerToView(ctxPtr, view, app.width, app.height)
+    kiraGraphicsLiveBackendInitialized()
 
     let onInit: (Graphics) -> Void = app.initHandler
     let initGraphics = Graphics {
@@ -46,16 +71,34 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     onInit(move initGraphics)
 
     let onFrame: (borrow mut GraphicsFrame) -> Void = app.frameHandler
-    let frameGraphics = Graphics {
+    var running = true
+    while running {
+        let framePool = metalAutoreleasePoolPush()
+        let frameGraphics = Graphics {
+            userData: userData
+            backend: GraphicsBackend.Metal
+            metalContext: ctxPtr
+        }
+        var frame = frameGraphics.frame()
+        onFrame(frame)
+        graphicsSubmitFrame(frame)
+        metalSpinRunLoop(0.008)
+        if frame.shouldQuit {
+            running = false
+        }
+        if !metalViewWindowVisible(view) {
+            running = false
+        }
+        metalAutoreleasePoolPop(framePool)
+    }
+
+    let onCleanup: (Graphics) -> Void = app.cleanupHandler
+    let cleanupGraphics = Graphics {
         userData: userData
         backend: GraphicsBackend.Metal
         metalContext: ctxPtr
     }
-    var frame = frameGraphics.frame()
-    onFrame(frame)
-    graphicsSubmitFrame(frame)
-
-    metalReportCenterPixel(ctxPtr, app.width, app.height)
+    onCleanup(move cleanupGraphics)
     metalContextFree(ctxPtr)
     metalAutoreleasePoolPop(pool)
     return

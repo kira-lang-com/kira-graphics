@@ -36,6 +36,8 @@ function metalMsgSend(obj: RawPtr, op: RawPtr): RawPtr;
 function metalMsgSendVoid(obj: RawPtr, op: RawPtr): Void;
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendU64(obj: RawPtr, op: RawPtr): U64;
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendBoolEmpty(obj: RawPtr, op: RawPtr): Bool;
 
 // (id) -> id / void
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
@@ -119,6 +121,16 @@ function metalMsgSendDrawPrimitives(obj: RawPtr, op: RawPtr, primitiveType: U64,
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendDrawIndexed(obj: RawPtr, op: RawPtr, primitiveType: U64, indexCount: U64, indexType: U64, indexBuffer: RawPtr, indexBufferOffset: U64): Void;
 
+// NSWindow initWithContentRect:styleMask:backing:defer: — the content rect is a
+// CGRect (HFA of four doubles -> four F64 scalars), then NSUInteger style/backing
+// and a BOOL defer flag.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendInitWindow(obj: RawPtr, op: RawPtr, x: F64, y: F64, w: F64, h: F64, style: U64, backing: U64, deferCreation: Bool): RawPtr;
+
+// (double) -> id  (e.g. +[NSDate dateWithTimeIntervalSinceNow:])
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendDateInterval(obj: RawPtr, op: RawPtr, seconds: F64): RawPtr;
+
 // Objective-C autorelease pool (C functions in libobjc). The Metal shader compiler
 // and NSString helpers create many autoreleased temporaries; without a pool that is
 // undefined behaviour, so resource creation runs inside push/pop.
@@ -133,6 +145,10 @@ function metalAutoreleasePoolPop(token: RawPtr): Void;
 
 @FFI.Extern { library: kira_metal; symbol: MTLCreateSystemDefaultDevice; abi: c; }
 function metalCreateSystemDefaultDevice(): RawPtr;
+
+// libc getenv — used to select the headless offscreen path for verification.
+@FFI.Extern { library: kira_metal; symbol: getenv; abi: c; }
+function metalGetEnv(name: CString): RawPtr;
 
 // ---------------------------------------------------------------------------
 // kira_runtime raw memory helpers (build by-reference structs, read pixels)

@@ -1,0 +1,47 @@
+// macOS host window + run loop for self-contained Metal apps, created from Kira via
+// FFI (no shim). The backend creates an NSApplication, an NSWindow, and returns the
+// window's content view; the Metal context attaches a CAMetalLayer to that view and
+// drives draw/present each frame while the run loop is pumped between frames.
+//
+// (When the platform runner provides its own NSView/UIView, the backend skips this
+// and attaches to the provided view instead — see metalContextAttachLayerToView.)
+
+function metalWindowStyleMask() -> U64 { return 15 }
+function metalWindowBackingBuffered() -> U64 { return 2 }
+function metalActivationPolicyRegular() -> U64 { return 0 }
+
+// Create the application + window and return the content view to render into.
+@Native
+function metalCreateWindow(width: Int, height: Int, title: borrow String) -> RawPtr {
+    let app = metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication"))
+    metalMsgSendVoidU(app, metalSel("setActivationPolicy:"), metalActivationPolicyRegular())
+    metalMsgSendVoidB(app, metalSel("activateIgnoringOtherApps:"), true)
+    metalMsgSendVoid(app, metalSel("finishLaunching"))
+
+    let windowAlloc = metalMsgSend(metalObjcGetClass("NSWindow"), metalSel("alloc"))
+    let window = metalMsgSendInitWindow(windowAlloc, metalSel("initWithContentRect:styleMask:backing:defer:"), 120.0, 120.0, Float(width), Float(height), metalWindowStyleMask(), metalWindowBackingBuffered(), false)
+    let nsTitle = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), title)
+    metalMsgSendVoidP(window, metalSel("setTitle:"), nsTitle)
+    metalMsgSendVoidP(window, metalSel("makeKeyAndOrderFront:"), metalObjcGetClass("NSObject"))
+    return metalMsgSend(window, metalSel("contentView"))
+}
+
+// Pump the main run loop for `seconds` so the window server processes window/input
+// events between rendered frames.
+@Native
+function metalSpinRunLoop(seconds: F64) {
+    let runloop = metalMsgSend(metalObjcGetClass("NSRunLoop"), metalSel("currentRunLoop"))
+    let until = metalMsgSendDateInterval(metalObjcGetClass("NSDate"), metalSel("dateWithTimeIntervalSinceNow:"), seconds)
+    metalMsgSendVoidP(runloop, metalSel("runUntilDate:"), until)
+    return
+}
+
+// Whether the content view's window is still on screen (false once closed).
+@Native
+function metalViewWindowVisible(view: RawPtr) -> Bool {
+    let window = metalMsgSend(view, metalSel("window"))
+    if metalPtrIsNull(window) {
+        return false
+    }
+    return metalMsgSendBoolEmpty(window, metalSel("isVisible"))
+}

@@ -82,8 +82,8 @@ function trianglePass() -> RenderPassDescriptor {
 function main() {
     var app = GraphicsApplication {
         title: "Kira Graphics Metal Triangle"
-        width: 64
-        height: 64
+        width: 480
+        height: 480
         sampleCount: 1
         backend: GraphicsBackend.Metal
     }
