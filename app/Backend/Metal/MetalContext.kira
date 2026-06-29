@@ -181,6 +181,28 @@ function metalContextAttachDepth(ctx: RawPtr) {
     return
 }
 
+// Attach a CAMetalLayer to a host-provided NSView/UIView (the on-screen path: the
+// platform runner creates the window + view and drives the run loop; the backend
+// owns the layer and all draw/present). After this the context is in layer mode, so
+// each pass acquires and presents a drawable from the on-screen layer. macOS sets
+// the view layer-backed via setWantsLayer:/setLayer:; on iOS a UIView is already
+// layer-backed and the layer is added as a sublayer by the runner.
+@Native
+function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int, height: Int) {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let layerClass = metalObjcGetClass("CAMetalLayer")
+    let layer = metalMsgSend(metalMsgSend(layerClass, metalSel("alloc")), metalSel("init"))
+    metalMsgSendVoidP(layer, metalSel("setDevice:"), device)
+    metalMsgSendVoidU(layer, metalSel("setPixelFormat:"), metalPixelFormatBGRA8Unorm())
+    metalMsgSendVoid2F(layer, metalSel("setDrawableSize:"), Float(width), Float(height))
+    metalMsgSendVoidB(viewPtr, metalSel("setWantsLayer:"), true)
+    metalMsgSendVoidP(viewPtr, metalSel("setLayer:"), layer)
+    metalMemWritePtr(ctx, metalOffsetLayer(), layer)
+    metalMemWriteU64(ctx, metalOffsetWidth(), width)
+    metalMemWriteU64(ctx, metalOffsetHeight(), height)
+    return
+}
+
 // Begin a render pass that clears the color target to (r,g,b,a), optionally with a
 // depth attachment cleared to 1.0 and a less/write depth-stencil state bound. Builds
 // the MTLRenderPassDescriptor, attachments, command buffer and render-command

@@ -92,3 +92,56 @@ The public descriptor shapes are meant to survive the next compiler step. The pl
 3. expand backend coverage for multiple color attachments, resolve targets, richer texture usage, samplers, bind groups, and view-level attachment control
 
 That path keeps today’s compiler-safe API honest while preserving the intended long-term graphics architecture.
+
+## The Metal Backend (no shim)
+
+`GraphicsBackend.Metal` is a from-scratch Metal backend for Apple platforms,
+selected per-platform alongside Sokol (which still serves Windows/Linux/Web). It
+replaces the legacy OpenGL path used by Sokol on macOS with a real `CAMetalLayer`
+surface.
+
+Crucially it uses **no C or Objective-C shim**. The backend drives Metal,
+QuartzCore and AppKit/UIKit *directly* from Kira through FFI to the Objective-C
+runtime — `objc_getClass`, `sel_registerName`, and typed `objc_msgSend` aliases —
+plus the single Metal C entry point `MTLCreateSystemDefaultDevice`. `app/Backend/
+Metal/MetalForeign.kira` is the entire foreign surface; everything else
+(`MetalContext`, `MetalResources`, `MetalTexture`, `MetalBindGroup`, `MetalFrame`,
+`MetalApplication`) is ordinary Kira. `NativeLibs/Metal.toml` is a source-less
+descriptor that only links the system frameworks.
+
+Because the Metal API is Objective-C *messages* rather than C functions, the
+foreign surface is hand-authored (one typed `objc_msgSend` alias per call shape);
+there is no C header to autobind, which is what autobinding (used for Sokol/Vulkan)
+requires.
+
+The context is a small raw heap block threaded as a `RawPtr` handle. It owns the
+`MTLDevice`/`MTLCommandQueue`, the current color target (an offscreen `MTLTexture`
+for headless tests, or a `CAMetalLayer` drawable on screen), the in-flight command
+buffer + encoder, an optional `Depth32Float` target + depth-stencil state, and a
+small id→pointer registry that maps the public U32 resource handles to live Metal
+objects. Resource creation and draw encoding are dispatched by backend from the
+public `Graphics`/`RenderEncoder` facade; the encoder selects Metal mode by the
+presence of a non-null context handle.
+
+Implemented and verified (via the `tests/metal_kik` Test harness, which renders
+real frames offscreen and asserts the produced pixels):
+
+- color clear and `CAMetalLayer` drawable present
+- runtime MSL shader compilation, render pipeline state, vertex + index buffers
+- non-indexed and indexed draws
+- uniform buffers bound to the vertex and fragment stages
+- depth buffer + depth-tested passes (`Depth24Stencil8` requests map to
+  `Depth32Float`, which is what Apple GPUs support)
+- textures + samplers, and bind groups mapping uniforms/textures/samplers to slots
+
+Run the suite with:
+
+```
+KIRA_PURE_TEST=1 kira test --backend hybrid tests/metal_kik
+```
+
+The remaining work is the on-screen host integration: attaching the
+`CAMetalLayer` to the runner-provided `NSView`/`UIView` and driving frames from the
+platform run loop, then making Metal the default Apple backend and retiring Sokol's
+Apple targets. The drawable render + present path itself is already proven; only the
+window/run-loop host glue and on-device verification remain.
