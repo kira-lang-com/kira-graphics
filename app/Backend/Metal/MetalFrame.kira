@@ -21,7 +21,7 @@ function metalMapLoadAction(publicLoadAction: Int) -> U64 {
 @Native
 function metalBeginRenderPassFromFrame(frame: borrow GraphicsFrame, ctxPtr: RawPtr) -> Bool {
     let load = metalMapLoadAction(frame.colorLoadAction)
-    metalContextBeginClear(ctxPtr, load, frame.clearR, frame.clearG, frame.clearB, frame.clearA)
+    metalContextBeginClear(ctxPtr, load, frame.clearR, frame.clearG, frame.clearB, frame.clearA, frame.hasDepthAttachment)
     return true
 }
 

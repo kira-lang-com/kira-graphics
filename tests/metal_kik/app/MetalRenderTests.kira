@@ -19,3 +19,8 @@ Test MtkUniformDrivesFragmentColor {
     test { return metalSelfTestUniformOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
+
+Test MtkDepthOccludesFarSurface {
+    test { return metalSelfTestDepthOk() }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}

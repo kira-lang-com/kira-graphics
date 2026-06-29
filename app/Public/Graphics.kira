@@ -39,7 +39,7 @@ class Graphics {
 
     function createRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> RenderPipeline {
         if self.backend == GraphicsBackend.Metal {
-            let metalPipelineId = metalCreateRenderPipeline(self.metalContext, descriptor.shader.id, metalPixelFormatBGRA8Unorm())
+            let metalPipelineId = metalCreateRenderPipeline(self.metalContext, descriptor.shader.id, metalPixelFormatBGRA8Unorm(), descriptor.depthStencil.depthEnabled)
             return RenderPipeline {
                 handle: BackendPipelineHandle {
                     id: metalPipelineId

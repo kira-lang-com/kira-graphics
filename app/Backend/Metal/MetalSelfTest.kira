@@ -28,7 +28,7 @@ function metalSelfTestTriangleVertices() -> [Float] {
 function metalSelfTestClearPixel() -> U32 {
     let ctx = metalContextAlloc()
     metalContextAttachOffscreen(ctx, 8, 8)
-    metalContextBeginClear(ctx, metalLoadActionClear(), 0.25, 0.5, 0.75, 1.0)
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.25, 0.5, 0.75, 1.0, false)
     metalContextEndAndCommit(ctx)
     let packed = metalContextReadPixel(ctx, 4, 4)
     metalContextFree(ctx)
@@ -42,9 +42,9 @@ function metalSelfTestTrianglePixel() -> U32 {
     let ctx = metalContextAlloc()
     metalContextAttachOffscreen(ctx, 8, 8)
     let shaderId = metalCreateShader(ctx, metalSelfTestTriangleSource())
-    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm(), false)
     let vertexBufferId = metalCreateVertexBuffer(ctx, metalSelfTestTriangleVertices())
-    metalContextBeginClear(ctx, metalLoadActionClear(), 0.05, 0.05, 0.10, 1.0)
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.05, 0.05, 0.10, 1.0, false)
     metalEncoderDraw(ctx, pipelineId, vertexBufferId, true, 3, 1)
     metalContextEndAndCommit(ctx)
     let packed = metalContextReadPixel(ctx, 4, 4)
@@ -73,10 +73,10 @@ function metalSelfTestIndexedPixel() -> U32 {
     let ctx = metalContextAlloc()
     metalContextAttachOffscreen(ctx, 8, 8)
     let shaderId = metalCreateShader(ctx, metalSelfTestTriangleSource())
-    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm(), false)
     let vertexBufferId = metalCreateVertexBuffer(ctx, metalSelfTestQuadVertices())
     let indexBufferId = metalCreateIndexBuffer(ctx, metalSelfTestQuadIndices())
-    metalContextBeginClear(ctx, metalLoadActionClear(), 0.05, 0.05, 0.10, 1.0)
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.05, 0.05, 0.10, 1.0, false)
     metalEncoderDrawIndexed(ctx, pipelineId, vertexBufferId, true, indexBufferId, 6, 1)
     metalContextEndAndCommit(ctx)
     let packed = metalContextReadPixel(ctx, 4, 4)
@@ -105,13 +105,65 @@ function metalSelfTestUniformPixel() -> U32 {
     let ctx = metalContextAlloc()
     metalContextAttachOffscreen(ctx, 8, 8)
     let shaderId = metalCreateShader(ctx, metalSelfTestUniformSource())
-    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm(), false)
     let vertexBufferId = metalCreateVertexBuffer(ctx, metalSelfTestTriangleVertices())
     let uniformId = metalCreateUniform(ctx, 4)
     metalUpdateUniform(ctx, uniformId, metalSelfTestUniformData())
-    metalContextBeginClear(ctx, metalLoadActionClear(), 0.0, 0.0, 0.0, 1.0)
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.0, 0.0, 0.0, 1.0, false)
     metalEncoderBindFragmentUniform(ctx, uniformId, 0)
     metalEncoderDraw(ctx, pipelineId, vertexBufferId, true, 3, 1)
+    metalContextEndAndCommit(ctx)
+    let packed = metalContextReadPixel(ctx, 4, 4)
+    metalContextFree(ctx)
+    metalAutoreleasePoolPop(pool)
+    return packed
+}
+
+// Depth: a near red triangle (z=0.2) then a far blue triangle (z=0.8) drawn AFTER
+// it. With depth testing the far blue fails the less-than test and the center stays
+// red; without depth the later blue would overwrite it. Expected center = red
+// (1,0,0,1): B=0, G=0, R=255, A=255.
+function metalSelfTestDepthExpected() -> U32 { return 4294901760 }
+
+function metalSelfTestDepthSource() -> String {
+    return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant packed_float3* verts [[buffer(0)]]) { VOut o; o.pos = float4(float3(verts[vid]), 1.0); return o; }\nfragment float4 f_main(constant float4& color [[buffer(0)]]) { return color; }\n"
+}
+
+function metalSelfTestNearVertices() -> [Float] {
+    return [
+        0.0, 0.7, 0.2,
+        0.7, -0.7, 0.2,
+        -0.7, -0.7, 0.2
+    ]
+}
+
+function metalSelfTestFarVertices() -> [Float] {
+    return [
+        0.0, 0.7, 0.8,
+        0.7, -0.7, 0.8,
+        -0.7, -0.7, 0.8
+    ]
+}
+
+@Native
+function metalSelfTestDepthPixel() -> U32 {
+    let pool = metalAutoreleasePoolPush()
+    let ctx = metalContextAlloc()
+    metalContextAttachOffscreen(ctx, 8, 8)
+    metalContextAttachDepth(ctx)
+    let shaderId = metalCreateShader(ctx, metalSelfTestDepthSource())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm(), true)
+    let nearBufferId = metalCreateVertexBuffer(ctx, metalSelfTestNearVertices())
+    let farBufferId = metalCreateVertexBuffer(ctx, metalSelfTestFarVertices())
+    let redId = metalCreateUniform(ctx, 4)
+    metalUpdateUniform(ctx, redId, [1.0, 0.0, 0.0, 1.0])
+    let blueId = metalCreateUniform(ctx, 4)
+    metalUpdateUniform(ctx, blueId, [0.0, 0.0, 1.0, 1.0])
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.0, 0.0, 0.0, 1.0, true)
+    metalEncoderBindFragmentUniform(ctx, redId, 0)
+    metalEncoderDraw(ctx, pipelineId, nearBufferId, true, 3, 1)
+    metalEncoderBindFragmentUniform(ctx, blueId, 0)
+    metalEncoderDraw(ctx, pipelineId, farBufferId, true, 3, 1)
     metalContextEndAndCommit(ctx)
     let packed = metalContextReadPixel(ctx, 4, 4)
     metalContextFree(ctx)
@@ -123,6 +175,11 @@ function metalSelfTestUniformPixel() -> U32 {
 @Native
 function metalSelfTestClearOk() -> Bool {
     return metalSelfTestClearPixel() == metalSelfTestClearExpected()
+}
+
+@Native
+function metalSelfTestDepthOk() -> Bool {
+    return metalSelfTestDepthPixel() == metalSelfTestDepthExpected()
 }
 
 @Native

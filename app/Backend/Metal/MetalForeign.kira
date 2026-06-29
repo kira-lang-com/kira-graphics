@@ -61,6 +61,10 @@ function metalMsgSendVoidB(obj: RawPtr, op: RawPtr, a: Bool): Void;
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendVoid2F(obj: RawPtr, op: RawPtr, w: F64, h: F64): Void;
 
+// (double) -> void  (e.g. MTLRenderPassDepthAttachmentDescriptor setClearDepth:)
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendVoidF(obj: RawPtr, op: RawPtr, value: F64): Void;
+
 // setClearColor: — MTLClearColor is an HFA of four doubles, passed as four F64
 // scalars (same v0-v3 registers on arm64), so no by-value struct is needed.
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }

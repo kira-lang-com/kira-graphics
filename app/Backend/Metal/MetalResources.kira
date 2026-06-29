@@ -64,7 +64,7 @@ function metalCreateIndexBuffer(ctx: RawPtr, data: borrow [Int]) -> Int {
 // Build an MTLRenderPipelineState from a shader library and a color pixel format,
 // and register it.
 @Native
-function metalCreateRenderPipeline(ctx: RawPtr, shaderId: Int, colorFormat: U64) -> Int {
+function metalCreateRenderPipeline(ctx: RawPtr, shaderId: Int, colorFormat: U64, depthEnabled: Bool) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let library = metalLookup(ctx, shaderId)
     let vname = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "v_main")
@@ -77,6 +77,9 @@ function metalCreateRenderPipeline(ctx: RawPtr, shaderId: Int, colorFormat: U64)
     metalMsgSendVoidP(desc, metalSel("setFragmentFunction:"), ffn)
     let colorAttachment = metalMsgSendPU(metalMsgSend(desc, metalSel("colorAttachments")), metalSel("objectAtIndexedSubscript:"), 0)
     metalMsgSendVoidU(colorAttachment, metalSel("setPixelFormat:"), colorFormat)
+    if depthEnabled {
+        metalMsgSendVoidU(desc, metalSel("setDepthAttachmentPixelFormat:"), metalPixelFormatDepth32Float())
+    }
 
     let errSlot = metalMemAlloc(8)
     metalMemWriteU64(errSlot, 0, 0)

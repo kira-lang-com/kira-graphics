@@ -25,7 +25,9 @@
 //  64  drawable         (id<CAMetalDrawable>, per pass in layer mode)
 //  72  registry         (raw block of resource pointers indexed by handle id)
 //  80  nextId           (U64, next resource handle id; id 0 is reserved/invalid)
-function metalContextSize() -> U64 { return 88 }
+//  88  depthTexture     (id<MTLTexture>, Depth32Float; null until attached)
+//  96  depthState       (id<MTLDepthStencilState>, less + write)
+function metalContextSize() -> U64 { return 104 }
 function metalOffsetDevice() -> U64 { return 0 }
 function metalOffsetQueue() -> U64 { return 8 }
 function metalOffsetColorTexture() -> U64 { return 16 }
@@ -37,6 +39,8 @@ function metalOffsetLayer() -> U64 { return 56 }
 function metalOffsetDrawable() -> U64 { return 64 }
 function metalOffsetRegistry() -> U64 { return 72 }
 function metalOffsetNextId() -> U64 { return 80 }
+function metalOffsetDepthTexture() -> U64 { return 88 }
+function metalOffsetDepthState() -> U64 { return 96 }
 
 // The resource registry maps small integer handle ids (stored as U32 in the public
 // handle types) to the Objective-C resource pointers (MTLBuffer / MTLLibrary /
@@ -75,6 +79,10 @@ function metalStorageModeShared() -> U64 { return 0 }
 function metalLoadActionClear() -> U64 { return 2 }
 function metalLoadActionLoad() -> U64 { return 1 }
 function metalStoreActionStore() -> U64 { return 1 }
+function metalStoreActionDontCare() -> U64 { return 0 }
+function metalPixelFormatDepth32Float() -> U64 { return 252 }
+function metalStorageModePrivate() -> U64 { return 2 }
+function metalCompareFunctionLess() -> U64 { return 1 }
 
 // Allocate the context block and create the device + command queue.
 @Native
@@ -84,9 +92,12 @@ function metalContextAlloc() -> RawPtr {
     let queue = metalMsgSend(device, metalSel("newCommandQueue"))
     metalMemWritePtr(ctx, metalOffsetDevice(), device)
     metalMemWritePtr(ctx, metalOffsetQueue(), queue)
-    // Null the surface slots so offscreen mode (no layer/drawable) is detectable.
+    // Null the surface/depth slots so offscreen mode (no layer/drawable) and the
+    // no-depth path are detectable.
     metalMemWritePtr(ctx, metalOffsetLayer(), metalNullPtr())
     metalMemWritePtr(ctx, metalOffsetDrawable(), metalNullPtr())
+    metalMemWritePtr(ctx, metalOffsetDepthTexture(), metalNullPtr())
+    metalMemWritePtr(ctx, metalOffsetDepthState(), metalNullPtr())
     // Resource registry: capacity pointers, ids starting at 1.
     let registry = metalMemAlloc(metalRegistryCapacity() * 8)
     metalMemWritePtr(ctx, metalOffsetRegistry(), registry)
@@ -139,11 +150,35 @@ function metalContextAttachOffscreen(ctx: RawPtr, width: Int, height: Int) {
     return
 }
 
-// Begin a render pass that clears the color target to (r,g,b,a). Builds the
-// MTLRenderPassDescriptor, the color attachment, the command buffer and the
-// render-command encoder, leaving the encoder recorded on the context.
+// Create a Depth32Float depth target and a less/write depth-stencil state for the
+// context (sized to the current color target). Enables depth-tested passes.
 @Native
-function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b: F64, a: F64) {
+function metalContextAttachDepth(ctx: RawPtr) {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let width = metalMemReadU64(ctx, metalOffsetWidth())
+    let height = metalMemReadU64(ctx, metalOffsetHeight())
+    let descClass = metalObjcGetClass("MTLTextureDescriptor")
+    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatDepth32Float(), width, height, false)
+    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget())
+    metalMsgSendVoidU(desc, metalSel("setStorageMode:"), metalStorageModePrivate())
+    let depthTexture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
+    metalMemWritePtr(ctx, metalOffsetDepthTexture(), depthTexture)
+
+    let dsDescClass = metalObjcGetClass("MTLDepthStencilDescriptor")
+    let dsDesc = metalMsgSend(metalMsgSend(dsDescClass, metalSel("alloc")), metalSel("init"))
+    metalMsgSendVoidU(dsDesc, metalSel("setDepthCompareFunction:"), metalCompareFunctionLess())
+    metalMsgSendVoidB(dsDesc, metalSel("setDepthWriteEnabled:"), true)
+    let depthState = metalMsgSendP(device, metalSel("newDepthStencilStateWithDescriptor:"), dsDesc)
+    metalMemWritePtr(ctx, metalOffsetDepthState(), depthState)
+    return
+}
+
+// Begin a render pass that clears the color target to (r,g,b,a), optionally with a
+// depth attachment cleared to 1.0 and a less/write depth-stencil state bound. Builds
+// the MTLRenderPassDescriptor, attachments, command buffer and render-command
+// encoder, leaving the encoder recorded on the context.
+@Native
+function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b: F64, a: F64, depthEnabled: Bool) {
     let queue = metalMemReadPtr(ctx, metalOffsetQueue())
     // In layer mode, acquire the next CAMetalLayer drawable and render into its
     // texture; in offscreen mode, render into the fixed offscreen texture. Either
@@ -166,8 +201,21 @@ function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b:
     metalMsgSendVoidU(ca0, metalSel("setStoreAction:"), metalStoreActionStore())
     metalMsgSendVoid4F(ca0, metalSel("setClearColor:"), r, g, b, a)
 
+    if depthEnabled {
+        let depthTexture = metalMemReadPtr(ctx, metalOffsetDepthTexture())
+        let depthAtt = metalMsgSend(rp, metalSel("depthAttachment"))
+        metalMsgSendVoidP(depthAtt, metalSel("setTexture:"), depthTexture)
+        metalMsgSendVoidU(depthAtt, metalSel("setLoadAction:"), metalLoadActionClear())
+        metalMsgSendVoidU(depthAtt, metalSel("setStoreAction:"), metalStoreActionDontCare())
+        metalMsgSendVoidF(depthAtt, metalSel("setClearDepth:"), 1.0)
+    }
+
     let commandBuffer = metalMsgSend(queue, metalSel("commandBuffer"))
     let encoder = metalMsgSendP(commandBuffer, metalSel("renderCommandEncoderWithDescriptor:"), rp)
+    if depthEnabled {
+        let depthState = metalMemReadPtr(ctx, metalOffsetDepthState())
+        metalMsgSendVoidP(encoder, metalSel("setDepthStencilState:"), depthState)
+    }
     metalMemWritePtr(ctx, metalOffsetCommandBuffer(), commandBuffer)
     metalMemWritePtr(ctx, metalOffsetEncoder(), encoder)
     return
