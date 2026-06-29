@@ -85,10 +85,49 @@ function metalSelfTestIndexedPixel() -> U32 {
     return packed
 }
 
+// Expected center pixel for a uniform fragment color (0.2, 0.6, 0.9, 1.0):
+// B=229, G=153, R=51, A=255 (Metal rounds 0.9*255=229.5 to 229).
+function metalSelfTestUniformExpected() -> U32 { return 4281571813 }
+
+function metalSelfTestUniformSource() -> String {
+    return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main(constant float4& color [[buffer(0)]]) { return color; }\n"
+}
+
+function metalSelfTestUniformData() -> [Float] {
+    return [0.2, 0.6, 0.9, 1.0]
+}
+
+// Render an offscreen triangle whose fragment color comes from a uniform buffer,
+// and return the center pixel — proving uniform upload + fragment binding.
+@Native
+function metalSelfTestUniformPixel() -> U32 {
+    let pool = metalAutoreleasePoolPush()
+    let ctx = metalContextAlloc()
+    metalContextAttachOffscreen(ctx, 8, 8)
+    let shaderId = metalCreateShader(ctx, metalSelfTestUniformSource())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm())
+    let vertexBufferId = metalCreateVertexBuffer(ctx, metalSelfTestTriangleVertices())
+    let uniformId = metalCreateUniform(ctx, 4)
+    metalUpdateUniform(ctx, uniformId, metalSelfTestUniformData())
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.0, 0.0, 0.0, 1.0)
+    metalEncoderBindFragmentUniform(ctx, uniformId, 0)
+    metalEncoderDraw(ctx, pipelineId, vertexBufferId, true, 3, 1)
+    metalContextEndAndCommit(ctx)
+    let packed = metalContextReadPixel(ctx, 4, 4)
+    metalContextFree(ctx)
+    metalAutoreleasePoolPop(pool)
+    return packed
+}
+
 // Verdicts the kik Test harness asserts.
 @Native
 function metalSelfTestClearOk() -> Bool {
     return metalSelfTestClearPixel() == metalSelfTestClearExpected()
+}
+
+@Native
+function metalSelfTestUniformOk() -> Bool {
+    return metalSelfTestUniformPixel() == metalSelfTestUniformExpected()
 }
 
 @Native

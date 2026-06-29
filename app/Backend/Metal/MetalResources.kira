@@ -86,6 +86,36 @@ function metalCreateRenderPipeline(ctx: RawPtr, shaderId: Int, colorFormat: U64)
     return id
 }
 
+// Create a CPU-writable uniform MTLBuffer sized for `floatCount` floats, register it.
+@Native
+function metalCreateUniform(ctx: RawPtr, floatCount: Int) -> Int {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let buffer = metalMsgSendNewBufferLength(device, metalSel("newBufferWithLength:options:"), floatCount * 4, 0)
+    return metalRegister(ctx, buffer)
+}
+
+// Upload float uniform data into a uniform buffer's shared contents.
+@Native
+function metalUpdateUniform(ctx: RawPtr, uniformId: Int, data: borrow [Float]) {
+    let buffer = metalLookup(ctx, uniformId)
+    let contents = metalMsgSend(buffer, metalSel("contents"))
+    var i = 0
+    while i < data.count {
+        metalMemWriteF32(contents, i * 4, data[i])
+        i = i + 1
+    }
+    return
+}
+
+// Bind a uniform buffer to a fragment-shader buffer slot on the active encoder.
+@Native
+function metalEncoderBindFragmentUniform(ctx: RawPtr, uniformId: Int, index: Int) {
+    let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
+    let buffer = metalLookup(ctx, uniformId)
+    metalMsgSendSetFragmentBuffer(encoder, metalSel("setFragmentBuffer:offset:atIndex:"), buffer, 0, index)
+    return
+}
+
 // Encode a non-indexed draw on the active render-command encoder: bind the pipeline
 // state, the vertex buffer (slot 0), then draw `vertexCount` triangle vertices.
 @Native

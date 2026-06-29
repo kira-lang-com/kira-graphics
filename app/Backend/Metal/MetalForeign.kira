@@ -87,6 +87,14 @@ function metalMsgSendPPP(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr, c: RawPt
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendNewBuffer(obj: RawPtr, op: RawPtr, bytes: RawPtr, length: U64, options: U64): RawPtr;
 
+// newBufferWithLength:options: -> id
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendNewBufferLength(obj: RawPtr, op: RawPtr, length: U64, options: U64): RawPtr;
+
+// setFragmentBuffer:offset:atIndex:
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendSetFragmentBuffer(obj: RawPtr, op: RawPtr, buffer: RawPtr, offset: U64, index: U64): Void;
+
 // setVertexBuffer:offset:atIndex:
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendSetVertexBuffer(obj: RawPtr, op: RawPtr, buffer: RawPtr, offset: U64, index: U64): Void;
