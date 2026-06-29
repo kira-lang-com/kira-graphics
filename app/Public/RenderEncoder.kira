@@ -88,6 +88,10 @@ class RenderEncoder {
         state.instanceCount = 1
         if (state.passActive && state.hasPipeline && state.pipelineId != 0) {
             if metalContextActive(state.metalContext) {
+                if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup0Id) }
+                if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup1Id) }
+                if state.hasBindGroup2 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup2Id) }
+                if state.hasBindGroup3 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup3Id) }
                 metalEncoderDraw(state.metalContext, state.pipelineId, state.vertexBufferId, state.hasVertexBuffer, state.vertexCount, state.instanceCount)
                 return
             }
@@ -120,6 +124,10 @@ class RenderEncoder {
         state.instanceCount = 1
         if (state.passActive && state.hasPipeline && state.pipelineId != 0) {
             if metalContextActive(state.metalContext) {
+                if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup0Id) }
+                if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup1Id) }
+                if state.hasBindGroup2 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup2Id) }
+                if state.hasBindGroup3 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup3Id) }
                 metalEncoderDrawIndexed(state.metalContext, state.pipelineId, state.vertexBufferId, state.hasVertexBuffer, state.indexBufferId, state.indexCount, state.instanceCount)
                 return
             }

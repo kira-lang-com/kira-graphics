@@ -120,6 +120,16 @@ class Graphics {
     }
 
     function createUniform(descriptor: borrow UniformDescriptor) -> GraphicsUniform {
+        if self.backend == GraphicsBackend.Metal {
+            let metalUniformId = metalCreateUniform(self.metalContext, descriptor.expectedFloatCount)
+            metalUpdateUniform(self.metalContext, metalUniformId, descriptor.data)
+            return GraphicsUniform {
+                handle: BackendUniformHandle {
+                    id: metalUniformId
+                }
+                id: metalUniformId
+            }
+        }
         let uniformId = sokolCreateUniformId(descriptor.label, descriptor.expectedFloatCount)
         let uniform = GraphicsUniform {
             handle: BackendUniformHandle {
@@ -132,6 +142,10 @@ class Graphics {
     }
 
     function updateUniform(uniform: borrow GraphicsUniform, data: borrow [Float]) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUpdateUniform(self.metalContext, uniform.id, data)
+            return
+        }
         updateGraphicsUniform(uniform, data)
         return
     }
@@ -142,6 +156,33 @@ class Graphics {
     }
 
     function createBindGroup(descriptor: borrow BindGroupDescriptor) -> BindGroup {
+        if self.backend == GraphicsBackend.Metal {
+            let metalBindGroupId = metalCreateBindGroup(self.metalContext)
+            var mi = 0
+            while mi < descriptor.uniformEntries.count {
+                let uEntry = descriptor.uniformEntries[mi]
+                metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindUniform(), uEntry.uniformSlot, uEntry.uniform.id)
+                mi = mi + 1
+            }
+            mi = 0
+            while mi < descriptor.textureEntries.count {
+                let tEntry = descriptor.textureEntries[mi]
+                metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindTexture(), tEntry.textureSlot, tEntry.texture.id)
+                mi = mi + 1
+            }
+            mi = 0
+            while mi < descriptor.samplerEntries.count {
+                let sEntry = descriptor.samplerEntries[mi]
+                metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindSampler(), sEntry.samplerSlot, sEntry.sampler.id)
+                mi = mi + 1
+            }
+            return BindGroup {
+                handle: BackendBindGroupHandle {
+                    id: metalBindGroupId
+                }
+                id: metalBindGroupId
+            }
+        }
         let bindGroupId = sokolCreateBindGroupId(descriptor.label)
         var index = 0
         while index < descriptor.uniformEntries.count {
@@ -170,6 +211,16 @@ class Graphics {
     }
 
     function createUniformBindGroup(label: borrow String, uniformSlot: Int, uniform: borrow GraphicsUniform) -> BindGroup {
+        if self.backend == GraphicsBackend.Metal {
+            let metalBindGroupId = metalCreateBindGroup(self.metalContext)
+            metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindUniform(), uniformSlot, uniform.id)
+            return BindGroup {
+                handle: BackendBindGroupHandle {
+                    id: metalBindGroupId
+                }
+                id: metalBindGroupId
+            }
+        }
         let bindGroupId = sokolCreateBindGroupId(label)
         sokolSetBindGroupUniform(bindGroupId, 0, uniformSlot, uniform.id)
         return BindGroup {
@@ -181,6 +232,17 @@ class Graphics {
     }
 
     function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroup {
+        if self.backend == GraphicsBackend.Metal {
+            let metalBindGroupId = metalCreateBindGroup(self.metalContext)
+            metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindTexture(), textureSlot, texture.id)
+            metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindSampler(), samplerSlot, sampler.id)
+            return BindGroup {
+                handle: BackendBindGroupHandle {
+                    id: metalBindGroupId
+                }
+                id: metalBindGroupId
+            }
+        }
         let bindGroupId = sokolCreateBindGroupId(label)
         sokolSetBindGroupTexture(bindGroupId, 0, textureSlot, texture.id)
         sokolSetBindGroupSampler(bindGroupId, 0, samplerSlot, sampler.id)

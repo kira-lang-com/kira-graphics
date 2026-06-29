@@ -29,3 +29,13 @@ Test MtkTextureSampling {
     test { return metalSelfTestTextureOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
+
+Test MtkBindGroupBindsUniform {
+    test { return metalSelfTestBindGroupOk() }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test MtkVertexUniformTransform {
+    test { return metalSelfTestVertexUniformOk() }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}

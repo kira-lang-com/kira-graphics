@@ -205,10 +205,86 @@ function metalSelfTestTexturePixel() -> U32 {
     return packed
 }
 
+// Bind group: same uniform color path as the uniform test, but bound through a
+// bind-group block (create + add entry + apply) — proving the bind-group glue.
+@Native
+function metalSelfTestBindGroupPixel() -> U32 {
+    let pool = metalAutoreleasePoolPush()
+    let ctx = metalContextAlloc()
+    metalContextAttachOffscreen(ctx, 8, 8)
+    let shaderId = metalCreateShader(ctx, metalSelfTestUniformSource())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm(), false)
+    let vertexBufferId = metalCreateVertexBuffer(ctx, metalSelfTestTriangleVertices())
+    let uniformId = metalCreateUniform(ctx, 4)
+    metalUpdateUniform(ctx, uniformId, metalSelfTestUniformData())
+    let bindGroupId = metalCreateBindGroup(ctx)
+    metalBindGroupAddEntry(ctx, bindGroupId, metalBindEntryKindUniform(), 0, uniformId)
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.0, 0.0, 0.0, 1.0, false)
+    metalEncoderApplyBindGroup(ctx, bindGroupId)
+    metalEncoderDraw(ctx, pipelineId, vertexBufferId, true, 3, 1)
+    metalContextEndAndCommit(ctx)
+    let packed = metalContextReadPixel(ctx, 4, 4)
+    metalContextFree(ctx)
+    metalAutoreleasePoolPop(pool)
+    return packed
+}
+
+// Vertex MVP uniform via a bind group: the vertex shader multiplies positions by a
+// 4x4 matrix supplied as a vertex-stage uniform (bind-group slot 0 -> vertex buffer
+// 1). The matrix translates X by +2, moving the whole triangle off-screen, so the
+// center clears to black. If the vertex uniform were not applied the center would be
+// the triangle color — so this proves the vertex-stage uniform path end to end.
+function metalSelfTestVertexUniformExpected() -> U32 { return 4278190080 }
+
+function metalSelfTestVertexUniformSource() -> String {
+    return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]], constant float4x4& mvp [[buffer(1)]]) { VOut o; o.pos = mvp * float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main() { return float4(1.0, 0.4, 0.1, 1.0); }\n"
+}
+
+function metalSelfTestTranslateMatrix() -> [Float] {
+    return [
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        2.0, 0.0, 0.0, 1.0
+    ]
+}
+
+@Native
+function metalSelfTestVertexUniformPixel() -> U32 {
+    let pool = metalAutoreleasePoolPush()
+    let ctx = metalContextAlloc()
+    metalContextAttachOffscreen(ctx, 8, 8)
+    let shaderId = metalCreateShader(ctx, metalSelfTestVertexUniformSource())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm(), false)
+    let vertexBufferId = metalCreateVertexBuffer(ctx, metalSelfTestTriangleVertices())
+    let mvpId = metalCreateUniform(ctx, 16)
+    metalUpdateUniform(ctx, mvpId, metalSelfTestTranslateMatrix())
+    let bindGroupId = metalCreateBindGroup(ctx)
+    metalBindGroupAddEntry(ctx, bindGroupId, metalBindEntryKindUniform(), 0, mvpId)
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.0, 0.0, 0.0, 1.0, false)
+    metalEncoderApplyBindGroup(ctx, bindGroupId)
+    metalEncoderDraw(ctx, pipelineId, vertexBufferId, true, 3, 1)
+    metalContextEndAndCommit(ctx)
+    let packed = metalContextReadPixel(ctx, 4, 4)
+    metalContextFree(ctx)
+    metalAutoreleasePoolPop(pool)
+    return packed
+}
+
 // Verdicts the kik Test harness asserts.
 @Native
 function metalSelfTestClearOk() -> Bool {
     return metalSelfTestClearPixel() == metalSelfTestClearExpected()
+}
+
+@Native
+function metalSelfTestVertexUniformOk() -> Bool {
+    return metalSelfTestVertexUniformPixel() == metalSelfTestVertexUniformExpected()
+}
+
+@Native
+function metalSelfTestBindGroupOk() -> Bool {
+    return metalSelfTestBindGroupPixel() == metalSelfTestUniformExpected()
 }
 
 @Native
