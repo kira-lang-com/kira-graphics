@@ -271,7 +271,51 @@ function metalSelfTestVertexUniformPixel() -> U32 {
     return packed
 }
 
+// Dynamic vertex buffer: a full-screen quad whose vertices are written straight into
+// a persistent shared buffer's `contents` (the UI compositor's hot path — no per-frame
+// Kira array, no upload call), then drawn. The fragment is solid blue (0,0,1,1) so the
+// center reads back B=255,G=0,R=0,A=255.
+function metalSelfTestDynamicExpected() -> U32 { return 4278190335 }
+
+function metalSelfTestDynamicSource() -> String {
+    return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main() { return float4(0.0, 0.0, 1.0, 1.0); }\n"
+}
+
+@Native
+function metalSelfTestDynamicPixel() -> U32 {
+    let pool = metalAutoreleasePoolPush()
+    let ctx = metalContextAlloc()
+    metalContextAttachOffscreen(ctx, 8, 8)
+    let shaderId = metalCreateShader(ctx, metalSelfTestDynamicSource())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm(), false)
+    // Persistent dynamic buffer (8 float slots), filled by writing F32 straight into
+    // its shared contents — the same path the UI compositor uses every frame.
+    let bufferId = metalCreateDynamicBuffer(ctx, 8)
+    let contents = metalDynamicBufferContents(ctx, bufferId)
+    metalMemWriteF32(contents, 0, 0.0 - 1.0)
+    metalMemWriteF32(contents, 4, 0.0 - 1.0)
+    metalMemWriteF32(contents, 8, 1.0)
+    metalMemWriteF32(contents, 12, 0.0 - 1.0)
+    metalMemWriteF32(contents, 16, 1.0)
+    metalMemWriteF32(contents, 20, 1.0)
+    metalMemWriteF32(contents, 24, 0.0 - 1.0)
+    metalMemWriteF32(contents, 28, 1.0)
+    let indexBufferId = metalCreateIndexBuffer(ctx, metalSelfTestQuadIndices())
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.0, 0.0, 0.0, 1.0, false)
+    metalEncoderDrawIndexed(ctx, pipelineId, bufferId, true, indexBufferId, 6, 1)
+    metalContextEndAndCommit(ctx)
+    let packed = metalContextReadPixel(ctx, 4, 4)
+    metalContextFree(ctx)
+    metalAutoreleasePoolPop(pool)
+    return packed
+}
+
 // Verdicts the kik Test harness asserts.
+@Native
+function metalSelfTestDynamicOk() -> Bool {
+    return metalSelfTestDynamicPixel() == metalSelfTestDynamicExpected()
+}
+
 @Native
 function metalSelfTestClearOk() -> Bool {
     return metalSelfTestClearPixel() == metalSelfTestClearExpected()

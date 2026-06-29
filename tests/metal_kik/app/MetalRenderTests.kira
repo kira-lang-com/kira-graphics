@@ -39,3 +39,8 @@ Test MtkVertexUniformTransform {
     test { return metalSelfTestVertexUniformOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
+
+Test MtkDynamicBufferContentsDraw {
+    test { return metalSelfTestDynamicOk() }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}

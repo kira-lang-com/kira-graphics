@@ -133,6 +133,12 @@ real frames offscreen and asserts the produced pixels):
 - depth buffer + depth-tested passes (`Depth24Stencil8` requests map to
   `Depth32Float`, which is what Apple GPUs support)
 - textures + samplers, and bind groups mapping uniforms/textures/samplers to slots
+- premultiplied-alpha blended pipelines, dynamic vertex-stream buffers (write
+  straight into the buffer's shared `contents`), and glyph-atlas sub-region uploads —
+  the primitives the UI Foundation batched compositor draws through
+- an on-screen `NSWindow` + `CAMetalLayer` with a live monotonic frame clock (for an
+  FPS readout) and per-frame view-bounds tracking, so the drawable and the consuming
+  UI layout reflow during an interactive window resize
 
 Run the suite with:
 
@@ -140,8 +146,11 @@ Run the suite with:
 KIRA_PURE_TEST=1 kira test --backend hybrid tests/metal_kik
 ```
 
-The remaining work is the on-screen host integration: attaching the
-`CAMetalLayer` to the runner-provided `NSView`/`UIView` and driving frames from the
-platform run loop, then making Metal the default Apple backend and retiring Sokol's
-Apple targets. The drawable render + present path itself is already proven; only the
-window/run-loop host glue and on-device verification remain.
+UI Foundation renders **entirely through this abstraction** on Metal (no immediate-mode
+helpers, no shim): `basic-foundation-app` and a `kira_ui` widget app run on screen as a
+single batched SDF-surface + glyph-atlas draw per frame, resizable, at interactive
+frame rates.
+
+The remaining work is making Metal the *default* Apple backend and retiring Sokol's
+Apple targets (the legacy GLSL/KSL examples still default to Sokol), plus the iOS UIKit
+host and on-device verification.
