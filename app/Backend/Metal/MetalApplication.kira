@@ -60,6 +60,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     // requests quit or the window is closed.
     let view = metalCreateWindow(app.width, app.height, app.title)
     metalContextAttachLayerToView(ctxPtr, view, app.width, app.height)
+    let nsApp = metalSharedApp()
     kiraGraphicsLiveBackendInitialized()
 
     let onInit: (Graphics) -> Void = app.initHandler
@@ -74,6 +75,9 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     var running = true
     while running {
         let framePool = metalAutoreleasePoolPush()
+        // Dispatch queued window/input events first (activation, title-bar buttons,
+        // live resize), then pick up any resulting new window size for this frame.
+        metalPumpEvents(nsApp)
         metalContextTickFrameTime(ctxPtr)
         metalContextSyncViewportFromView(ctxPtr)
         let frameGraphics = Graphics {
@@ -84,7 +88,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         var frame = frameGraphics.frame()
         onFrame(frame)
         graphicsSubmitFrame(frame)
-        metalSpinRunLoop(0.008)
+        metalSpinRunLoop(0.002)
         if frame.shouldQuit {
             running = false
         }

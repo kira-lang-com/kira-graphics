@@ -148,6 +148,11 @@ function metalMsgSendInitWindow(obj: RawPtr, op: RawPtr, x: F64, y: F64, w: F64,
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendDateInterval(obj: RawPtr, op: RawPtr, seconds: F64): RawPtr;
 
+// -[NSApplication nextEventMatchingMask:untilDate:inMode:dequeue:] -> NSEvent*
+// (NSEventMask is unsigned long long; the mode is an NSRunLoopMode NSString).
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendNextEvent(obj: RawPtr, op: RawPtr, mask: U64, untilDate: RawPtr, mode: RawPtr, dequeue: Bool): RawPtr;
+
 // Objective-C autorelease pool (C functions in libobjc). The Metal shader compiler
 // and NSString helpers create many autoreleased temporaries; without a pool that is
 // undefined behaviour, so resource creation runs inside push/pop.

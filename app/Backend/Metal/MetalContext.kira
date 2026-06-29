@@ -271,8 +271,12 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     metalMsgSendVoidP(layer, metalSel("setDevice:"), device)
     metalMsgSendVoidU(layer, metalSel("setPixelFormat:"), metalPixelFormatBGRA8Unorm())
     metalMsgSendVoid2F(layer, metalSel("setDrawableSize:"), Float(width), Float(height))
-    metalMsgSendVoidB(viewPtr, metalSel("setWantsLayer:"), true)
+    // Order matters: assign the layer FIRST, then turn on wantsLayer. This makes the
+    // view layer-HOSTING (the CAMetalLayer is ours to drive) rather than layer-backed
+    // (where AppKit owns the layer and would draw the view's opaque background over our
+    // rendered content on every display pass, blanking the frame).
     metalMsgSendVoidP(viewPtr, metalSel("setLayer:"), layer)
+    metalMsgSendVoidB(viewPtr, metalSel("setWantsLayer:"), true)
     metalMemWritePtr(ctx, metalOffsetLayer(), layer)
     metalMemWritePtr(ctx, metalOffsetHostView(), viewPtr)
     metalMemWriteU64(ctx, metalOffsetWidth(), width)

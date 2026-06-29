@@ -26,13 +26,44 @@ function metalCreateWindow(width: Int, height: Int, title: borrow String) -> Raw
     return metalMsgSend(window, metalSel("contentView"))
 }
 
-// Pump the main run loop for `seconds` so the window server processes window/input
-// events between rendered frames.
+// Pump the main run loop for `seconds` so Core Animation / timers run between frames.
 @Native
 function metalSpinRunLoop(seconds: F64) {
     let runloop = metalMsgSend(metalObjcGetClass("NSRunLoop"), metalSel("currentRunLoop"))
     let until = metalMsgSendDateInterval(metalObjcGetClass("NSDate"), metalSel("dateWithTimeIntervalSinceNow:"), seconds)
     metalMsgSendVoidP(runloop, metalSel("runUntilDate:"), until)
+    return
+}
+
+// The shared NSApplication (singleton), used to dispatch the event queue each frame.
+@Native
+function metalSharedApp() -> RawPtr {
+    return metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication"))
+}
+
+// All event types (every real NSEvent type is a low bit; this covers bits 0-62, well
+// above the highest NSEventType, standing in for NSEventMaskAny == NSUIntegerMax).
+function metalEventMaskAny() -> U64 { return 9223372036854775807 }
+
+// Dispatch every pending NSEvent. Running the bare NSRunLoop only services run-loop
+// SOURCES; it does not dequeue NSApplication's event queue or call -sendEvent:, so
+// without this the window never receives mouse/keyboard/resize events — it never
+// becomes the active key window (its traffic lights stay greyed) and the resize
+// control does nothing. Pulling each queued event and sending it delivers window
+// activation, title-bar buttons, and live-resize tracking to the window.
+@Native
+function metalPumpEvents(app: RawPtr) {
+    let distantPast = metalMsgSend(metalObjcGetClass("NSDate"), metalSel("distantPast"))
+    let mode = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "kCFRunLoopDefaultMode")
+    var draining = true
+    while draining {
+        let event = metalMsgSendNextEvent(app, metalSel("nextEventMatchingMask:untilDate:inMode:dequeue:"), metalEventMaskAny(), distantPast, mode, true)
+        if metalPtrIsNull(event) {
+            draining = false
+        } else {
+            metalMsgSendVoidP(app, metalSel("sendEvent:"), event)
+        }
+    }
     return
 }
 
