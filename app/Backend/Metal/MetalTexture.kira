@@ -1,0 +1,76 @@
+// Metal texture and sampler resources, built from Objective-C messages via FFI and
+// registered in the context's id->pointer table.
+
+function metalPixelFormatRGBA8Unorm() -> U64 { return 70 }
+function metalTextureUsageShaderRead() -> U64 { return 1 }
+function metalSamplerFilterNearest() -> U64 { return 0 }
+function metalSamplerFilterLinear() -> U64 { return 1 }
+function metalSamplerAddressClampToEdge() -> U64 { return 0 }
+
+// Create an RGBA8 sampled texture (shared storage so pixels can be uploaded from
+// the CPU) and register it.
+@Native
+function metalCreateTexture(ctx: RawPtr, width: Int, height: Int) -> Int {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let descClass = metalObjcGetClass("MTLTextureDescriptor")
+    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatRGBA8Unorm(), width, height, false)
+    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageShaderRead())
+    metalMsgSendVoidU(desc, metalSel("setStorageMode:"), metalStorageModeShared())
+    let texture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
+    return metalRegister(ctx, texture)
+}
+
+// Upload RGBA8 pixel bytes (row-major, 4 bytes/pixel) into a texture region.
+@Native
+function metalUpdateTexture(ctx: RawPtr, textureId: Int, width: Int, height: Int, data: borrow [Int]) {
+    let texture = metalLookup(ctx, textureId)
+    let count = data.count
+    let bytes = metalMemAlloc(count)
+    var i = 0
+    while i < count {
+        metalMemWriteU8(bytes, i, data[i])
+        i = i + 1
+    }
+    let region = metalMemAlloc(48)
+    metalMemWriteU64(region, 0, 0)
+    metalMemWriteU64(region, 8, 0)
+    metalMemWriteU64(region, 16, 0)
+    metalMemWriteU64(region, 24, width)
+    metalMemWriteU64(region, 32, height)
+    metalMemWriteU64(region, 40, 1)
+    metalMsgSendReplaceRegion(texture, metalSel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), region, 0, bytes, width * 4)
+    metalMemFree(bytes)
+    metalMemFree(region)
+    return
+}
+
+// Create an MTLSamplerState with the given min/mag filters and address mode.
+@Native
+function metalCreateSampler(ctx: RawPtr, minFilter: U64, magFilter: U64, addressMode: U64) -> Int {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let descClass = metalObjcGetClass("MTLSamplerDescriptor")
+    let desc = metalMsgSend(metalMsgSend(descClass, metalSel("alloc")), metalSel("init"))
+    metalMsgSendVoidU(desc, metalSel("setMinFilter:"), minFilter)
+    metalMsgSendVoidU(desc, metalSel("setMagFilter:"), magFilter)
+    metalMsgSendVoidU(desc, metalSel("setSAddressMode:"), addressMode)
+    metalMsgSendVoidU(desc, metalSel("setTAddressMode:"), addressMode)
+    let sampler = metalMsgSendP(device, metalSel("newSamplerStateWithDescriptor:"), desc)
+    return metalRegister(ctx, sampler)
+}
+
+// Bind a texture / sampler to a fragment-shader slot on the active encoder.
+@Native
+function metalEncoderBindFragmentTexture(ctx: RawPtr, textureId: Int, index: Int) {
+    let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
+    let texture = metalLookup(ctx, textureId)
+    metalMsgSendVoidPU(encoder, metalSel("setFragmentTexture:atIndex:"), texture, index)
+    return
+}
+
+@Native
+function metalEncoderBindFragmentSampler(ctx: RawPtr, samplerId: Int, index: Int) {
+    let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
+    let sampler = metalLookup(ctx, samplerId)
+    metalMsgSendVoidPU(encoder, metalSel("setFragmentSamplerState:atIndex:"), sampler, index)
+    return
+}

@@ -171,10 +171,49 @@ function metalSelfTestDepthPixel() -> U32 {
     return packed
 }
 
+// Texture: a 1x1 RGBA8 texture (R=50,G=150,B=250,A=255) sampled in the fragment
+// shader, written to the BGRA8 target -> center pixel B=250,G=150,R=50,A=255.
+function metalSelfTestTextureExpected() -> U32 { return 4281505530 }
+
+function metalSelfTestTextureSource() -> String {
+    return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main(texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) { return tex.sample(smp, float2(0.5, 0.5)); }\n"
+}
+
+function metalSelfTestTexturePixels() -> [Int] {
+    return [50, 150, 250, 255]
+}
+
+@Native
+function metalSelfTestTexturePixel() -> U32 {
+    let pool = metalAutoreleasePoolPush()
+    let ctx = metalContextAlloc()
+    metalContextAttachOffscreen(ctx, 8, 8)
+    let shaderId = metalCreateShader(ctx, metalSelfTestTextureSource())
+    let pipelineId = metalCreateRenderPipeline(ctx, shaderId, metalPixelFormatBGRA8Unorm(), false)
+    let vertexBufferId = metalCreateVertexBuffer(ctx, metalSelfTestTriangleVertices())
+    let textureId = metalCreateTexture(ctx, 1, 1)
+    metalUpdateTexture(ctx, textureId, 1, 1, metalSelfTestTexturePixels())
+    let samplerId = metalCreateSampler(ctx, metalSamplerFilterNearest(), metalSamplerFilterNearest(), metalSamplerAddressClampToEdge())
+    metalContextBeginClear(ctx, metalLoadActionClear(), 0.0, 0.0, 0.0, 1.0, false)
+    metalEncoderBindFragmentTexture(ctx, textureId, 0)
+    metalEncoderBindFragmentSampler(ctx, samplerId, 0)
+    metalEncoderDraw(ctx, pipelineId, vertexBufferId, true, 3, 1)
+    metalContextEndAndCommit(ctx)
+    let packed = metalContextReadPixel(ctx, 4, 4)
+    metalContextFree(ctx)
+    metalAutoreleasePoolPop(pool)
+    return packed
+}
+
 // Verdicts the kik Test harness asserts.
 @Native
 function metalSelfTestClearOk() -> Bool {
     return metalSelfTestClearPixel() == metalSelfTestClearExpected()
+}
+
+@Native
+function metalSelfTestTextureOk() -> Bool {
+    return metalSelfTestTexturePixel() == metalSelfTestTextureExpected()
 }
 
 @Native

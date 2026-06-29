@@ -24,3 +24,8 @@ Test MtkDepthOccludesFarSurface {
     test { return metalSelfTestDepthOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
+
+Test MtkTextureSampling {
+    test { return metalSelfTestTextureOk() }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}

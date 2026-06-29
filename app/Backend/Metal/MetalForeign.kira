@@ -99,6 +99,14 @@ function metalMsgSendNewBufferLength(obj: RawPtr, op: RawPtr, length: U64, optio
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendSetFragmentBuffer(obj: RawPtr, op: RawPtr, buffer: RawPtr, offset: U64, index: U64): Void;
 
+// (id, NSUInteger) -> void  (setFragmentTexture:atIndex: / setFragmentSamplerState:atIndex:)
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendVoidPU(obj: RawPtr, op: RawPtr, a: RawPtr, index: U64): Void;
+
+// replaceRegion:mipmapLevel:withBytes:bytesPerRow: — MTLRegion passed by reference.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendReplaceRegion(obj: RawPtr, op: RawPtr, region: RawPtr, mipLevel: U64, bytes: RawPtr, bytesPerRow: U64): Void;
+
 // setVertexBuffer:offset:atIndex:
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendSetVertexBuffer(obj: RawPtr, op: RawPtr, buffer: RawPtr, offset: U64, index: U64): Void;
@@ -150,6 +158,8 @@ function metalMemReadU64(ptr: RawPtr, offset: U64): U64;
 function metalMemWriteF32(ptr: RawPtr, offset: U64, value: F32): Void;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u32_at; abi: c; }
 function metalMemWriteU32(ptr: RawPtr, offset: U64, value: U32): Void;
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u8_at; abi: c; }
+function metalMemWriteU8(ptr: RawPtr, offset: U64, value: U8): Void;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_null_ptr; abi: c; }
 function metalNullPtr(): RawPtr;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_ptr_is_null; abi: c; }
