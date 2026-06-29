@@ -91,6 +91,15 @@ app/
       SokolPipeline.kira
       SokolShader.kira
       SokolTexture.kira
+    Metal/
+      MetalForeign.kira       (the entire objc-runtime + Metal FFI surface; no shim)
+      MetalContext.kira        (device/queue/surface/registry/depth)
+      MetalResources.kira      (shaders, pipelines, vertex/index buffers, uniforms, draws)
+      MetalTexture.kira        (textures + samplers)
+      MetalBindGroup.kira      (bind-group apply)
+      MetalFrame.kira          (begin/end/submit bridge)
+      MetalSelfTest.kira       (offscreen render + pixel-readback verdicts)
+      MetalApplication.kira    (lifecycle)
   Resources/
     BufferDescriptor.kira
     PipelineDescriptor.kira
