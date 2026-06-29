@@ -39,7 +39,11 @@ class Graphics {
 
     function createRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> RenderPipeline {
         if self.backend == GraphicsBackend.Metal {
-            let metalPipelineId = metalCreateRenderPipeline(self.metalContext, descriptor.shader.id, metalPixelFormatBGRA8Unorm(), descriptor.depthStencil.depthEnabled)
+            var blendEnabled = false
+            if descriptor.colorTargets.count > 0 {
+                blendEnabled = descriptor.colorTargets[0].blend.enabled
+            }
+            let metalPipelineId = metalCreateRenderPipelineBlended(self.metalContext, descriptor.shader.id, metalPixelFormatBGRA8Unorm(), descriptor.depthStencil.depthEnabled, blendEnabled)
             return RenderPipeline {
                 handle: BackendPipelineHandle {
                     id: metalPipelineId
@@ -48,6 +52,50 @@ class Graphics {
             }
         }
         return sokolCreateRenderPipeline(descriptor)
+    }
+
+    // A persistent, CPU-writable vertex buffer sized for `floatCapacity` f32 slots.
+    // The UI compositor allocates one and rewrites its contents every frame
+    // (updateDynamicBuffer), avoiding per-frame buffer churn. Bind it like any
+    // vertex buffer through the render encoder.
+    function createDynamicBuffer(floatCapacity: Int) -> GraphicsBuffer {
+        if self.backend == GraphicsBackend.Metal {
+            let id = metalCreateDynamicBuffer(self.metalContext, floatCapacity)
+            return GraphicsBuffer {
+                handle: BackendBufferHandle {
+                    id: id
+                }
+                id: id
+            }
+        }
+        graphicsDiagnostic("Kira Graphics: createDynamicBuffer is only implemented on the Metal backend")
+        return GraphicsBuffer {
+            handle: BackendBufferHandle {
+                id: 0
+            }
+            id: 0
+        }
+    }
+
+    // Overwrite the first data.count f32 slots of a dynamic buffer's contents.
+    function updateDynamicBuffer(buffer: borrow GraphicsBuffer, data: borrow [Float]) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUpdateDynamicBuffer(self.metalContext, buffer.id, data)
+            return
+        }
+        graphicsDiagnostic("Kira Graphics: updateDynamicBuffer is only implemented on the Metal backend")
+        return
+    }
+
+    // Upload RGBA8 bytes into a sub-region of a texture (the UI glyph atlas blits one
+    // rasterized glyph at a time into its packed slot).
+    function updateTextureRegion(texture: borrow GraphicsTexture, x: Int, y: Int, width: Int, height: Int, data: borrow [Int]) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUpdateTextureRegion(self.metalContext, texture.id, x, y, width, height, data)
+            return
+        }
+        graphicsDiagnostic("Kira Graphics: updateTextureRegion is only implemented on the Metal backend")
+        return
     }
 
     function destroyPipeline(pipeline: borrow RenderPipeline) {
@@ -260,6 +308,15 @@ class Graphics {
     }
 
     function createTexture(descriptor: borrow TextureDescriptor) -> GraphicsTexture {
+        if self.backend == GraphicsBackend.Metal {
+            let metalTextureId = metalCreateTexture(self.metalContext, descriptor.width, descriptor.height)
+            return GraphicsTexture {
+                handle: BackendTextureHandle {
+                    id: metalTextureId
+                }
+                id: metalTextureId
+            }
+        }
         let textureId = sokolCreateTextureId(
             descriptor.label,
             descriptor.width,
@@ -293,6 +350,23 @@ class Graphics {
     }
 
     function createSampler(descriptor: borrow SamplerDescriptor) -> GraphicsSampler {
+        if self.backend == GraphicsBackend.Metal {
+            var metalMin = metalSamplerFilterNearest()
+            if descriptor.minFilter == textureFilterLinear() {
+                metalMin = metalSamplerFilterLinear()
+            }
+            var metalMag = metalSamplerFilterNearest()
+            if descriptor.magFilter == textureFilterLinear() {
+                metalMag = metalSamplerFilterLinear()
+            }
+            let metalSamplerId = metalCreateSampler(self.metalContext, metalMin, metalMag, metalSamplerAddressClampToEdge())
+            return GraphicsSampler {
+                handle: BackendSamplerHandle {
+                    id: metalSamplerId
+                }
+                id: metalSamplerId
+            }
+        }
         let samplerId = sokolCreateSamplerId(
             descriptor.label,
             descriptor.minFilter,

@@ -71,6 +71,18 @@ function metalContextActive(ctx: RawPtr) -> Bool {
     return !metalPtrIsNull(ctx)
 }
 
+// Drawable dimensions recorded on the context (the UI layout/viewport source on the
+// Metal path, where Sokol's sapp_width/height are not valid).
+@Native
+function metalContextWidth(ctx: RawPtr) -> Int {
+    return metalMemReadU64(ctx, metalOffsetWidth())
+}
+
+@Native
+function metalContextHeight(ctx: RawPtr) -> Int {
+    return metalMemReadU64(ctx, metalOffsetHeight())
+}
+
 // Resolve a handle id (as U64) to its Objective-C resource pointer. Used by the
 // bind-group apply loop, which carries ids as U64 in its raw entry block.
 @Native

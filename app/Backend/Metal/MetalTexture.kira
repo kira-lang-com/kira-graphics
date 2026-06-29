@@ -44,6 +44,32 @@ function metalUpdateTexture(ctx: RawPtr, textureId: Int, width: Int, height: Int
     return
 }
 
+// Upload RGBA8 pixel bytes into a sub-region (origin x,y, size w×h) of a texture.
+// Used by the UI glyph atlas, which rasterizes one glyph at a time and blits it to
+// its packed slot without re-uploading the whole atlas.
+@Native
+function metalUpdateTextureRegion(ctx: RawPtr, textureId: Int, x: Int, y: Int, width: Int, height: Int, data: borrow [Int]) {
+    let texture = metalLookup(ctx, textureId)
+    let count = data.count
+    let bytes = metalMemAlloc(count)
+    var i = 0
+    while i < count {
+        metalMemWriteU8(bytes, i, data[i])
+        i = i + 1
+    }
+    let region = metalMemAlloc(48)
+    metalMemWriteU64(region, 0, x)
+    metalMemWriteU64(region, 8, y)
+    metalMemWriteU64(region, 16, 0)
+    metalMemWriteU64(region, 24, width)
+    metalMemWriteU64(region, 32, height)
+    metalMemWriteU64(region, 40, 1)
+    metalMsgSendReplaceRegion(texture, metalSel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), region, 0, bytes, width * 4)
+    metalMemFree(bytes)
+    metalMemFree(region)
+    return
+}
+
 // Create an MTLSamplerState with the given min/mag filters and address mode.
 @Native
 function metalCreateSampler(ctx: RawPtr, minFilter: U64, magFilter: U64, addressMode: U64) -> Int {

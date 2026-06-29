@@ -61,10 +61,23 @@ function metalCreateIndexBuffer(ctx: RawPtr, data: borrow [Int]) -> Int {
     return id
 }
 
+// MTLBlendFactor / MTLBlendOperation constants used by the premultiplied-alpha
+// compositing path (UI). Premultiplied: srcRGB*One + dstRGB*(1-srcA).
+function metalBlendFactorOne() -> U64 { return 1 }
+function metalBlendFactorOneMinusSourceAlpha() -> U64 { return 5 }
+function metalBlendOperationAdd() -> U64 { return 0 }
+
 // Build an MTLRenderPipelineState from a shader library and a color pixel format,
 // and register it.
 @Native
 function metalCreateRenderPipeline(ctx: RawPtr, shaderId: Int, colorFormat: U64, depthEnabled: Bool) -> Int {
+    return metalCreateRenderPipelineBlended(ctx, shaderId, colorFormat, depthEnabled, false)
+}
+
+// Build an MTLRenderPipelineState, optionally enabling premultiplied-alpha blending
+// on color attachment 0 (the UI compositor draws translucent, premultiplied quads).
+@Native
+function metalCreateRenderPipelineBlended(ctx: RawPtr, shaderId: Int, colorFormat: U64, depthEnabled: Bool, blendEnabled: Bool) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let library = metalLookup(ctx, shaderId)
     let vname = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "v_main")
@@ -77,6 +90,15 @@ function metalCreateRenderPipeline(ctx: RawPtr, shaderId: Int, colorFormat: U64,
     metalMsgSendVoidP(desc, metalSel("setFragmentFunction:"), ffn)
     let colorAttachment = metalMsgSendPU(metalMsgSend(desc, metalSel("colorAttachments")), metalSel("objectAtIndexedSubscript:"), 0)
     metalMsgSendVoidU(colorAttachment, metalSel("setPixelFormat:"), colorFormat)
+    if blendEnabled {
+        metalMsgSendVoidB(colorAttachment, metalSel("setBlendingEnabled:"), true)
+        metalMsgSendVoidU(colorAttachment, metalSel("setRgbBlendOperation:"), metalBlendOperationAdd())
+        metalMsgSendVoidU(colorAttachment, metalSel("setAlphaBlendOperation:"), metalBlendOperationAdd())
+        metalMsgSendVoidU(colorAttachment, metalSel("setSourceRGBBlendFactor:"), metalBlendFactorOne())
+        metalMsgSendVoidU(colorAttachment, metalSel("setSourceAlphaBlendFactor:"), metalBlendFactorOne())
+        metalMsgSendVoidU(colorAttachment, metalSel("setDestinationRGBBlendFactor:"), metalBlendFactorOneMinusSourceAlpha())
+        metalMsgSendVoidU(colorAttachment, metalSel("setDestinationAlphaBlendFactor:"), metalBlendFactorOneMinusSourceAlpha())
+    }
     if depthEnabled {
         metalMsgSendVoidU(desc, metalSel("setDepthAttachmentPixelFormat:"), metalPixelFormatDepth32Float())
     }
@@ -87,6 +109,30 @@ function metalCreateRenderPipeline(ctx: RawPtr, shaderId: Int, colorFormat: U64,
     let id = metalRegister(ctx, pipeline)
     metalMemFree(errSlot)
     return id
+}
+
+// Create a persistent, CPU-writable MTLBuffer sized for `floatCount` f32 slots and
+// register it. The UI compositor allocates one of these per frame-stream and rewrites
+// its shared contents every frame (no per-frame buffer churn), binding it as the
+// vertex buffer at slot 0.
+@Native
+function metalCreateDynamicBuffer(ctx: RawPtr, floatCount: Int) -> Int {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let buffer = metalMsgSendNewBufferLength(device, metalSel("newBufferWithLength:options:"), floatCount * 4, 0)
+    return metalRegister(ctx, buffer)
+}
+
+// Overwrite the first `data.count` f32 slots of a dynamic buffer's shared contents.
+@Native
+function metalUpdateDynamicBuffer(ctx: RawPtr, bufferId: Int, data: borrow [Float]) {
+    let buffer = metalLookup(ctx, bufferId)
+    let contents = metalMsgSend(buffer, metalSel("contents"))
+    var i = 0
+    while i < data.count {
+        metalMemWriteF32(contents, i * 4, data[i])
+        i = i + 1
+    }
+    return
 }
 
 // Create a CPU-writable uniform MTLBuffer sized for `floatCount` floats, register it.
