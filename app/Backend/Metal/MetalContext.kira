@@ -30,7 +30,9 @@
 // 104  hostView         (NSView/UIView the layer is attached to; null in offscreen)
 // 112  lastFrameNs      (U64 nanoseconds; the previous frame's monotonic clock)
 // 120  frameDurationNs  (U64 nanoseconds; the most recent inter-frame delta, for FPS)
-function metalContextSize() -> U64 { return 128 }
+// 128  physicalWidth    (U64 backing pixels; width/height stay in points, so
+//                        scale = physicalWidth / width — the Retina backing factor)
+function metalContextSize() -> U64 { return 136 }
 function metalOffsetDevice() -> U64 { return 0 }
 function metalOffsetQueue() -> U64 { return 8 }
 function metalOffsetColorTexture() -> U64 { return 16 }
@@ -47,6 +49,7 @@ function metalOffsetDepthState() -> U64 { return 96 }
 function metalOffsetHostView() -> U64 { return 104 }
 function metalOffsetLastFrameNs() -> U64 { return 112 }
 function metalOffsetFrameDurationNs() -> U64 { return 120 }
+function metalOffsetPhysicalWidth() -> U64 { return 128 }
 
 // The resource registry maps small integer handle ids (stored as U32 in the public
 // handle types) to the Objective-C resource pointers (MTLBuffer / MTLLibrary /
@@ -112,6 +115,9 @@ function metalContextSyncViewportFromView(ctx: RawPtr) {
     if metalPtrIsNull(view) {
         return
     }
+    // bounds is in points (the layout/viewport unit); the CAMetalLayer drawable must be
+    // sized in PHYSICAL pixels (points x backing scale) or the frame is rendered at
+    // logical resolution and upscaled — blurry on a Retina display.
     let bounds = metalMsgSendCGRect(view, metalSel("bounds"))
     let w = Int(bounds.width)
     let h = Int(bounds.height)
@@ -120,16 +126,42 @@ function metalContextSyncViewportFromView(ctx: RawPtr) {
     }
     let curW = metalMemReadU64(ctx, metalOffsetWidth())
     let curH = metalMemReadU64(ctx, metalOffsetHeight())
-    if w == curW && h == curH {
+    let curPhysical = metalMemReadU64(ctx, metalOffsetPhysicalWidth())
+    if w == curW && h == curH && curPhysical != 0 {
         return
+    }
+    let backing = metalMsgSendRectToBacking(view, metalSel("convertRectToBacking:"), bounds.x, bounds.y, bounds.width, bounds.height)
+    var pw = Int(backing.width)
+    var ph = Int(backing.height)
+    if pw <= 0 || ph <= 0 {
+        pw = w
+        ph = h
     }
     let layer = metalMemReadPtr(ctx, metalOffsetLayer())
     if !metalPtrIsNull(layer) {
-        metalMsgSendVoid2F(layer, metalSel("setDrawableSize:"), Float(w), Float(h))
+        // A layer-hosting view does not auto-size its layer, so set the layer's frame
+        // to the view bounds (points) — otherwise the rendered content keeps its
+        // original size instead of growing/shrinking with the window. The drawable is
+        // sized in physical pixels and contentsScale carries the backing factor.
+        metalMsgSendVoid4F(layer, metalSel("setFrame:"), 0.0, 0.0, Float(w), Float(h))
+        metalMsgSendVoid2F(layer, metalSel("setDrawableSize:"), Float(pw), Float(ph))
+        metalMsgSendVoidF(layer, metalSel("setContentsScale:"), Float(pw) / Float(w))
     }
     metalMemWriteU64(ctx, metalOffsetWidth(), w)
     metalMemWriteU64(ctx, metalOffsetHeight(), h)
+    metalMemWriteU64(ctx, metalOffsetPhysicalWidth(), pw)
     return
+}
+
+// Backing (Retina) scale = physical pixels / points. 1.0 until the first viewport sync.
+@Native
+function metalContextScale(ctx: RawPtr) -> Float {
+    let pw = metalMemReadU64(ctx, metalOffsetPhysicalWidth())
+    let w = metalMemReadU64(ctx, metalOffsetWidth())
+    if w <= 0 || pw <= 0 {
+        return 1.0
+    }
+    return Float(pw) / Float(w)
 }
 
 // Drawable dimensions recorded on the context (the UI layout/viewport source on the
@@ -182,6 +214,7 @@ function metalContextAlloc() -> RawPtr {
     metalMemWritePtr(ctx, metalOffsetHostView(), metalNullPtr())
     metalMemWriteU64(ctx, metalOffsetLastFrameNs(), 0)
     metalMemWriteU64(ctx, metalOffsetFrameDurationNs(), 0)
+    metalMemWriteU64(ctx, metalOffsetPhysicalWidth(), 0)
     // Resource registry: capacity pointers, ids starting at 1.
     let registry = metalMemAlloc(metalRegistryCapacity() * 8)
     metalMemWritePtr(ctx, metalOffsetRegistry(), registry)

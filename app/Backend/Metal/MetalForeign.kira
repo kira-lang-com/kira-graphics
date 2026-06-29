@@ -94,9 +94,12 @@ struct MetalCGRect {
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendCGRect(obj: RawPtr, op: RawPtr): MetalCGRect;
 
-// () -> CGFloat  — e.g. -[NSWindow backingScaleFactor] (a single double).
+// (CGRect) -> CGRect  — e.g. -[NSView convertRectToBacking:]. The argument CGRect is
+// an HFA-of-4-doubles passed as four F64 scalars (v0-v3, like setClearColor:), and the
+// result is the same four-F64 struct. Used to get physical (backing) pixel sizes
+// without a scalar-double return (which the FFI does not marshal).
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendF64(obj: RawPtr, op: RawPtr): F64;
+function metalMsgSendRectToBacking(obj: RawPtr, op: RawPtr, x: F64, y: F64, w: F64, h: F64): MetalCGRect;
 
 // (id, id) -> id  — e.g. newRenderPipelineStateWithDescriptor:error:
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }

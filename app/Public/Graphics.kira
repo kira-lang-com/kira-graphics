@@ -77,6 +77,15 @@ class Graphics {
         }
     }
 
+    // The Retina backing scale (physical pixels per point) of the current drawable.
+    // 1.0 off Metal or before the first viewport sync.
+    function backingScale() -> Float {
+        if self.backend == GraphicsBackend.Metal {
+            return metalContextScale(self.metalContext)
+        }
+        return 1.0
+    }
+
     // The CPU-visible contents pointer of a dynamic buffer, for callers that write
     // vertices straight into GPU-visible memory (the UI compositor's hot path).
     function dynamicBufferContents(buffer: borrow GraphicsBuffer) -> RawPtr {
