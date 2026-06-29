@@ -50,3 +50,13 @@ function metalReportCenterPixel(ctxPtr: RawPtr, width: Int, height: Int) {
     return
     // packed is little-endian BGRA: (A<<24)|(R<<16)|(G<<8)|B
 }
+
+// Frame-time benchmark report: prints a sentinel then nanoseconds-per-frame, so a
+// shell harness can derive ms/FPS without on-screen present/vsync. Integer-only to
+// avoid float/FFI marshalling edge cases.
+@Native
+function metalReportBench(totalNs: Int, frames: Int) {
+    print(424242)
+    print(totalNs / frames)
+    return
+}

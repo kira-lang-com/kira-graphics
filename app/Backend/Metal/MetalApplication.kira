@@ -42,6 +42,42 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         onInitOffscreen(move initGraphicsOffscreen)
 
         let onFrameOffscreen: (borrow mut GraphicsFrame) -> Void = app.frameHandler
+
+        // Deterministic frame-time benchmark: KIRA_METAL_BENCH runs the frame handler
+        // many times offscreen and reports average ms + implied FPS, so VM hot-path
+        // optimisation can be measured without the on-screen present/vsync loop.
+        let benchEnv = metalGetEnv("KIRA_METAL_BENCH")
+        if !metalPtrIsNull(benchEnv) {
+            let benchFrames = 180
+            // Warm up one frame (first-touch caches, retained tree mount) before timing.
+            let warmGraphics = Graphics {
+                userData: userData
+                backend: GraphicsBackend.Metal
+                metalContext: ctxPtr
+            }
+            var warmFrame = warmGraphics.frame()
+            onFrameOffscreen(warmFrame)
+            graphicsSubmitFrame(warmFrame)
+            let startNs = metalClockNs(metalClockUptimeRaw())
+            var bi = 0
+            while bi < benchFrames {
+                let benchGraphics = Graphics {
+                    userData: userData
+                    backend: GraphicsBackend.Metal
+                    metalContext: ctxPtr
+                }
+                var benchFrame = benchGraphics.frame()
+                onFrameOffscreen(benchFrame)
+                graphicsSubmitFrame(benchFrame)
+                bi = bi + 1
+            }
+            let endNs = metalClockNs(metalClockUptimeRaw())
+            metalReportBench(Int(endNs - startNs), benchFrames)
+            metalContextFree(ctxPtr)
+            metalAutoreleasePoolPop(pool)
+            return
+        }
+
         let frameGraphicsOffscreen = Graphics {
             userData: userData
             backend: GraphicsBackend.Metal
