@@ -232,6 +232,23 @@ function metalEncoderDraw(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, has
     return
 }
 
+// Encode an INDIRECT draw: bind pipeline + vertex buffer, then let the GPU read
+// the draw arguments (vertexCount/instanceCount/...) from a compute-written
+// argument buffer — the CPU never learns the count (GPU-driven rendering).
+@Native
+function metalEncoderDrawIndirect(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, hasVertexBuffer: Bool, indirectBufferId: Int) {
+    let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
+    let pipeline = metalLookup(ctx, pipelineId)
+    metalMsgSendVoidP(encoder, metalSel("setRenderPipelineState:"), pipeline)
+    if hasVertexBuffer {
+        let buffer = metalLookup(ctx, vertexBufferId)
+        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, 0, 0)
+    }
+    let indirect = metalLookup(ctx, indirectBufferId)
+    metalMsgSendDrawPrimitivesIndirect(encoder, metalSel("drawPrimitives:indirectBuffer:indirectBufferOffset:"), metalPrimitiveTriangle(), indirect, 0)
+    return
+}
+
 // Encode an indexed draw: bind the pipeline state and vertex buffer, then draw
 // `indexCount` triangle indices (uint32) from the index buffer.
 @Native
