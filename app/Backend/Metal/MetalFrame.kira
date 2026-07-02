@@ -21,7 +21,13 @@ function metalMapLoadAction(publicLoadAction: Int) -> U64 {
 @Native
 function metalBeginRenderPassFromFrame(frame: borrow GraphicsFrame, ctxPtr: RawPtr) -> Bool {
     let load = metalMapLoadAction(frame.colorLoadAction)
-    metalContextBeginClear(ctxPtr, load, frame.clearR, frame.clearG, frame.clearB, frame.clearA, frame.hasDepthAttachment)
+    // A custom texture target (multi-pass rendering) begins a targeted pass; the
+    // default swapchain/offscreen target uses the context color texture.
+    if frame.colorTargetKind == renderTargetKindTexture() {
+        metalContextBeginClearTarget(ctxPtr, Int(frame.colorTextureId), load, frame.clearR, frame.clearG, frame.clearB, frame.clearA, frame.hasDepthAttachment)
+    } else {
+        metalContextBeginClear(ctxPtr, load, frame.clearR, frame.clearG, frame.clearB, frame.clearA, frame.hasDepthAttachment)
+    }
     return true
 }
 
@@ -49,6 +55,33 @@ function metalReportCenterPixel(ctxPtr: RawPtr, width: Int, height: Int) {
     print(packed)
     return
     // packed is little-endian BGRA: (A<<24)|(R<<16)|(G<<8)|B
+}
+
+// Headless verification for spatially-varying output: report two probe pixels at
+// the left-quarter and right-quarter columns (screen mid-height). Used to prove a
+// pass produces DIFFERENT values in different regions (e.g. a visibility buffer
+// carrying distinct per-primitive ids that resolve to distinct materials). Printed
+// in addition to the center pixel, so single-value readback assertions are
+// unaffected; only callers that opt in (KIRA_METAL_READBACK_POINTS) read these.
+@Native
+function metalReportProbePixels(ctxPtr: RawPtr, width: Int, height: Int) {
+    let my = height / 2
+    let left = metalContextReadPixel(ctxPtr, width / 4, my)
+    let right = metalContextReadPixel(ctxPtr, (width * 3) / 4, my)
+    print(left)
+    print(right)
+    return
+}
+
+// Golden-image report: prints a sentinel (313131) then a deterministic digest of the
+// whole framebuffer, so a shell harness can assert pixel-exact stability of the entire
+// rendered image. Opt-in (KIRA_METAL_IMAGE_DIGEST); does not affect other readback.
+@Native
+function metalReportImageDigest(ctxPtr: RawPtr, width: Int, height: Int) {
+    let digest = metalContextImageDigest(ctxPtr, width, height)
+    print(313131)
+    print(digest)
+    return
 }
 
 // Frame-time benchmark report: prints a sentinel then nanoseconds-per-frame, so a

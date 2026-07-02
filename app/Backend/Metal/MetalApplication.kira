@@ -30,7 +30,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
 
     let offscreenEnv = metalGetEnv("KIRA_METAL_OFFSCREEN")
     if !metalPtrIsNull(offscreenEnv) {
-        metalContextAttachOffscreen(ctxPtr, app.width, app.height)
+        metalContextAttachOffscreenFormat(ctxPtr, app.width, app.height, metalPixelFormatForTexture(app.colorFormat))
         kiraGraphicsLiveBackendInitialized()
 
         let onInitOffscreen: (Graphics) -> Void = app.initHandler
@@ -97,6 +97,14 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         onFrameOffscreen(frameOffscreen)
         graphicsSubmitFrame(frameOffscreen)
         metalReportCenterPixel(ctxPtr, app.width, app.height)
+        let probeEnv = metalGetEnv("KIRA_METAL_READBACK_POINTS")
+        if !metalPtrIsNull(probeEnv) {
+            metalReportProbePixels(ctxPtr, app.width, app.height)
+        }
+        let digestEnv = metalGetEnv("KIRA_METAL_IMAGE_DIGEST")
+        if !metalPtrIsNull(digestEnv) {
+            metalReportImageDigest(ctxPtr, app.width, app.height)
+        }
         metalContextFree(ctxPtr)
         metalAutoreleasePoolPop(pool)
         return

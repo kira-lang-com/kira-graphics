@@ -109,6 +109,12 @@ function metalMsgSendPP(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr): RawPtr;
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendPPP(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr, c: RawPtr): RawPtr;
 
+// (id, id) -> void — e.g. dispatchThreadgroups:threadsPerThreadgroup:, where each
+// MTLSize (3x NSUInteger = 24 bytes > 16) is passed indirectly (by pointer) per the
+// arm64 AAPCS, so a caller-built MTLSize in memory is passed as a plain pointer arg.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendVoidPP(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr): Void;
+
 // newBufferWithBytes:length:options: -> id
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendNewBuffer(obj: RawPtr, op: RawPtr, bytes: RawPtr, length: U64, options: U64): RawPtr;
@@ -136,6 +142,10 @@ function metalMsgSendSetVertexBuffer(obj: RawPtr, op: RawPtr, buffer: RawPtr, of
 // drawPrimitives:vertexStart:vertexCount:
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendDrawPrimitives(obj: RawPtr, op: RawPtr, primitiveType: U64, vertexStart: U64, vertexCount: U64): Void;
+
+// drawPrimitives:vertexStart:vertexCount:instanceCount:
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendDrawPrimitivesInstanced(obj: RawPtr, op: RawPtr, primitiveType: U64, vertexStart: U64, vertexCount: U64, instanceCount: U64): Void;
 
 // drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }

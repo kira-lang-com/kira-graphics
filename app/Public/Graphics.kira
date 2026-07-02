@@ -43,7 +43,19 @@ class Graphics {
             if descriptor.colorTargets.count > 0 {
                 blendEnabled = descriptor.colorTargets[0].blend.enabled
             }
-            let metalPipelineId = metalCreateRenderPipelineBlended(self.metalContext, descriptor.shader.id, metalPixelFormatBGRA8Unorm(), descriptor.depthStencil.depthEnabled, blendEnabled)
+            var attrFormats: [Int] = []
+            var attrOffsets: [Int] = []
+            var ai = 0
+            while ai < descriptor.vertexLayout.attributes.count {
+                attrFormats.append(descriptor.vertexLayout.attributes[ai].format)
+                attrOffsets.append(descriptor.vertexLayout.attributes[ai].offset)
+                ai = ai + 1
+            }
+            var colorFmt = metalPixelFormatBGRA8Unorm()
+            if descriptor.colorTargets.count > 0 {
+                colorFmt = metalPixelFormatForTexture(descriptor.colorTargets[0].format)
+            }
+            let metalPipelineId = metalCreateRenderPipelineWithEntries(self.metalContext, descriptor.shader.id, colorFmt, descriptor.depthStencil.depthEnabled, blendEnabled, descriptor.vertexEntry, descriptor.fragmentEntry, descriptor.vertexLayout.stride, attrFormats, attrOffsets)
             return RenderPipeline {
                 handle: BackendPipelineHandle {
                     id: metalPipelineId
@@ -298,6 +310,26 @@ class Graphics {
         }
     }
 
+    // Bind a raw registered buffer (e.g. a storage buffer of per-instance data) at a
+    // uniform-style slot: vertex stage reads it at [[buffer(slot+1)]], fragment at
+    // [[buffer(slot)]] (the standard bind-group rule).
+    function createBufferBindGroup(label: borrow String, slot: Int, bufferId: Int) -> BindGroup {
+        if self.backend == GraphicsBackend.Metal {
+            let metalBindGroupId = metalCreateBindGroup(self.metalContext)
+            metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindUniform(), slot, bufferId)
+            return BindGroup {
+                handle: BackendBindGroupHandle {
+                    id: metalBindGroupId
+                }
+                id: metalBindGroupId
+            }
+        }
+        return BindGroup {
+            handle: BackendBindGroupHandle { id: 0 }
+            id: 0
+        }
+    }
+
     function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroup {
         if self.backend == GraphicsBackend.Metal {
             let metalBindGroupId = metalCreateBindGroup(self.metalContext)
@@ -326,9 +358,99 @@ class Graphics {
         return
     }
 
+    // Attach a Depth32Float depth buffer + less/write depth-stencil state to the
+    // context, sized to the current color target. Passes whose descriptor sets
+    // hasDepthAttachment then depth-test (nearest fragment wins), enabling occlusion
+    // in a visibility pass. Non-breaking: passes that don't request depth are
+    // unaffected. Metal-only for now (offscreen + on-screen both size from the context).
+    function enableDepth() {
+        if self.backend == GraphicsBackend.Metal {
+            metalContextAttachDepth(self.metalContext)
+        }
+        return
+    }
+
+    // --- GPU compute (Metal). KSL compute shaders lower to an MSL kernel; these build
+    // a compute pipeline, shared-storage buffers, dispatch, and read results back. Handle
+    // ids are raw registry ints (compute is a bounded job path, not part of the
+    // render-graph resource structs). Non-Metal backends return 0 / no-op. ---
+    function createComputePipeline(shader: borrow GraphicsShader, entryName: borrow String) -> Int {
+        if self.backend == GraphicsBackend.Metal {
+            return metalCreateComputePipeline(self.metalContext, shader.id, entryName)
+        }
+        return 0
+    }
+
+    function createStorageBufferFloats(data: borrow [Float]) -> Int {
+        if self.backend == GraphicsBackend.Metal {
+            return metalCreateStorageBufferF32(self.metalContext, data)
+        }
+        return 0
+    }
+
+    function createEmptyStorageBuffer(wordCount: Int) -> Int {
+        if self.backend == GraphicsBackend.Metal {
+            return metalCreateEmptyStorageBuffer(self.metalContext, wordCount)
+        }
+        return 0
+    }
+
+    function createCullParams(count: Int, planeX: Float, planeD: Float) -> Int {
+        if self.backend == GraphicsBackend.Metal {
+            return metalCreateCullParamsBuffer(self.metalContext, count, planeX, planeD)
+        }
+        return 0
+    }
+
+    function dispatchCompute3(pipeline: Int, buf0: Int, buf1: Int, buf2: Int, count: Int, threadsPerGroup: Int) {
+        if self.backend == GraphicsBackend.Metal {
+            metalDispatchCompute3(self.metalContext, pipeline, buf0, buf1, buf2, count, threadsPerGroup)
+        }
+        return
+    }
+
+    function dispatchCompute4(pipeline: Int, buf0: Int, buf1: Int, buf2: Int, buf3: Int, count: Int, threadsPerGroup: Int) {
+        if self.backend == GraphicsBackend.Metal {
+            metalDispatchCompute4(self.metalContext, pipeline, buf0, buf1, buf2, buf3, count, threadsPerGroup)
+        }
+        return
+    }
+
+    // Generic form: bind any number of buffers at slots 0..n-1.
+    function dispatchComputeBuffers(pipeline: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
+        if self.backend == GraphicsBackend.Metal {
+            metalDispatchComputeN(self.metalContext, pipeline, buffers, count, threadsPerGroup)
+        }
+        return
+    }
+
+    function createStorageBufferWords(data: borrow [Int]) -> Int {
+        if self.backend == GraphicsBackend.Metal {
+            return metalCreateStorageBufferU32(self.metalContext, data)
+        }
+        return 0
+    }
+
+    function createParams4(a: Int, b: Int, c: Int, d: Int) -> Int {
+        if self.backend == GraphicsBackend.Metal {
+            return metalCreateParams4U32(self.metalContext, a, b, c, d)
+        }
+        return 0
+    }
+
+
+    function readStorageU32(bufferId: Int, index: Int) -> U32 {
+        if self.backend == GraphicsBackend.Metal {
+            return metalReadStorageBufferU32(self.metalContext, bufferId, index)
+        }
+        return U32(0)
+    }
+
     function createTexture(descriptor: borrow TextureDescriptor) -> GraphicsTexture {
         if self.backend == GraphicsBackend.Metal {
-            let metalTextureId = metalCreateTexture(self.metalContext, descriptor.width, descriptor.height)
+            // Render-target-capable + sampled, in the requested format (enables
+            // multi-pass rendering, e.g. the deferred-resolve visibility texture).
+            let metalTextureId = metalCreateColorTargetTexture(self.metalContext, descriptor.width, descriptor.height, metalPixelFormatForTexture(descriptor.format))
             return GraphicsTexture {
                 handle: BackendTextureHandle {
                     id: metalTextureId

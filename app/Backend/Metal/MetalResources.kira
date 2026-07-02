@@ -78,16 +78,55 @@ function metalCreateRenderPipeline(ctx: RawPtr, shaderId: Int, colorFormat: U64,
 // on color attachment 0 (the UI compositor draws translucent, premultiplied quads).
 @Native
 function metalCreateRenderPipelineBlended(ctx: RawPtr, shaderId: Int, colorFormat: U64, depthEnabled: Bool, blendEnabled: Bool) -> Int {
+    var noFmt: [Int] = []
+    var noOff: [Int] = []
+    return metalCreateRenderPipelineWithEntries(ctx, shaderId, colorFormat, depthEnabled, blendEnabled, "v_main", "f_main", 0, noFmt, noOff)
+}
+
+// Map a KiraGraphics vertex format (Constants.kira) to an MTLVertexFormat raw value.
+function metalVertexFormat(kiraFormat: Int) -> U64 {
+    if kiraFormat == 1 { return 29 }   // Float2 -> MTLVertexFormatFloat2
+    if kiraFormat == 2 { return 30 }   // Float3 -> MTLVertexFormatFloat3
+    if kiraFormat == 3 { return 31 }   // Float4 -> MTLVertexFormatFloat4
+    return 28                          // Float
+}
+
+// As above, with configurable entry-point names AND a vertex layout. KSL-compiled
+// shaders use `[[stage_in]]` inputs, which REQUIRE an MTLVertexDescriptor on the
+// pipeline (entries `{shader}__vertex__main` / `__fragment__main`). Buffer-indexing
+// shaders (self-tests, UI) pass an empty layout and skip the descriptor.
+@Native
+function metalCreateRenderPipelineWithEntries(ctx: RawPtr, shaderId: Int, colorFormat: U64, depthEnabled: Bool, blendEnabled: Bool, vertexEntry: borrow String, fragmentEntry: borrow String, stride: Int, attrFormats: borrow [Int], attrOffsets: borrow [Int]) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let library = metalLookup(ctx, shaderId)
-    let vname = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "v_main")
-    let fname = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "f_main")
+    let vname = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), vertexEntry)
+    let fname = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), fragmentEntry)
     let vfn = metalMsgSendP(library, metalSel("newFunctionWithName:"), vname)
     let ffn = metalMsgSendP(library, metalSel("newFunctionWithName:"), fname)
 
     let desc = metalMsgSend(metalMsgSend(metalObjcGetClass("MTLRenderPipelineDescriptor"), metalSel("alloc")), metalSel("init"))
     metalMsgSendVoidP(desc, metalSel("setVertexFunction:"), vfn)
     metalMsgSendVoidP(desc, metalSel("setFragmentFunction:"), ffn)
+
+    // Build an MTLVertexDescriptor for [[stage_in]] shaders.
+    if attrFormats.count > 0 {
+        let vd = metalMsgSend(metalObjcGetClass("MTLVertexDescriptor"), metalSel("vertexDescriptor"))
+        let attrs = metalMsgSend(vd, metalSel("attributes"))
+        var ai = 0
+        while ai < attrFormats.count {
+            let attr = metalMsgSendPU(attrs, metalSel("objectAtIndexedSubscript:"), U64(ai))
+            metalMsgSendVoidU(attr, metalSel("setFormat:"), metalVertexFormat(attrFormats[ai]))
+            metalMsgSendVoidU(attr, metalSel("setOffset:"), U64(attrOffsets[ai]))
+            metalMsgSendVoidU(attr, metalSel("setBufferIndex:"), 0)
+            ai = ai + 1
+        }
+        let layouts = metalMsgSend(vd, metalSel("layouts"))
+        let layout0 = metalMsgSendPU(layouts, metalSel("objectAtIndexedSubscript:"), 0)
+        metalMsgSendVoidU(layout0, metalSel("setStride:"), U64(stride))
+        metalMsgSendVoidU(layout0, metalSel("setStepFunction:"), 1)   // MTLVertexStepFunctionPerVertex
+        metalMsgSendVoidP(desc, metalSel("setVertexDescriptor:"), vd)
+    }
+
     let colorAttachment = metalMsgSendPU(metalMsgSend(desc, metalSel("colorAttachments")), metalSel("objectAtIndexedSubscript:"), 0)
     metalMsgSendVoidU(colorAttachment, metalSel("setPixelFormat:"), colorFormat)
     if blendEnabled {
@@ -184,6 +223,10 @@ function metalEncoderDraw(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, has
     if hasVertexBuffer {
         let buffer = metalLookup(ctx, vertexBufferId)
         metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, 0, 0)
+    }
+    if instanceCount > 1 {
+        metalMsgSendDrawPrimitivesInstanced(encoder, metalSel("drawPrimitives:vertexStart:vertexCount:instanceCount:"), metalPrimitiveTriangle(), 0, vertexCount, instanceCount)
+        return
     }
     metalMsgSendDrawPrimitives(encoder, metalSel("drawPrimitives:vertexStart:vertexCount:"), metalPrimitiveTriangle(), 0, vertexCount)
     return
