@@ -44,4 +44,9 @@ struct RenderPipelineDescriptor {
     var depthStencil: DepthStencilDescriptor
     var rasterization: RasterizationDescriptor
     var primitive: PrimitiveDescriptor
+    // Metal shader-library entry-point names (default v_main/f_main; KSL-compiled
+    // libraries use `{shader}__vertex__main` / `__fragment__main`). Transient — this
+    // descriptor is not stored in native state, so String fields are safe here.
+    var vertexEntry: String = "v_main"
+    var fragmentEntry: String = "f_main"
 }

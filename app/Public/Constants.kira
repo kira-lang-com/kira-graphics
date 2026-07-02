@@ -29,6 +29,11 @@ function uniformSlotObject() -> Int {
 }
 
 @Native
+function vertexFormatFloat() -> Int {
+    return 0
+}
+
+@Native
 function vertexFormatFloat2() -> Int {
     return 1
 }
@@ -66,6 +71,12 @@ function textureFormatNone() -> Int {
 @Native
 function textureFormatSwapchain() -> Int {
     return -1
+}
+
+// A 32-bit single-channel unsigned-integer target — the compact visibility buffer
+// format (stores packed instance/cluster/triangle IDs losslessly).
+function textureFormatR32Uint() -> Int {
+    return 10
 }
 
 @Native

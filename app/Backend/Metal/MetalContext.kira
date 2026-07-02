@@ -300,18 +300,85 @@ function metalContextFree(ctx: RawPtr) {
     return
 }
 
+function metalPixelFormatR32Uint() -> U64 { return 53 }
+
+// Map a KiraGraphics texture format (Constants.kira) to an MTLPixelFormat.
+function metalPixelFormatForTexture(kiraFormat: Int) -> U64 {
+    if kiraFormat == 10 { return metalPixelFormatR32Uint() }   // textureFormatR32Uint
+    return metalPixelFormatBGRA8Unorm()                        // swapchain / default
+}
+
 // Allocate an offscreen BGRA8 render target and make it the context's color target.
 @Native
 function metalContextAttachOffscreen(ctx: RawPtr, width: Int, height: Int) {
+    metalContextAttachOffscreenFormat(ctx, width, height, metalPixelFormatBGRA8Unorm())
+    return
+}
+
+// As above but with an explicit MTLPixelFormat (e.g. R32Uint for a visibility
+// buffer). The readback path reads the raw 32-bit texel, which is the uint value
+// directly for R32Uint targets.
+@Native
+function metalContextAttachOffscreenFormat(ctx: RawPtr, width: Int, height: Int, pixelFormat: U64) {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
-    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatBGRA8Unorm(), width, height, false)
+    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), pixelFormat, width, height, false)
     metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget())
     metalMsgSendVoidU(desc, metalSel("setStorageMode:"), metalStorageModeShared())
     let texture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
     metalMemWritePtr(ctx, metalOffsetColorTexture(), texture)
     metalMemWriteU64(ctx, metalOffsetWidth(), width)
     metalMemWriteU64(ctx, metalOffsetHeight(), height)
+    return
+}
+
+// Create a color texture usable as BOTH a render target and a sampled input
+// (usage = RenderTarget | ShaderRead), registered so it can be targeted by a pass
+// and bound to a later pass. Enables multi-pass rendering (e.g. deferred resolve:
+// pass 1 -> visibility texture, pass 2 samples it -> final color).
+@Native
+function metalCreateColorTargetTexture(ctx: RawPtr, width: Int, height: Int, pixelFormat: U64) -> Int {
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let descClass = metalObjcGetClass("MTLTextureDescriptor")
+    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), pixelFormat, width, height, false)
+    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget() + 1)   // RenderTarget(4) | ShaderRead(1)
+    metalMsgSendVoidU(desc, metalSel("setStorageMode:"), metalStorageModeShared())
+    let texture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
+    return metalRegister(ctx, texture)
+}
+
+// Begin a render pass that targets a REGISTERED texture (not the context's swapchain/
+// offscreen color texture). Used for intermediate passes in multi-pass rendering. Does
+// not touch the context colorTexture slot, so a later swapchain pass + readback still
+// see the final image.
+@Native
+function metalContextBeginClearTarget(ctx: RawPtr, textureId: Int, loadAction: U64, r: F64, g: F64, b: F64, a: F64, depthEnabled: Bool) {
+    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
+    let texture = metalLookup(ctx, textureId)
+    let rpClass = metalObjcGetClass("MTLRenderPassDescriptor")
+    let rp = metalMsgSend(rpClass, metalSel("renderPassDescriptor"))
+    let colorAttachments = metalMsgSend(rp, metalSel("colorAttachments"))
+    let ca0 = metalMsgSendPU(colorAttachments, metalSel("objectAtIndexedSubscript:"), 0)
+    metalMsgSendVoidP(ca0, metalSel("setTexture:"), texture)
+    metalMsgSendVoidU(ca0, metalSel("setLoadAction:"), loadAction)
+    metalMsgSendVoidU(ca0, metalSel("setStoreAction:"), metalStoreActionStore())
+    metalMsgSendVoid4F(ca0, metalSel("setClearColor:"), r, g, b, a)
+    if depthEnabled {
+        let depthTexture = metalMemReadPtr(ctx, metalOffsetDepthTexture())
+        let depthAtt = metalMsgSend(rp, metalSel("depthAttachment"))
+        metalMsgSendVoidP(depthAtt, metalSel("setTexture:"), depthTexture)
+        metalMsgSendVoidU(depthAtt, metalSel("setLoadAction:"), metalLoadActionClear())
+        metalMsgSendVoidU(depthAtt, metalSel("setStoreAction:"), metalStoreActionDontCare())
+        metalMsgSendVoidF(depthAtt, metalSel("setClearDepth:"), 1.0)
+    }
+    let commandBuffer = metalMsgSend(queue, metalSel("commandBuffer"))
+    let encoder = metalMsgSendP(commandBuffer, metalSel("renderCommandEncoderWithDescriptor:"), rp)
+    if depthEnabled {
+        let depthState = metalMemReadPtr(ctx, metalOffsetDepthState())
+        metalMsgSendVoidP(encoder, metalSel("setDepthStencilState:"), depthState)
+    }
+    metalMemWritePtr(ctx, metalOffsetCommandBuffer(), commandBuffer)
+    metalMemWritePtr(ctx, metalOffsetEncoder(), encoder)
     return
 }
 
@@ -473,4 +540,40 @@ function metalContextReadPixel(ctx: RawPtr, x: Int, y: Int) -> U32 {
     metalMemFree(region)
     metalMemFree(px)
     return packed
+}
+
+// Deterministic digest of the WHOLE color target — a golden-image gate. Reads every
+// texel once and folds it into a rolling modular hash (in U64 to avoid overflow; the
+// result fits in U32). Identical rendering -> identical digest, so a shell harness can
+// assert pixel-exact stability of the entire framebuffer, not just probe points.
+@Native
+function metalContextImageDigest(ctx: RawPtr, width: Int, height: Int) -> U32 {
+    let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
+    if !metalPtrIsNull(pending) {
+        metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+    }
+    let texture = metalMemReadPtr(ctx, metalOffsetColorTexture())
+    let bytesPerRow = width * 4
+    let total = width * height * 4
+    let buf = metalMemAlloc(U64(total))
+    let region = metalMemAlloc(48)
+    metalMemWriteU64(region, 0, 0)
+    metalMemWriteU64(region, 8, 0)
+    metalMemWriteU64(region, 16, 0)
+    metalMemWriteU64(region, 24, width)
+    metalMemWriteU64(region, 32, height)
+    metalMemWriteU64(region, 40, 1)
+    metalMsgSendGetBytes(texture, metalSel("getBytes:bytesPerRow:fromRegion:mipmapLevel:"), buf, U64(bytesPerRow), region, 0)
+    let prime: U64 = 2147483647
+    var hash: U64 = 2166136261
+    let words = width * height
+    var i = 0
+    while i < words {
+        let word = metalMemReadU32(buf, U64(i * 4))
+        hash = (hash * U64(31) + U64(word)) % prime
+        i = i + 1
+    }
+    metalMemFree(buf)
+    metalMemFree(region)
+    return U32(hash)
 }

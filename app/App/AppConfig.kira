@@ -19,6 +19,9 @@ struct GraphicsApplication {
     var width: Int = 640
     var height: Int = 480
     var sampleCount: Int = 1
+    // Offscreen color-target format (Metal). Default swapchain (BGRA8); set to
+    // textureFormatR32Uint() to render a visibility buffer.
+    var colorFormat: Int = -1
     var backend: GraphicsBackend = GraphicsBackend.Sokol
     var platform: GraphicsPlatform = GraphicsPlatform.Unknown
     var initHandler: (Graphics) -> Void = graphicsApplicationDefaultInit
