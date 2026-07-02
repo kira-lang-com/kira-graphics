@@ -147,6 +147,12 @@ function metalMsgSendDrawPrimitives(obj: RawPtr, op: RawPtr, primitiveType: U64,
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendDrawPrimitivesInstanced(obj: RawPtr, op: RawPtr, primitiveType: U64, vertexStart: U64, vertexCount: U64, instanceCount: U64): Void;
 
+// drawPrimitives:indirectBuffer:indirectBufferOffset: — the argument buffer holds
+// MTLDrawPrimitivesIndirectArguments {vertexCount, instanceCount, vertexStart,
+// baseInstance} (4x u32), written by a compute pass (GPU-driven draws).
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendDrawPrimitivesIndirect(obj: RawPtr, op: RawPtr, primitiveType: U64, indirectBuffer: RawPtr, indirectOffset: U64): Void;
+
 // drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendDrawIndexed(obj: RawPtr, op: RawPtr, primitiveType: U64, indexCount: U64, indexType: U64, indexBuffer: RawPtr, indexBufferOffset: U64): Void;
