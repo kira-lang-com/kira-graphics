@@ -7,5 +7,5 @@ module_root = "KiraGraphics"
 native_libraries = ["NativeLibs/Sokol.toml", "NativeLibs/Vulkan.toml", "NativeLibs/Metal.toml"]
 
 [defaults]
-execution_mode = "vm"
+execution_mode = "llvm"
 build_target = "host"

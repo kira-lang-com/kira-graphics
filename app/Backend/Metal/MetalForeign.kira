@@ -72,6 +72,11 @@ function metalMsgSendVoidF(obj: RawPtr, op: RawPtr, value: F64): Void;
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendVoid4F(obj: RawPtr, op: RawPtr, r: F64, g: F64, b: F64, a: F64): Void;
 
+// (NSRect, BOOL) -> void — e.g. -[NSWindow setFrame:display:]. The rect is an
+// HFA of four doubles in v0-v3, the BOOL rides in w2.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendVoidRectB(obj: RawPtr, op: RawPtr, x: F64, y: F64, w: F64, h: F64, display: Bool): Void;
+
 // getBytes:bytesPerRow:fromRegion:mipmapLevel: — MTLRegion (>16 bytes, not an HFA)
 // is passed by reference per AAPCS64, so `region` is a pointer to a 48-byte buffer.
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
@@ -93,6 +98,18 @@ struct MetalCGRect {
 }
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendCGRect(obj: RawPtr, op: RawPtr): MetalCGRect;
+
+// () -> NSPoint — e.g. -[NSEvent locationInWindow]. Two-double HFA returned in
+// v0/v1. ALSO used for scalar CGFloat returns (-scrollingDeltaY,
+// -backingScaleFactor): the callee returns the scalar in v0, so `.x` is the
+// value and `.y` is register garbage — the FFI has no scalar-double return.
+@FFI.Struct { layout: c; }
+struct MetalNSPoint {
+    var x: F64
+    var y: F64
+}
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendPoint(obj: RawPtr, op: RawPtr): MetalNSPoint;
 
 // (CGRect) -> CGRect  — e.g. -[NSView convertRectToBacking:]. The argument CGRect is
 // an HFA-of-4-doubles passed as four F64 scalars (v0-v3, like setClearColor:), and the
@@ -213,6 +230,17 @@ function metalCreateSystemDefaultDevice(): RawPtr;
 // libc getenv — used to select the headless offscreen path for verification.
 @FFI.Extern { library: kira_metal; symbol: getenv; abi: c; }
 function metalGetEnv(name: CString): RawPtr;
+
+// libc file I/O — full-framebuffer dump for visual verification
+// (KIRA_METAL_IMAGE_DUMP). `fopen`'s path arrives as the RawPtr getenv returned,
+// so no CString round-trip is needed; fclose's int result is ignored (Void keeps
+// the FFI boundary to pointer/U64 marshalling only).
+@FFI.Extern { library: kira_metal; symbol: fopen; abi: c; }
+function metalFOpen(path: RawPtr, mode: CString): RawPtr;
+@FFI.Extern { library: kira_metal; symbol: fwrite; abi: c; }
+function metalFWrite(ptr: RawPtr, size: U64, count: U64, stream: RawPtr): U64;
+@FFI.Extern { library: kira_metal; symbol: fclose; abi: c; }
+function metalFClose(stream: RawPtr): Void;
 
 // clock_gettime_nsec_np — monotonic time in nanoseconds as a uint64_t, the
 // frame-timing clock for the on-screen run loop (drives the live FPS readout). An

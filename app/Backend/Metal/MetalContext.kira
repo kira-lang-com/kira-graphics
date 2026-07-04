@@ -114,6 +114,35 @@ function metalU64ToInt(v: U64) -> Int {
     return v
 }
 
+// Full f64 decode (sign + fraction preserved) from raw bits — for event
+// coordinates and scroll deltas, where metalDoubleBitsToInt's positive-integer
+// truncation drops trackpad sub-point deltas and negative values entirely.
+// Works in the sign-free domain: top 12 bits = sign(1) + exponent(11).
+@Native
+function metalDoubleBitsToFloat(bits: U64) -> Float {
+    let top = metalU64ToInt(bits / U64(4503599627370496))
+    let sign = top / 2048
+    let exp = top % 2048
+    if exp == 0 || exp == 2047 {
+        return 0.0
+    }
+    let mant = metalU64ToInt(bits % U64(4503599627370496))
+    var frac = 1.0 + Float(mant) / 4503599627370496.0
+    var k = exp - 1023
+    while k > 0 {
+        frac = frac * 2.0
+        k = k - 1
+    }
+    while k < 0 {
+        frac = frac / 2.0
+        k = k + 1
+    }
+    if sign == 1 {
+        return 0.0 - frac
+    }
+    return frac
+}
+
 @Native
 function metalDoubleBitsToInt(bits: U64) -> Int {
     let b = metalU64ToInt(bits)
@@ -318,17 +347,31 @@ function metalContextAttachOffscreen(ctx: RawPtr, width: Int, height: Int) {
 // As above but with an explicit MTLPixelFormat (e.g. R32Uint for a visibility
 // buffer). The readback path reads the raw 32-bit texel, which is the uint value
 // directly for R32Uint targets.
+//
+// KIRA_METAL_OFFSCREEN_SCALE emulates a Retina backing factor headlessly:
+// width/height stay in points, the color target is points x scale physical
+// pixels, and physicalWidth records the factor — the same shape the on-screen
+// layer path produces, so scale-dependent rendering bugs reproduce offscreen.
 @Native
 function metalContextAttachOffscreenFormat(ctx: RawPtr, width: Int, height: Int, pixelFormat: U64) {
+    var scaleFactor = 1
+    let scaleEnv = metalGetEnv("KIRA_METAL_OFFSCREEN_SCALE")
+    if !metalPtrIsNull(scaleEnv) {
+        let parsed = metalEnvInt(scaleEnv)
+        if parsed > 1 {
+            scaleFactor = parsed
+        }
+    }
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
-    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), pixelFormat, width, height, false)
+    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), pixelFormat, width * scaleFactor, height * scaleFactor, false)
     metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget())
     metalMsgSendVoidU(desc, metalSel("setStorageMode:"), metalStorageModeShared())
     let texture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
     metalMemWritePtr(ctx, metalOffsetColorTexture(), texture)
     metalMemWriteU64(ctx, metalOffsetWidth(), width)
     metalMemWriteU64(ctx, metalOffsetHeight(), height)
+    metalMemWriteU64(ctx, metalOffsetPhysicalWidth(), width * scaleFactor)
     return
 }
 
@@ -576,4 +619,37 @@ function metalContextImageDigest(ctx: RawPtr, width: Int, height: Int) -> U32 {
     metalMemFree(buf)
     metalMemFree(region)
     return U32(hash)
+}
+
+// Full-framebuffer dump — writes the color target's raw texel bytes (BGRA8, row-major,
+// width*4 bytes per row, no header) to `path` for visual verification of a rendered
+// frame. Dimensions are known to the harness, so a raw blob keeps the writer trivial;
+// opt-in via KIRA_METAL_IMAGE_DUMP (the env VALUE is the destination path).
+@Native
+function metalContextImageDump(ctx: RawPtr, width: Int, height: Int, path: RawPtr) {
+    let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
+    if !metalPtrIsNull(pending) {
+        metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+    }
+    let texture = metalMemReadPtr(ctx, metalOffsetColorTexture())
+    let bytesPerRow = width * 4
+    let total = width * height * 4
+    let buf = metalMemAlloc(U64(total))
+    let region = metalMemAlloc(48)
+    metalMemWriteU64(region, 0, 0)
+    metalMemWriteU64(region, 8, 0)
+    metalMemWriteU64(region, 16, 0)
+    metalMemWriteU64(region, 24, width)
+    metalMemWriteU64(region, 32, height)
+    metalMemWriteU64(region, 40, 1)
+    metalMsgSendGetBytes(texture, metalSel("getBytes:bytesPerRow:fromRegion:mipmapLevel:"), buf, U64(bytesPerRow), region, 0)
+    let stream = metalFOpen(path, "wb")
+    if !metalPtrIsNull(stream) {
+        let written = metalFWrite(buf, 1, U64(total), stream)
+        let ignored = written + 0
+        metalFClose(stream)
+    }
+    metalMemFree(buf)
+    metalMemFree(region)
+    return
 }
