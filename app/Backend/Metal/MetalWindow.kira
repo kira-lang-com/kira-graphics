@@ -41,18 +41,240 @@ function metalSharedApp() -> RawPtr {
     return metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication"))
 }
 
+// Cursor visibility on the native Metal window path (Sokol's sapp_show_mouse is a
+// no-op here). `[NSCursor hide]`/`[NSCursor unhide]` are counted, so calls must be
+// balanced — one hide per one unhide.
+@Native
+function metalSetCursorHidden(hidden: Bool) {
+    let cls = metalObjcGetClass("NSCursor")
+    if hidden {
+        metalMsgSendVoid(cls, metalSel("hide"))
+    } else {
+        metalMsgSendVoid(cls, metalSel("unhide"))
+        // Manual hide/unhide leaves the window's AUTOMATIC cursor rectangles
+        // stale, so AppKit stops re-asserting the edge resize cursors (the frame
+        // just shows the arrow). Invalidating them forces a rebuild on the next
+        // pointer move, restoring the resize arrows at the window border.
+        let app = metalSharedApp()
+        let window = metalMsgSend(app, metalSel("keyWindow"))
+        if metalPtrIsNull(window) == false {
+            let view = metalMsgSend(window, metalSel("contentView"))
+            metalMsgSendVoidP(window, metalSel("invalidateCursorRectsForView:"), view)
+        }
+    }
+    return
+}
+
 // All event types (every real NSEvent type is a low bit; this covers bits 0-62, well
 // above the highest NSEventType, standing in for NSEventMaskAny == NSUIntegerMax).
 function metalEventMaskAny() -> U64 { return 9223372036854775807 }
+
+// NSEventType values (AppKit stable ABI).
+function metalNsLeftDown() -> Int { return 1 }
+function metalNsLeftUp() -> Int { return 2 }
+function metalNsRightDown() -> Int { return 3 }
+function metalNsRightUp() -> Int { return 4 }
+function metalNsMoved() -> Int { return 5 }
+function metalNsLeftDragged() -> Int { return 6 }
+function metalNsRightDragged() -> Int { return 7 }
+function metalNsKeyDown() -> Int { return 10 }
+function metalNsKeyUp() -> Int { return 11 }
+function metalNsScroll() -> Int { return 22 }
+
+// macOS virtual keycodes -> the neutral key codes the UI layer expects for the
+// special keys it acts on (GLFW-style, matching the offscreen input scripts):
+// Return / keypad-Enter -> 257 (submit), Delete/Backspace -> 259. Character keys
+// keep their raw code (foundationKeyBit maps those to held-key bits) and ALSO
+// emit a TextInput event carrying the typed codepoint (see metalPumpEvents).
+function metalMapKeyCode(raw: Int) -> Int {
+    if raw == 36 { return 257 }    // Return -> Enter (submit)
+    if raw == 76 { return 257 }    // keypad Enter
+    if raw == 51 { return 259 }    // Delete -> Backspace
+    if raw == 123 { return 263 }   // Left arrow
+    if raw == 124 { return 262 }   // Right arrow
+    if raw == 125 { return 264 }   // Down arrow
+    if raw == 126 { return 265 }   // Up arrow
+    if raw == 115 { return 268 }   // Home
+    if raw == 119 { return 269 }   // End
+    if raw == 117 { return 261 }   // Forward Delete
+    if raw == 53 { return 256 }    // Escape
+    return raw
+}
+function metalNsOtherDown() -> Int { return 25 }
+function metalNsOtherUp() -> Int { return 26 }
+function metalNsOtherDragged() -> Int { return 27 }
+
+// KVC fetch of a geometry/scalar property into a caller buffer: -valueForKey:
+// boxes NSPoint/NSRect/CGFloat as NSValue/NSNumber (a pointer return, which
+// marshals), and -getValue: writes the raw doubles into `buf`. A null boxed
+// value leaves the buffer's first slot zeroed so stale reads decode to 0.
+@Native
+function metalKvcValueInto(obj: RawPtr, key: RawPtr, buf: RawPtr) {
+    metalMemWriteU64(buf, 0, 0)
+    metalMemWriteU64(buf, 8, 0)
+    metalMemWriteU64(buf, 16, 0)
+    metalMemWriteU64(buf, 24, 0)
+    let value = metalMsgSendP(obj, metalSel("valueForKey:"), key)
+    if metalPtrIsNull(value) {
+        return
+    }
+    metalMsgSendVoidP(value, metalSel("getValue:"), buf)
+    return
+}
+
+// Modifier state from -[NSEvent modifierFlags] (bit 17 shift, 18 control,
+// 19 option, 20 command), extracted with div/mod (no bitwise ops needed).
+@Native
+function metalModifiersFromFlags(flags: Int) -> GraphicsModifierState {
+    return GraphicsModifierState {
+        shift: (flags / 131072) - ((flags / 131072) / 2) * 2 == 1
+        control: (flags / 262144) - ((flags / 262144) / 2) * 2 == 1
+        alt: (flags / 524288) - ((flags / 524288) / 2) * 2 == 1
+        superKey: (flags / 1048576) - ((flags / 1048576) / 2) * 2 == 1
+    }
+}
+
+// Translate one queued NSEvent into a GraphicsEvent (kind None when the event
+// carries nothing for the app). Pointer coordinates convert from window space
+// (bottom-left origin, points) to view-local top-left via the content view's
+// bounds height.
+@Native
+function metalTranslateEvent(event: RawPtr, view: RawPtr) -> GraphicsEvent {
+    let etype = Int(metalMsgSendU64(event, metalSel("type")))
+    var kind = GraphicsEventKind.None
+    var button = GraphicsPointerButton.None
+    var isPointer = false
+    if etype == metalNsLeftDown() {
+        kind = GraphicsEventKind.PointerDown
+        button = GraphicsPointerButton.Left
+        isPointer = true
+    }
+    if etype == metalNsLeftUp() {
+        kind = GraphicsEventKind.PointerUp
+        button = GraphicsPointerButton.Left
+        isPointer = true
+    }
+    if etype == metalNsRightDown() {
+        kind = GraphicsEventKind.PointerDown
+        button = GraphicsPointerButton.Right
+        isPointer = true
+    }
+    if etype == metalNsRightUp() {
+        kind = GraphicsEventKind.PointerUp
+        button = GraphicsPointerButton.Right
+        isPointer = true
+    }
+    if etype == metalNsOtherDown() {
+        kind = GraphicsEventKind.PointerDown
+        button = GraphicsPointerButton.Middle
+        isPointer = true
+    }
+    if etype == metalNsOtherUp() {
+        kind = GraphicsEventKind.PointerUp
+        button = GraphicsPointerButton.Middle
+        isPointer = true
+    }
+    if etype == metalNsMoved() {
+        kind = GraphicsEventKind.PointerMoved
+        isPointer = true
+    }
+    if etype == metalNsLeftDragged() {
+        kind = GraphicsEventKind.PointerMoved
+        button = GraphicsPointerButton.Left
+        isPointer = true
+    }
+    if etype == metalNsRightDragged() {
+        kind = GraphicsEventKind.PointerMoved
+        button = GraphicsPointerButton.Right
+        isPointer = true
+    }
+    if etype == metalNsOtherDragged() {
+        kind = GraphicsEventKind.PointerMoved
+        button = GraphicsPointerButton.Middle
+        isPointer = true
+    }
+    if etype == metalNsScroll() {
+        kind = GraphicsEventKind.Scroll
+        isPointer = true
+    }
+    let flags = Int(metalMsgSendU64(event, metalSel("modifierFlags")))
+    if isPointer {
+        // Geometry through KVC + NSValue/NSNumber -getValue: into a buffer:
+        // direct CGRect/NSPoint/CGFloat message RETURNS do not marshal across
+        // the FFI (they read back as garbage — the same gap the viewport sync
+        // in MetalContext works around; see metalContextSyncViewportFromView).
+        let buf = metalMemAlloc(32)
+        let locKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "locationInWindow")
+        metalKvcValueInto(event, locKey, buf)
+        let locX = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+        let locY = metalDoubleBitsToFloat(metalMemReadU64(buf, 8))
+        let boundsKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "bounds")
+        metalKvcValueInto(view, boundsKey, buf)
+        let boundsH = metalDoubleBitsToFloat(metalMemReadU64(buf, 24))
+        var sx = 0.0
+        var sy = 0.0
+        if etype == metalNsScroll() {
+            let sxKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "scrollingDeltaX")
+            metalKvcValueInto(event, sxKey, buf)
+            sx = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+            let syKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "scrollingDeltaY")
+            metalKvcValueInto(event, syKey, buf)
+            sy = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+        }
+        metalMemFree(buf)
+        return GraphicsEvent {
+            kind: kind
+            pointerButton: button
+            pointerX: locX
+            pointerY: boundsH - locY
+            scrollX: sx
+            scrollY: sy
+            modifiers: metalModifiersFromFlags(flags)
+        }
+    }
+    if etype == metalNsKeyDown() {
+        let rawKey = Int(metalMsgSendU64(event, metalSel("keyCode")))
+        let cmdHeld = (flags / 1048576) - ((flags / 1048576) / 2) * 2 == 1
+        var mappedKey = metalMapKeyCode(rawKey)
+        // Cmd+A ('A' is mac keyCode 0) -> synthetic Select-All (300) so a focused
+        // field selects its whole text instead of inserting 'a' / strafing.
+        if cmdHeld && rawKey == 0 {
+            mappedKey = 300
+        }
+        return GraphicsEvent {
+            kind: GraphicsEventKind.KeyDown
+            keyCode: mappedKey
+            keyRepeat: metalMsgSendBoolEmpty(event, metalSel("isARepeat"))
+            modifiers: metalModifiersFromFlags(flags)
+        }
+    }
+    if etype == metalNsKeyUp() {
+        return GraphicsEvent {
+            kind: GraphicsEventKind.KeyUp
+            keyCode: metalMapKeyCode(Int(metalMsgSendU64(event, metalSel("keyCode"))))
+            modifiers: metalModifiersFromFlags(flags)
+        }
+    }
+    return GraphicsEvent {
+        kind: GraphicsEventKind.None
+    }
+}
 
 // Dispatch every pending NSEvent. Running the bare NSRunLoop only services run-loop
 // SOURCES; it does not dequeue NSApplication's event queue or call -sendEvent:, so
 // without this the window never receives mouse/keyboard/resize events — it never
 // becomes the active key window (its traffic lights stay greyed) and the resize
-// control does nothing. Pulling each queued event and sending it delivers window
-// activation, title-bar buttons, and live-resize tracking to the window.
+// control does nothing. Each event is ALSO translated into a GraphicsEvent and
+// RETURNED to the caller (pointer, scroll, keys): the caller owns the app's event
+// handler closure, which must be bound exactly once — moving it into this function
+// per frame would free its captured environment after the first pump and later
+// events would dispatch through a dangling capture (observed as an abort inside
+// nativeRecover). The window still gets -sendEvent: for activation/title-bar
+// behavior, except key-downs (kept from the window so the unhandled-key beep
+// never fires).
 @Native
-function metalPumpEvents(app: RawPtr) {
+function metalPumpEvents(app: RawPtr, view: RawPtr) -> [GraphicsEvent] {
+    var out: [GraphicsEvent] = []
     let distantPast = metalMsgSend(metalObjcGetClass("NSDate"), metalSel("distantPast"))
     let mode = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "kCFRunLoopDefaultMode")
     var draining = true
@@ -61,46 +283,61 @@ function metalPumpEvents(app: RawPtr) {
         if metalPtrIsNull(event) {
             draining = false
         } else {
-            metalMsgSendVoidP(app, metalSel("sendEvent:"), event)
+            let translated = metalTranslateEvent(event, view)
+            if translated.kind != GraphicsEventKind.None {
+                out.append(move translated)
+            }
+            let etype = Int(metalMsgSendU64(event, metalSel("type")))
+            if etype != metalNsKeyDown() {
+                metalMsgSendVoidP(app, metalSel("sendEvent:"), event)
+            }
+            // A key-down that produces a character also emits a TextInput event
+            // (after the KeyDown), so focused fields receive typed text. Return,
+            // Delete etc. carry non-printable characters and are skipped here —
+            // they drive submit/backspace through the KeyDown path above.
+            var cmdDown = false
+            if etype == metalNsKeyDown() {
+                let mflags = Int(metalMsgSendU64(event, metalSel("modifierFlags")))
+                cmdDown = (mflags / 1048576) - ((mflags / 1048576) / 2) * 2 == 1
+            }
+            if etype == metalNsKeyDown() && cmdDown == false {
+                let chars = metalMsgSend(event, metalSel("characters"))
+                if !metalPtrIsNull(chars) {
+                    if metalMsgSendU64(chars, metalSel("length")) > 0 {
+                        let utf8 = metalMsgSend(chars, metalSel("UTF8String"))
+                        if !metalPtrIsNull(utf8) {
+                            let raw8 = metalMemReadU64(utf8, 0)
+                            let b0 = raw8 - (raw8 / 256) * 256
+                            if b0 >= 32 && b0 < 127 {
+                                out.append(GraphicsEvent {
+                                    kind: GraphicsEventKind.TextInput
+                                    textCodepoint: Int(b0)
+                                })
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
-    return
+    return move out
 }
 
-// State the live-resize delegate needs to render a frame: the Metal context, the app
-// user data, and the frame handler captured from the running application.
+// State the live-resize delegate needs: only the Metal context. The delegate
+// must NOT render by calling the app's frame closure: closures do not survive
+// repeated extraction from nativeState — the first -windowDidResize: consumed
+// the captured environment and every later tick of the drag rendered through a
+// dangling capture (the long-standing resize SIGSEGV). The delegate now only
+// keeps the drawable size in sync while AppKit's modal resize-tracking loop
+// blocks the frame loop; content scales during the drag and the main loop
+// renders the properly re-laid-out frame the moment the drag ends.
 struct MetalLiveState {
     var ctx: RawPtr
-    var userData: RawPtr
-    var onFrame: (borrow mut GraphicsFrame) -> Void
 }
 
-// Render exactly one frame at the current window size. Shared by the main loop's
-// resize path and the live-resize delegate so a drag produces real, re-laid-out
-// frames rather than a stretched still.
-@Native
-function metalLiveRenderFrame(statePtr: RawPtr) {
-    var state = nativeRecover<MetalLiveState>(statePtr)
-    let pool = metalAutoreleasePoolPush()
-    metalContextSyncViewportFromView(state.ctx)
-    metalContextTickFrameTime(state.ctx)
-    let graphics = Graphics {
-        userData: state.userData
-        backend: GraphicsBackend.Metal
-        metalContext: state.ctx
-    }
-    var frame = graphics.frame()
-    let onFrame = state.onFrame
-    onFrame(frame)
-    graphicsSubmitFrame(frame)
-    metalAutoreleasePoolPop(pool)
-    return
-}
-
-// The -windowDidResize: IMP. AppKit posts this repeatedly while the user drags the
-// window edge — inside its modal resize-tracking loop, where the manual Kira frame
-// loop is blocked — so rendering here makes the UI reflow live during the drag. The
-// live state is retrieved from the delegate it is associated with.
+// The -windowDidResize: IMP. AppKit posts this repeatedly while the user drags
+// the window edge — inside its modal resize-tracking loop, where the manual
+// Kira frame loop is blocked.
 @Native
 function metalResizeImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr): Void {
     let value = metalObjcGetAssociatedObject(selfObj, metalSel("kiraLiveState"))
@@ -111,7 +348,8 @@ function metalResizeImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr): Voi
     if metalPtrIsNull(statePtr) {
         return
     }
-    metalLiveRenderFrame(statePtr)
+    var state = nativeRecover<MetalLiveState>(statePtr)
+    metalContextSyncViewportFromView(state.ctx)
     return
 }
 

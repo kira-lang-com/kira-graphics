@@ -284,6 +284,8 @@ function graphicsKeyboardShown() -> Bool {
 @Native
 function graphicsShowMouse(show: Bool) {
     sapp_show_mouse(show)
+    // The native Metal window path doesn't run through Sokol, so drive NSCursor too.
+    metalSetCursorHidden(show == false)
     return
 }
 
