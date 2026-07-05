@@ -97,6 +97,10 @@ class GraphicsFrame {
             graphicsDiagnostic("Kira Graphics skipped render pass because the backend could not begin it")
         }
 
+        // The previous encoder (the initial placeholder from Graphics.frame(), or
+        // the placeholder installed by the last endPass) is never used again once
+        // a new pass begins; release its native state before overwriting it.
+        nativeStateFree(self.currentEncoder.storage)
         let encoder = makeRenderEncoderForBackend(self.renderPassActive, self.metalContext)
         self.currentEncoder = encoder
         return encoder
@@ -125,6 +129,10 @@ class GraphicsFrame {
             }
         }
         self.renderPassActive = false
+        // The pass is committed: encoder handles returned by beginRenderPass are
+        // dead from here on. Release the pass encoder's native state before
+        // installing the fresh placeholder that keeps currentEncoder recoverable.
+        nativeStateFree(self.currentEncoder.storage)
         self.currentEncoder = makeRenderEncoder()
         return
     }
