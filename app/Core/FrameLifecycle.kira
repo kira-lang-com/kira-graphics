@@ -5,5 +5,9 @@ function graphicsSubmitFrame(frame: borrow GraphicsFrame) {
         Vulkan -> sokolSubmitFrame(frame);
         DirectX12 -> sokolSubmitFrame(frame);
     }
+    // Submission is the end of the frame: the placeholder encoder installed by
+    // Graphics.frame() or the last endPass is never recovered again. Release it
+    // here so per-frame native-state allocations do not accumulate.
+    nativeStateFree(frame.currentEncoder.storage)
     return
 }
