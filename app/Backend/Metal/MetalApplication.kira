@@ -160,6 +160,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             let resizeEnv = metalGetEnv("KIRA_METAL_RESIZE_BENCH")
             let resizeBench = !metalPtrIsNull(resizeEnv)
             // Warm up one frame (first-touch caches, retained tree mount) before timing.
+            let warmPool = metalAutoreleasePoolPush()
             let warmGraphics = Graphics {
                 userData: userData
                 backend: GraphicsBackend.Metal
@@ -168,9 +169,11 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             var warmFrame = warmGraphics.frame()
             onFrameOffscreen(warmFrame)
             graphicsSubmitFrame(warmFrame)
+            metalAutoreleasePoolPop(warmPool)
             let startNs = metalClockNs(metalClockUptimeRaw())
             var bi = 0
             while bi < benchFrames {
+                let benchPool = metalAutoreleasePoolPush()
                 if resizeBench {
                     metalContextAttachOffscreen(ctxPtr, app.width + (bi % 120), app.height)
                 }
@@ -182,6 +185,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                 var benchFrame = benchGraphics.frame()
                 onFrameOffscreen(benchFrame)
                 graphicsSubmitFrame(benchFrame)
+                metalAutoreleasePoolPop(benchPool)
                 bi = bi + 1
             }
             let endNs = metalClockNs(metalClockUptimeRaw())
@@ -247,6 +251,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         }
         var fi = 0
         while fi < totalFrames {
+            let framePool = metalAutoreleasePoolPush()
             var ri = 0
             while ri + 3 <= offResizes.count {
                 if offResizes[ri] == fi {
@@ -366,6 +371,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             var frameOffscreen = frameGraphicsOffscreen.frame()
             onFrameOffscreen(frameOffscreen)
             graphicsSubmitFrame(frameOffscreen)
+            metalAutoreleasePoolPop(framePool)
             fi = fi + 1
         }
         metalReportCenterPixel(ctxPtr, app.width, app.height)

@@ -51,6 +51,23 @@ function metalOffsetLastFrameNs() -> U64 { return 112 }
 function metalOffsetFrameDurationNs() -> U64 { return 120 }
 function metalOffsetPhysicalWidth() -> U64 { return 128 }
 
+// Stash the frame's command buffer for the DEFERRED readback wait (the GPU wait was
+// moved out of endAndCommit into metalContextReadPixel so offscreen frames pipeline).
+// `[queue commandBuffer]` returns an AUTORELEASED buffer, so the enclosing per-frame
+// autorelease pool would free it at frame end — before the post-loop readback runs.
+// Retain it here (releasing the previous frame's committed buffer) so it survives the
+// pool pop; metalContextFree releases the last one.
+@Native
+function metalStashCommandBuffer(ctx: RawPtr, commandBuffer: RawPtr) {
+    let previous = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
+    if !metalPtrIsNull(previous) {
+        metalMsgSendVoid(previous, metalSel("release"))
+    }
+    metalMsgSendVoid(commandBuffer, metalSel("retain"))
+    metalMemWritePtr(ctx, metalOffsetCommandBuffer(), commandBuffer)
+    return
+}
+
 // The resource registry maps small integer handle ids (stored as U32 in the public
 // handle types) to the Objective-C resource pointers (MTLBuffer / MTLLibrary /
 // MTLRenderPipelineState / ...). A fixed-capacity pointer table is enough for the
@@ -325,6 +342,11 @@ function metalContextAttachLayer(ctx: RawPtr, width: Int, height: Int) {
 // management; this frees the host-side handle block).
 @Native
 function metalContextFree(ctx: RawPtr) {
+    // Release the last command buffer we retained for the deferred readback wait.
+    let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
+    if !metalPtrIsNull(pending) {
+        metalMsgSendVoid(pending, metalSel("release"))
+    }
     metalMemFree(ctx)
     return
 }
@@ -420,7 +442,7 @@ function metalContextBeginClearTarget(ctx: RawPtr, textureId: Int, loadAction: U
         let depthState = metalMemReadPtr(ctx, metalOffsetDepthState())
         metalMsgSendVoidP(encoder, metalSel("setDepthStencilState:"), depthState)
     }
-    metalMemWritePtr(ctx, metalOffsetCommandBuffer(), commandBuffer)
+    metalStashCommandBuffer(ctx, commandBuffer)
     metalMemWritePtr(ctx, metalOffsetEncoder(), encoder)
     return
 }
@@ -529,7 +551,7 @@ function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b:
         let depthState = metalMemReadPtr(ctx, metalOffsetDepthState())
         metalMsgSendVoidP(encoder, metalSel("setDepthStencilState:"), depthState)
     }
-    metalMemWritePtr(ctx, metalOffsetCommandBuffer(), commandBuffer)
+    metalStashCommandBuffer(ctx, commandBuffer)
     metalMemWritePtr(ctx, metalOffsetEncoder(), encoder)
     return
 }
