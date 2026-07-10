@@ -32,7 +32,10 @@
 // 120  frameDurationNs  (U64 nanoseconds; the most recent inter-frame delta, for FPS)
 // 128  physicalWidth    (U64 backing pixels; width/height stay in points, so
 //                        scale = physicalWidth / width — the Retina backing factor)
-function metalContextSize() -> U64 { return 136 }
+// 136  registryKinds    (raw block of per-id U8 kind tags parallel to `registry`:
+//                        1 = Objective-C object (teardown releases it), 2 = raw
+//                        metalMemAlloc block such as a bind group (teardown frees it))
+function metalContextSize() -> U64 { return 144 }
 function metalOffsetDevice() -> U64 { return 0 }
 function metalOffsetQueue() -> U64 { return 8 }
 function metalOffsetColorTexture() -> U64 { return 16 }
@@ -50,6 +53,14 @@ function metalOffsetHostView() -> U64 { return 104 }
 function metalOffsetLastFrameNs() -> U64 { return 112 }
 function metalOffsetFrameDurationNs() -> U64 { return 120 }
 function metalOffsetPhysicalWidth() -> U64 { return 128 }
+function metalOffsetRegistryKinds() -> U64 { return 136 }
+
+// Registry entry kinds (parallel `registryKinds` table). An entry is either a
+// +1-owned Objective-C object (released at teardown) or a raw metalMemAlloc block
+// such as a bind group (freed at teardown); the untyped pointer registry cannot
+// tell them apart, so the kind is recorded when the handle is registered.
+function metalRegistryKindObject() -> U8 { return 1 }
+function metalRegistryKindRawBlock() -> U8 { return 2 }
 
 // Stash the frame's command buffer for the DEFERRED readback wait (the GPU wait was
 // moved out of endAndCommit into metalContextReadPixel so offscreen frames pipeline).
@@ -74,12 +85,29 @@ function metalStashCommandBuffer(ctx: RawPtr, commandBuffer: RawPtr) {
 // resource counts a frame uses; ids start at 1 so 0 stays a sentinel.
 function metalRegistryCapacity() -> U64 { return 1024 }
 
-// Register an Objective-C resource pointer and return its handle id.
+// Register a +1-owned Objective-C resource pointer and return its handle id. The
+// entry is tagged as an object so teardown releases it.
 @Native
 function metalRegister(ctx: RawPtr, object: RawPtr) -> Int {
     let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
     let id = metalMemReadU64(ctx, metalOffsetNextId())
     metalMemWritePtr(registry, id * 8, object)
+    let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
+    metalMemWriteU8(kinds, id, metalRegistryKindObject())
+    metalMemWriteU64(ctx, metalOffsetNextId(), id + 1)
+    return id
+}
+
+// Register a raw metalMemAlloc block (e.g. a bind group) and return its handle id.
+// The entry is tagged as a raw block so teardown frees it with metalMemFree rather
+// than sending it an Objective-C `release` (which would crash on a non-object).
+@Native
+function metalRegisterRawBlock(ctx: RawPtr, block: RawPtr) -> Int {
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    let id = metalMemReadU64(ctx, metalOffsetNextId())
+    metalMemWritePtr(registry, id * 8, block)
+    let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
+    metalMemWriteU8(kinds, id, metalRegistryKindRawBlock())
     metalMemWriteU64(ctx, metalOffsetNextId(), id + 1)
     return id
 }
@@ -309,9 +337,13 @@ function metalContextAlloc() -> RawPtr {
     metalMemWriteU64(ctx, metalOffsetLastFrameNs(), 0)
     metalMemWriteU64(ctx, metalOffsetFrameDurationNs(), 0)
     metalMemWriteU64(ctx, metalOffsetPhysicalWidth(), 0)
-    // Resource registry: capacity pointers, ids starting at 1.
+    // Resource registry: capacity pointers, ids starting at 1. The parallel kinds
+    // table (one U8 per id) records whether each entry is an Objective-C object or a
+    // raw block so teardown can release vs free it correctly.
     let registry = metalMemAlloc(metalRegistryCapacity() * 8)
     metalMemWritePtr(ctx, metalOffsetRegistry(), registry)
+    let kinds = metalMemAlloc(metalRegistryCapacity())
+    metalMemWritePtr(ctx, metalOffsetRegistryKinds(), kinds)
     metalMemWriteU64(ctx, metalOffsetNextId(), 1)
     return ctx
 }
@@ -338,8 +370,12 @@ function metalContextAttachLayer(ctx: RawPtr, width: Int, height: Int) {
     return
 }
 
-// Free the context block (the GPU objects are released by Metal's own lifetime
-// management; this frees the host-side handle block).
+// Destroy the context: release every Objective-C object it owns (each backend
+// resource is created through a +1-owned `new*`/`alloc`+`init` message and never
+// released elsewhere), free the registry and handle blocks. Wired to run at app
+// shutdown (metalRunApplication) so these process-lifetime objects — the render/
+// compute pipelines, shader libraries, buffers, textures, samplers, the command
+// queue and its dispatch sources, and the device — do not survive to `leaks --atExit`.
 @Native
 function metalContextFree(ctx: RawPtr) {
     // Release the last command buffer we retained for the deferred readback wait.
@@ -347,6 +383,65 @@ function metalContextFree(ctx: RawPtr) {
     if !metalPtrIsNull(pending) {
         metalMsgSendVoid(pending, metalSel("release"))
     }
+    // Release/free every registered resource (ids 1..nextId-1; id 0 is the reserved
+    // sentinel), then free the registry and its parallel kinds table. Object entries
+    // are +1-owned `new*` results (library / buffer / pipeline / texture / sampler)
+    // and are released; raw-block entries (bind groups) are freed with metalMemFree —
+    // sending them an Objective-C `release` would crash on a non-object.
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
+    if !metalPtrIsNull(registry) {
+        let nextId = metalMemReadU64(ctx, metalOffsetNextId())
+        var id: U64 = 1
+        while id < nextId {
+            let entry = metalMemReadPtr(registry, id * 8)
+            if !metalPtrIsNull(entry) {
+                let kind = metalMemReadU8(kinds, id)
+                if kind == metalRegistryKindRawBlock() {
+                    metalMemFree(entry)
+                } else {
+                    metalMsgSendVoid(entry, metalSel("release"))
+                }
+            }
+            id = id + 1
+        }
+        metalMemFree(registry)
+    }
+    if !metalPtrIsNull(kinds) {
+        metalMemFree(kinds)
+    }
+    // Release the context-owned depth target/state (null unless depth was attached).
+    let depthState = metalMemReadPtr(ctx, metalOffsetDepthState())
+    if !metalPtrIsNull(depthState) {
+        metalMsgSendVoid(depthState, metalSel("release"))
+    }
+    let depthTexture = metalMemReadPtr(ctx, metalOffsetDepthTexture())
+    if !metalPtrIsNull(depthTexture) {
+        metalMsgSendVoid(depthTexture, metalSel("release"))
+    }
+    // The color target is +1-owned ONLY in offscreen mode (newTextureWithDescriptor:).
+    // In layer mode it is the drawable's texture, which we do not own — releasing it
+    // would over-release — so skip it whenever a layer is present.
+    let layer = metalMemReadPtr(ctx, metalOffsetLayer())
+    if metalPtrIsNull(layer) {
+        let colorTexture = metalMemReadPtr(ctx, metalOffsetColorTexture())
+        if !metalPtrIsNull(colorTexture) {
+            metalMsgSendVoid(colorTexture, metalSel("release"))
+        }
+    } else {
+        // The CAMetalLayer is a +1-owned alloc/init we created for the on-screen path.
+        metalMsgSendVoid(layer, metalSel("release"))
+    }
+    // Release the command queue, breaking its dispatch-source retain cycles.
+    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
+    if !metalPtrIsNull(queue) {
+        metalMsgSendVoid(queue, metalSel("release"))
+    }
+    // The device is NOT released: MTLCreateSystemDefaultDevice returns a cached
+    // process-lifetime singleton (the same object every call), which Metal retains
+    // internally. Releasing our reference per-context over-releases the shared device
+    // and crashes the next context that recreates it. It is process-lifetime and does
+    // not appear in the per-run leak buckets, so we intentionally leave it reachable.
     metalMemFree(ctx)
     return
 }
@@ -433,7 +528,7 @@ function metalContextBeginClearTarget(ctx: RawPtr, textureId: Int, loadAction: U
         let depthAtt = metalMsgSend(rp, metalSel("depthAttachment"))
         metalMsgSendVoidP(depthAtt, metalSel("setTexture:"), depthTexture)
         metalMsgSendVoidU(depthAtt, metalSel("setLoadAction:"), metalLoadActionClear())
-        metalMsgSendVoidU(depthAtt, metalSel("setStoreAction:"), metalStoreActionDontCare())
+        metalMsgSendVoidU(depthAtt, metalSel("setStoreAction:"), metalStoreActionStore())
         metalMsgSendVoidF(depthAtt, metalSel("setClearDepth:"), 1.0)
     }
     let commandBuffer = metalMsgSend(queue, metalSel("commandBuffer"))
@@ -456,7 +551,7 @@ function metalContextAttachDepth(ctx: RawPtr) {
     let height = metalMemReadU64(ctx, metalOffsetHeight())
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
     let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatDepth32Float(), width, height, false)
-    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget())
+    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget() + metalTextureUsageShaderRead())
     metalMsgSendVoidU(desc, metalSel("setStorageMode:"), metalStorageModePrivate())
     let depthTexture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
     metalMemWritePtr(ctx, metalOffsetDepthTexture(), depthTexture)
@@ -466,6 +561,9 @@ function metalContextAttachDepth(ctx: RawPtr) {
     metalMsgSendVoidU(dsDesc, metalSel("setDepthCompareFunction:"), metalCompareFunctionLess())
     metalMsgSendVoidB(dsDesc, metalSel("setDepthWriteEnabled:"), true)
     let depthState = metalMsgSendP(device, metalSel("newDepthStencilStateWithDescriptor:"), dsDesc)
+    // The descriptor is a +1-owned alloc/init temporary; the depth-stencil state does
+    // not retain it, so release it here rather than leaking one per attach.
+    metalMsgSendVoid(dsDesc, metalSel("release"))
     metalMemWritePtr(ctx, metalOffsetDepthState(), depthState)
     return
 }
@@ -541,7 +639,7 @@ function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b:
         let depthAtt = metalMsgSend(rp, metalSel("depthAttachment"))
         metalMsgSendVoidP(depthAtt, metalSel("setTexture:"), depthTexture)
         metalMsgSendVoidU(depthAtt, metalSel("setLoadAction:"), metalLoadActionClear())
-        metalMsgSendVoidU(depthAtt, metalSel("setStoreAction:"), metalStoreActionDontCare())
+        metalMsgSendVoidU(depthAtt, metalSel("setStoreAction:"), metalStoreActionStore())
         metalMsgSendVoidF(depthAtt, metalSel("setClearDepth:"), 1.0)
     }
 

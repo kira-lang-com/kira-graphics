@@ -32,6 +32,32 @@ class Graphics {
         }
     }
 
+    // Backend-aware shader creation from inline `ksl!` KslArtifact sources. The
+    // caller passes each backend's precompiled shader text (the KslArtifact
+    // fields) plus the KSL stage entry names; this selects the variant the active
+    // backend needs — combinedMsl on Metal, WGSL on WebGPU/wasm, GLSL on desktop
+    // GL — with no shader-file IO. Entry names follow the KSL
+    // `{Shader}__{stage}__main` convention and are shared by the MSL and WGSL
+    // backends; GLSL stage functions are always `main` (handled natively).
+    function createShaderFromKslArtifact(label: borrow String, combinedMsl: borrow String, vertexWgsl: borrow String, fragmentWgsl: borrow String, vertexGlsl: borrow String, fragmentGlsl: borrow String, vertexEntry: borrow String, fragmentEntry: borrow String, uniformReflection: borrow String) -> GraphicsShader {
+        if self.backend == GraphicsBackend.Metal {
+            let metalShaderId = metalCreateShader(self.metalContext, combinedMsl)
+            return GraphicsShader {
+                handle: BackendShaderHandle {
+                    id: metalShaderId
+                }
+                id: metalShaderId
+            }
+        }
+        let shaderId = sokolCreateShaderKslInlineId(label, vertexWgsl, fragmentWgsl, vertexGlsl, fragmentGlsl, vertexEntry, fragmentEntry, uniformReflection)
+        return GraphicsShader {
+            handle: BackendShaderHandle {
+                id: shaderId
+            }
+            id: shaderId
+        }
+    }
+
     function destroyShader(shader: GraphicsShader) {
         sokolDestroyShaderId(shader.id)
         return
@@ -368,6 +394,25 @@ class Graphics {
             metalContextAttachDepth(self.metalContext)
         }
         return
+    }
+
+    // Backend-agnostic drawable size in framebuffer pixels. On Metal the drawable
+    // dimensions are recorded on the context (Sokol's sapp_* are not valid there);
+    // on the Sokol backend (desktop GL / WebGPU / wasm) they come from sapp_width/height.
+    // Hosts that render context-sized offscreen targets must use this rather than the
+    // Metal-only metalContextWidth/Height, which read 0 on the Sokol backend.
+    function contextWidth() -> Int {
+        if self.backend == GraphicsBackend.Metal {
+            return metalContextWidth(self.metalContext)
+        }
+        return sokolDrawableWidth()
+    }
+
+    function contextHeight() -> Int {
+        if self.backend == GraphicsBackend.Metal {
+            return metalContextHeight(self.metalContext)
+        }
+        return sokolDrawableHeight()
     }
 
     // --- GPU compute (Metal). KSL compute shaders lower to an MSL kernel; these build

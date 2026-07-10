@@ -85,12 +85,10 @@ function main() {
     app.onInit { graphics in
         var triangleState = nativeRecover<TriangleState>(graphics.userData)
 
-        triangleState.shader = graphics.createShader(ShaderDescriptor {
+        triangleState.shader = graphics.createShaderFromKsl(KslShaderDescriptor {
             label: "basic-triangle-shader"
-            vertexSource: ""
-            fragmentSource: ""
-            vertexPath: "generated/Shaders/BasicTriangle.vert.glsl"
-            fragmentPath: "generated/Shaders/BasicTriangle.frag.glsl"
+            asset: "BasicTriangle"
+            directory: "generated/Shaders"
         })
 
         triangleState.vertices = graphics.createBuffer(BufferDescriptor {

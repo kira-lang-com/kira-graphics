@@ -16,6 +16,9 @@ function metalCreateComputePipeline(ctx: RawPtr, shaderId: Int, entryName: borro
     let errSlot = metalMemAlloc(8)
     metalMemWriteU64(errSlot, 0, 0)
     let pipeline = metalMsgSendPP(device, metalSel("newComputePipelineStateWithFunction:error:"), fn, errSlot)
+    // fn (newFunctionWithName:) is a +1-owned transient; the compute pipeline state
+    // retains what it needs, so release it here rather than leaking one per pipeline.
+    metalMsgSendVoid(fn, metalSel("release"))
     metalMemFree(errSlot)
     return metalRegister(ctx, pipeline)
 }
@@ -151,6 +154,43 @@ function metalDispatchComputeN(ctx: RawPtr, pipelineId: Int, buffers: borrow [In
     let cmd = metalMsgSend(queue, metalSel("commandBuffer"))
     let enc = metalMsgSend(cmd, metalSel("computeCommandEncoder"))
     metalMsgSendVoidP(enc, metalSel("setComputePipelineState:"), pipeline)
+    var i = 0
+    while i < buffers.count {
+        let b = metalLookup(ctx, buffers[i])
+        metalMsgSendSetVertexBuffer(enc, metalSel("setBuffer:offset:atIndex:"), b, 0, i)
+        i = i + 1
+    }
+    let groups = (count + threadsPerGroup - 1) / threadsPerGroup
+    let gridSize = metalMemAlloc(24)
+    metalMemWriteU64(gridSize, 0, groups)
+    metalMemWriteU64(gridSize, 8, 1)
+    metalMemWriteU64(gridSize, 16, 1)
+    let tgSize = metalMemAlloc(24)
+    metalMemWriteU64(tgSize, 0, threadsPerGroup)
+    metalMemWriteU64(tgSize, 8, 1)
+    metalMemWriteU64(tgSize, 16, 1)
+    metalMsgSendVoidPP(enc, metalSel("dispatchThreadgroups:threadsPerThreadgroup:"), gridSize, tgSize)
+    metalMsgSendVoid(enc, metalSel("endEncoding"))
+    metalMsgSendVoid(cmd, metalSel("commit"))
+    metalMsgSendVoid(cmd, metalSel("waitUntilCompleted"))
+    metalMemFree(gridSize)
+    metalMemFree(tgSize)
+    return
+}
+
+// Dispatch with the context's raster depth attachment bound as texture(0), plus
+// arbitrary storage/uniform buffers at buffer slots 0..n-1. This is the render ->
+// compute seam used by Hi-Z: the depth prepass remains GPU-resident and is sampled
+// directly by the pyramid seed kernel.
+@Native
+function metalDispatchDepthComputeN(ctx: RawPtr, pipelineId: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
+    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
+    let pipeline = metalLookup(ctx, pipelineId)
+    let depthTexture = metalMemReadPtr(ctx, metalOffsetDepthTexture())
+    let cmd = metalMsgSend(queue, metalSel("commandBuffer"))
+    let enc = metalMsgSend(cmd, metalSel("computeCommandEncoder"))
+    metalMsgSendVoidP(enc, metalSel("setComputePipelineState:"), pipeline)
+    metalMsgSendVoidPU(enc, metalSel("setTexture:atIndex:"), depthTexture, 0)
     var i = 0
     while i < buffers.count {
         let b = metalLookup(ctx, buffers[i])

@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Kira cube3d — wasm</title>
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000}
+  #canvas{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none}
+</style>
+</head>
+<body data-kira-runner="web" data-kira-surface="webgpu" data-kira-artifact="main.wasm">
+<canvas id="canvas" tabindex="0"></canvas>
+<!-- Keeps the load event pending so headless Chrome's --screenshot fires AFTER
+     the wasm runtime has booted and rendered several frames. -->
+<img src="/slow?ms=9000" style="position:absolute;width:1px;height:1px;opacity:0" alt="">
+<script>
+  var Module = {
+    canvas: document.getElementById('canvas'),
+    print: (t) => console.log("kira:", t),
+    printErr: (t) => console.warn("kira:", t),
+    onRuntimeInitialized: () => console.log("kira.wasm.runtime_initialized"),
+    onAbort: (w) => console.error("kira.wasm.abort:", w),
+  };
+  window.addEventListener('error', (e) => console.error("page.error:", e.message));
+</script>
+<script src="./kira-browser-ffi.generated.js"></script>
+<script src="./main.js"></script>
+</body>
+</html>

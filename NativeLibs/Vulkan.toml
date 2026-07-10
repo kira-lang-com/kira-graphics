@@ -25,3 +25,9 @@ dynamic_lib = ""
 
 [target.aarch64-macos-none]
 dynamic_lib = ""
+
+# Browser target: the Vulkan backend is unavailable in the browser and is guarded at
+# runtime. Empty artifact => nothing is linked, so eager resolution for any wasm app
+# build succeeds instead of failing KTC003.
+[target.wasm32-emscripten-unknown]
+dynamic_lib = ""

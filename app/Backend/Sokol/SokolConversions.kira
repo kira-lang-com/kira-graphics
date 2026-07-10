@@ -7,3 +7,16 @@ function sokolDefaultViewport() -> Viewport {
         height: sapp_height()
     }
 }
+
+// Current sokol-app drawable size (framebuffer pixels). @Native wrappers so
+// non-@Native callers (e.g. Graphics.contextWidth/Height) can obtain the size
+// without directly touching the FFI-bound sapp_* symbols.
+@Native
+function sokolDrawableWidth() -> Int {
+    return sapp_width()
+}
+
+@Native
+function sokolDrawableHeight() -> Int {
+    return sapp_height()
+}
