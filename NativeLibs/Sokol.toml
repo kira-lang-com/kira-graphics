@@ -64,3 +64,12 @@ system_libs = ["X11", "Xi", "Xcursor", "GL", "dl", "pthread", "m"]
 static_lib = "../generated/native/x86_64-windows-msvc/sokol.lib"
 defines = ["SOKOL_GLCORE"]
 system_libs = ["opengl32"]
+
+# Browser/WebGPU target. sokol_impl.c auto-defines SOKOL_WGPU under __EMSCRIPTEN__.
+# The vendored sokol headers (sokol_gfx.h:96, sokol_app.h:112) require WebGPU builds
+# to "compile and link with --use-port=emdawnwebgpu"; no ASYNCIFY is required by these
+# sokol versions. emcc/emar produce the static archive for the wasm32-emscripten target.
+[target.wasm32-emscripten-unknown]
+static_lib = "../generated/native/wasm32-emscripten/libsokol.a"
+compiler_flags = ["--use-port=emdawnwebgpu"]
+linker_flags = ["--use-port=emdawnwebgpu"]

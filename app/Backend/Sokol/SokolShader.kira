@@ -8,6 +8,14 @@ function sokolCreateShaderFromKslId(label: borrow String, asset: borrow String, 
     return kgMakeKslShader(label, asset, directory)
 }
 
+// Create a shader straight from inline `ksl!` KslArtifact sources. The native
+// helper selects WGSL (WebGPU/wasm) or GLSL (desktop GL) and applies the KSL
+// stage entry-point names; no shader files are read from disk.
+@Native
+function sokolCreateShaderKslInlineId(label: borrow String, vertexWgsl: borrow String, fragmentWgsl: borrow String, vertexGlsl: borrow String, fragmentGlsl: borrow String, vertexEntry: borrow String, fragmentEntry: borrow String, uniformReflection: borrow String) -> U32 {
+    return kgMakeShaderKslInline(label, vertexWgsl, fragmentWgsl, vertexGlsl, fragmentGlsl, vertexEntry, fragmentEntry, uniformReflection)
+}
+
 @Native
 function sokolDestroyShaderId(shaderId: U32): Void {
     if (shaderId != 0) {

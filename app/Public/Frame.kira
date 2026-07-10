@@ -137,6 +137,29 @@ class GraphicsFrame {
         return
     }
 
+    // Metal render -> compute seam: bind this frame context's persistent depth
+    // attachment as texture(0), with caller buffers at slots 0..n-1.
+    function dispatchDepthComputeBuffers(pipeline: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
+        if self.backend == GraphicsBackend.Metal {
+            metalDispatchDepthComputeN(self.metalContext, pipeline, buffers, count, threadsPerGroup)
+        }
+        return
+    }
+
+    function dispatchComputeBuffers(pipeline: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
+        if self.backend == GraphicsBackend.Metal {
+            metalDispatchComputeN(self.metalContext, pipeline, buffers, count, threadsPerGroup)
+        }
+        return
+    }
+
+    function readStorageU32(bufferId: Int, index: Int) -> U32 {
+        if self.backend == GraphicsBackend.Metal {
+            return metalReadStorageBufferU32(self.metalContext, bufferId, index)
+        }
+        return U32(0)
+    }
+
     function renderPass(descriptor: borrow RenderPassDescriptor, body: (RenderEncoder) -> Void) {
         let encoder = beginRenderPass(descriptor)
         let callbackEncoder = encoder

@@ -169,6 +169,9 @@ function kgMakeShader(label: CString, vertexSource: CString, fragmentSource: CSt
 @FFI.Extern { library: sokol; symbol: kg_make_ksl_shader; abi: c; }
 function kgMakeKslShader(label: CString, asset: CString, directory: CString): U32;
 
+@FFI.Extern { library: sokol; symbol: kg_make_shader_ksl_inline; abi: c; }
+function kgMakeShaderKslInline(label: CString, vertexWgsl: CString, fragmentWgsl: CString, vertexGlsl: CString, fragmentGlsl: CString, vertexEntry: CString, fragmentEntry: CString, uniformReflection: CString): U32;
+
 @FFI.Extern { library: sokol; symbol: kg_math_sqrt; abi: c; }
 function kgMathSqrt(value: Float): Float;
 

@@ -98,12 +98,42 @@ static uint32_t kg_ui_demo_pipeline_id = 0;
 #define KG_PATH_BUFFER_SIZE 4096
 #endif
 
+// Per-uniform-block descriptor parsed from the KSL `uniformReflection` string
+// (real shader-compiler reflection). Replaces the old hardcoded scene/object
+// uniform model: each declared uniform block carries its std140 size, the WGSL
+// @group(0) binding (which is also the app's public bind slot), the stages it is
+// visible to, and its member layout for the GL backend. vertex_block_slot /
+// fragment_block_slot record which Sokol uniform_blocks[] slots the block was
+// configured into (or -1 when the block is not used in that stage).
+#ifndef KG_MAX_UNIFORM_BLOCK_MEMBERS
+#define KG_MAX_UNIFORM_BLOCK_MEMBERS 16
+#endif
+#ifndef KG_MAX_UNIFORM_BLOCKS
+#define KG_MAX_UNIFORM_BLOCKS 8
+#endif
+typedef struct {
+    char name[64];
+    int binding;
+    uint32_t size;
+    uint32_t stage_mask; // bit0 vertex, bit1 fragment, bit2 compute
+    int vertex_block_slot;
+    int fragment_block_slot;
+    int member_count;
+    struct {
+        char name[64];
+        uint32_t offset;
+        uint32_t size;
+    } members[KG_MAX_UNIFORM_BLOCK_MEMBERS];
+} kg_uniform_block_desc;
+
 typedef struct {
     uint32_t id;
     bool has_position_attribute;
     bool has_normal_attribute;
     uint32_t required_uniform_mask;
     uint32_t available_uniform_mask;
+    kg_uniform_block_desc uniform_descs[KG_MAX_UNIFORM_BLOCKS];
+    int uniform_desc_count;
 } kg_shader_record;
 
 typedef struct {
@@ -113,6 +143,8 @@ typedef struct {
     bool has_position_attribute;
     uint32_t required_uniform_mask;
     uint32_t available_uniform_mask;
+    kg_uniform_block_desc uniform_descs[KG_MAX_UNIFORM_BLOCKS];
+    int uniform_desc_count;
 } kg_pipeline_record;
 
 typedef struct {
@@ -304,6 +336,18 @@ static uint32_t kg_shader_available_uniform_mask(uint32_t id) {
     return 0;
 }
 
+static kg_shader_record* kg_find_shader_record(uint32_t id) {
+    if (id == 0) {
+        return NULL;
+    }
+    for (int i = 0; i < kg_shader_record_count; i += 1) {
+        if (kg_shader_records[i].id == id) {
+            return &kg_shader_records[i];
+        }
+    }
+    return NULL;
+}
+
 static kg_pipeline_record* kg_find_pipeline_record(uint32_t public_id) {
     for (int i = 0; i < kg_pipeline_record_count; i += 1) {
         if (kg_pipeline_records[i].public_id == public_id) {
@@ -419,6 +463,25 @@ static int kg_lifetime_outstanding_count(void) {
 static uint32_t kg_pipeline_uniform_target_mask(const kg_pipeline_record* record, int public_slot) {
     if (record == NULL) {
         return 0;
+    }
+
+    // Reflection-driven shaders: the app's public bind slot equals the uniform's
+    // WGSL binding; return the Sokol block slots that binding was configured into
+    // (a vertex block, a fragment block, or both).
+    if (record->uniform_desc_count > 0) {
+        uint32_t mask = 0;
+        for (int i = 0; i < record->uniform_desc_count; i += 1) {
+            if (record->uniform_descs[i].binding != public_slot) {
+                continue;
+            }
+            if (record->uniform_descs[i].vertex_block_slot >= 0) {
+                mask |= 1u << (uint32_t)record->uniform_descs[i].vertex_block_slot;
+            }
+            if (record->uniform_descs[i].fragment_block_slot >= 0) {
+                mask |= 1u << (uint32_t)record->uniform_descs[i].fragment_block_slot;
+            }
+        }
+        return mask;
     }
 
     uint32_t target_mask = 0;
@@ -896,6 +959,37 @@ static void kg_ui_ensure_pipeline(void) {
             "  return in.color;\n"
             "}\n";
         shader_desc.fragment_func.entry = "fs_main";
+#elif defined(SOKOL_WGPU)
+        // WebGPU/Dawn only accepts WGSL. Feeding it the GLSL branch below makes the
+        // shader module invalid, which invalidates the immediate-2d pipeline and —
+        // because WebGPU rejects a whole command buffer containing one invalid
+        // command — silently drops EVERY queue submit for the frame, clear included:
+        // the wasm canvas stayed opaque black while all Kira markers still fired.
+        // @location(N) matches the pipeline vertex layout attr indices (0=position
+        // float2, 1=color float4), mirroring the KSL WGSL backend's convention.
+        shader_desc.vertex_func.source =
+            "struct VsIn {\n"
+            "  @location(0) position: vec2<f32>,\n"
+            "  @location(1) color: vec4<f32>,\n"
+            "};\n"
+            "struct VsOut {\n"
+            "  @builtin(position) clip_position: vec4<f32>,\n"
+            "  @location(0) color: vec4<f32>,\n"
+            "};\n"
+            "@vertex\n"
+            "fn vs_main(in: VsIn) -> VsOut {\n"
+            "  var out: VsOut;\n"
+            "  out.clip_position = vec4<f32>(in.position, 0.0, 1.0);\n"
+            "  out.color = in.color;\n"
+            "  return out;\n"
+            "}\n";
+        shader_desc.vertex_func.entry = "vs_main";
+        shader_desc.fragment_func.source =
+            "@fragment\n"
+            "fn fs_main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {\n"
+            "  return color;\n"
+            "}\n";
+        shader_desc.fragment_func.entry = "fs_main";
 #else
         shader_desc.vertex_func.source =
             "#version 330 core\n"
@@ -924,7 +1018,19 @@ static void kg_ui_ensure_pipeline(void) {
     }
 
     if (kg_ui_pipeline.id == 0) {
-        sg_swapchain swapchain = sglue_swapchain();
+        // Read the swapchain color format / sample count for pipeline creation via
+        // sapp_color_format()/sapp_sample_count() rather than sglue_swapchain().
+        // sglue_swapchain() calls sapp_get_swapchain(), which on the WebGPU backend
+        // ACQUIRES the frame's swapchain view and asserts (0 == swapchain_view) that
+        // it had not already been acquired this frame. The swapchain pass already
+        // acquired it (kg_begin_render_pass), so a second acquire here — triggered
+        // the first frame the lazy UI pipeline is built — trips
+        // `SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view)` and aborts the module.
+        // Metal tolerates the double acquire, which is why this only surfaced on
+        // wasm/WebGPU. sapp_color_format()/sapp_sample_count() report the same
+        // formats without acquiring a view.
+        const sg_pixel_format swapchain_color_format = _sglue_to_sgpixelformat(sapp_color_format());
+        const int swapchain_sample_count = sapp_sample_count();
         sg_pipeline_desc pipeline_desc = {0};
         pipeline_desc.shader = kg_ui_shader;
         pipeline_desc.layout.buffers[0].stride = sizeof(kg_ui_vertex);
@@ -934,7 +1040,7 @@ static void kg_ui_ensure_pipeline(void) {
         pipeline_desc.layout.attrs[1].buffer_index = 0;
         pipeline_desc.layout.attrs[1].offset = offsetof(kg_ui_vertex, r);
         pipeline_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT4;
-        pipeline_desc.colors[0].pixel_format = swapchain.color_format;
+        pipeline_desc.colors[0].pixel_format = swapchain_color_format;
         pipeline_desc.colors[0].blend.enabled = true;
         pipeline_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
         pipeline_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -945,7 +1051,7 @@ static void kg_ui_ensure_pipeline(void) {
         pipeline_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
         pipeline_desc.cull_mode = SG_CULLMODE_NONE;
         pipeline_desc.face_winding = SG_FACEWINDING_CCW;
-        pipeline_desc.sample_count = swapchain.sample_count;
+        pipeline_desc.sample_count = swapchain_sample_count;
         pipeline_desc.label = "kira-graphics-immediate-2d-pipeline";
         kg_ui_pipeline = sg_make_pipeline(&pipeline_desc);
         kg_update_lifetime_peaks();
@@ -1275,7 +1381,11 @@ static sg_store_action kg_store_action(int64_t action) {
 }
 
 static sg_vertex_format kg_vertex_format(int64_t format) {
+    // Codes match app/Public/Constants.kira: vertexFormatFloat()=0,
+    // vertexFormatFloat2()=1, vertexFormatFloat3()=2, vertexFormatFloat4()=3.
     switch (format) {
+        case 0:
+            return SG_VERTEXFORMAT_FLOAT;
         case 2:
             return SG_VERTEXFORMAT_FLOAT3;
         case 3:
@@ -2055,7 +2165,12 @@ uint32_t kg_create_texture_id(const char* label, int64_t width, int64_t height, 
     desc.height = (int)height;
     desc.num_slices = 1;
     desc.num_mipmaps = 1;
-    desc.pixel_format = kg_pixel_format(format);
+    // The swapchain-format sentinel (-1, textureFormatSwapchain) must resolve to the
+    // actual swapchain color format so a render-target texture created with it matches
+    // pipelines, which bake in swapchain_color_format for that same sentinel. Mapping it
+    // to a fixed RGBA8 mismatches the pipeline on backends whose swapchain is BGRA8
+    // (WebGPU/wasm), tripping VALIDATE_APIP_COLORATTACHMENTS_FORMAT.
+    desc.pixel_format = (format == -1) ? _sglue_to_sgpixelformat(sapp_color_format()) : kg_pixel_format(format);
     desc.sample_count = (int)((sample_count > 0) ? sample_count : 1);
     desc.label = label;
 
@@ -2264,6 +2379,162 @@ static bool kg_shader_source_uses_resource(const char* source, const char* resou
     return strstr(source, needle) != NULL;
 }
 
+// --- Data-driven uniform blocks (real KSL shader reflection) ----------------
+// The `ksl!` macro emits a compact `uniformReflection` string (see
+// kira-zig .../shader/uniform_reflection.zig). When present it fully describes a
+// shader's uniform blocks, so the Sokol backend no longer greps source for the
+// hardcoded "scene"/"object" names. Shaders without a reflection string (older
+// KG examples, the file-based KSL path, SPIR-V metadata) fall back to the legacy
+// scene/object configuration below, preserving existing behavior.
+
+static uint32_t kg_parse_reflection_uint(const char** cursor) {
+    const char* s = *cursor;
+    uint32_t value = 0;
+    while (*s >= '0' && *s <= '9') {
+        value = value * 10u + (uint32_t)(*s - '0');
+        s += 1;
+    }
+    *cursor = s;
+    return value;
+}
+
+// Parses `name:binding:size:stageMask:memberCount(:member,member,...)` blocks
+// separated by ';'; each member is `name@offset#size`. Returns the block count.
+static int kg_parse_uniform_reflection(const char* text, kg_uniform_block_desc* out, int max_blocks) {
+    if (text == NULL || text[0] == '\0') {
+        return 0;
+    }
+    int count = 0;
+    const char* s = text;
+    while (*s != '\0' && count < max_blocks) {
+        kg_uniform_block_desc* d = &out[count];
+        memset(d, 0, sizeof(*d));
+        d->vertex_block_slot = -1;
+        d->fragment_block_slot = -1;
+
+        int n = 0;
+        while (*s != '\0' && *s != ':' && n < (int)sizeof(d->name) - 1) {
+            d->name[n++] = *s++;
+        }
+        d->name[n] = '\0';
+        while (*s != '\0' && *s != ':') s++;
+        if (*s != ':') break;
+        s++; d->binding = (int)kg_parse_reflection_uint(&s);
+        if (*s != ':') break;
+        s++; d->size = kg_parse_reflection_uint(&s);
+        if (*s != ':') break;
+        s++; d->stage_mask = kg_parse_reflection_uint(&s);
+        if (*s != ':') break;
+        s++; uint32_t member_count = kg_parse_reflection_uint(&s);
+
+        if (member_count > 0 && *s == ':') {
+            s++;
+            for (uint32_t m = 0; m < member_count; m++) {
+                if (d->member_count < KG_MAX_UNIFORM_BLOCK_MEMBERS) {
+                    int mn = 0;
+                    while (*s != '\0' && *s != '@' && mn < (int)sizeof(d->members[0].name) - 1) {
+                        d->members[d->member_count].name[mn++] = *s++;
+                    }
+                    d->members[d->member_count].name[mn] = '\0';
+                    while (*s != '\0' && *s != '@') s++;
+                    if (*s == '@') { s++; d->members[d->member_count].offset = kg_parse_reflection_uint(&s); }
+                    if (*s == '#') { s++; d->members[d->member_count].size = kg_parse_reflection_uint(&s); }
+                    d->member_count++;
+                } else {
+                    while (*s != '\0' && *s != ',' && *s != ';') s++;
+                }
+                if (*s == ',') { s++; continue; }
+                break;
+            }
+        }
+
+        count++;
+        while (*s != '\0' && *s != ';') s++;
+        if (*s == ';') s++;
+    }
+    return count;
+}
+
+// Maps a std140 member byte size to a Sokol GL uniform type (KSL uniform members
+// are float scalars/vectors/matrices). Only used by the GL backend; WGSL/Metal
+// treat the block as opaque bytes.
+static sg_uniform_type kg_uniform_type_from_size(uint32_t size, uint16_t* array_count) {
+    *array_count = 1;
+    switch (size) {
+        case 4:  return SG_UNIFORMTYPE_FLOAT;
+        case 8:  return SG_UNIFORMTYPE_FLOAT2;
+        case 12: return SG_UNIFORMTYPE_FLOAT3;
+        case 16: return SG_UNIFORMTYPE_FLOAT4;
+        case 64: return SG_UNIFORMTYPE_MAT4;
+        default:
+            if (size >= 16 && (size % 16u) == 0u) {
+                *array_count = (uint16_t)(size / 16u);
+                return SG_UNIFORMTYPE_FLOAT4;
+            }
+            return SG_UNIFORMTYPE_FLOAT4;
+    }
+}
+
+// Configures Sokol uniform blocks from parsed descriptors. Each descriptor is
+// realized as one Sokol uniform block per stage it is visible to; the block's
+// WGSL/MSL/HLSL/SPIR-V binding numbers all use the descriptor's binding (which is
+// the WGSL @group(0) binding and the app's public bind slot). Records which Sokol
+// block slot each stage landed in and returns the available-block bit mask.
+// `member_name_storage` must remain live until sg_make_shader() consumes the desc.
+static uint32_t kg_configure_uniform_blocks_from_descs(
+    sg_shader_desc* desc,
+    kg_uniform_block_desc* descs,
+    int count,
+    char (*member_name_storage)[80],
+    int member_name_capacity
+) {
+    uint32_t available_mask = 0;
+    int next_slot = 0;
+    int name_index = 0;
+    for (int i = 0; i < count; i += 1) {
+        kg_uniform_block_desc* d = &descs[i];
+        d->vertex_block_slot = -1;
+        d->fragment_block_slot = -1;
+        for (int stage_bit = 0; stage_bit < 2; stage_bit += 1) {
+            if ((d->stage_mask & (1u << (uint32_t)stage_bit)) == 0) {
+                continue;
+            }
+            if (next_slot >= KG_MAX_UNIFORM_BLOCKS) {
+                break;
+            }
+            int slot = next_slot;
+            next_slot += 1;
+            sg_shader_uniform_block* block = &desc->uniform_blocks[slot];
+            block->stage = (stage_bit == 0) ? SG_SHADERSTAGE_VERTEX : SG_SHADERSTAGE_FRAGMENT;
+            block->size = d->size;
+            block->layout = SG_UNIFORMLAYOUT_STD140;
+            block->wgsl_group0_binding_n = (uint8_t)d->binding;
+            block->msl_buffer_n = (uint8_t)d->binding;
+            block->hlsl_register_b_n = (uint8_t)d->binding;
+            block->spirv_set0_binding_n = (uint8_t)d->binding;
+            for (int m = 0; m < d->member_count && m < SG_MAX_UNIFORMBLOCK_MEMBERS; m += 1) {
+                uint16_t array_count = 1;
+                sg_uniform_type type = kg_uniform_type_from_size(d->members[m].size, &array_count);
+                block->glsl_uniforms[m].type = type;
+                block->glsl_uniforms[m].array_count = array_count;
+                if (name_index < member_name_capacity) {
+                    char* store = member_name_storage[name_index];
+                    name_index += 1;
+                    snprintf(store, 80, "%s.%s", d->name, d->members[m].name);
+                    block->glsl_uniforms[m].glsl_name = store;
+                }
+            }
+            if (stage_bit == 0) {
+                d->vertex_block_slot = slot;
+            } else {
+                d->fragment_block_slot = slot;
+            }
+            available_mask |= 1u << (uint32_t)slot;
+        }
+    }
+    return available_mask;
+}
+
 static uint32_t kg_configure_uniform_blocks(sg_shader_desc* desc, const char* vertex_source, const char* fragment_source) {
     uint32_t available_mask = 0;
     const bool vertex_uses_scene = kg_shader_source_uses_resource(vertex_source, "scene");
@@ -2353,14 +2624,15 @@ static uint32_t kg_uniform_mask_from_shader_source(const char* vertex_source, co
     return mask;
 }
 
-static uint32_t kg_make_shader_with_entries(
+static uint32_t kg_make_shader_with_entries_reflected(
     const char* label,
     const char* vertex_source,
     const char* fragment_source,
     const char* vertex_path,
     const char* fragment_path,
     const char* vertex_entry,
-    const char* fragment_entry
+    const char* fragment_entry,
+    const char* uniform_reflection
 ) {
     sg_shader_desc desc = {0};
     kg_owned_text prepared_vertex_source = kg_prepare_shader_source_for_sokol(kg_shader_source_owned(vertex_source, vertex_path));
@@ -2375,7 +2647,6 @@ static uint32_t kg_make_shader_with_entries(
     bool has_normal_attribute =
         strstr(desc.vertex_func.source, "kira_attr_normal") != NULL ||
         strstr(desc.vertex_func.source, "normal : TEXCOORD1") != NULL;
-    uint32_t required_uniform_mask = kg_uniform_mask_from_shader_source(desc.vertex_func.source, desc.fragment_func.source);
     if (has_position_attribute) {
         desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
         desc.attrs[0].glsl_name = "kira_attr_position";
@@ -2388,15 +2659,56 @@ static uint32_t kg_make_shader_with_entries(
         desc.attrs[1].hlsl_sem_name = "TEXCOORD";
         desc.attrs[1].hlsl_sem_index = 1;
     }
-    uint32_t available_uniform_mask = kg_configure_uniform_blocks(&desc, desc.vertex_func.source, desc.fragment_func.source);
+
+    // Reflection-driven uniform blocks when the KSL macro provided a descriptor
+    // string; otherwise fall back to the legacy scene/object source-grep model.
+    // `member_name_storage` and `uniform_descs` must live until sg_make_shader().
+    kg_uniform_block_desc uniform_descs[KG_MAX_UNIFORM_BLOCKS];
+    char member_name_storage[KG_MAX_UNIFORM_BLOCKS * 2 * KG_MAX_UNIFORM_BLOCK_MEMBERS][80];
+    int uniform_desc_count = kg_parse_uniform_reflection(uniform_reflection, uniform_descs, KG_MAX_UNIFORM_BLOCKS);
+    uint32_t required_uniform_mask;
+    uint32_t available_uniform_mask;
+    if (uniform_desc_count > 0) {
+        available_uniform_mask = kg_configure_uniform_blocks_from_descs(
+            &desc, uniform_descs, uniform_desc_count,
+            member_name_storage,
+            (int)(sizeof(member_name_storage) / sizeof(member_name_storage[0])));
+        // Every declared uniform block must be bound before a draw.
+        required_uniform_mask = available_uniform_mask;
+    } else {
+        required_uniform_mask = kg_uniform_mask_from_shader_source(desc.vertex_func.source, desc.fragment_func.source);
+        available_uniform_mask = kg_configure_uniform_blocks(&desc, desc.vertex_func.source, desc.fragment_func.source);
+    }
+
     kg_configure_sampled_textures(&desc, desc.fragment_func.source);
     desc.label = label;
     uint32_t shader_id = sg_make_shader(&desc).id;
     kg_record_shader(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask, available_uniform_mask);
+    kg_shader_record* shader_record = kg_find_shader_record(shader_id);
+    if (shader_record != NULL) {
+        shader_record->uniform_desc_count = uniform_desc_count;
+        for (int i = 0; i < uniform_desc_count; i += 1) {
+            shader_record->uniform_descs[i] = uniform_descs[i];
+        }
+    }
     kg_update_lifetime_peaks();
     kg_owned_text_deinit(&prepared_vertex_source);
     kg_owned_text_deinit(&prepared_fragment_source);
     return shader_id;
+}
+
+static uint32_t kg_make_shader_with_entries(
+    const char* label,
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* vertex_path,
+    const char* fragment_path,
+    const char* vertex_entry,
+    const char* fragment_entry
+) {
+    return kg_make_shader_with_entries_reflected(
+        label, vertex_source, fragment_source, vertex_path, fragment_path,
+        vertex_entry, fragment_entry, NULL);
 }
 
 static kg_owned_bytes kg_shader_bytecode_owned(const char* path) {
@@ -2551,6 +2863,50 @@ uint32_t kg_make_ksl_shader(const char* label, const char* asset, const char* di
 #endif
 }
 
+// Create a shader from inline, precompiled KSL artifact sources (no file IO).
+// The `ksl!` compile-time macro embeds every backend's shader text in a
+// KslArtifact; this picks the variant the active Sokol backend actually needs:
+// WGSL (with the KSL `{Shader}__{stage}__main` entry names) on the WebGPU/wasm
+// backend, GLSL (whose stage functions are always `main`) everywhere else.
+// Metal is handled in the Kira Graphics layer (metalCreateShader) and never
+// reaches this path.
+uint32_t kg_make_shader_ksl_inline(
+    const char* label,
+    const char* vertex_wgsl,
+    const char* fragment_wgsl,
+    const char* vertex_glsl,
+    const char* fragment_glsl,
+    const char* vertex_entry,
+    const char* fragment_entry,
+    const char* uniform_reflection
+) {
+#if defined(SOKOL_WGPU)
+    return kg_make_shader_with_entries_reflected(
+        label,
+        vertex_wgsl ? vertex_wgsl : "",
+        fragment_wgsl ? fragment_wgsl : "",
+        "",
+        "",
+        (vertex_entry != NULL && vertex_entry[0] != '\0') ? vertex_entry : "main",
+        (fragment_entry != NULL && fragment_entry[0] != '\0') ? fragment_entry : "main",
+        uniform_reflection);
+#else
+    (void)vertex_wgsl;
+    (void)fragment_wgsl;
+    (void)vertex_entry;
+    (void)fragment_entry;
+    return kg_make_shader_with_entries_reflected(
+        label,
+        vertex_glsl ? vertex_glsl : "",
+        fragment_glsl ? fragment_glsl : "",
+        "",
+        "",
+        "main",
+        "main",
+        uniform_reflection);
+#endif
+}
+
 uint32_t kg_make_pipeline_detailed(
     uint32_t shader_id,
     const char* label,
@@ -2657,6 +3013,19 @@ uint32_t kg_make_pipeline_detailed(
     }
 
     uint32_t pipeline_id = kg_record_pipeline(draw_pipeline_id, indexed_pipeline_id, attribute_count > 0 || kg_shader_has_position_attribute(shader_id), kg_shader_required_uniform_mask(shader_id), kg_shader_available_uniform_mask(shader_id));
+    // Propagate the shader's reflection-driven uniform descriptors onto the
+    // pipeline so the draw path can size-validate uploads and map public bind
+    // slots to Sokol uniform block slots.
+    {
+        kg_pipeline_record* new_pipeline_record = kg_find_pipeline_record(pipeline_id);
+        kg_shader_record* source_shader_record = kg_find_shader_record(shader_id);
+        if (new_pipeline_record != NULL && source_shader_record != NULL) {
+            new_pipeline_record->uniform_desc_count = source_shader_record->uniform_desc_count;
+            for (int i = 0; i < source_shader_record->uniform_desc_count; i += 1) {
+                new_pipeline_record->uniform_descs[i] = source_shader_record->uniform_descs[i];
+            }
+        }
+    }
     if (pipeline_id == 0) {
         sg_pipeline draw_pipeline = { draw_pipeline_id };
         sg_pipeline indexed_pipeline = { indexed_pipeline_id };
@@ -2863,6 +3232,75 @@ uint32_t kg_run_lifetime_stress(int64_t iterations, const char* shader_directory
     return 1;
 }
 
+// Shared, lazily-managed offscreen depth-stencil image. Offscreen passes that
+// enable depth but supply no explicit depth texture (the Metal path depth-tests
+// against the implicit context depth buffer; the swapchain path uses the
+// swapchain's own depth buffer) get this managed buffer instead of being skipped.
+// It is sized to the offscreen color target and recreated when the size or sample
+// count changes. Its pixel format matches the swapchain depth format — which is
+// exactly what kg_create_pipeline_id bakes into every depth-enabled pipeline — so
+// pass and pipeline depth formats agree under Sokol validation.
+static sg_image kg_offscreen_depth_image = {0};
+static uint32_t kg_offscreen_depth_view_id = 0;
+static int kg_offscreen_depth_w = 0;
+static int kg_offscreen_depth_h = 0;
+static int kg_offscreen_depth_sample_count = 0;
+
+static uint32_t kg_ensure_offscreen_depth(int w, int h, int sample_count) {
+    if (w <= 0 || h <= 0) {
+        return 0;
+    }
+    if (sample_count <= 0) {
+        sample_count = 1;
+    }
+    if (kg_offscreen_depth_view_id != 0 &&
+        kg_offscreen_depth_w == w &&
+        kg_offscreen_depth_h == h &&
+        kg_offscreen_depth_sample_count == sample_count) {
+        return kg_offscreen_depth_view_id;
+    }
+    if (kg_offscreen_depth_view_id != 0) {
+        sg_view old_view = { kg_offscreen_depth_view_id };
+        sg_destroy_view(old_view);
+        kg_offscreen_depth_view_id = 0;
+    }
+    if (kg_offscreen_depth_image.id != 0) {
+        sg_destroy_image(kg_offscreen_depth_image);
+        kg_offscreen_depth_image = (sg_image){0};
+    }
+    sg_image_desc desc = {0};
+    desc.type = SG_IMAGETYPE_2D;
+    desc.usage = kg_image_usage(4);
+    desc.width = w;
+    desc.height = h;
+    desc.num_slices = 1;
+    desc.num_mipmaps = 1;
+    desc.pixel_format = _sglue_to_sgpixelformat(sapp_depth_format());
+    desc.sample_count = sample_count;
+    desc.label = "kira-offscreen-managed-depth";
+    sg_image image = sg_make_image(&desc);
+    if (image.id == 0) {
+        return 0;
+    }
+    kg_update_lifetime_peaks();
+    sg_view_desc view_desc = {0};
+    view_desc.depth_stencil_attachment.image = image;
+    view_desc.label = "kira-offscreen-managed-depth-view";
+    uint32_t view_id = sg_make_view(&view_desc).id;
+    if (view_id == 0) {
+        sg_destroy_image(image);
+        kg_update_lifetime_peaks();
+        return 0;
+    }
+    kg_offscreen_depth_image = image;
+    kg_offscreen_depth_view_id = view_id;
+    kg_offscreen_depth_w = w;
+    kg_offscreen_depth_h = h;
+    kg_offscreen_depth_sample_count = sample_count;
+    kg_update_lifetime_peaks();
+    return view_id;
+}
+
 uint32_t kg_begin_render_pass(
     const char* label,
     int64_t color_target_kind,
@@ -2979,16 +3417,25 @@ uint32_t kg_begin_render_pass(
             pass.attachments.resolves[0].id = resolve_record->color_view_id;
         }
         if (has_depth_attachment != 0) {
+            uint32_t depth_view = 0;
             if (depth_texture_id == 0) {
-                printf("Kira Graphics: offscreen render pass has depth enabled, but no depth texture was provided\n");
-                return 0;
+                // No explicit depth texture: provide a managed offscreen depth
+                // buffer sized to the color target (parity with the Metal context
+                // depth buffer and the swapchain's implicit depth attachment).
+                depth_view = kg_ensure_offscreen_depth((int)color_record->width, (int)color_record->height, (int)color_record->sample_count);
+                if (depth_view == 0) {
+                    printf("Kira Graphics: offscreen render pass could not provision a managed depth buffer\n");
+                    return 0;
+                }
+            } else {
+                kg_texture_record* depth_record = kg_find_texture(depth_texture_id);
+                if (depth_record == NULL || depth_record->depth_view_id == 0) {
+                    printf("Kira Graphics: offscreen render pass depth texture %u is not available as a depth attachment\n", depth_texture_id);
+                    return 0;
+                }
+                depth_view = depth_record->depth_view_id;
             }
-            kg_texture_record* depth_record = kg_find_texture(depth_texture_id);
-            if (depth_record == NULL || depth_record->depth_view_id == 0) {
-                printf("Kira Graphics: offscreen render pass depth texture %u is not available as a depth attachment\n", depth_texture_id);
-                return 0;
-            }
-            pass.attachments.depth_stencil.id = depth_record->depth_view_id;
+            pass.attachments.depth_stencil.id = depth_view;
             pass.action.depth.load_action = kg_load_action(depth_load_action);
             pass.action.depth.store_action = kg_store_action(depth_store_action);
             pass.action.depth.clear_value = (float)clear_depth;
@@ -3145,10 +3592,23 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
                     (long long)uniform->expected_float_count);
                 return 0;
             }
-            const size_t expected_slot_size =
-                (group->uniform_slots[entry_index] == 0) ? 96u :
-                (group->uniform_slots[entry_index] == 1) ? 80u :
-                byte_size;
+            size_t expected_slot_size;
+            if (pipeline_record->uniform_desc_count > 0) {
+                // Reflection-driven: the expected size is the descriptor's std140
+                // block size for the uniform whose binding matches this bind slot.
+                expected_slot_size = byte_size;
+                for (int desc_index = 0; desc_index < pipeline_record->uniform_desc_count; desc_index += 1) {
+                    if (pipeline_record->uniform_descs[desc_index].binding == group->uniform_slots[entry_index]) {
+                        expected_slot_size = pipeline_record->uniform_descs[desc_index].size;
+                        break;
+                    }
+                }
+            } else {
+                expected_slot_size =
+                    (group->uniform_slots[entry_index] == 0) ? 96u :
+                    (group->uniform_slots[entry_index] == 1) ? 80u :
+                    byte_size;
+            }
             if (byte_size != expected_slot_size) {
                 printf("Kira Graphics: uniform buffer '%s' upload size %zu bytes does not match expected size %zu bytes for uniform slot %d\n",
                     uniform->label ? uniform->label : "",

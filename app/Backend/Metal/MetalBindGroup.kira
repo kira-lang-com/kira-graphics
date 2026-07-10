@@ -14,7 +14,9 @@ function metalBindEntryKindSampler() -> U64 { return 3 }
 function metalCreateBindGroup(ctx: RawPtr) -> Int {
     let block = metalMemAlloc(8 + metalBindGroupCapacity() * 24)
     metalMemWriteU64(block, 0, 0)
-    return metalRegister(ctx, block)
+    // A bind group is a raw heap block, not an Objective-C object: register it as a
+    // raw block so teardown frees it with metalMemFree instead of `release`.
+    return metalRegisterRawBlock(ctx, block)
 }
 
 @Native

@@ -20,6 +20,9 @@ function metalCreateShader(ctx: RawPtr, source: borrow String) -> Int {
     let errSlot = metalMemAlloc(8)
     metalMemWriteU64(errSlot, 0, 0)
     let library = metalMsgSendPPP(device, metalSel("newLibraryWithSource:options:error:"), nsstr, opts, errSlot)
+    // MTLCompileOptions is a +1-owned alloc/init temporary; the compiled library keeps
+    // no reference to it, so release it here rather than leaking one per shader.
+    metalMsgSendVoid(opts, metalSel("release"))
     let id = metalRegister(ctx, library)
     metalMemFree(errSlot)
     return id
@@ -145,6 +148,12 @@ function metalCreateRenderPipelineWithEntries(ctx: RawPtr, shaderId: Int, colorF
     let errSlot = metalMemAlloc(8)
     metalMemWriteU64(errSlot, 0, 0)
     let pipeline = metalMsgSendPP(device, metalSel("newRenderPipelineStateWithDescriptor:error:"), desc, errSlot)
+    // vfn/ffn (newFunctionWithName:) and desc (alloc/init) are +1-owned transients: the
+    // compiled pipeline state retains what it needs, so release them here to avoid
+    // leaking one MTLFunction pair and one MTLRenderPipelineDescriptor per pipeline.
+    metalMsgSendVoid(vfn, metalSel("release"))
+    metalMsgSendVoid(ffn, metalSel("release"))
+    metalMsgSendVoid(desc, metalSel("release"))
     let id = metalRegister(ctx, pipeline)
     metalMemFree(errSlot)
     return id

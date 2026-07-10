@@ -81,6 +81,9 @@ function metalCreateSampler(ctx: RawPtr, minFilter: U64, magFilter: U64, address
     metalMsgSendVoidU(desc, metalSel("setSAddressMode:"), addressMode)
     metalMsgSendVoidU(desc, metalSel("setTAddressMode:"), addressMode)
     let sampler = metalMsgSendP(device, metalSel("newSamplerStateWithDescriptor:"), desc)
+    // The descriptor is a +1-owned alloc/init temporary; the sampler state does not
+    // retain it, so release it here rather than leaking one per sampler.
+    metalMsgSendVoid(desc, metalSel("release"))
     return metalRegister(ctx, sampler)
 }
 

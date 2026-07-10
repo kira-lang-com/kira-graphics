@@ -27,6 +27,25 @@ function defaultGraphicsBackend() -> GraphicsBackend {
     return GraphicsBackend.Sokol
 }
 
+// Platform-aware default backend for hosts that do not pick one explicitly:
+// Metal owns Apple hosts (the dynamic-FFI platform probe reports the Apple
+// platform code for macOS; iOS maps the same way), everything else defaults
+// to Sokol — the portable backend. This includes Web/WASM honestly: the
+// browser sandbox has no host-OS probe, so `hostGraphicsPlatform()` returns
+// `Unknown` there, and Unknown -> Sokol is the correct choice because Sokol
+// (WebGPU) is the only backend that exists on wasm32-emscripten.
+@Native
+function graphicsDefaultBackend() -> GraphicsBackend {
+    let platform = hostGraphicsPlatform()
+    if platform == GraphicsPlatform.MacOS {
+        return GraphicsBackend.Metal
+    }
+    if platform == GraphicsPlatform.IOS {
+        return GraphicsBackend.Metal
+    }
+    return GraphicsBackend.Sokol
+}
+
 @Native
 function hostGraphicsPlatform() -> GraphicsPlatform {
     return dynamicFfiHostPlatform()

@@ -21,3 +21,14 @@ system_libs = ["objc"]
 [target.aarch64-ios-none]
 frameworks = ["Foundation", "QuartzCore", "Metal", "UIKit"]
 system_libs = ["objc"]
+
+# Browser target: the Metal backend is unavailable in the browser and is guarded at
+# runtime (validateMetalBackend rejects non-Apple platforms). Empty artifact => nothing
+# is linked, so eager resolution for any wasm app build succeeds instead of failing KTC003.
+# The Metal backend's Objective-C runtime externs (objc_getClass, sel_registerName,
+# objc_msgSend, ...) are still compiled into every KG app but have no objc runtime on the
+# web; -sERROR_ON_UNDEFINED_SYMBOLS=0 turns those never-called (runtime-guarded) references
+# into abort-on-call import stubs so the wasm link succeeds.
+[target.wasm32-emscripten-unknown]
+dynamic_lib = ""
+linker_flags = ["-sERROR_ON_UNDEFINED_SYMBOLS=0"]

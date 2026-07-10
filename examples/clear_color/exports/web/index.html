@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>clear_color</title></head>
+<body data-kira-runner="web" data-kira-surface="webgpu" data-kira-artifact="main.wasm">
+<h1>clear_color</h1>
+<pre id="kira-stdout" aria-label="Kira application output"></pre>
+<script src="./kira-browser-ffi.generated.js"></script>
+<script>
+(() => {
+  const sink = document.getElementById("kira-stdout");
+  const emit = (line) => { if (sink) sink.textContent += line + "\n"; console.log(line); };
+  const appOut = (text) => { if (sink) sink.textContent += text + "\n"; console.log(text); };
+  globalThis.KiraWasmApp = { moduleLoaded: false, runtimeStarted: false, mainReturned: false, stdout: [] };
+  globalThis.Module = {
+    print: (text) => { globalThis.KiraWasmApp.stdout.push(text); appOut(text); },
+    printErr: (text) => { console.error(text); },
+    onRuntimeInitialized: () => {
+      globalThis.KiraWasmApp.moduleLoaded = true;
+      globalThis.KiraWasmApp.runtimeStarted = true;
+      emit("kira.wasm.module_loaded");
+      emit("kira.runtime.started");
+    },
+    postRun: [() => {
+      globalThis.KiraWasmApp.mainReturned = true;
+      emit("kira.app.main_returned");
+    }],
+  };
+})();
+</script>
+<script src="./main.js"></script>
+</body></html>
