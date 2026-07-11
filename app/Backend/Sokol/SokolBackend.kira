@@ -4,6 +4,25 @@ function kgShaderSource(inlineSource: CString, path: CString): CString;
 @FFI.Extern { library: sokol; symbol: kira_live_emit_log_line; abi: c; }
 function kiraLiveEmitLogLine(line: CString): Void;
 
+// The runner's first-frame hook (kira_live_install_first_frame_hook) fires the
+// `live.frame.presented` health marker the live supervisor blocks on. sokol
+// calls this from its frame callback after sg_commit; the Metal backend calls
+// it after its first real on-screen drawable present so a macOS live session
+// reaches `live.session.ready` instead of timing out (KCL038). Standalone
+// `kira run` installs no hook, so this is a no-op there.
+@FFI.Extern { library: sokol; symbol: kira_live_emit_first_frame; abi: c; }
+function kiraLiveEmitFirstFrame(): Void;
+
+// Emit the once-per-session "a real Kira frame was submitted and presented"
+// live markers. Backend-agnostic: called by both the sokol and Metal on-screen
+// present paths after a genuine frame submission, never before real draw work.
+@Native
+function kiraGraphicsLiveFramePresented(): Void {
+    kiraLiveEmitLogLine("live.kira_graphics.frame.submitted")
+    kiraLiveEmitFirstFrame()
+    return
+}
+
 @FFI.Extern { library: sokol; symbol: kg_sapp_log; abi: c; }
 function kgSappLog(tag: CString, level: U32, itemId: U32, message: CString, lineNr: U32, filename: CString, userData: RawPtr): Void;
 
@@ -135,6 +154,9 @@ function kgUiDrawSquircleSurface(x: Float, y: Float, width: Float, height: Float
 
 @FFI.Extern { library: sokol; symbol: kg_ui_draw_glow; abi: c; }
 function kgUiDrawGlow(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, radius: Float, intensity: Float): Void;
+
+@FFI.Extern { library: sokol; symbol: kg_ui_draw_texture; abi: c; }
+function kgUiDrawTexture(textureId: U32, x: Float, y: Float, width: Float, height: Float, opacity: Float, radius: Float): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_ui_draw_text; abi: c; }
 function kgUiDrawText(text: CString, x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, size: Float): Void;

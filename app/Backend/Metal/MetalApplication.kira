@@ -117,6 +117,10 @@ function metalEnvInts(value: RawPtr) -> [Int] {
 
 @Native
 function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
+    // Become a foreground GUI app BEFORE creating the Metal device. The device
+    // (MTLCreateSystemDefaultDevice) and the window both need a WindowServer
+    // connection; establishing the app up front keeps the ordering explicit.
+    metalActivateApp()
     // One autorelease pool around the whole run; per-frame pools drain inside the
     // loop. The Metal shader compiler and Foundation helpers create many autoreleased
     // temporaries, and draining them at well-defined points keeps resource creation
@@ -450,6 +454,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     }
     var onFrameIndex = 0
     var running = true
+    var liveFramePresented = false
     while running {
         let framePool = metalAutoreleasePoolPush()
         var oci = 0
@@ -500,6 +505,15 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         var frame = frameGraphics.frame()
         onFrame(frame)
         graphicsSubmitFrame(frame)
+        // The frame's passes ended+committed inside graphicsSubmitFrame ->
+        // metalContextEndAndCommit, which presented a real on-screen drawable.
+        // Signal the live supervisor once (the sokol backend does the same from
+        // its frame callback); without this a macOS live session never sees
+        // `live.frame.presented` and fails with KCL038.
+        if !liveFramePresented {
+            liveFramePresented = true
+            kiraGraphicsLiveFramePresented()
+        }
         metalSpinRunLoop(0.002)
         if frame.shouldQuit {
             running = false

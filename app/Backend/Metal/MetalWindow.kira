@@ -10,6 +10,21 @@ function metalWindowStyleMask() -> U64 { return 15 }
 function metalWindowBackingBuffered() -> U64 { return 2 }
 function metalActivationPolicyRegular() -> U64 { return 0 }
 
+// Transform the process into a foreground GUI app (NSApplication, Regular
+// activation policy, finishLaunching) WITHOUT creating a window yet. Hoisted
+// ahead of Metal device creation: a spawned live-runner process that has not
+// yet become a foreground app can hang in MTLCreateSystemDefaultDevice (its
+// GPU/WindowServer XPC never gets serviced under App Nap / background status).
+// Idempotent — sharedApplication is a singleton.
+@Native
+function metalActivateApp(): Void {
+    let app = metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication"))
+    metalMsgSendVoidU(app, metalSel("setActivationPolicy:"), metalActivationPolicyRegular())
+    metalMsgSendVoidB(app, metalSel("activateIgnoringOtherApps:"), true)
+    metalMsgSendVoid(app, metalSel("finishLaunching"))
+    return
+}
+
 // Create the application + window and return the content view to render into.
 @Native
 function metalCreateWindow(width: Int, height: Int, title: borrow String) -> RawPtr {
