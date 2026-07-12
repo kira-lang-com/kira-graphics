@@ -230,6 +230,13 @@ static uint32_t kg_next_uniform_id = 1;
 static uint32_t kg_next_bind_group_id = 1;
 static int kg_current_pass_width = 0;
 static int kg_current_pass_height = 0;
+// Physical pixels per logical point for the immediate-2D UI pipeline in the
+// current pass. The swapchain pass on a Retina (high_dpi) framebuffer sets this
+// to sapp_dpi_scale() so kg_ui_* draws position content in logical POINTS while
+// the framebuffer stays at native pixel resolution — vector edges and glyph
+// coverage rasterize per physical pixel, so text/UI are crisp instead of
+// upscaled. Offscreen passes render in their own pixel space (scale 1.0).
+static float kg_ui_logical_scale = 1.0f;
 static bool kg_current_pass_active = false;
 static bool kg_live_first_frame_emitted = false;
 static bool kg_live_frame_submitted_emitted = false;
@@ -586,18 +593,55 @@ typedef struct {
     float a;
 } kg_ui_vertex;
 
+// UI coordinates arrive in logical POINTS; the framebuffer is kg_current_pass_width
+// PHYSICAL pixels wide = (logical width) * kg_ui_logical_scale. Normalize against
+// the logical width so a point-space quad maps to the full framebuffer and is
+// rendered at native pixel resolution (scale 1.0 => classic pixel-space behavior).
+static float kg_ui_logical_width(void) {
+    return (float)kg_current_pass_width / kg_ui_logical_scale;
+}
+
+static float kg_ui_logical_height(void) {
+    return (float)kg_current_pass_height / kg_ui_logical_scale;
+}
+
 static float kg_ui_ndc_x(double x) {
     if (kg_current_pass_width <= 0) {
         return 0.0f;
     }
-    return (x / (float)kg_current_pass_width) * 2.0f - 1.0f;
+    return ((float)x / kg_ui_logical_width()) * 2.0f - 1.0f;
 }
 
 static float kg_ui_ndc_y(double y) {
     if (kg_current_pass_height <= 0) {
         return 0.0f;
     }
-    return 1.0f - (y / (float)kg_current_pass_height) * 2.0f;
+    return 1.0f - ((float)y / kg_ui_logical_height()) * 2.0f;
+}
+
+// One shared point->pixel snapping rule for the seam where logical points become
+// physical pixels. A logical coordinate becomes a physical pixel edge via
+// round(v * scale); dividing back by scale yields a logical coordinate that lands
+// exactly on the physical grid. Two rects sharing a logical edge therefore always
+// resolve to the SAME physical pixel column/row, and solid quads snap the SAME way
+// the glyph/icon coverage path already does (round(x*scale) in kg_glyph_emit_quad /
+// kg_ui_blit_coverage) — eliminating the 1px seams/steps and sub-pixel widget
+// overflow that arise when adjacent elements snap under different rules. Uses the
+// exact scale kg_ui_ndc_* divides by, so snapping is consistent with NDC mapping.
+// At scale 1.0 this reduces to round-to-nearest-integer-pixel (no fractional seams).
+static double kg_ui_snap_point(double v) {
+    const double s = (double)kg_ui_logical_scale;
+    if (s <= 0.0) {
+        return v;
+    }
+    return round(v * s) / s;
+}
+
+// Logical-point <-> physical-pixel backing scale for the current UI pass. Exposed
+// to the text native lib (kira_text.c) so glyphs rasterize at point-size * scale
+// and stay crisp on Retina.
+double kg_ui_dpi_scale(void) {
+    return (double)kg_ui_logical_scale;
 }
 
 static void kg_ui_draw_vertices(const kg_ui_vertex* vertices, int count);
@@ -844,6 +888,27 @@ static void kg_ui_draw_path_surface(
         return;
     }
 
+    // Snap each rect edge (left/top/right/bottom) independently to the physical
+    // pixel grid before building geometry. Snapping the far edges (x+w, y+h)
+    // rather than the width/height preserves shared seams: a widget whose logical
+    // right edge equals its neighbor's logical left edge resolves to the same
+    // physical pixel column. Downstream (border ring + inner fill, rounded/squircle
+    // corners derived from these bounds) inherits the snapped bounds, so a button
+    // can no longer overflow the strip it sits on by a sub-pixel rounding step.
+    {
+        const double sx = kg_ui_snap_point(x);
+        const double sy = kg_ui_snap_point(y);
+        const double sr = kg_ui_snap_point(x + w);
+        const double sb = kg_ui_snap_point(y + h);
+        x = sx;
+        y = sy;
+        w = sr - sx;
+        h = sb - sy;
+        if (w <= 0.0 || h <= 0.0) {
+            return;
+        }
+    }
+
     if (a > 0.0 || (border_width > 0.0 && border_a > 0.0)) {
         kg_live_note_visible_ui_content();
     }
@@ -1068,6 +1133,744 @@ static void kg_ui_ensure_pipeline(void) {
     }
 }
 
+// Textured UI quads (TextureView compositing): a dedicated textured pipeline the
+// immediate-2D path uses to blit a registered kg texture (e.g. an engine's
+// offscreen viewport render target) into the UI pass. Separate from the solid
+// batch because it needs a texture+sampler bind; draws flush the solid batch
+// first so z-order against surrounding chrome is preserved.
+typedef struct {
+    float x, y;
+    float u, v;
+    float a;
+    // Rounded-rect mask params, in PHYSICAL pixels, constant across the 6 verts.
+    // hx/hy = half-extent of the quad; rad = corner radius. The fragment derives
+    // its local pixel position from uv and applies an analytic rounded-rect
+    // coverage mask so the composited texture (viewport) gets rounded corners.
+    // rad == 0 => full coverage (unchanged square quad).
+    float hx, hy;
+    float rad;
+} kg_ui_tex_vertex;
+
+static sg_shader kg_ui_tex_shader = {0};
+static sg_pipeline kg_ui_tex_pipeline = {0};
+static sg_buffer kg_ui_tex_vertex_buffer = {0};
+static sg_sampler kg_ui_tex_sampler = {0};
+
+static void kg_ui_tex_ensure_pipeline(void) {
+    if (kg_ui_tex_pipeline.id != 0 && kg_ui_tex_vertex_buffer.id != 0 && kg_ui_tex_sampler.id != 0) {
+        return;
+    }
+
+    if (kg_ui_tex_shader.id == 0) {
+        sg_shader_desc shader_desc = {0};
+#if defined(SOKOL_METAL)
+        shader_desc.vertex_func.source =
+            "#include <metal_stdlib>\n"
+            "using namespace metal;\n"
+            "struct vs_in {\n"
+            "  float2 position [[attribute(0)]];\n"
+            "  float2 uv [[attribute(1)]];\n"
+            "  float alpha [[attribute(2)]];\n"
+            "  float2 half_ext [[attribute(3)]];\n"
+            "  float radius [[attribute(4)]];\n"
+            "};\n"
+            "struct vs_out {\n"
+            "  float4 position [[position]];\n"
+            "  float2 uv;\n"
+            "  float alpha;\n"
+            "  float2 half_ext;\n"
+            "  float radius;\n"
+            "};\n"
+            "vertex vs_out vs_main(vs_in in [[stage_in]]) {\n"
+            "  vs_out out;\n"
+            "  out.position = float4(in.position, 0.0, 1.0);\n"
+            "  out.uv = in.uv;\n"
+            "  out.alpha = in.alpha;\n"
+            "  out.half_ext = in.half_ext;\n"
+            "  out.radius = in.radius;\n"
+            "  return out;\n"
+            "}\n";
+        shader_desc.vertex_func.entry = "vs_main";
+        shader_desc.fragment_func.source =
+            "#include <metal_stdlib>\n"
+            "using namespace metal;\n"
+            "struct fs_in {\n"
+            "  float4 position [[position]];\n"
+            "  float2 uv;\n"
+            "  float alpha;\n"
+            "  float2 half_ext;\n"
+            "  float radius;\n"
+            "};\n"
+            // Analytic rounded-rect coverage in physical pixels. p = local pixel
+            // offset from the quad centre (derived from uv); d = signed distance to
+            // the rounded-rect edge; cov = clamp(0.5 - d) is a 1px-wide analytic AA
+            // that keeps straight edges flush (d<=-0.5 => cov=1) and only rounds the
+            // corners. radius==0 => cov==1 everywhere (unchanged square quad).
+            "fragment float4 fs_main(fs_in in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) {\n"
+            "  float4 c = tex.sample(smp, in.uv);\n"
+            "  float2 p = (in.uv - float2(0.5)) * (in.half_ext * 2.0);\n"
+            "  float2 q = abs(p) - in.half_ext + float2(in.radius);\n"
+            "  float d = min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0))) - in.radius;\n"
+            "  float cov = clamp(0.5 - d, 0.0, 1.0);\n"
+            "  return float4(c.rgb, c.a * in.alpha * cov);\n"
+            "}\n";
+        shader_desc.fragment_func.entry = "fs_main";
+#elif defined(SOKOL_WGPU)
+        // WGSL: texture/sampler live in @group(1) per sokol-gfx's WGPU binding
+        // model (uniforms own @group(0)); bindings match wgsl_group1_binding_n
+        // configured below.
+        shader_desc.vertex_func.source =
+            "struct VsIn {\n"
+            "  @location(0) position: vec2<f32>,\n"
+            "  @location(1) uv: vec2<f32>,\n"
+            "  @location(2) alpha: f32,\n"
+            "  @location(3) half_ext: vec2<f32>,\n"
+            "  @location(4) radius: f32,\n"
+            "};\n"
+            "struct VsOut {\n"
+            "  @builtin(position) clip_position: vec4<f32>,\n"
+            "  @location(0) uv: vec2<f32>,\n"
+            "  @location(1) alpha: f32,\n"
+            "  @location(2) half_ext: vec2<f32>,\n"
+            "  @location(3) radius: f32,\n"
+            "};\n"
+            "@vertex\n"
+            "fn vs_main(in: VsIn) -> VsOut {\n"
+            "  var out: VsOut;\n"
+            "  out.clip_position = vec4<f32>(in.position, 0.0, 1.0);\n"
+            "  out.uv = in.uv;\n"
+            "  out.alpha = in.alpha;\n"
+            "  out.half_ext = in.half_ext;\n"
+            "  out.radius = in.radius;\n"
+            "  return out;\n"
+            "}\n";
+        shader_desc.vertex_func.entry = "vs_main";
+        // Analytic rounded-rect coverage in physical pixels — see the Metal variant
+        // for the derivation. radius==0 => cov==1 (unchanged square quad).
+        shader_desc.fragment_func.source =
+            "@group(1) @binding(0) var kira_ui_tex: texture_2d<f32>;\n"
+            "@group(1) @binding(1) var kira_ui_smp: sampler;\n"
+            "@fragment\n"
+            "fn fs_main(@location(0) uv: vec2<f32>, @location(1) alpha: f32, @location(2) half_ext: vec2<f32>, @location(3) radius: f32) -> @location(0) vec4<f32> {\n"
+            "  let c = textureSample(kira_ui_tex, kira_ui_smp, uv);\n"
+            "  let p = (uv - vec2<f32>(0.5)) * (half_ext * 2.0);\n"
+            "  let q = abs(p) - half_ext + vec2<f32>(radius);\n"
+            "  let d = min(max(q.x, q.y), 0.0) + length(max(q, vec2<f32>(0.0))) - radius;\n"
+            "  let cov = clamp(0.5 - d, 0.0, 1.0);\n"
+            "  return vec4<f32>(c.rgb, c.a * alpha * cov);\n"
+            "}\n";
+        shader_desc.fragment_func.entry = "fs_main";
+#else
+        shader_desc.vertex_func.source =
+            "#version 330 core\n"
+            "layout(location=0) in vec2 kira_attr_position;\n"
+            "layout(location=1) in vec2 kira_attr_uv;\n"
+            "layout(location=2) in float kira_attr_alpha;\n"
+            "layout(location=3) in vec2 kira_attr_half;\n"
+            "layout(location=4) in float kira_attr_radius;\n"
+            "out vec2 v_uv;\n"
+            "out float v_alpha;\n"
+            "out vec2 v_half;\n"
+            "out float v_radius;\n"
+            "void main() {\n"
+            "  gl_Position = vec4(kira_attr_position, 0.0, 1.0);\n"
+            "  v_uv = kira_attr_uv;\n"
+            "  v_alpha = kira_attr_alpha;\n"
+            "  v_half = kira_attr_half;\n"
+            "  v_radius = kira_attr_radius;\n"
+            "}\n";
+        // Analytic rounded-rect coverage in physical pixels — see the Metal variant
+        // for the derivation. radius==0 => cov==1 (unchanged square quad).
+        shader_desc.fragment_func.source =
+            "#version 330 core\n"
+            "uniform sampler2D kira_ui_tex_smp;\n"
+            "in vec2 v_uv;\n"
+            "in float v_alpha;\n"
+            "in vec2 v_half;\n"
+            "in float v_radius;\n"
+            "out vec4 frag_color;\n"
+            "void main() {\n"
+            "  vec4 c = texture(kira_ui_tex_smp, v_uv);\n"
+            "  vec2 p = (v_uv - vec2(0.5)) * (v_half * 2.0);\n"
+            "  vec2 q = abs(p) - v_half + vec2(v_radius);\n"
+            "  float d = min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - v_radius;\n"
+            "  float cov = clamp(0.5 - d, 0.0, 1.0);\n"
+            "  frag_color = vec4(c.rgb, c.a * v_alpha * cov);\n"
+            "}\n";
+#endif
+        shader_desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        shader_desc.attrs[0].glsl_name = "kira_attr_position";
+        shader_desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        shader_desc.attrs[1].glsl_name = "kira_attr_uv";
+        shader_desc.attrs[2].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        shader_desc.attrs[2].glsl_name = "kira_attr_alpha";
+        shader_desc.attrs[3].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        shader_desc.attrs[3].glsl_name = "kira_attr_half";
+        shader_desc.attrs[4].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        shader_desc.attrs[4].glsl_name = "kira_attr_radius";
+        shader_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+        shader_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
+        shader_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+        shader_desc.views[0].texture.hlsl_register_t_n = 0;
+        shader_desc.views[0].texture.msl_texture_n = 0;
+        shader_desc.views[0].texture.wgsl_group1_binding_n = 0;
+        shader_desc.views[0].texture.spirv_set1_binding_n = 0;
+        shader_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
+        shader_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
+        shader_desc.samplers[0].hlsl_register_s_n = 0;
+        shader_desc.samplers[0].msl_sampler_n = 0;
+        shader_desc.samplers[0].wgsl_group1_binding_n = 1;
+        shader_desc.samplers[0].spirv_set1_binding_n = 2;
+        shader_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
+        shader_desc.texture_sampler_pairs[0].view_slot = 0;
+        shader_desc.texture_sampler_pairs[0].sampler_slot = 0;
+        shader_desc.texture_sampler_pairs[0].glsl_name = "kira_ui_tex_smp";
+        shader_desc.label = "kira-graphics-immediate-2d-texture-shader";
+        kg_ui_tex_shader = sg_make_shader(&shader_desc);
+        kg_update_lifetime_peaks();
+    }
+
+    if (kg_ui_tex_pipeline.id == 0) {
+        // sapp_color_format()/sapp_sample_count(), not sglue_swapchain(): the
+        // latter re-acquires the WebGPU swapchain view and asserts (see the
+        // solid-color pipeline above).
+        const sg_pixel_format swapchain_color_format = _sglue_to_sgpixelformat(sapp_color_format());
+        const int swapchain_sample_count = sapp_sample_count();
+        sg_pipeline_desc pipeline_desc = {0};
+        pipeline_desc.shader = kg_ui_tex_shader;
+        pipeline_desc.layout.buffers[0].stride = sizeof(kg_ui_tex_vertex);
+        pipeline_desc.layout.attrs[0].buffer_index = 0;
+        pipeline_desc.layout.attrs[0].offset = offsetof(kg_ui_tex_vertex, x);
+        pipeline_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
+        pipeline_desc.layout.attrs[1].buffer_index = 0;
+        pipeline_desc.layout.attrs[1].offset = offsetof(kg_ui_tex_vertex, u);
+        pipeline_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
+        pipeline_desc.layout.attrs[2].buffer_index = 0;
+        pipeline_desc.layout.attrs[2].offset = offsetof(kg_ui_tex_vertex, a);
+        pipeline_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT;
+        pipeline_desc.layout.attrs[3].buffer_index = 0;
+        pipeline_desc.layout.attrs[3].offset = offsetof(kg_ui_tex_vertex, hx);
+        pipeline_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT2;
+        pipeline_desc.layout.attrs[4].buffer_index = 0;
+        pipeline_desc.layout.attrs[4].offset = offsetof(kg_ui_tex_vertex, rad);
+        pipeline_desc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT;
+        pipeline_desc.colors[0].pixel_format = swapchain_color_format;
+        pipeline_desc.colors[0].blend.enabled = true;
+        pipeline_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+        pipeline_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pipeline_desc.colors[0].blend.op_rgb = SG_BLENDOP_ADD;
+        pipeline_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+        pipeline_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pipeline_desc.colors[0].blend.op_alpha = SG_BLENDOP_ADD;
+        pipeline_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+        pipeline_desc.cull_mode = SG_CULLMODE_NONE;
+        pipeline_desc.face_winding = SG_FACEWINDING_CCW;
+        pipeline_desc.sample_count = swapchain_sample_count;
+        pipeline_desc.label = "kira-graphics-immediate-2d-texture-pipeline";
+        kg_ui_tex_pipeline = sg_make_pipeline(&pipeline_desc);
+        kg_update_lifetime_peaks();
+    }
+
+    if (kg_ui_tex_vertex_buffer.id == 0) {
+        sg_buffer_desc buffer_desc = {0};
+        buffer_desc.usage.vertex_buffer = true;
+        buffer_desc.usage.stream_update = true;
+        buffer_desc.size = sizeof(kg_ui_tex_vertex) * 6 * 64;
+        buffer_desc.label = "kira-graphics-immediate-2d-texture-vertices";
+        kg_ui_tex_vertex_buffer = sg_make_buffer(&buffer_desc);
+        kg_update_lifetime_peaks();
+    }
+
+    if (kg_ui_tex_sampler.id == 0) {
+        sg_sampler_desc sampler_desc = {0};
+        sampler_desc.min_filter = SG_FILTER_LINEAR;
+        sampler_desc.mag_filter = SG_FILTER_LINEAR;
+        sampler_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+        sampler_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+        sampler_desc.label = "kira-graphics-immediate-2d-texture-sampler";
+        kg_ui_tex_sampler = sg_make_sampler(&sampler_desc);
+        kg_update_lifetime_peaks();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Glyph atlas — textured coverage for text + icons on the immediate-2D path.
+//
+// The prior text/icon path (kg_ui_blit_coverage) turned every covered pixel run
+// of a FreeType/SVG coverage bitmap into a solid-color quad EVERY FRAME. At 2x
+// retina that is ~4x the vertex traffic of 1x and re-does the whole per-pixel
+// decomposition each frame — the measured cap (~19 fps idle at 2x on the editor).
+//
+// Instead: pack each glyph's A8 coverage bitmap into a single R8 atlas texture
+// ONCE (keyed by an opaque int64 the caller derives from face/glyph/px or icon
+// hash/px), then draw the glyph as ONE textured quad that samples the atlas and
+// multiplies by a per-vertex tint. Steady state = zero rasterization re-pack,
+// zero texture uploads, 6 vertices per glyph regardless of pixel size.
+//
+// Ordering vs the solid batch is preserved by cross-flushing: emitting a glyph
+// quad flushes the pending solid batch first, and emitting a solid quad flushes
+// the pending glyph batch first, so at any clip/pass boundary at most one batch
+// is non-empty and painter order is exact.
+//
+// Upload timing honors sokol's "one sg_update_image per image per frame"
+// (frame == sg_commit cycle): the whole CPU atlas is uploaded at most once per
+// commit, lazily at the first glyph flush that has newly-packed content. Glyphs
+// packed AFTER that upload window closes this frame fall back to the per-pixel
+// blit for one frame and become resident on the next. Atlas-full falls back for
+// the overflow glyph and schedules a full reset at the next frame boundary (no
+// mid-frame corruption of already-queued UVs).
+#define KG_ATLAS_DIM 2048
+#define KG_ATLAS_PAD 1
+#define KG_GLYPH_SLOT_CAP 8192            // power of two; open-addressing table
+#define KG_GLYPH_BATCH_CAPACITY 12288     // CPU vertices flushed when full (2048 glyphs)
+#define KG_GLYPH_VBUF_VERTS (6 * 24576)   // GPU ring capacity per frame
+
+typedef struct {
+    float x, y;
+    float u, v;
+    float r, g, b, a;
+} kg_glyph_vertex;
+
+typedef struct {
+    int64_t  key;     // 0 == empty slot
+    uint16_t gx, gy;  // atlas origin (texels)
+    uint16_t gw, gh;  // glyph size (texels)
+    uint32_t seq;     // pack sequence number (residency vs uploaded_seq)
+} kg_glyph_slot;
+
+static uint8_t         g_atlas_pixels[KG_ATLAS_DIM * KG_ATLAS_DIM]; // A8 coverage, BSS
+static kg_glyph_slot   g_glyph_slots[KG_GLYPH_SLOT_CAP];
+static int             g_glyph_slot_count = 0;
+static int             g_atlas_shelf_x = 0;   // current shelf cursor (texels)
+static int             g_atlas_shelf_y = 0;   // current shelf top (texels)
+static int             g_atlas_shelf_h = 0;   // current shelf height (texels)
+static uint32_t        g_atlas_seq = 0;          // last packed sequence
+static uint32_t        g_atlas_uploaded_seq = 0; // sequence covered by GPU image
+static bool            g_atlas_uploaded_this_frame = false;
+static bool            g_atlas_reset_pending = false;
+
+static sg_shader   g_glyph_shader = {0};
+static sg_pipeline g_glyph_pipeline = {0};
+static sg_buffer   g_glyph_vbuf = {0};
+static sg_sampler  g_glyph_sampler = {0};
+static sg_image    g_glyph_image = {0};
+static uint32_t    g_glyph_view_id = 0;
+
+static kg_glyph_vertex g_glyph_batch[KG_GLYPH_BATCH_CAPACITY];
+static int             g_glyph_batch_count = 0;
+
+// Forward declarations: the glyph path cross-flushes the solid batch and falls
+// back to the per-pixel blit, both defined further below.
+static void kg_ui_flush_batch(void);
+static void kg_live_note_visible_ui_content(void);
+void kg_ui_blit_coverage(double x, double y, int width, int rows, int pitch,
+                         const unsigned char* coverage,
+                         double r, double g, double b, double a);
+
+static void kg_glyph_ensure_pipeline(void) {
+    if (g_glyph_pipeline.id != 0 && g_glyph_vbuf.id != 0 &&
+        g_glyph_sampler.id != 0 && g_glyph_image.id != 0 && g_glyph_view_id != 0) {
+        return;
+    }
+
+    if (g_glyph_image.id == 0) {
+        sg_image_desc image_desc = {0};
+        image_desc.width = KG_ATLAS_DIM;
+        image_desc.height = KG_ATLAS_DIM;
+        image_desc.num_mipmaps = 1;
+        image_desc.pixel_format = SG_PIXELFORMAT_R8;
+        image_desc.usage.stream_update = true; // uploaded via sg_update_image
+        image_desc.label = "kira-graphics-glyph-atlas-image";
+        g_glyph_image = sg_make_image(&image_desc);
+        kg_update_lifetime_peaks();
+    }
+    if (g_glyph_view_id == 0 && g_glyph_image.id != 0) {
+        sg_view_desc view_desc = {0};
+        view_desc.texture.image = g_glyph_image;
+        view_desc.label = "kira-graphics-glyph-atlas-view";
+        g_glyph_view_id = sg_make_view(&view_desc).id;
+        kg_update_lifetime_peaks();
+    }
+
+    if (g_glyph_shader.id == 0) {
+        sg_shader_desc shader_desc = {0};
+#if defined(SOKOL_METAL)
+        shader_desc.vertex_func.source =
+            "#include <metal_stdlib>\n"
+            "using namespace metal;\n"
+            "struct vs_in {\n"
+            "  float2 position [[attribute(0)]];\n"
+            "  float2 uv [[attribute(1)]];\n"
+            "  float4 color [[attribute(2)]];\n"
+            "};\n"
+            "struct vs_out {\n"
+            "  float4 position [[position]];\n"
+            "  float2 uv;\n"
+            "  float4 color;\n"
+            "};\n"
+            "vertex vs_out vs_main(vs_in in [[stage_in]]) {\n"
+            "  vs_out out;\n"
+            "  out.position = float4(in.position, 0.0, 1.0);\n"
+            "  out.uv = in.uv;\n"
+            "  out.color = in.color;\n"
+            "  return out;\n"
+            "}\n";
+        shader_desc.vertex_func.entry = "vs_main";
+        shader_desc.fragment_func.source =
+            "#include <metal_stdlib>\n"
+            "using namespace metal;\n"
+            "struct fs_in {\n"
+            "  float4 position [[position]];\n"
+            "  float2 uv;\n"
+            "  float4 color;\n"
+            "};\n"
+            "fragment float4 fs_main(fs_in in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) {\n"
+            "  float cov = tex.sample(smp, in.uv).r;\n"
+            "  return float4(in.color.rgb, in.color.a * cov);\n"
+            "}\n";
+        shader_desc.fragment_func.entry = "fs_main";
+#elif defined(SOKOL_WGPU)
+        shader_desc.vertex_func.source =
+            "struct VsIn {\n"
+            "  @location(0) position: vec2<f32>,\n"
+            "  @location(1) uv: vec2<f32>,\n"
+            "  @location(2) color: vec4<f32>,\n"
+            "};\n"
+            "struct VsOut {\n"
+            "  @builtin(position) clip_position: vec4<f32>,\n"
+            "  @location(0) uv: vec2<f32>,\n"
+            "  @location(1) color: vec4<f32>,\n"
+            "};\n"
+            "@vertex\n"
+            "fn vs_main(in: VsIn) -> VsOut {\n"
+            "  var out: VsOut;\n"
+            "  out.clip_position = vec4<f32>(in.position, 0.0, 1.0);\n"
+            "  out.uv = in.uv;\n"
+            "  out.color = in.color;\n"
+            "  return out;\n"
+            "}\n";
+        shader_desc.vertex_func.entry = "vs_main";
+        shader_desc.fragment_func.source =
+            "@group(1) @binding(0) var kira_glyph_tex: texture_2d<f32>;\n"
+            "@group(1) @binding(1) var kira_glyph_smp: sampler;\n"
+            "@fragment\n"
+            "fn fs_main(@location(0) uv: vec2<f32>, @location(1) color: vec4<f32>) -> @location(0) vec4<f32> {\n"
+            "  let cov = textureSample(kira_glyph_tex, kira_glyph_smp, uv).r;\n"
+            "  return vec4<f32>(color.rgb, color.a * cov);\n"
+            "}\n";
+        shader_desc.fragment_func.entry = "fs_main";
+#else
+        shader_desc.vertex_func.source =
+            "#version 330 core\n"
+            "layout(location=0) in vec2 kira_attr_position;\n"
+            "layout(location=1) in vec2 kira_attr_uv;\n"
+            "layout(location=2) in vec4 kira_attr_color;\n"
+            "out vec2 v_uv;\n"
+            "out vec4 v_color;\n"
+            "void main() {\n"
+            "  gl_Position = vec4(kira_attr_position, 0.0, 1.0);\n"
+            "  v_uv = kira_attr_uv;\n"
+            "  v_color = kira_attr_color;\n"
+            "}\n";
+        shader_desc.fragment_func.source =
+            "#version 330 core\n"
+            "uniform sampler2D kira_glyph_tex_smp;\n"
+            "in vec2 v_uv;\n"
+            "in vec4 v_color;\n"
+            "out vec4 frag_color;\n"
+            "void main() {\n"
+            "  float cov = texture(kira_glyph_tex_smp, v_uv).r;\n"
+            "  frag_color = vec4(v_color.rgb, v_color.a * cov);\n"
+            "}\n";
+#endif
+        shader_desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        shader_desc.attrs[0].glsl_name = "kira_attr_position";
+        shader_desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        shader_desc.attrs[1].glsl_name = "kira_attr_uv";
+        shader_desc.attrs[2].base_type = SG_SHADERATTRBASETYPE_FLOAT;
+        shader_desc.attrs[2].glsl_name = "kira_attr_color";
+        shader_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
+        shader_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
+        shader_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+        shader_desc.views[0].texture.hlsl_register_t_n = 0;
+        shader_desc.views[0].texture.msl_texture_n = 0;
+        shader_desc.views[0].texture.wgsl_group1_binding_n = 0;
+        shader_desc.views[0].texture.spirv_set1_binding_n = 0;
+        shader_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
+        shader_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
+        shader_desc.samplers[0].hlsl_register_s_n = 0;
+        shader_desc.samplers[0].msl_sampler_n = 0;
+        shader_desc.samplers[0].wgsl_group1_binding_n = 1;
+        shader_desc.samplers[0].spirv_set1_binding_n = 2;
+        shader_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
+        shader_desc.texture_sampler_pairs[0].view_slot = 0;
+        shader_desc.texture_sampler_pairs[0].sampler_slot = 0;
+        shader_desc.texture_sampler_pairs[0].glsl_name = "kira_glyph_tex_smp";
+        shader_desc.label = "kira-graphics-glyph-atlas-shader";
+        g_glyph_shader = sg_make_shader(&shader_desc);
+        kg_update_lifetime_peaks();
+    }
+
+    if (g_glyph_pipeline.id == 0) {
+        const sg_pixel_format swapchain_color_format = _sglue_to_sgpixelformat(sapp_color_format());
+        const int swapchain_sample_count = sapp_sample_count();
+        sg_pipeline_desc pipeline_desc = {0};
+        pipeline_desc.shader = g_glyph_shader;
+        pipeline_desc.layout.buffers[0].stride = sizeof(kg_glyph_vertex);
+        pipeline_desc.layout.attrs[0].buffer_index = 0;
+        pipeline_desc.layout.attrs[0].offset = offsetof(kg_glyph_vertex, x);
+        pipeline_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
+        pipeline_desc.layout.attrs[1].buffer_index = 0;
+        pipeline_desc.layout.attrs[1].offset = offsetof(kg_glyph_vertex, u);
+        pipeline_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
+        pipeline_desc.layout.attrs[2].buffer_index = 0;
+        pipeline_desc.layout.attrs[2].offset = offsetof(kg_glyph_vertex, r);
+        pipeline_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT4;
+        pipeline_desc.colors[0].pixel_format = swapchain_color_format;
+        pipeline_desc.colors[0].blend.enabled = true;
+        pipeline_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
+        pipeline_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pipeline_desc.colors[0].blend.op_rgb = SG_BLENDOP_ADD;
+        pipeline_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
+        pipeline_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        pipeline_desc.colors[0].blend.op_alpha = SG_BLENDOP_ADD;
+        pipeline_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
+        pipeline_desc.cull_mode = SG_CULLMODE_NONE;
+        pipeline_desc.face_winding = SG_FACEWINDING_CCW;
+        pipeline_desc.sample_count = swapchain_sample_count;
+        pipeline_desc.label = "kira-graphics-glyph-atlas-pipeline";
+        g_glyph_pipeline = sg_make_pipeline(&pipeline_desc);
+        kg_update_lifetime_peaks();
+    }
+
+    if (g_glyph_vbuf.id == 0) {
+        sg_buffer_desc buffer_desc = {0};
+        buffer_desc.usage.vertex_buffer = true;
+        buffer_desc.usage.stream_update = true;
+        buffer_desc.size = sizeof(kg_glyph_vertex) * KG_GLYPH_VBUF_VERTS;
+        buffer_desc.label = "kira-graphics-glyph-atlas-vertices";
+        g_glyph_vbuf = sg_make_buffer(&buffer_desc);
+        kg_update_lifetime_peaks();
+    }
+
+    if (g_glyph_sampler.id == 0) {
+        // Glyphs are packed at physical px and drawn 1:1 to the physical pixel
+        // grid, so NEAREST reproduces the coverage exactly (crisp, no bleed from
+        // the 1px padding gutter between packed glyphs).
+        sg_sampler_desc sampler_desc = {0};
+        sampler_desc.min_filter = SG_FILTER_NEAREST;
+        sampler_desc.mag_filter = SG_FILTER_NEAREST;
+        sampler_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+        sampler_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+        sampler_desc.label = "kira-graphics-glyph-atlas-sampler";
+        g_glyph_sampler = sg_make_sampler(&sampler_desc);
+        kg_update_lifetime_peaks();
+    }
+}
+
+// Reset the atlas to empty. Deferred to a frame boundary (never mid-frame) so
+// already-queued glyph quads never reference stale/overwritten UVs.
+static void kg_glyph_atlas_reset(void) {
+    memset(g_glyph_slots, 0, sizeof(g_glyph_slots));
+    memset(g_atlas_pixels, 0, sizeof(g_atlas_pixels));
+    g_glyph_slot_count = 0;
+    g_atlas_shelf_x = 0;
+    g_atlas_shelf_y = 0;
+    g_atlas_shelf_h = 0;
+    g_atlas_seq = 0;
+    g_atlas_uploaded_seq = 0;
+    fprintf(stderr, "KiraGraphics: glyph atlas full — reset (v1 eviction)\n");
+}
+
+// Open-addressing lookup; returns slot index or -1. key is never 0 for live keys
+// (callers fold in a non-zero discriminator), matching the empty sentinel.
+static int kg_glyph_find(int64_t key) {
+    uint32_t mask = KG_GLYPH_SLOT_CAP - 1;
+    uint32_t h = (uint32_t)((uint64_t)key * 0x9E3779B97F4A7C15ull >> 40) & mask;
+    for (uint32_t probe = 0; probe < KG_GLYPH_SLOT_CAP; probe += 1) {
+        uint32_t i = (h + probe) & mask;
+        if (g_glyph_slots[i].key == key) {
+            return (int)i;
+        }
+        if (g_glyph_slots[i].key == 0) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
+// Pack a coverage bitmap into the atlas on first use. Returns slot index, or -1
+// when the atlas is full (caller falls back + schedules a reset).
+static int kg_glyph_pack(int64_t key, int width, int rows, int pitch,
+                         const unsigned char* coverage) {
+    if (width <= 0 || rows <= 0 || width > KG_ATLAS_DIM || rows > KG_ATLAS_DIM) {
+        return -1;
+    }
+    // Table nearly full: force an atlas reset rather than probe forever.
+    if (g_glyph_slot_count >= (KG_GLYPH_SLOT_CAP * 3) / 4) {
+        return -1;
+    }
+    int need_w = width + KG_ATLAS_PAD;
+    int need_h = rows + KG_ATLAS_PAD;
+    if (g_atlas_shelf_x + need_w > KG_ATLAS_DIM) {
+        // New shelf.
+        g_atlas_shelf_y += g_atlas_shelf_h;
+        g_atlas_shelf_x = 0;
+        g_atlas_shelf_h = 0;
+    }
+    if (g_atlas_shelf_y + need_h > KG_ATLAS_DIM) {
+        return -1; // atlas full
+    }
+    int gx = g_atlas_shelf_x;
+    int gy = g_atlas_shelf_y;
+    // Blit coverage into the CPU atlas (row-major, one byte per texel).
+    for (int ry = 0; ry < rows; ry += 1) {
+        const unsigned char* src = coverage + (size_t)ry * (size_t)pitch;
+        uint8_t* dst = g_atlas_pixels + (size_t)(gy + ry) * KG_ATLAS_DIM + (size_t)gx;
+        memcpy(dst, src, (size_t)width);
+    }
+    g_atlas_shelf_x += need_w;
+    if (need_h > g_atlas_shelf_h) {
+        g_atlas_shelf_h = need_h;
+    }
+
+    // Insert into the slot table.
+    uint32_t mask = KG_GLYPH_SLOT_CAP - 1;
+    uint32_t h = (uint32_t)((uint64_t)key * 0x9E3779B97F4A7C15ull >> 40) & mask;
+    for (uint32_t probe = 0; probe < KG_GLYPH_SLOT_CAP; probe += 1) {
+        uint32_t i = (h + probe) & mask;
+        if (g_glyph_slots[i].key == 0) {
+            g_atlas_seq += 1;
+            g_glyph_slots[i].key = key;
+            g_glyph_slots[i].gx = (uint16_t)gx;
+            g_glyph_slots[i].gy = (uint16_t)gy;
+            g_glyph_slots[i].gw = (uint16_t)width;
+            g_glyph_slots[i].gh = (uint16_t)rows;
+            g_glyph_slots[i].seq = g_atlas_seq;
+            g_glyph_slot_count += 1;
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static void kg_glyph_flush_batch(void) {
+    const int count = g_glyph_batch_count;
+    g_glyph_batch_count = 0;
+    if (count <= 0) {
+        return;
+    }
+    kg_glyph_ensure_pipeline();
+    if (g_glyph_pipeline.id == 0 || g_glyph_vbuf.id == 0 ||
+        g_glyph_sampler.id == 0 || g_glyph_view_id == 0) {
+        return;
+    }
+    // Upload the whole CPU atlas at most once per commit cycle, and only when it
+    // holds glyphs the GPU image does not yet have.
+    if (g_atlas_seq > g_atlas_uploaded_seq && !g_atlas_uploaded_this_frame) {
+        sg_image_data data = {0};
+        data.mip_levels[0].ptr = g_atlas_pixels;
+        data.mip_levels[0].size = (size_t)KG_ATLAS_DIM * (size_t)KG_ATLAS_DIM;
+        sg_update_image(g_glyph_image, &data);
+        g_atlas_uploaded_seq = g_atlas_seq;
+        g_atlas_uploaded_this_frame = true;
+    }
+    sg_range data = { g_glyph_batch, (size_t)count * sizeof(kg_glyph_vertex) };
+    int offset = sg_append_buffer(g_glyph_vbuf, &data);
+    if (offset < 0) {
+        return;
+    }
+    sg_apply_pipeline(g_glyph_pipeline);
+    sg_bindings bindings = {0};
+    bindings.vertex_buffers[0] = g_glyph_vbuf;
+    bindings.vertex_buffer_offsets[0] = offset;
+    bindings.views[0].id = g_glyph_view_id;
+    bindings.samplers[0].id = g_glyph_sampler.id;
+    sg_apply_bindings(&bindings);
+    sg_draw(0, count, 1);
+}
+
+static void kg_glyph_emit_quad(const kg_glyph_slot* slot,
+                               double x, double y, int width, int rows,
+                               float r, float g, float b, float a) {
+    // Cross-flush: any pending solid quads were queued before this glyph, so they
+    // must draw underneath it.
+    kg_ui_flush_batch();
+    if (g_glyph_batch_count + 6 > KG_GLYPH_BATCH_CAPACITY) {
+        kg_glyph_flush_batch();
+    }
+    // Physical-pixel-grid placement, identical to kg_ui_blit_coverage: align the
+    // glyph origin to the physical pixel grid, then map back into logical points
+    // so the quad occupies its intended point size at native pixel resolution.
+    float scale = kg_ui_logical_scale;
+    if (scale < 1.0f) {
+        scale = 1.0f;
+    }
+    const double inv = 1.0 / (double)scale;
+    const double left = round(x * (double)scale);
+    const double top = round(y * (double)scale);
+    const double px0 = left * inv;
+    const double py0 = top * inv;
+    const double px1 = (left + (double)width) * inv;
+    const double py1 = (top + (double)rows) * inv;
+    const float vx0 = kg_ui_ndc_x(px0);
+    const float vy0 = kg_ui_ndc_y(py0);
+    const float vx1 = kg_ui_ndc_x(px1);
+    const float vy1 = kg_ui_ndc_y(py1);
+    const float u0 = (float)slot->gx / (float)KG_ATLAS_DIM;
+    const float v0 = (float)slot->gy / (float)KG_ATLAS_DIM;
+    const float u1 = (float)(slot->gx + slot->gw) / (float)KG_ATLAS_DIM;
+    const float v1 = (float)(slot->gy + slot->gh) / (float)KG_ATLAS_DIM;
+    kg_glyph_vertex* out = g_glyph_batch + g_glyph_batch_count;
+    out[0] = (kg_glyph_vertex){ vx0, vy0, u0, v0, r, g, b, a };
+    out[1] = (kg_glyph_vertex){ vx1, vy0, u1, v0, r, g, b, a };
+    out[2] = (kg_glyph_vertex){ vx1, vy1, u1, v1, r, g, b, a };
+    out[3] = (kg_glyph_vertex){ vx0, vy0, u0, v0, r, g, b, a };
+    out[4] = (kg_glyph_vertex){ vx1, vy1, u1, v1, r, g, b, a };
+    out[5] = (kg_glyph_vertex){ vx0, vy1, u0, v1, r, g, b, a };
+    g_glyph_batch_count += 6;
+}
+
+// Public: draw a coverage bitmap keyed for atlas reuse. Drop-in for
+// kg_ui_blit_coverage, but packs the glyph once and thereafter draws a single
+// textured quad. `key` must uniquely identify (face, glyph, physical px) for
+// text or (icon hash, px) for icons, and be non-zero.
+void kg_ui_draw_glyph_coverage(int64_t key,
+                               double x, double y, int width, int rows, int pitch,
+                               const unsigned char* coverage,
+                               double r, double g, double b, double a) {
+    if (coverage == NULL || width <= 0 || rows <= 0 || a <= 0.0 || pitch < width) {
+        return;
+    }
+    if (key == 0 || !kg_current_pass_active) {
+        // No stable key / no pass: fall back to the immediate per-pixel path.
+        kg_ui_blit_coverage(x, y, width, rows, pitch, coverage, r, g, b, a);
+        return;
+    }
+    kg_live_note_visible_ui_content();
+
+    int idx = kg_glyph_find(key);
+    if (idx < 0) {
+        idx = kg_glyph_pack(key, width, rows, pitch, coverage);
+        if (idx < 0) {
+            // Atlas/table full: draw this glyph the slow way, reset next frame.
+            g_atlas_reset_pending = true;
+            kg_ui_blit_coverage(x, y, width, rows, pitch, coverage, r, g, b, a);
+            return;
+        }
+    }
+    const kg_glyph_slot* slot = &g_glyph_slots[idx];
+    // Resident iff already on the GPU, or packed this cycle with the upload window
+    // still open (the next glyph flush uploads before its draw). Otherwise the
+    // upload window has closed this cycle — draw via the slow path for one frame.
+    bool resident = (slot->seq <= g_atlas_uploaded_seq) || !g_atlas_uploaded_this_frame;
+    if (!resident) {
+        kg_ui_blit_coverage(x, y, width, rows, pitch, coverage, r, g, b, a);
+        return;
+    }
+    kg_glyph_emit_quad(slot, x, y, width, rows, (float)r, (float)g, (float)b, (float)a);
+}
+
 // UI draw batching: kg_ui_draw_* calls queue triangles into a frame-local CPU
 // batch, and the batch is flushed as ONE buffer append + ONE draw call at
 // state-change boundaries (clip rect changes, non-UI pipeline draws, pass
@@ -1101,6 +1904,11 @@ static void kg_ui_draw_vertices(const kg_ui_vertex* vertices, int count) {
     if (count <= 0) {
         return;
     }
+    // Cross-flush: any pending glyph quads were queued before these solid quads,
+    // so they must draw underneath. Keeps painter order exact across pipelines.
+    if (g_glyph_batch_count > 0) {
+        kg_glyph_flush_batch();
+    }
     while (count > KG_UI_BATCH_CAPACITY) {
         kg_ui_draw_vertices(vertices, KG_UI_BATCH_CAPACITY);
         vertices += KG_UI_BATCH_CAPACITY;
@@ -1126,6 +1934,23 @@ static kg_ui_clip_rect kg_ui_intersect_clip(kg_ui_clip_rect a, kg_ui_clip_rect b
     return result;
 }
 
+// Clip rects are tracked in logical POINTS (they intersect layout-space quads),
+// but sg_apply_scissor_rect operates in FRAMEBUFFER PIXELS. Scale by the current
+// backing factor so the scissor lands on the right physical pixels on Retina.
+static void kg_ui_apply_scissor_points(const kg_ui_clip_rect clip) {
+    const double s = (double)kg_ui_logical_scale;
+    // Snap each scissor edge (left/top/right/bottom) to the physical grid with the
+    // SAME round rule the quad geometry uses, instead of truncating each component
+    // independently. Truncation of x and w separately could clip a snapped quad
+    // edge by 1px (the classic scissor/quad seam); rounding matched edges keeps the
+    // clip flush with the content it bounds.
+    const int left = (int)lround((double)clip.x * s);
+    const int top = (int)lround((double)clip.y * s);
+    const int right = (int)lround(((double)clip.x + (double)clip.w) * s);
+    const int bottom = (int)lround(((double)clip.y + (double)clip.h) * s);
+    sg_apply_scissor_rect(left, top, right - left, bottom - top, true);
+}
+
 void kg_ui_push_clip(double x, double y, double w, double h, double radius) {
     (void)radius;
     if (kg_ui_clip_depth >= 32) {
@@ -1133,18 +1958,20 @@ void kg_ui_push_clip(double x, double y, double w, double h, double radius) {
     }
     // Queued vertices belong to the previous scissor rect.
     kg_ui_flush_batch();
+    kg_glyph_flush_batch();
     kg_ui_clip_rect clip = { x, y, w, h };
     if (kg_ui_clip_depth > 0) {
         clip = kg_ui_intersect_clip(kg_ui_clip_stack[kg_ui_clip_depth - 1], clip);
     }
     kg_ui_clip_stack[kg_ui_clip_depth] = clip;
     kg_ui_clip_depth += 1;
-    sg_apply_scissor_rect((int)clip.x, (int)clip.y, (int)clip.w, (int)clip.h, true);
+    kg_ui_apply_scissor_points(clip);
 }
 
 void kg_ui_pop_clip(void) {
     // Queued vertices belong to the previous scissor rect.
     kg_ui_flush_batch();
+    kg_glyph_flush_batch();
     if (kg_ui_clip_depth <= 0) {
         sg_apply_scissor_rect(0, 0, kg_current_pass_width, kg_current_pass_height, true);
         return;
@@ -1154,7 +1981,7 @@ void kg_ui_pop_clip(void) {
         sg_apply_scissor_rect(0, 0, kg_current_pass_width, kg_current_pass_height, true);
     } else {
         kg_ui_clip_rect clip = kg_ui_clip_stack[kg_ui_clip_depth - 1];
-        sg_apply_scissor_rect((int)clip.x, (int)clip.y, (int)clip.w, (int)clip.h, true);
+        kg_ui_apply_scissor_points(clip);
     }
 }
 
@@ -1180,6 +2007,95 @@ void kg_ui_draw_glow(double x, double y, double w, double h, double r, double g,
     float spread = radius > 1.0f ? radius : 1.0f;
     float alpha = a * intensity * 0.25f;
     kg_ui_draw_surface(x - spread, y - spread, w + spread * 2.0f, h + spread * 2.0f, r, g, b, alpha, 0, 0, 0, 0, 0, 0);
+}
+
+static kg_texture_record* kg_find_texture(uint32_t texture_id);
+
+// Composite a registered kg texture (must have a sampleable texture view, i.e.
+// created with a sampled usage) as a UI quad in the current pass — the
+// TextureView widget path on the Sokol backend. Draws immediately with the
+// dedicated textured pipeline; the pending solid batch is flushed first so
+// chrome drawn before the texture stays underneath it.
+void kg_ui_draw_texture(uint32_t texture_id, double x, double y, double w, double h, double opacity, double radius) {
+    if (texture_id == 0 || w <= 0.0 || h <= 0.0 || opacity <= 0.0) {
+        return;
+    }
+    if (!kg_current_pass_active) {
+        return;
+    }
+    kg_texture_record* record = kg_find_texture(texture_id);
+    if (record == NULL || record->texture_view_id == 0) {
+        static bool warned = false;
+        if (!warned) {
+            printf("Kira Graphics: UI texture draw skipped, texture %u has no sampleable view\n", texture_id);
+            warned = true;
+        }
+        return;
+    }
+    kg_ui_flush_batch();
+    kg_glyph_flush_batch();
+    kg_ui_tex_ensure_pipeline();
+    if (kg_ui_tex_pipeline.id == 0 || kg_ui_tex_vertex_buffer.id == 0 || kg_ui_tex_sampler.id == 0) {
+        return;
+    }
+    // Snap each edge to the physical grid so the composited texture (e.g. the
+    // viewport render target) shares its panel seam exactly with the surrounding
+    // chrome quads, which snap the same way.
+    const double sx = kg_ui_snap_point(x);
+    const double sy = kg_ui_snap_point(y);
+    const double sr = kg_ui_snap_point(x + w);
+    const double sb = kg_ui_snap_point(y + h);
+    float x0 = kg_ui_ndc_x(sx);
+    float y0 = kg_ui_ndc_y(sy);
+    float x1 = kg_ui_ndc_x(sr);
+    float y1 = kg_ui_ndc_y(sb);
+    // Rounded-corner mask geometry, in PHYSICAL pixels. The snapped logical size
+    // times the backing scale gives the physical extent the fragment shader's
+    // analytic 1px AA is calibrated against; radius is clamped to half the
+    // shorter side so it never over-rounds a thin viewport. radius<=0 leaves the
+    // shader coverage at 1 everywhere (unchanged square quad).
+    const double scale = (double)kg_ui_logical_scale;
+    const double phys_w = (sr - sx) * scale;
+    const double phys_h = (sb - sy) * scale;
+    double rad_logical = radius;
+    if (rad_logical < 0.0) rad_logical = 0.0;
+    const double max_rad_logical = ((sr - sx) < (sb - sy) ? (sr - sx) : (sb - sy)) * 0.5;
+    if (rad_logical > max_rad_logical) rad_logical = max_rad_logical;
+    const float half_x = (float)(phys_w * 0.5);
+    const float half_y = (float)(phys_h * 0.5);
+    const float rad_px = (float)(rad_logical * scale);
+    // Render targets sample top-down on Metal/WebGPU/D3D; desktop GL stores
+    // render targets bottom-up, so flip V there.
+#if defined(SOKOL_GLCORE)
+    const float v_top = 1.0f;
+    const float v_bottom = 0.0f;
+#else
+    const float v_top = 0.0f;
+    const float v_bottom = 1.0f;
+#endif
+    float alpha = (float)opacity;
+    kg_ui_tex_vertex vertices[6] = {
+        { x0, y0, 0.0f, v_top,    alpha, half_x, half_y, rad_px },
+        { x1, y0, 1.0f, v_top,    alpha, half_x, half_y, rad_px },
+        { x1, y1, 1.0f, v_bottom, alpha, half_x, half_y, rad_px },
+        { x0, y0, 0.0f, v_top,    alpha, half_x, half_y, rad_px },
+        { x1, y1, 1.0f, v_bottom, alpha, half_x, half_y, rad_px },
+        { x0, y1, 0.0f, v_bottom, alpha, half_x, half_y, rad_px },
+    };
+    sg_range data = { vertices, sizeof(vertices) };
+    int offset = sg_append_buffer(kg_ui_tex_vertex_buffer, &data);
+    if (offset < 0) {
+        return;
+    }
+    sg_apply_pipeline(kg_ui_tex_pipeline);
+    sg_bindings bindings = {0};
+    bindings.vertex_buffers[0] = kg_ui_tex_vertex_buffer;
+    bindings.vertex_buffer_offsets[0] = offset;
+    bindings.views[0].id = record->texture_view_id;
+    bindings.samplers[0].id = kg_ui_tex_sampler.id;
+    sg_apply_bindings(&bindings);
+    sg_draw(0, 6, 1);
+    kg_live_note_visible_ui_content();
 }
 
 void kg_ui_draw_text(const char* text, double x, double y, double w, double h, double r, double g, double b, double a, double size) {
@@ -1262,8 +2178,20 @@ void kg_ui_blit_coverage(double x, double y, int width, int rows, int pitch,
     const float cr = (float)r;
     const float cg = (float)g;
     const float cb = (float)b;
-    const double left = round(x);
-    const double top = round(y);
+    // The caller (kira_text.c) rasterizes glyphs at point-size * backing scale, so
+    // the coverage bitmap is `scale`x denser than the point grid. `x`/`y` are the
+    // glyph origin in logical POINTS; align to the physical pixel grid, then map
+    // each physical coverage pixel back into points (multiply by 1/scale) so the
+    // glyph occupies its intended point size while every physical pixel of the
+    // Retina framebuffer carries real coverage — crisp text, no upscale blur.
+    // At scale 1.0 this reduces exactly to the previous 1px-per-unit behavior.
+    float scale = kg_ui_logical_scale;
+    if (scale < 1.0f) {
+        scale = 1.0f;
+    }
+    const double inv = 1.0 / (double)scale;
+    const double left = round(x * (double)scale);
+    const double top = round(y * (double)scale);
 
     kg_ui_vertex vertices[1536]; // flushed when full
     int vertex_count = 0;
@@ -1288,12 +2216,12 @@ void kg_ui_blit_coverage(double x, double y, int width, int rows, int pitch,
             int run = cx - start;
 
             float alpha = (float)(a * ((double)cov / 255.0));
-            double px = left + (double)start;
-            double py = top + (double)ry;
+            double px = (left + (double)start) * inv;
+            double py = (top + (double)ry) * inv;
             float x0 = kg_ui_ndc_x(px);
             float y0 = kg_ui_ndc_y(py);
-            float x1 = kg_ui_ndc_x(px + (double)run);
-            float y1 = kg_ui_ndc_y(py + 1.0);
+            float x1 = kg_ui_ndc_x(px + (double)run * inv);
+            float y1 = kg_ui_ndc_y(py + inv);
             vertices[vertex_count++] = (kg_ui_vertex){ x0, y0, cr, cg, cb, alpha };
             vertices[vertex_count++] = (kg_ui_vertex){ x1, y0, cr, cg, cb, alpha };
             vertices[vertex_count++] = (kg_ui_vertex){ x1, y1, cr, cg, cb, alpha };
@@ -1871,6 +2799,38 @@ const char* kg_shader_source(const char* inline_source, const char* path) {
     return source.ptr;
 }
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/em_js.h>
+// Kira owns the right mouse button (Unreal-style viewport look, context actions).
+// Without this the browser's native context menu opens on RMB and, worse, steals
+// the corresponding mouseup: the app never sees the release, so RMB-held state
+// (and a hidden cursor) can wedge permanently. Suppress the menu on the canvas
+// and, as a safety net, restore the CSS cursor whenever every button is released
+// or the page loses focus/visibility while sokol has it hidden — the app's own
+// show-mouse call remains the source of truth on the next real transition.
+EM_JS(void, kg_js_own_right_click, (void), {
+    const target = Module.sapp_emsc_target || Module.canvas;
+    if (!target || target.__kira_rmb_owned) return;
+    target.__kira_rmb_owned = true;
+    const stopMenu = (e) => { e.preventDefault(); return false; };
+    target.addEventListener('contextmenu', stopMenu);
+    window.addEventListener('contextmenu', (e) => {
+        if (e.target === target) { e.preventDefault(); }
+    });
+    const restoreCursor = () => {
+        if (target.style.cursor === 'none') { target.style.cursor = 'auto'; }
+    };
+    // All-buttons-released anywhere (incl. outside the canvas) and page
+    // blur/hidden are the states where a hidden cursor can no longer be
+    // intentional; un-hide so the UI stays usable.
+    window.addEventListener('mouseup', (e) => { if (e.buttons === 0) restoreCursor(); });
+    window.addEventListener('blur', restoreCursor);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') restoreCursor();
+    });
+});
+#endif
+
 void kg_setup(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
@@ -1878,6 +2838,9 @@ void kg_setup(void) {
     desc.environment = sglue_environment();
     desc.logger.func = kg_sokol_log;
     sg_setup(&desc);
+#if defined(__EMSCRIPTEN__)
+    kg_js_own_right_click();
+#endif
 }
 
 double kg_math_sqrt(double value) {
@@ -3342,6 +4305,7 @@ uint32_t kg_begin_render_pass(
     kg_current_pass_height = 0;
     // Stale UI vertices from a pass that never flushed must not leak into this pass.
     kg_ui_batch_count = 0;
+    g_glyph_batch_count = 0;
 
     sg_pass pass = {0};
     pass.label = label;
@@ -3392,6 +4356,13 @@ uint32_t kg_begin_render_pass(
         }
         kg_current_pass_width = w;
         kg_current_pass_height = h;
+        // Swapchain (on-screen) pass: w/h are physical framebuffer pixels. On a
+        // Retina/high_dpi surface the UI is authored in logical points, so record
+        // the backing scale for the immediate-2D pipeline. Clamp to >= 1.0.
+        kg_ui_logical_scale = sapp_dpi_scale();
+        if (kg_ui_logical_scale < 1.0f) {
+            kg_ui_logical_scale = 1.0f;
+        }
         return 1;
     } else if (color_target_kind == 2) {
         if (color_texture_id == 0) {
@@ -3457,6 +4428,9 @@ uint32_t kg_begin_render_pass(
         }
         kg_current_pass_width = (int)color_record->width;
         kg_current_pass_height = (int)color_record->height;
+        // Offscreen targets are authored directly in their own pixel space, so the
+        // immediate-2D pipeline maps points 1:1 to target pixels here.
+        kg_ui_logical_scale = 1.0f;
         sg_begin_pass(&pass);
         kg_current_pass_active = _sg.cur_pass.in_pass && _sg.cur_pass.valid;
         if (!kg_current_pass_active) {
@@ -3700,14 +4674,24 @@ void kg_end_pass_and_commit(void) {
     if (!_sg.cur_pass.in_pass) {
         printf("Kira Graphics: end pass skipped because no render pass is currently active\n");
         kg_ui_batch_count = 0;
+        g_glyph_batch_count = 0;
         kg_current_pass_active = false;
         kg_current_pass_width = 0;
         kg_current_pass_height = 0;
         return;
     }
     kg_ui_flush_batch();
+    kg_glyph_flush_batch();
     sg_end_pass();
     sg_commit();
+    // sg_commit closes the frame (sokol's frame_index advances), so a fresh
+    // sg_update_image is allowed again. Reset the once-per-frame upload gate and
+    // service any deferred atlas reset now that no glyph quads are queued.
+    g_atlas_uploaded_this_frame = false;
+    if (g_atlas_reset_pending) {
+        g_atlas_reset_pending = false;
+        kg_glyph_atlas_reset();
+    }
     if (!kg_live_frame_submitted_emitted) {
         kg_live_frame_submitted_emitted = true;
         kira_live_emit_log_line("live.kira_graphics.frame.submitted");

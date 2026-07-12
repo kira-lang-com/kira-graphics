@@ -10,7 +10,7 @@ function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         height: app.height
         sample_count: app.sampleCount
         window_title: app.title
-        high_dpi: false
+        high_dpi: app.highDpi
         logger: sapp_logger {
             func: kiraGraphicsSokolLog
         }

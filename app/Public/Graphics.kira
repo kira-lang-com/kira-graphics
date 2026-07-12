@@ -121,7 +121,7 @@ class Graphics {
         if self.backend == GraphicsBackend.Metal {
             return metalContextScale(self.metalContext)
         }
-        return 1.0
+        return sokolDpiScale()
     }
 
     // The CPU-visible contents pointer of a dynamic buffer, for callers that write
