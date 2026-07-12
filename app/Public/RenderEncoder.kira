@@ -292,6 +292,14 @@ class RenderEncoder {
         sokolUiDrawGlow(frame.x, frame.y, frame.width, frame.height, color.r, color.g, color.b, color.a, radius, intensity)
         return
     }
+
+    // Composite a registered sampleable texture (e.g. an engine's offscreen
+    // viewport render target) as a UI quad — the TextureView widget path on the
+    // Sokol backend.
+    function drawTexture(frame: borrow GraphicsRect, textureId: Int, opacity: Float, radius: Float) {
+        sokolUiDrawTexture(textureId, frame.x, frame.y, frame.width, frame.height, opacity, radius)
+        return
+    }
 }
 
 @Native
@@ -327,6 +335,12 @@ function sokolUiDrawGlow(x: Float, y: Float, width: Float, height: Float, r: Flo
 @Native
 function sokolUiDrawText(content: borrow String, x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, size: Float) {
     kgUiDrawText(content, x, y, width, height, r, g, b, a, size)
+    return
+}
+
+@Native
+function sokolUiDrawTexture(textureId: Int, x: Float, y: Float, width: Float, height: Float, opacity: Float, radius: Float) {
+    kgUiDrawTexture(U32(textureId), x, y, width, height, opacity, radius)
     return
 }
 

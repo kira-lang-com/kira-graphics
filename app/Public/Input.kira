@@ -220,8 +220,15 @@ function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> GraphicsEvent
     // fields. Routing the primary touch into pointerX/Y lets the shared
     // pointer hit-testing path drive hover/press/drag from touch input too.
     let isTouch = graphicsRawKindIsTouch(rawKind) && touchCount > 0
-    let pointerX = isTouch ? kgEventTouchX(eventPtr, 0) : kgEventMouseX(eventPtr)
-    let pointerY = isTouch ? kgEventTouchY(eventPtr, 0) : kgEventMouseY(eventPtr)
+    // Sokol reports pointer positions and deltas in FRAMEBUFFER PIXELS (mouse
+    // coords are multiplied by the DPI scale). UI layout, hit regions, and the
+    // window size (sapp_event.window_width) are all in logical POINTS, so divide
+    // the raw pixel coordinates by the backing scale to keep pointer space and
+    // layout space in the same units — otherwise hit-testing misses by the DPI
+    // factor on Retina. dpi_scale is 1.0 off Retina, so this is a no-op there.
+    let dpiScale = sokolDpiScale()
+    let pointerX = (isTouch ? kgEventTouchX(eventPtr, 0) : kgEventMouseX(eventPtr)) / dpiScale
+    let pointerY = (isTouch ? kgEventTouchY(eventPtr, 0) : kgEventMouseY(eventPtr)) / dpiScale
     return GraphicsEvent {
         kind: graphicsEventKindFromRaw(rawKind)
         frameCount: kgEventFrameCount(eventPtr)
@@ -232,8 +239,8 @@ function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> GraphicsEvent
         pointerButton: graphicsPointerButtonFromRaw(kgEventMouseButton(eventPtr))
         pointerX: pointerX
         pointerY: pointerY
-        pointerDeltaX: kgEventMouseDx(eventPtr)
-        pointerDeltaY: kgEventMouseDy(eventPtr)
+        pointerDeltaX: kgEventMouseDx(eventPtr) / dpiScale
+        pointerDeltaY: kgEventMouseDy(eventPtr) / dpiScale
         scrollX: kgEventScrollX(eventPtr)
         scrollY: kgEventScrollY(eventPtr)
         touchCount: touchCount
@@ -285,7 +292,12 @@ function graphicsKeyboardShown() -> Bool {
 function graphicsShowMouse(show: Bool) {
     sapp_show_mouse(show)
     // The native Metal window path doesn't run through Sokol, so drive NSCursor too.
-    metalSetCursorHidden(show == false)
+    // Apple-only: the ObjC runtime does not exist elsewhere (on wasm the objc
+    // externs are abort-stubs), so gate on the actual host platform.
+    let platform = hostGraphicsPlatform()
+    if platform == GraphicsPlatform.MacOS || platform == GraphicsPlatform.IOS {
+        metalSetCursorHidden(show == false)
+    }
     return
 }
 

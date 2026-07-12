@@ -19,6 +19,12 @@ struct GraphicsApplication {
     var width: Int = 640
     var height: Int = 480
     var sampleCount: Int = 1
+    // Request a full-resolution framebuffer on HighDPI/Retina displays. When true
+    // (the default), the Sokol backend sets sapp_desc.high_dpi so sapp_width/height
+    // return PIXEL sizes and sapp_dpi_scale() gives the backing factor; UI layout
+    // stays in logical points (pixels / dpi_scale) so nothing shrinks, while the
+    // framebuffer is rendered at native resolution for crisp text and vector edges.
+    var highDpi: Bool = true
     // Offscreen color-target format (Metal). Default swapchain (BGRA8); set to
     // textureFormatR32Uint() to render a visibility buffer.
     var colorFormat: Int = -1
