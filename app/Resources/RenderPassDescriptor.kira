@@ -1,3 +1,4 @@
+import Foundation
 struct RenderTarget {
     var kind: Int
     var texture: GraphicsTexture
