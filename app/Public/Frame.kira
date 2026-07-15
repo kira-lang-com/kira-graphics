@@ -1,3 +1,4 @@
+import Foundation
 class GraphicsFrame {
     var hasColorAttachment: Bool = false
     var colorTargetKind: Int = 0

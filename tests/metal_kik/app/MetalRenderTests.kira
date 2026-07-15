@@ -1,3 +1,5 @@
+import Foundation
+import KiraGraphics
 // Metal render Tests. Names use the mtk / Mtk prefix.
 
 Test MtkClearRendersExactColor {
