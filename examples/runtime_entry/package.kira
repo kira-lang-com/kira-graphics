@@ -1,0 +1,30 @@
+Package runtime_entry {
+    let version = "0.1.0"
+    let kira = "0.1.0"
+    let kind = PackageKind.App
+    let defaults = Defaults { executionMode: Backend.Llvm, buildTarget: BuildTarget.Host }
+    let dependencies = [
+        Dependency { name: "KiraGraphics", path: "../.." }
+    ]
+    let nativeLibraries = [
+        NativeLibrary {
+            name: "sokol",
+            linkMode: LinkMode.Static,
+            headers: Headers { entrypoint: "../../NativeLibs/Sokol/sokol_bindings.h", includeDirs: ["../../NativeLibs/Sokol"], defines: ["SOKOL_NO_ENTRY"] },
+            sources: ["../../NativeLibs/Sokol/sokol_impl.c"],
+            autobind: Autobind { module: "sokol", headers: ["../../NativeLibs/Sokol/sokol_app.h", "../../NativeLibs/Sokol/sokol_gfx.h", "../../NativeLibs/Sokol/sokol_glue.h"], mode: AutobindMode.AllPublic },
+            nativeTargets: [
+                NativeTarget { triple: "aarch64-macos-none", staticLib: "../../NativeLibs/../generated/native/aarch64-macos/libsokol.a", defines: ["SOKOL_GLCORE"], frameworks: ["Foundation", "AppKit", "QuartzCore", "OpenGL"] },
+                NativeTarget { triple: "aarch64-ios-none", staticLib: "../../NativeLibs/../generated/native/aarch64-ios/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
+                NativeTarget { triple: "aarch64-ios-simulator", staticLib: "../../NativeLibs/../generated/native/aarch64-ios-simulator/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
+                NativeTarget { triple: "aarch64-tvos-none", staticLib: "../../NativeLibs/../generated/native/aarch64-tvos/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
+                NativeTarget { triple: "aarch64-tvos-simulator", staticLib: "../../NativeLibs/../generated/native/aarch64-tvos-simulator/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
+                NativeTarget { triple: "aarch64-xros-none", staticLib: "../../NativeLibs/../generated/native/aarch64-xros/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
+                NativeTarget { triple: "aarch64-xros-simulator", staticLib: "../../NativeLibs/../generated/native/aarch64-xros-simulator/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
+                NativeTarget { triple: "x86_64-linux-gnu", staticLib: "../../NativeLibs/../generated/native/x86_64-linux-gnu/libsokol.a", defines: ["SOKOL_GLCORE"], systemLibs: ["X11", "Xi", "Xcursor", "GL", "dl", "pthread", "m"] },
+                NativeTarget { triple: "x86_64-windows-msvc", staticLib: "../../NativeLibs/../generated/native/x86_64-windows-msvc/sokol.lib", defines: ["SOKOL_GLCORE"], systemLibs: ["opengl32"] },
+                NativeTarget { triple: "wasm32-emscripten-unknown", staticLib: "../../NativeLibs/../generated/native/wasm32-emscripten/libsokol.a", compilerFlags: ["--use-port=emdawnwebgpu"], linkerFlags: ["--use-port=emdawnwebgpu"] }
+            ],
+        }
+    ]
+}
