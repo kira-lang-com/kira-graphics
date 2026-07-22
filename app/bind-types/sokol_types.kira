@@ -1,0 +1,8 @@
+// Foreign-binding type vocabulary for the sokol bindings — the C primitive
+// typedefs `bindings/sokol.kira` assumes already exist.
+//
+// STOPGAP: autobind will emit this from sokol's headers. Delete when it does.
+// Placement follows the KPK025 `bind-types/` rule.
+
+// sokol spells C `_Bool` as `CBool`.
+type CBool = Bool

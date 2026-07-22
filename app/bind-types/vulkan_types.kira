@@ -1,0 +1,26 @@
+// Foreign-binding type vocabulary for the Vulkan bindings — the C primitive
+// typedefs `bindings/vulkan.kira` assumes already exist.
+//
+// STOPGAP: autobind will emit these from the Vulkan headers
+// (`typedef uint32_t VkFlags;` becomes `type VkFlags = U32`). Delete this file
+// when it does. Placement follows the KPK025 `bind-types/` rule.
+//
+// The Win32 handle typedefs the Vulkan surface extensions reference
+// (`HWND`/`HINSTANCE`/`HANDLE`/`DWORD`/`LPCWSTR`) are defined once in
+// `win32_types.kira`; flat package scope makes them visible here.
+
+// Vulkan flag words.
+type VkFlags = U32
+type VkFlags64 = U64
+
+// The Vulkan video std enums are C enums (int-width). Aliased to their
+// underlying width as a stopgap so binding field and parameter types resolve;
+// their named variants arrive with the video-enum port.
+type StdVideoH264ProfileIdc = I32
+type StdVideoH264LevelIdc = I32
+type StdVideoH265ProfileIdc = I32
+type StdVideoH265LevelIdc = I32
+type StdVideoAV1Profile = I32
+type StdVideoAV1Level = I32
+type StdVideoVP9Profile = I32
+type StdVideoVP9Level = I32
