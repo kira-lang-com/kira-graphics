@@ -69,7 +69,7 @@ function kgSetup(): Void;
 function kgBeginFloatBufferUpload(label: CString, usage: I64, stride: I64, count: I64): U32;
 
 @FFI.Extern { library: sokol; symbol: kg_set_float_buffer_upload_value; abi: c; }
-function kgSetFloatBufferUploadValue(uploadId: U32, index: I64, value: Float): Void;
+function kgSetFloatBufferUploadValue(uploadId: U32, index: I64, value: F64): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_finalize_float_buffer_upload; abi: c; }
 function kgFinalizeFloatBufferUpload(uploadId: U32): U32;
@@ -90,7 +90,7 @@ function kgDestroyBufferId(bufferId: U32): Void;
 function kgCreateUniformId(label: CString, expectedFloatCount: I64): U32;
 
 @FFI.Extern { library: sokol; symbol: kg_set_uniform_float; abi: c; }
-function kgSetUniformFloat(uniformId: U32, index: I64, value: Float): Void;
+function kgSetUniformFloat(uniformId: U32, index: I64, value: F64): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_finish_uniform_update; abi: c; }
 function kgFinishUniformUpdate(uniformId: U32, floatCount: I64): U32;
@@ -129,7 +129,7 @@ function kgCreateSamplerId(label: CString, minFilter: I64, magFilter: I64, addre
 function kgDestroySamplerId(samplerId: U32): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_begin_render_pass; abi: c; }
-function kgBeginRenderPass(label: CString, colorTargetKind: I64, colorTextureId: U32, colorMipLevel: I64, colorArrayLayer: I64, colorLoadAction: I64, colorStoreAction: I64, clearR: Float, clearG: Float, clearB: Float, clearA: Float, hasResolveTarget: I64, resolveTextureId: U32, resolveMipLevel: I64, resolveArrayLayer: I64, hasDepthAttachment: I64, depthTextureId: U32, depthLoadAction: I64, depthStoreAction: I64, clearDepth: Float, depthReadOnly: I64, hasStencilAttachment: I64, stencilTextureId: U32, stencilLoadAction: I64, stencilStoreAction: I64, clearStencil: I64, stencilReadOnly: I64): U32;
+function kgBeginRenderPass(label: CString, colorTargetKind: I64, colorTextureId: U32, colorMipLevel: I64, colorArrayLayer: I64, colorLoadAction: I64, colorStoreAction: I64, clearR: F64, clearG: F64, clearB: F64, clearA: F64, hasResolveTarget: I64, resolveTextureId: U32, resolveMipLevel: I64, resolveArrayLayer: I64, hasDepthAttachment: I64, depthTextureId: U32, depthLoadAction: I64, depthStoreAction: I64, clearDepth: F64, depthReadOnly: I64, hasStencilAttachment: I64, stencilTextureId: U32, stencilLoadAction: I64, stencilStoreAction: I64, clearStencil: I64, stencilReadOnly: I64): U32;
 
 @FFI.Extern { library: sokol; symbol: kg_apply_pipeline_bindings_and_draw; abi: c; }
 function kgApplyPipelineBindingsAndDraw(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, bindGroup0Id: U32, hasBindGroup0: I64, bindGroup1Id: U32, hasBindGroup1: I64, bindGroup2Id: U32, hasBindGroup2: I64, bindGroup3Id: U32, hasBindGroup3: I64, vertexCount: I64, indexCount: I64, instanceCount: I64): U32;
@@ -141,25 +141,25 @@ function kgLogSubmitState(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer:
 function kgEndPassAndCommit(): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_ui_push_clip; abi: c; }
-function kgUiPushClip(x: Float, y: Float, width: Float, height: Float, radius: Float): Void;
+function kgUiPushClip(x: F64, y: F64, width: F64, height: F64, radius: F64): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_ui_pop_clip; abi: c; }
 function kgUiPopClip(): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_ui_draw_surface; abi: c; }
-function kgUiDrawSurface(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, borderR: Float, borderG: Float, borderB: Float, borderA: Float, borderWidth: Float, radius: Float): Void;
+function kgUiDrawSurface(x: F64, y: F64, width: F64, height: F64, r: F64, g: F64, b: F64, a: F64, borderR: F64, borderG: F64, borderB: F64, borderA: F64, borderWidth: F64, radius: F64): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_ui_draw_squircle_surface; abi: c; }
-function kgUiDrawSquircleSurface(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, borderR: Float, borderG: Float, borderB: Float, borderA: Float, borderWidth: Float, radius: Float): Void;
+function kgUiDrawSquircleSurface(x: F64, y: F64, width: F64, height: F64, r: F64, g: F64, b: F64, a: F64, borderR: F64, borderG: F64, borderB: F64, borderA: F64, borderWidth: F64, radius: F64): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_ui_draw_glow; abi: c; }
-function kgUiDrawGlow(x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, radius: Float, intensity: Float): Void;
+function kgUiDrawGlow(x: F64, y: F64, width: F64, height: F64, r: F64, g: F64, b: F64, a: F64, radius: F64, intensity: F64): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_ui_draw_texture; abi: c; }
-function kgUiDrawTexture(textureId: U32, x: Float, y: Float, width: Float, height: Float, opacity: Float, radius: Float): Void;
+function kgUiDrawTexture(textureId: U32, x: F64, y: F64, width: F64, height: F64, opacity: F64, radius: F64): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_ui_draw_text; abi: c; }
-function kgUiDrawText(text: CString, x: Float, y: Float, width: Float, height: Float, r: Float, g: Float, b: Float, a: Float, size: Float): Void;
+function kgUiDrawText(text: CString, x: F64, y: F64, width: F64, height: F64, r: F64, g: F64, b: F64, a: F64, size: F64): Void;
 
 @FFI.Extern { library: sokol; symbol: kg_destroy_pipeline_id; abi: c; }
 function kgDestroyPipelineId(pipelineId: U32): Void;
@@ -195,16 +195,16 @@ function kgMakeKslShader(label: CString, asset: CString, directory: CString): U3
 function kgMakeShaderKslInline(label: CString, vertexWgsl: CString, fragmentWgsl: CString, vertexGlsl: CString, fragmentGlsl: CString, vertexEntry: CString, fragmentEntry: CString, uniformReflection: CString): U32;
 
 @FFI.Extern { library: sokol; symbol: kg_math_sqrt; abi: c; }
-function kgMathSqrt(value: Float): Float;
+function kgMathSqrt(value: F64): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_math_sin; abi: c; }
-function kgMathSin(value: Float): Float;
+function kgMathSin(value: F64): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_math_cos; abi: c; }
-function kgMathCos(value: Float): Float;
+function kgMathCos(value: F64): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_math_tan; abi: c; }
-function kgMathTan(value: Float): Float;
+function kgMathTan(value: F64): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_frame_count; abi: c; }
 function kgEventFrameCount(eventPtr: borrow sapp_event_ptr): I64;
@@ -228,31 +228,31 @@ function kgEventModifiers(eventPtr: borrow sapp_event_ptr): I64;
 function kgEventMouseButton(eventPtr: borrow sapp_event_ptr): I64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_mouse_x; abi: c; }
-function kgEventMouseX(eventPtr: borrow sapp_event_ptr): Float;
+function kgEventMouseX(eventPtr: borrow sapp_event_ptr): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_mouse_y; abi: c; }
-function kgEventMouseY(eventPtr: borrow sapp_event_ptr): Float;
+function kgEventMouseY(eventPtr: borrow sapp_event_ptr): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_mouse_dx; abi: c; }
-function kgEventMouseDx(eventPtr: borrow sapp_event_ptr): Float;
+function kgEventMouseDx(eventPtr: borrow sapp_event_ptr): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_mouse_dy; abi: c; }
-function kgEventMouseDy(eventPtr: borrow sapp_event_ptr): Float;
+function kgEventMouseDy(eventPtr: borrow sapp_event_ptr): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_touch_count; abi: c; }
 function kgEventTouchCount(eventPtr: borrow sapp_event_ptr): I64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_touch_x; abi: c; }
-function kgEventTouchX(eventPtr: borrow sapp_event_ptr, index: I64): Float;
+function kgEventTouchX(eventPtr: borrow sapp_event_ptr, index: I64): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_touch_y; abi: c; }
-function kgEventTouchY(eventPtr: borrow sapp_event_ptr, index: I64): Float;
+function kgEventTouchY(eventPtr: borrow sapp_event_ptr, index: I64): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_scroll_x; abi: c; }
-function kgEventScrollX(eventPtr: borrow sapp_event_ptr): Float;
+function kgEventScrollX(eventPtr: borrow sapp_event_ptr): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_scroll_y; abi: c; }
-function kgEventScrollY(eventPtr: borrow sapp_event_ptr): Float;
+function kgEventScrollY(eventPtr: borrow sapp_event_ptr): F64;
 
 @FFI.Extern { library: sokol; symbol: kg_event_window_width; abi: c; }
 function kgEventWindowWidth(eventPtr: borrow sapp_event_ptr): I64;
