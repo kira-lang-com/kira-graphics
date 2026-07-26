@@ -24,3 +24,12 @@ type StdVideoAV1Profile = I32
 type StdVideoAV1Level = I32
 type StdVideoVP9Profile = I32
 type StdVideoVP9Level = I32
+
+// `typedef uint64_t VkDeviceSize;` — a device address or size, always 64 bits
+// regardless of host pointer width.
+type VkDeviceSize = U64
+
+// Two more Vulkan C enums, aliased to their int width on the same terms as the
+// video enums above.
+type VkFragmentShadingRateCombinerOpKHR = I32
+type VkQueueGlobalPriority = I32

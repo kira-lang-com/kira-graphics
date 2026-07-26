@@ -42,3 +42,24 @@ type HINSTANCE = RawPtr
 type LPCWSTR = RawPtr
 type LPCSTR = RawPtr
 type LPCVOID = RawPtr
+
+// `wchar_t` on Windows is 16 bits, so `WCHAR` is an unsigned 16-bit code unit —
+// not the 32-bit `wchar_t` of the System V targets.
+type WCHAR = U16
+
+// `DXGI_FORMAT` is a C enum (`typedef enum DXGI_FORMAT { … }`), so it carries
+// the int width its variants are numbered in. Aliased to that width as a
+// stopgap; the named variants arrive with the enum port, as for the Vulkan
+// video enums.
+type DXGI_FORMAT = I32
+
+// `RECT` is a struct rather than a scalar typedef, so it is declared as the C
+// layout it is: `typedef struct tagRECT { LONG left, top, right, bottom; }`,
+// with `LONG` a signed 32-bit integer.
+@FFI.Struct { layout: c; }
+struct RECT {
+    let left: I32 = 0
+    let top: I32 = 0
+    let right: I32 = 0
+    let bottom: I32 = 0
+}
