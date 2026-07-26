@@ -254,26 +254,26 @@ function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> GraphicsEvent
 @Native
 function graphicsStringFromCodepoint(codepoint: Int) -> String {
     let nativeCodepoint: I64 = codepoint
-    let value: CString = kgCodepointUtf8(nativeCodepoint)
+    let value: String = kgCodepointUtf8(nativeCodepoint)
     return value
 }
 
 @Native
 function graphicsAppendCodepoint(base: borrow String, codepoint: Int) -> String {
     let nativeCodepoint: I64 = codepoint
-    let value: CString = kgStringAppendCodepoint(base, nativeCodepoint)
+    let value: String = kgStringAppendCodepoint(base, nativeCodepoint)
     return value
 }
 
 @Native
 function graphicsDropLastScalar(base: borrow String) -> String {
-    let value: CString = kgStringDropLastScalar(base)
+    let value: String = kgStringDropLastScalar(base)
     return value
 }
 
 @Native
 function graphicsStringConcat(a: borrow String, b: borrow String) -> String {
-    let value: CString = kgStringConcat(a, b)
+    let value: String = kgStringConcat(a, b)
     return value
 }
 

@@ -21,7 +21,7 @@ function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
 }
 
 @Native
-function kiraGraphicsSokolLog(tag: CString, level: U32, itemId: U32, message: CString, lineNr: U32, filename: CString, userData: RawPtr): Void {
+function kiraGraphicsSokolLog(tag: String, level: U32, itemId: U32, message: String, lineNr: U32, filename: String, userData: RawPtr): Void {
     kgSappLog(tag, level, itemId, message, lineNr, filename, userData)
     return
 }
