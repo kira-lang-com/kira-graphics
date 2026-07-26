@@ -184,8 +184,8 @@ class GraphicsFrame {
     }
 }
 
-function drawPass(frame: borrow GraphicsFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, vertexCount: Int) {
-    let encoder = frame.beginRenderPass(descriptor)
+function drawPass(frame: borrow mut GraphicsFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, vertexCount: Int) {
+    var encoder = frame.beginRenderPass(descriptor)
     encoder.setPipeline(pipeline)
     encoder.setVertexBuffer(vertexBuffer)
     encoder.draw(vertexCount)
@@ -193,8 +193,8 @@ function drawPass(frame: borrow GraphicsFrame, descriptor: borrow RenderPassDesc
     return
 }
 
-function drawPassWithBindGroups(frame: borrow GraphicsFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, bindGroup0: borrow BindGroup, bindGroup1: borrow BindGroup, vertexCount: Int) {
-    let encoder = frame.beginRenderPass(descriptor)
+function drawPassWithBindGroups(frame: borrow mut GraphicsFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, bindGroup0: borrow BindGroup, bindGroup1: borrow BindGroup, vertexCount: Int) {
+    var encoder = frame.beginRenderPass(descriptor)
     encoder.setPipeline(pipeline)
     encoder.setVertexBuffer(vertexBuffer)
     encoder.setBindGroup(0, bindGroup0)
