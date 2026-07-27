@@ -26,13 +26,55 @@ Package KiraGraphics {
         },
         NativeLibrary {
             name: "vulkan",
-            linkMode: LinkMode.Dynamic,
+            // A driver, not a build dependency: it may simply be absent, so the
+            // runtime opens it on first call and a machine without it still runs.
+            linkMode: LinkMode.Runtime,
+            // And not every platform has one at all. On a target with no row
+            // here the binding is excluded: nothing links, and a call traps by
+            // name rather than the build failing.
+            availability: Availability.Optional,
             headers: Headers { entrypoint: "${VULKAN_SDK}/Include/vulkan/vulkan.h", includeDirs: ["${VULKAN_SDK}/Include"], defines: ["VK_USE_PLATFORM_WIN32_KHR"] },
             autobind: Autobind { module: "vulkan", headers: ["${VULKAN_SDK}/Include/vulkan/vulkan.h", "${VULKAN_SDK}/Include/vulkan/vulkan_core.h", "${VULKAN_SDK}/Include/vulkan/vulkan_win32.h"], mode: AutobindMode.AllPublic, profile: AutobindProfile.Vulkan },
             nativeTargets: [
                 NativeTarget { triple: "x86_64-windows-msvc", dynamicLib: "" },
                 NativeTarget { triple: "x86_64-linux-gnu", dynamicLib: "" },
+                NativeTarget { triple: "wasm32-emscripten-unknown", dynamicLib: "" }
+            ],
+        },
+        NativeLibrary {
+            // A native fast path for writing a UI quad's vertices in one call.
+            // This toolchain does not provide it and nothing calls it; the
+            // declaration says so rather than guessing at a buffer layout.
+            name: "kira_ui",
+            linkMode: LinkMode.Runtime,
+            availability: Availability.Optional,
+            nativeTargets: [],
+        },
+        NativeLibrary {
+            // The libffi-backed call builder and symbol lookup the Vulkan and
+            // Direct3D loaders use to reach a driver they cannot link against.
+            // This toolchain provides none of it, and declaring no target row
+            // says so: those calls are excluded and trap by name rather than
+            // failing the link. Neither loader runs on Apple platforms, so
+            // nothing here is reachable there.
+            name: "kira_dynamic_ffi",
+            linkMode: LinkMode.Runtime,
+            availability: Availability.Optional,
+            nativeTargets: [],
+        },
+        NativeLibrary {
+            // Kira's own runtime archive, already on every native link line.
+            // The raw-memory primitives a backend lays its C-shaped context out
+            // with live there; the libffi call machinery the Vulkan and Direct3D
+            // loaders reach for does not, and those calls trap by name on a
+            // platform that never makes them.
+            name: "kira_runtime",
+            linkMode: LinkMode.Runtime,
+            nativeTargets: [
                 NativeTarget { triple: "aarch64-macos-none", dynamicLib: "" },
+                NativeTarget { triple: "aarch64-ios-none", dynamicLib: "" },
+                NativeTarget { triple: "x86_64-linux-gnu", dynamicLib: "" },
+                NativeTarget { triple: "x86_64-windows-msvc", dynamicLib: "" },
                 NativeTarget { triple: "wasm32-emscripten-unknown", dynamicLib: "" }
             ],
         },
