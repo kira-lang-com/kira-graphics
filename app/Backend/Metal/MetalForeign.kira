@@ -25,6 +25,12 @@ function metalObjcGetClass(name: CString): RawPtr;
 @FFI.Extern { library: kira_metal; symbol: sel_registerName; abi: c; }
 function metalSel(name: CString): RawPtr;
 
+// Writes a C string and a newline to stdout. The one way to surface text the
+// Objective-C runtime hands back as `char*` — an `NSError`'s description, say —
+// without a round trip through a Kira `String` this seam has no conversion for.
+@FFI.Extern { library: kira_metal; symbol: puts; abi: c; }
+function metalPutsRaw(text: RawPtr): Void;
+
 // ---------------------------------------------------------------------------
 // objc_msgSend, one typed alias per call shape
 // ---------------------------------------------------------------------------
