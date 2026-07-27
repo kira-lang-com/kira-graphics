@@ -23,6 +23,22 @@ function metalCreateShader(ctx: RawPtr, source: borrow String) -> Int {
     // MTLCompileOptions is a +1-owned alloc/init temporary; the compiled library keeps
     // no reference to it, so release it here rather than leaking one per shader.
     metalMsgSendVoid(opts, metalSel("release"))
+    // A shader that does not compile leaves a nil library and an NSError nobody
+    // was reading. The next thing to fail is the pipeline, reporting only that
+    // its vertex function is nil — which says nothing about why. Say why.
+    if metalPtrIsNull(library) {
+        graphicsDiagnostic("kira-graphics: Metal rejected a shader library")
+        let err = metalMemReadPtr(errSlot, 0)
+        if !metalPtrIsNull(err) {
+            let described = metalMsgSend(err, metalSel("localizedDescription"))
+            if !metalPtrIsNull(described) {
+                let utf8 = metalMsgSend(described, metalSel("UTF8String"))
+                if !metalPtrIsNull(utf8) {
+                    metalPutsRaw(utf8)
+                }
+            }
+        }
+    }
     let id = metalRegister(ctx, library)
     metalMemFree(errSlot)
     return id
