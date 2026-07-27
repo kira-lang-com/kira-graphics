@@ -1,6 +1,10 @@
 [library]
 name = "directx12"
-link_mode = "dynamic"
+# A driver, not a build dependency: opened by the runtime on first call, so a
+# non-Windows build neither links it nor needs a target row for it.
+link_mode = "runtime"
+# Windows only. Elsewhere the binding is excluded rather than linked.
+availability = "optional"
 abi = "c"
 
 [headers]

@@ -273,7 +273,7 @@ function metalMemReadU32(ptr: RawPtr, offset: U64): U32;
 function metalMemReadU64(ptr: RawPtr, offset: U64): U64;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_f32_at; abi: c; }
 function metalMemWriteF32(ptr: RawPtr, offset: U64, value: F32): Void;
-@FFI.Extern { library: kira_runtime; symbol: kira_ui_write_quad; abi: c; }
+@FFI.Extern { library: kira_ui; symbol: kira_ui_write_quad; abi: c; }
 function metalUiWriteQuad(ptr: RawPtr, baseFloats: U64, px0: F32, py0: F32, px1: F32, py1: F32, lx0: F32, ly0: F32, lx1: F32, ly1: F32, vw: F32, vh: F32, halfW: F32, halfH: F32, radius: F32, borderWidth: F32, mode: F32, fr: F32, fg: F32, fb: F32, fa: F32, br: F32, bg: F32, bb: F32, ba: F32, clipMinX: F32, clipMinY: F32, clipMaxX: F32, clipMaxY: F32): Void;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u32_at; abi: c; }
 function metalMemWriteU32(ptr: RawPtr, offset: U64, value: U32): Void;
