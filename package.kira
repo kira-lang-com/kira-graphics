@@ -42,15 +42,6 @@ Package KiraGraphics {
             ],
         },
         NativeLibrary {
-            // A native fast path for writing a UI quad's vertices in one call.
-            // This toolchain does not provide it and nothing calls it; the
-            // declaration says so rather than guessing at a buffer layout.
-            name: "kira_ui",
-            linkMode: LinkMode.Runtime,
-            availability: Availability.Optional,
-            nativeTargets: [],
-        },
-        NativeLibrary {
             // The libffi-backed call builder and symbol lookup the Vulkan and
             // Direct3D loaders use to reach a driver they cannot link against.
             // This toolchain provides none of it, and declaring no target row

@@ -455,6 +455,14 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     var onFrameIndex = 0
     var running = true
     var liveFramePresented = false
+    // On-screen visual proof: the env VALUE is the destination path for the raw
+    // BGRA8 bytes of the drawable this loop presented. A window's own pixels are
+    // the only thing that settles "it renders" for a session that cannot look at
+    // the screen — an offscreen dump proves the renderer, not the window. Each
+    // frame overwrites the last, so the file holds whatever was on screen when the
+    // run ended. Requires the layer to have opted out of framebufferOnly, which
+    // the same variable does at attach time.
+    let onScreenDumpEnv = metalGetEnv("KIRA_METAL_ONSCREEN_DUMP")
     while running {
         let framePool = metalAutoreleasePoolPush()
         var oci = 0
@@ -513,6 +521,12 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         if !liveFramePresented {
             liveFramePresented = true
             kiraGraphicsLiveFramePresented()
+        }
+        if !metalPtrIsNull(onScreenDumpEnv) {
+            let onScreenScale = metalContextScale(ctxPtr)
+            let onScreenW = Int(Float(metalContextWidth(ctxPtr)) * onScreenScale)
+            let onScreenH = Int(Float(metalContextHeight(ctxPtr)) * onScreenScale)
+            metalContextImageDump(ctxPtr, onScreenW, onScreenH, onScreenDumpEnv)
         }
         metalSpinRunLoop(0.002)
         if frame.shouldQuit {

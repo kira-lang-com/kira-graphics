@@ -586,6 +586,16 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     // drawableSize, so CAMetalLayer keeps it at bounds x contentsScale and updates it
     // on resize; the actual pixel size is read back from the drawable's texture.
     metalMsgSendVoidU(layer, metalSel("setAutoresizingMask:"), 18)
+    // A drawable is write-only by default, which is exactly right for a window and
+    // exactly wrong for proving one draws: nothing may read back what was presented.
+    // KIRA_METAL_ONSCREEN_DUMP opts out of that so a headless session can dump the
+    // frame the screen received. Opt-in, because framebufferOnly is a real
+    // optimisation (it lets Core Animation pick a lossless-compressed texture) and
+    // a window nobody is verifying should keep it.
+    let onScreenDumpEnv = metalGetEnv("KIRA_METAL_ONSCREEN_DUMP")
+    if !metalPtrIsNull(onScreenDumpEnv) {
+        metalMsgSendVoidB(layer, metalSel("setFramebufferOnly:"), false)
+    }
     // During a live drag the Kira frame loop is blocked inside AppKit's modal resize
     // tracking, so no new frame is presented until the drag ends. contentsGravity
     // "resize" makes the last presented frame stretch to fill the growing/shrinking
