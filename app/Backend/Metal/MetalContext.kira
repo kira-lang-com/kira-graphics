@@ -39,7 +39,9 @@
 // 152  lockedX          (F64 bits; the virtual pointer's window-space x while locked)
 // 160  lockedY          (F64 bits; the virtual pointer's window-space y while locked)
 // 168  registryCap      (U64; how many ids the registry blocks currently hold)
-function metalContextSize() -> U64 { return 176 }
+// 176  freeId           (U64; head of the freed-id list, 0 when empty — id 0 is
+//                        the reserved sentinel, so it can never be a real entry)
+function metalContextSize() -> U64 { return 184 }
 function metalOffsetDevice() -> U64 { return 0 }
 function metalOffsetQueue() -> U64 { return 8 }
 function metalOffsetColorTexture() -> U64 { return 16 }
@@ -62,6 +64,7 @@ function metalOffsetLockSeeded() -> U64 { return 144 }
 function metalOffsetLockedX() -> U64 { return 152 }
 function metalOffsetLockedY() -> U64 { return 160 }
 function metalOffsetRegistryCap() -> U64 { return 168 }
+function metalOffsetFreeId() -> U64 { return 176 }
 
 // Registry entry kinds (parallel `registryKinds` table). An entry is either a
 // +1-owned Objective-C object (released at teardown) or a raw metalMemAlloc block
@@ -69,6 +72,9 @@ function metalOffsetRegistryCap() -> U64 { return 168 }
 // tell them apart, so the kind is recorded when the handle is registered.
 function metalRegistryKindObject() -> U8 { return 1 }
 function metalRegistryKindRawBlock() -> U8 { return 2 }
+// A slot whose resource was released. Its pointer word holds the next free id
+// rather than a resource, so nothing may release or free what it points at.
+function metalRegistryKindFree() -> U8 { return 0 }
 
 // Stash the frame's command buffer for the DEFERRED readback wait (the GPU wait was
 // moved out of endAndCommit into metalContextReadPixel so offscreen frames pipeline).
@@ -139,13 +145,11 @@ function metalRegistryReserve(ctx: RawPtr, needed: U64) {
 // entry is tagged as an object so teardown releases it.
 @Native
 function metalRegister(ctx: RawPtr, object: RawPtr) -> Int {
-    let id = metalMemReadU64(ctx, metalOffsetNextId())
-    metalRegistryReserve(ctx, id)
+    let id = metalTakeId(ctx)
     let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
     metalMemWritePtr(registry, id * 8, object)
     let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
     metalMemWriteU8(kinds, id, metalRegistryKindObject())
-    metalMemWriteU64(ctx, metalOffsetNextId(), id + 1)
     return id
 }
 
@@ -154,14 +158,70 @@ function metalRegister(ctx: RawPtr, object: RawPtr) -> Int {
 // than sending it an Objective-C `release` (which would crash on a non-object).
 @Native
 function metalRegisterRawBlock(ctx: RawPtr, block: RawPtr) -> Int {
-    let id = metalMemReadU64(ctx, metalOffsetNextId())
-    metalRegistryReserve(ctx, id)
+    let id = metalTakeId(ctx)
     let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
     metalMemWritePtr(registry, id * 8, block)
     let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
     metalMemWriteU8(kinds, id, metalRegistryKindRawBlock())
-    metalMemWriteU64(ctx, metalOffsetNextId(), id + 1)
     return id
+}
+
+// The id a new resource takes: a released one if any are waiting, otherwise the
+// next never-used one, growing the table to fit it.
+//
+// Reuse is what keeps a long session bounded. Ids are handed out per resource and
+// a scene rebuilds its per-entity uniforms whenever the entity count changes, so
+// without reuse the table grows by the whole scene every rebuild and never
+// shrinks — which is a leak of both ids and the memory they index.
+function metalTakeId(ctx: RawPtr) -> U64 {
+    let free = metalMemReadU64(ctx, metalOffsetFreeId())
+    if free != 0 {
+        let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+        metalMemWriteU64(ctx, metalOffsetFreeId(), metalMemReadU64(registry, free * 8))
+        return free
+    }
+    let id = metalMemReadU64(ctx, metalOffsetNextId())
+    metalRegistryReserve(ctx, id)
+    metalMemWriteU64(ctx, metalOffsetNextId(), id + U64(1))
+    return id
+}
+
+// Release the resource behind a handle id and put the id back in circulation.
+//
+// Releasing twice, or releasing an id that was never registered, does nothing:
+// the kind tag says what a slot holds, and a freed slot holds neither an object
+// nor a block. That matters because a caller cannot see the difference — a
+// double `destroyUniform` would otherwise over-release an Objective-C object and
+// take the process down some frames later.
+@Native
+function metalUnregister(ctx: RawPtr, id: Int) {
+    if id <= 0 {
+        return
+    }
+    let slot = U64(id)
+    if slot >= metalMemReadU64(ctx, metalOffsetNextId()) {
+        return
+    }
+    let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
+    let kind = metalMemReadU8(kinds, slot)
+    if kind == metalRegistryKindFree() {
+        return
+    }
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    let entry = metalMemReadPtr(registry, slot * 8)
+    if !metalPtrIsNull(entry) {
+        if kind == metalRegistryKindRawBlock() {
+            metalMemFree(entry)
+        } else {
+            metalMsgSendVoid(entry, metalSel("release"))
+        }
+    }
+    // The slot's pointer word becomes the link to the next free id, which is why
+    // the kind has to say "free" before anything reads it as a resource again.
+    metalMemWriteU8(kinds, slot, metalRegistryKindFree())
+    metalMemWriteU64(registry, slot * 8, metalMemReadU64(ctx, metalOffsetFreeId()))
+    metalMemWriteU64(ctx, metalOffsetFreeId(), slot)
+    return
 }
 
 // Resolve a handle id back to its Objective-C resource pointer.
@@ -397,6 +457,7 @@ function metalContextAlloc() -> RawPtr {
     let kinds = metalMemAlloc(metalRegistryInitialCapacity())
     metalMemWritePtr(ctx, metalOffsetRegistryKinds(), kinds)
     metalMemWriteU64(ctx, metalOffsetRegistryCap(), metalRegistryInitialCapacity())
+    metalMemWriteU64(ctx, metalOffsetFreeId(), 0)
     metalMemWriteU64(ctx, metalOffsetNextId(), 1)
     return ctx
 }
@@ -447,9 +508,11 @@ function metalContextFree(ctx: RawPtr) {
         let nextId = metalMemReadU64(ctx, metalOffsetNextId())
         var id: U64 = 1
         while id < nextId {
+            let kind = metalMemReadU8(kinds, id)
             let entry = metalMemReadPtr(registry, id * 8)
-            if !metalPtrIsNull(entry) {
-                let kind = metalMemReadU8(kinds, id)
+            // A freed slot's word is a free-list link, not a resource: releasing
+            // it would send `release` to a small integer.
+            if kind != metalRegistryKindFree() && !metalPtrIsNull(entry) {
                 if kind == metalRegistryKindRawBlock() {
                     metalMemFree(entry)
                 } else {

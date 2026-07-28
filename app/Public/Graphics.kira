@@ -59,6 +59,10 @@ class Graphics {
     }
 
     function destroyShader(shader: GraphicsShader) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUnregister(self.metalContext, shader.id)
+            return
+        }
         sokolDestroyShaderId(shader.id)
         return
     }
@@ -156,11 +160,19 @@ class Graphics {
     }
 
     function destroyPipeline(pipeline: borrow RenderPipeline) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUnregister(self.metalContext, pipeline.id)
+            return
+        }
         sokolDestroyRenderPipelineId(pipeline.id)
         return
     }
 
     function destroyRenderPipeline(pipeline: borrow RenderPipeline) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUnregister(self.metalContext, pipeline.id)
+            return
+        }
         destroyPipeline(pipeline)
         return
     }
@@ -220,6 +232,10 @@ class Graphics {
     }
 
     function destroyBuffer(buffer: borrow GraphicsBuffer) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUnregister(self.metalContext, buffer.id)
+            return
+        }
         sokolDestroyBufferId(buffer.id)
         return
     }
@@ -256,6 +272,10 @@ class Graphics {
     }
 
     function destroyUniform(uniform: borrow GraphicsUniform) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUnregister(self.metalContext, uniform.id)
+            return
+        }
         sokolDestroyUniformId(uniform.id)
         return
     }
@@ -380,6 +400,10 @@ class Graphics {
     }
 
     function destroyBindGroup(bindGroup: borrow BindGroup) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUnregister(self.metalContext, bindGroup.id)
+            return
+        }
         sokolDestroyBindGroupId(bindGroup.id)
         return
     }
@@ -521,6 +545,10 @@ class Graphics {
     }
 
     function destroyTexture(texture: borrow GraphicsTexture) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUnregister(self.metalContext, texture.id)
+            return
+        }
         sokolDestroyTextureId(texture.id)
         return
     }
@@ -569,6 +597,10 @@ class Graphics {
     }
 
     function destroySampler(sampler: borrow GraphicsSampler) {
+        if self.backend == GraphicsBackend.Metal {
+            metalUnregister(self.metalContext, sampler.id)
+            return
+        }
         sokolDestroySamplerId(sampler.id)
         return
     }
