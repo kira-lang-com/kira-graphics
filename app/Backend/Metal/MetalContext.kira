@@ -38,7 +38,8 @@
 // 144  lockSeeded       (U64; 1 once the locked pointer has an anchor to walk from)
 // 152  lockedX          (F64 bits; the virtual pointer's window-space x while locked)
 // 160  lockedY          (F64 bits; the virtual pointer's window-space y while locked)
-function metalContextSize() -> U64 { return 168 }
+// 168  registryCap      (U64; how many ids the registry blocks currently hold)
+function metalContextSize() -> U64 { return 176 }
 function metalOffsetDevice() -> U64 { return 0 }
 function metalOffsetQueue() -> U64 { return 8 }
 function metalOffsetColorTexture() -> U64 { return 16 }
@@ -60,6 +61,7 @@ function metalOffsetRegistryKinds() -> U64 { return 136 }
 function metalOffsetLockSeeded() -> U64 { return 144 }
 function metalOffsetLockedX() -> U64 { return 152 }
 function metalOffsetLockedY() -> U64 { return 160 }
+function metalOffsetRegistryCap() -> U64 { return 168 }
 
 // Registry entry kinds (parallel `registryKinds` table). An entry is either a
 // +1-owned Objective-C object (released at teardown) or a raw metalMemAlloc block
@@ -87,16 +89,59 @@ function metalStashCommandBuffer(ctx: RawPtr, commandBuffer: RawPtr) {
 
 // The resource registry maps small integer handle ids (stored as U32 in the public
 // handle types) to the Objective-C resource pointers (MTLBuffer / MTLLibrary /
-// MTLRenderPipelineState / ...). A fixed-capacity pointer table is enough for the
-// resource counts a frame uses; ids start at 1 so 0 stays a sentinel.
-function metalRegistryCapacity() -> U64 { return 1024 }
+// MTLRenderPipelineState / ...). Ids start at 1 so 0 stays a sentinel, and they are
+// never reused — nothing unregisters — so the table has to grow with the scene.
+//
+// It used to be a fixed 1024 with no bounds check, which is not a limit but a
+// silent heap corruption: id 1024 wrote one word past the table and one byte past
+// the kinds block, into whatever the allocator had put there. A scene that built
+// enough resources — a lot of entities, each with its own buffers — would start
+// finding its own data changed underneath it, which reads as geometry shifting
+// slightly for no reason.
+function metalRegistryInitialCapacity() -> U64 { return 1024 }
+
+// Make room for id `needed`, doubling until it fits.
+//
+// Copies both parallel blocks and frees the old ones. Growth is amortised, so a
+// scene that registers n resources copies O(n) entries in total rather than per
+// registration.
+function metalRegistryReserve(ctx: RawPtr, needed: U64) {
+    let cap = metalMemReadU64(ctx, metalOffsetRegistryCap())
+    if needed < cap {
+        return
+    }
+    var grown = cap
+    if grown == 0 {
+        grown = metalRegistryInitialCapacity()
+    }
+    while needed >= grown {
+        grown = grown * U64(2)
+    }
+    let oldRegistry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    let oldKinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
+    let registry = metalMemAlloc(grown * 8)
+    let kinds = metalMemAlloc(grown)
+    var id: U64 = 0
+    while id < cap {
+        metalMemWritePtr(registry, id * 8, metalMemReadPtr(oldRegistry, id * 8))
+        metalMemWriteU8(kinds, id, metalMemReadU8(oldKinds, id))
+        id = id + U64(1)
+    }
+    metalMemFree(oldRegistry)
+    metalMemFree(oldKinds)
+    metalMemWritePtr(ctx, metalOffsetRegistry(), registry)
+    metalMemWritePtr(ctx, metalOffsetRegistryKinds(), kinds)
+    metalMemWriteU64(ctx, metalOffsetRegistryCap(), grown)
+    return
+}
 
 // Register a +1-owned Objective-C resource pointer and return its handle id. The
 // entry is tagged as an object so teardown releases it.
 @Native
 function metalRegister(ctx: RawPtr, object: RawPtr) -> Int {
-    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
     let id = metalMemReadU64(ctx, metalOffsetNextId())
+    metalRegistryReserve(ctx, id)
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
     metalMemWritePtr(registry, id * 8, object)
     let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
     metalMemWriteU8(kinds, id, metalRegistryKindObject())
@@ -109,8 +154,9 @@ function metalRegister(ctx: RawPtr, object: RawPtr) -> Int {
 // than sending it an Objective-C `release` (which would crash on a non-object).
 @Native
 function metalRegisterRawBlock(ctx: RawPtr, block: RawPtr) -> Int {
-    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
     let id = metalMemReadU64(ctx, metalOffsetNextId())
+    metalRegistryReserve(ctx, id)
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
     metalMemWritePtr(registry, id * 8, block)
     let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
     metalMemWriteU8(kinds, id, metalRegistryKindRawBlock())
@@ -346,10 +392,11 @@ function metalContextAlloc() -> RawPtr {
     // Resource registry: capacity pointers, ids starting at 1. The parallel kinds
     // table (one U8 per id) records whether each entry is an Objective-C object or a
     // raw block so teardown can release vs free it correctly.
-    let registry = metalMemAlloc(metalRegistryCapacity() * 8)
+    let registry = metalMemAlloc(metalRegistryInitialCapacity() * 8)
     metalMemWritePtr(ctx, metalOffsetRegistry(), registry)
-    let kinds = metalMemAlloc(metalRegistryCapacity())
+    let kinds = metalMemAlloc(metalRegistryInitialCapacity())
     metalMemWritePtr(ctx, metalOffsetRegistryKinds(), kinds)
+    metalMemWriteU64(ctx, metalOffsetRegistryCap(), metalRegistryInitialCapacity())
     metalMemWriteU64(ctx, metalOffsetNextId(), 1)
     return ctx
 }
