@@ -80,6 +80,23 @@ function metalSetCursorHidden(hidden: Bool) {
     return
 }
 
+// Lock the pointer in place for a look/pan drag on the native Metal window path.
+//
+// Hiding the cursor is not locking it: an invisible cursor still tracks the
+// hardware, so it walks out of the window, lands on another app, and stops
+// producing movement once it reaches a screen edge — which reads as the camera
+// jamming against an invisible wall. Disassociating freezes it where it stands
+// while deltas keep flowing.
+//
+// Idempotent at the OS level (unlike `[NSCursor hide]`, this is a flag rather
+// than a count), but callers should still pair lock with unlock so the pointer
+// never stays frozen after a drag ends.
+@Native
+function metalSetMouseLocked(locked: Bool) {
+    let _ = metalAssociateMouseAndCursor(locked == false)
+    return
+}
+
 // All event types (every real NSEvent type is a low bit; this covers bits 0-62, well
 // above the highest NSEventType, standing in for NSEventMaskAny == NSUIntegerMax).
 function metalEventMaskAny() -> U64 { return 9223372036854775807 }

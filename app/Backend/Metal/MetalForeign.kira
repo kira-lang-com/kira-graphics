@@ -19,6 +19,14 @@
 // Objective-C runtime primitives
 // ---------------------------------------------------------------------------
 
+// Decouple the hardware mouse from the on-screen cursor. While disassociated the
+// cursor stays exactly where it was and stops leaving the window, but delta
+// events keep arriving — which is what a look-drag needs. Re-associating puts
+// the two back together, with the cursor still under the user's hand, so no warp
+// is needed on either edge. CoreGraphics, reached through AppKit's link.
+@FFI.Extern { library: kira_metal; symbol: CGAssociateMouseAndMouseCursorPosition; abi: c; }
+function metalAssociateMouseAndCursor(connected: Bool): I32;
+
 @FFI.Extern { library: kira_metal; symbol: objc_getClass; abi: c; }
 function metalObjcGetClass(name: CString): RawPtr;
 
