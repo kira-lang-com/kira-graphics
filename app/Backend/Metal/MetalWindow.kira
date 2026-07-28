@@ -80,6 +80,22 @@ function metalSetCursorHidden(hidden: Bool) {
     return
 }
 
+// The virtual pointer's coordinates, stored in the context as fixed point.
+//
+// A locked pointer walks off the window by design, so its coordinates go
+// negative — and the context stores `U64`. A +100000 point bias covers any
+// screen this runs on in either direction, and a thousandth of a point is far
+// finer than the pixel the value ends up addressing. There is no encoder for
+// IEEE bits here (only `metalDoubleBitsToFloat`, which reads them), so fixed
+// point is also the only way to put a `Float` in that slot at all.
+function metalLockCoordBias() -> Float { return 100000.0 }
+function metalLockCoordStore(value: Float) -> U64 {
+    return U64(Int((value + metalLockCoordBias()) * 1000.0))
+}
+function metalLockCoordLoad(raw: U64) -> Float {
+    return Float(metalU64ToInt(raw)) / 1000.0 - metalLockCoordBias()
+}
+
 // Lock the pointer in place for a look/pan drag on the native Metal window path.
 //
 // Hiding the cursor is not locking it: an invisible cursor still tracks the
@@ -171,7 +187,7 @@ function metalModifiersFromFlags(flags: Int) -> GraphicsModifierState {
 // (bottom-left origin, points) to view-local top-left via the content view's
 // bounds height.
 @Native
-function metalTranslateEvent(event: RawPtr, view: RawPtr) -> GraphicsEvent {
+function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> GraphicsEvent {
     let etype = Int(metalMsgSendU64(event, metalSel("type")))
     var kind = GraphicsEventKind.None
     var button = GraphicsPointerButton.None
@@ -253,12 +269,47 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr) -> GraphicsEvent {
             metalKvcValueInto(event, syKey, buf)
             sy = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
         }
+        // A locked pointer does not move, so `locationInWindow` stops changing
+        // and every consumer that works in positions — which is all of them,
+        // since a drag reports its distance from the press point — sees a
+        // motionless mouse. The movement is still there, in the event's own
+        // deltas, so while the cursor is hidden the position handed onward is a
+        // *virtual* one walked by those deltas: it leaves the window freely,
+        // because nothing draws it, while the real cursor stays put.
+        //
+        // Seeded from the first hidden event's true location, so the virtual
+        // pointer starts where the visible one stopped and a drag's first frame
+        // reports no jump.
+        var px = locX
+        var py = locY
+        if metalCursorIsVisible() {
+            metalMemWriteU64(ctx, metalOffsetLockSeeded(), 0)
+        } else {
+            let dxKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "deltaX")
+            metalKvcValueInto(event, dxKey, buf)
+            let mdx = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+            let dyKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "deltaY")
+            metalKvcValueInto(event, dyKey, buf)
+            let mdy = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+            if metalMemReadU64(ctx, metalOffsetLockSeeded()) == 0 {
+                metalMemWriteU64(ctx, metalOffsetLockSeeded(), 1)
+                metalMemWriteU64(ctx, metalOffsetLockedX(), metalLockCoordStore(locX))
+                metalMemWriteU64(ctx, metalOffsetLockedY(), metalLockCoordStore(locY))
+            }
+            // `deltaY` counts downward and `locationInWindow` counts upward, so
+            // the virtual y walks against it and the top-left flip below stays
+            // the one every other event uses.
+            px = metalLockCoordLoad(metalMemReadU64(ctx, metalOffsetLockedX())) + mdx
+            py = metalLockCoordLoad(metalMemReadU64(ctx, metalOffsetLockedY())) - mdy
+            metalMemWriteU64(ctx, metalOffsetLockedX(), metalLockCoordStore(px))
+            metalMemWriteU64(ctx, metalOffsetLockedY(), metalLockCoordStore(py))
+        }
         metalMemFree(buf)
         return GraphicsEvent {
             kind: kind
             pointerButton: button
-            pointerX: locX
-            pointerY: boundsH - locY
+            pointerX: px
+            pointerY: boundsH - py
             scrollX: sx
             scrollY: sy
             modifiers: metalModifiersFromFlags(flags)
@@ -305,7 +356,7 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr) -> GraphicsEvent {
 // behavior, except key-downs (kept from the window so the unhandled-key beep
 // never fires).
 @Native
-function metalPumpEvents(app: RawPtr, view: RawPtr) -> [GraphicsEvent] {
+function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr) -> [GraphicsEvent] {
     var out: [GraphicsEvent] = []
     let distantPast = metalMsgSend(metalObjcGetClass("NSDate"), metalSel("distantPast"))
     let mode = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "kCFRunLoopDefaultMode")
@@ -315,7 +366,7 @@ function metalPumpEvents(app: RawPtr, view: RawPtr) -> [GraphicsEvent] {
         if metalPtrIsNull(event) {
             draining = false
         } else {
-            let translated = metalTranslateEvent(event, view)
+            let translated = metalTranslateEvent(event, view, ctx)
             if translated.kind != GraphicsEventKind.None {
                 out.append(move translated)
             }

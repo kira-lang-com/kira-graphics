@@ -497,7 +497,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         onFrameIndex = onFrameIndex + 1
         // Dispatch queued window/input events first (activation, title-bar buttons,
         // live resize); translated GraphicsEvents come back for the app handler.
-        let windowEvents = metalPumpEvents(nsApp, view)
+        let windowEvents = metalPumpEvents(nsApp, view, ctxPtr)
         var wei = 0
         while wei < windowEvents.count {
             onWindowEvent(windowEvents[wei])
