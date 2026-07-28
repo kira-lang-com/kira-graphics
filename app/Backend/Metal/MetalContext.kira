@@ -41,7 +41,17 @@
 // 168  registryCap      (U64; how many ids the registry blocks currently hold)
 // 176  freeId           (U64; head of the freed-id list, 0 when empty — id 0 is
 //                        the reserved sentinel, so it can never be a real entry)
-function metalContextSize() -> U64 { return 184 }
+// 184  raceProbe        (U64; 1 when KIRA_METAL_RACE_PROBE was set at alloc time)
+// 192  raceOverlaps     (U64; uniform writes this frame that landed while the
+//                        previous frame was still running on the GPU)
+// 200  raceWrites       (U64; uniform writes this frame, overlapping or not)
+// 208  slotRing         (per-id table of packed slot stride + current offset for
+//                        CPU-rewritten buffers, parallel to `registry`; 0 for a
+//                        resource that has no ring — see MetalPacing.kira)
+// 216  frameRing        (raw block of metalFramesInFlight() retained command
+//                        buffers; the CPU waits on one before recording a pass)
+// 224  frameIndex       (U64; commits so far, i.e. which frameRing slot is next)
+function metalContextSize() -> U64 { return 232 }
 function metalOffsetDevice() -> U64 { return 0 }
 function metalOffsetQueue() -> U64 { return 8 }
 function metalOffsetColorTexture() -> U64 { return 16 }
@@ -65,6 +75,16 @@ function metalOffsetLockedX() -> U64 { return 152 }
 function metalOffsetLockedY() -> U64 { return 160 }
 function metalOffsetRegistryCap() -> U64 { return 168 }
 function metalOffsetFreeId() -> U64 { return 176 }
+function metalOffsetRaceProbe() -> U64 { return 184 }
+function metalOffsetRaceOverlaps() -> U64 { return 192 }
+function metalOffsetRaceWrites() -> U64 { return 200 }
+function metalOffsetSlotRing() -> U64 { return 208 }
+function metalOffsetFrameRing() -> U64 { return 216 }
+function metalOffsetFrameIndex() -> U64 { return 224 }
+
+// MTLCommandBufferStatus.Completed. Anything below it — NotEnqueued, Enqueued,
+// Committed, Scheduled — is a buffer whose GPU work may still be running.
+function metalCommandBufferStatusCompleted() -> U64 { return 4 }
 
 // Registry entry kinds (parallel `registryKinds` table). An entry is either a
 // +1-owned Objective-C object (released at teardown) or a raw metalMemAlloc block
@@ -125,18 +145,23 @@ function metalRegistryReserve(ctx: RawPtr, needed: U64) {
     }
     let oldRegistry = metalMemReadPtr(ctx, metalOffsetRegistry())
     let oldKinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
+    let oldRings = metalMemReadPtr(ctx, metalOffsetSlotRing())
     let registry = metalMemAlloc(grown * 8)
     let kinds = metalMemAlloc(grown)
+    let rings = metalMemAlloc(grown * 8)
     var id: U64 = 0
     while id < cap {
         metalMemWritePtr(registry, id * 8, metalMemReadPtr(oldRegistry, id * 8))
         metalMemWriteU8(kinds, id, metalMemReadU8(oldKinds, id))
+        metalMemWriteU64(rings, id * 8, metalMemReadU64(oldRings, id * 8))
         id = id + U64(1)
     }
     metalMemFree(oldRegistry)
     metalMemFree(oldKinds)
+    metalMemFree(oldRings)
     metalMemWritePtr(ctx, metalOffsetRegistry(), registry)
     metalMemWritePtr(ctx, metalOffsetRegistryKinds(), kinds)
+    metalMemWritePtr(ctx, metalOffsetSlotRing(), rings)
     metalMemWriteU64(ctx, metalOffsetRegistryCap(), grown)
     return
 }
@@ -173,15 +198,22 @@ function metalRegisterRawBlock(ctx: RawPtr, block: RawPtr) -> Int {
 // a scene rebuilds its per-entity uniforms whenever the entity count changes, so
 // without reuse the table grows by the whole scene every rebuild and never
 // shrinks — which is a leak of both ids and the memory they index.
+// Reuse also means the ring entry a released resource left behind must not describe
+// the id's next occupant: every bind asks this table for its offset, so a static
+// vertex buffer handed a dead uniform's slot would be bound part-way into itself.
+// Clearing on the way OUT (rather than trusting each creator to overwrite it) keeps
+// that true for every resource kind, ringed or not.
 function metalTakeId(ctx: RawPtr) -> U64 {
     let free = metalMemReadU64(ctx, metalOffsetFreeId())
     if free != 0 {
         let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
         metalMemWriteU64(ctx, metalOffsetFreeId(), metalMemReadU64(registry, free * 8))
+        metalMemWriteU64(metalMemReadPtr(ctx, metalOffsetSlotRing()), free * 8, 0)
         return free
     }
     let id = metalMemReadU64(ctx, metalOffsetNextId())
     metalRegistryReserve(ctx, id)
+    metalMemWriteU64(metalMemReadPtr(ctx, metalOffsetSlotRing()), id * 8, 0)
     metalMemWriteU64(ctx, metalOffsetNextId(), id + U64(1))
     return id
 }
@@ -459,6 +491,19 @@ function metalContextAlloc() -> RawPtr {
     metalMemWriteU64(ctx, metalOffsetRegistryCap(), metalRegistryInitialCapacity())
     metalMemWriteU64(ctx, metalOffsetFreeId(), 0)
     metalMemWriteU64(ctx, metalOffsetNextId(), 1)
+    // Read the probe switch once, here: the check runs on every uniform write of
+    // every frame, and a scene with a few thousand entities would otherwise scan
+    // the environment a few thousand times a frame to learn the same answer.
+    if metalPtrIsNull(metalGetEnv("KIRA_METAL_RACE_PROBE")) {
+        metalMemWriteU64(ctx, metalOffsetRaceProbe(), 0)
+    } else {
+        metalMemWriteU64(ctx, metalOffsetRaceProbe(), 1)
+    }
+    metalMemWriteU64(ctx, metalOffsetRaceOverlaps(), 0)
+    metalMemWriteU64(ctx, metalOffsetRaceWrites(), 0)
+    // The uniform ring table is parallel to the registry and grows with it, so it
+    // starts at the same capacity.
+    metalPacingInit(ctx)
     return ctx
 }
 
@@ -492,6 +537,9 @@ function metalContextAttachLayer(ctx: RawPtr, width: Int, height: Int) {
 // queue and its dispatch sources, and the device — do not survive to `leaks --atExit`.
 @Native
 function metalContextFree(ctx: RawPtr) {
+    // First: wait out every frame still in flight and drop the pacing state. Nothing
+    // below may release a buffer or texture a running frame is reading.
+    metalPacingFree(ctx)
     // Release the last command buffer we retained for the deferred readback wait.
     let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
     if !metalPtrIsNull(pending) {
@@ -629,6 +677,7 @@ function metalCreateColorTargetTexture(ctx: RawPtr, width: Int, height: Int, pix
 // see the final image.
 @Native
 function metalContextBeginClearTarget(ctx: RawPtr, textureId: Int, loadAction: U64, r: F64, g: F64, b: F64, a: F64, depthEnabled: Bool) {
+    metalPacingBeginPass(ctx)
     let queue = metalMemReadPtr(ctx, metalOffsetQueue())
     let texture = metalLookup(ctx, textureId)
     let rpClass = metalObjcGetClass("MTLRenderPassDescriptor")
@@ -747,6 +796,7 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
 // encoder, leaving the encoder recorded on the context.
 @Native
 function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b: F64, a: F64, depthEnabled: Bool) {
+    metalPacingBeginPass(ctx)
     let queue = metalMemReadPtr(ctx, metalOffsetQueue())
     // In layer mode, acquire the next CAMetalLayer drawable and render into its
     // texture; in offscreen mode, render into the fixed offscreen texture. Either
@@ -802,7 +852,29 @@ function metalContextEndAndCommit(ctx: RawPtr) {
         metalMemWritePtr(ctx, metalOffsetDrawable(), metalNullPtr())
     }
     metalMsgSendVoid(commandBuffer, metalSel("commit"))
-    // No waitUntilCompleted here: the on-screen path presents the drawable (which
+    // Take a slot in the in-flight ring, which is what a later pass waits on before
+    // it records — the bound that keeps the uniform ring from being lapped.
+    metalPacingEndPass(ctx, commandBuffer)
+    // `KIRA_METAL_SYNC_FRAME=1` blocks until this frame is done on the GPU: a
+    // bisection tool, not a mode anything ships in. It gives up all pipelining, so
+    // an artefact that survives it is not the CPU writing memory a running frame is
+    // reading — which is what the uniform ring in MetalPacing.kira now prevents by
+    // construction, and what this variable proved was happening before it existed.
+    if !metalPtrIsNull(metalGetEnv("KIRA_METAL_SYNC_FRAME")) {
+        metalMsgSendVoid(commandBuffer, metalSel("waitUntilCompleted"))
+    }
+    // Frame tally for KIRA_METAL_RACE_PROBE: sentinel, overlapping uniform writes,
+    // total uniform writes. Printed per frame (not summed at exit) because the
+    // count is expected to climb with scene size, and a single total would hide
+    // that. Counters reset here, so each line covers exactly one frame.
+    if metalMemReadU64(ctx, metalOffsetRaceProbe()) != 0 {
+        print(515151)
+        print(Int(metalMemReadU64(ctx, metalOffsetRaceOverlaps())))
+        print(Int(metalMemReadU64(ctx, metalOffsetRaceWrites())))
+        metalMemWriteU64(ctx, metalOffsetRaceOverlaps(), 0)
+        metalMemWriteU64(ctx, metalOffsetRaceWrites(), 0)
+    }
+    // No waitUntilCompleted otherwise: the on-screen path presents the drawable (which
     // sequences its own work and never blocks), and the offscreen path only needs
     // GPU completion when a pixel is read back — so the wait lives in
     // metalContextReadPixel. Blocking every offscreen frame serialized CPU and GPU

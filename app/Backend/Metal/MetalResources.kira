@@ -175,66 +175,96 @@ function metalCreateRenderPipelineWithEntries(ctx: RawPtr, shaderId: Int, colorF
     return id
 }
 
-// Create a persistent, CPU-writable MTLBuffer sized for `floatCount` f32 slots and
-// register it. The UI compositor allocates one of these per frame-stream and rewrites
-// its shared contents every frame (no per-frame buffer churn), binding it as the
-// vertex buffer at slot 0.
+// Create a persistent, CPU-writable MTLBuffer for `floatCount` f32 slots and register
+// it. The UI compositor allocates one of these per frame-stream and rewrites its
+// shared contents every frame (no per-frame buffer churn), binding it as the vertex
+// buffer at slot 0 — so, like a uniform, it holds a whole RING and each frame writes
+// its own slot (MetalPacing.kira). Without that, the frame being written and a frame
+// still on the GPU share the same vertices, and the window shows part of each.
 @Native
 function metalCreateDynamicBuffer(ctx: RawPtr, floatCount: Int) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
-    let buffer = metalMsgSendNewBufferLength(device, metalSel("newBufferWithLength:options:"), floatCount * 4, 0)
-    return metalRegister(ctx, buffer)
+    let byteCount = U64(floatCount) * U64(4)
+    let buffer = metalMsgSendNewBufferLength(device, metalSel("newBufferWithLength:options:"), metalRingBytes(byteCount), 0)
+    let id = metalRegister(ctx, buffer)
+    metalRingInit(ctx, U64(id), metalRingSlotStride(byteCount))
+    return id
 }
 
-// The CPU-visible contents pointer of a dynamic (shared) buffer. Stable for the
-// buffer's lifetime, so a caller can fetch it once and write vertices straight into
-// GPU-visible memory each frame (no per-element FFI marshalling through a Kira array).
+// The CPU-visible base of a dynamic buffer's whole ring. Stable for the buffer's
+// lifetime, so a caller may still fetch it once — but every write through it must be
+// offset by this frame's slot (metalDynamicBufferFrameStart), or it lands in the slot
+// the GPU is reading. The pointer is the base rather than the current slot precisely
+// so that a stale cached copy cannot silently mean the wrong slot.
 @Native
 function metalDynamicBufferContents(ctx: RawPtr, bufferId: Int) -> RawPtr {
     let buffer = metalLookup(ctx, bufferId)
     return metalMsgSend(buffer, metalSel("contents"))
 }
 
-// Overwrite the first `data.count` f32 slots of a dynamic buffer's shared contents.
+// Claim this frame's slot and return the byte offset every write this frame adds to
+// its own. The frame still on the GPU keeps the slot it was recorded with, so writes
+// past this offset cannot disturb it.
+@Native
+function metalDynamicBufferFrameStart(ctx: RawPtr, bufferId: Int) -> Int {
+    return Int(metalRingAdvance(ctx, U64(bufferId)))
+}
+
+// Overwrite the first `data.count` f32 slots of a dynamic buffer, in this frame's
+// ring slot.
 @Native
 function metalUpdateDynamicBuffer(ctx: RawPtr, bufferId: Int, data: borrow [Float]) {
     let buffer = metalLookup(ctx, bufferId)
     let contents = metalMsgSend(buffer, metalSel("contents"))
+    let base = Int(metalRingAdvance(ctx, U64(bufferId)))
     var i = 0
     while i < data.count {
-        metalMemWriteF32(contents, i * 4, data[i])
+        metalMemWriteF32(contents, base + i * 4, data[i])
         i = i + 1
     }
     return
 }
 
-// Create a CPU-writable uniform MTLBuffer sized for `floatCount` floats, register it.
+// Create a CPU-writable uniform MTLBuffer for `floatCount` floats and register it.
+// The buffer holds a whole RING of the uniform (see MetalPacing.kira): the CPU
+// writes the next frame's values while the GPU is still reading the last frame's,
+// so each frame needs its own slot rather than a shared set of bytes.
 @Native
 function metalCreateUniform(ctx: RawPtr, floatCount: Int) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
-    let buffer = metalMsgSendNewBufferLength(device, metalSel("newBufferWithLength:options:"), floatCount * 4, 0)
-    return metalRegister(ctx, buffer)
+    let byteCount = U64(floatCount) * U64(4)
+    let buffer = metalMsgSendNewBufferLength(device, metalSel("newBufferWithLength:options:"), metalRingBytes(byteCount), 0)
+    let id = metalRegister(ctx, buffer)
+    metalRingInit(ctx, U64(id), metalRingSlotStride(byteCount))
+    return id
 }
 
-// Upload float uniform data into a uniform buffer's shared contents.
+// Upload float uniform data into the uniform's NEXT ring slot, which becomes the
+// offset every later bind of this uniform reads from. The slot the previous frame
+// bound is left untouched, so a frame still on the GPU keeps the values it was
+// drawn with.
 @Native
 function metalUpdateUniform(ctx: RawPtr, uniformId: Int, data: borrow [Float]) {
+    metalRaceProbeUniformWrite(ctx)
     let buffer = metalLookup(ctx, uniformId)
     let contents = metalMsgSend(buffer, metalSel("contents"))
+    let base = Int(metalRingAdvance(ctx, U64(uniformId)))
     var i = 0
     while i < data.count {
-        metalMemWriteF32(contents, i * 4, data[i])
+        metalMemWriteF32(contents, base + i * 4, data[i])
         i = i + 1
     }
     return
 }
 
-// Bind a uniform buffer to a fragment-shader buffer slot on the active encoder.
+// Bind a uniform buffer to a fragment-shader buffer slot on the active encoder, at
+// the ring slot its most recent write went to.
 @Native
 function metalEncoderBindFragmentUniform(ctx: RawPtr, uniformId: Int, index: Int) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let buffer = metalLookup(ctx, uniformId)
-    metalMsgSendSetFragmentBuffer(encoder, metalSel("setFragmentBuffer:offset:atIndex:"), buffer, 0, index)
+    let offset = metalRingOffset(ctx, U64(uniformId))
+    metalMsgSendSetFragmentBuffer(encoder, metalSel("setFragmentBuffer:offset:atIndex:"), buffer, offset, index)
     return
 }
 
@@ -247,7 +277,7 @@ function metalEncoderDraw(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, has
     metalMsgSendVoidP(encoder, metalSel("setRenderPipelineState:"), pipeline)
     if hasVertexBuffer {
         let buffer = metalLookup(ctx, vertexBufferId)
-        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, 0, 0)
+        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
     }
     if instanceCount > 1 {
         metalMsgSendDrawPrimitivesInstanced(encoder, metalSel("drawPrimitives:vertexStart:vertexCount:instanceCount:"), metalPrimitiveTriangle(), 0, vertexCount, instanceCount)
@@ -267,7 +297,7 @@ function metalEncoderDrawIndirect(ctx: RawPtr, pipelineId: Int, vertexBufferId: 
     metalMsgSendVoidP(encoder, metalSel("setRenderPipelineState:"), pipeline)
     if hasVertexBuffer {
         let buffer = metalLookup(ctx, vertexBufferId)
-        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, 0, 0)
+        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
     }
     let indirect = metalLookup(ctx, indirectBufferId)
     metalMsgSendDrawPrimitivesIndirect(encoder, metalSel("drawPrimitives:indirectBuffer:indirectBufferOffset:"), metalPrimitiveTriangle(), indirect, 0)
@@ -283,7 +313,7 @@ function metalEncoderDrawIndexed(ctx: RawPtr, pipelineId: Int, vertexBufferId: I
     metalMsgSendVoidP(encoder, metalSel("setRenderPipelineState:"), pipeline)
     if hasVertexBuffer {
         let buffer = metalLookup(ctx, vertexBufferId)
-        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, 0, 0)
+        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
     }
     let indexBuffer = metalLookup(ctx, indexBufferId)
     metalMsgSendDrawIndexed(encoder, metalSel("drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:"), metalPrimitiveTriangle(), indexCount, metalIndexTypeUInt32(), indexBuffer, 0)
