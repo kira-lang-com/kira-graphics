@@ -50,8 +50,13 @@ function metalEncoderApplyBindGroup(ctx: RawPtr, bindGroupId: Int) {
             // vertex buffer; fragment-stage uniforms bind directly at slot. A shader thus
             // reads a vertex uniform from [[buffer(slot+1)]] and a fragment uniform from
             // [[buffer(slot)]].
-            metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), resource, 0, slot + 1)
-            metalMsgSendSetFragmentBuffer(encoder, metalSel("setFragmentBuffer:offset:atIndex:"), resource, 0, slot)
+            //
+            // The offset is the uniform's current ring slot, not 0: the buffer holds one
+            // slot per frame in flight so the CPU can write the next frame's values
+            // without touching the bytes this draw is about to read (MetalPacing.kira).
+            let offset = metalRingOffset(ctx, resourceId)
+            metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), resource, offset, slot + 1)
+            metalMsgSendSetFragmentBuffer(encoder, metalSel("setFragmentBuffer:offset:atIndex:"), resource, offset, slot)
         }
         if kind == metalBindEntryKindTexture() {
             metalMsgSendVoidPU(encoder, metalSel("setFragmentTexture:atIndex:"), resource, slot)

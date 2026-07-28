@@ -128,14 +128,27 @@ class Graphics {
         return sokolDpiScale()
     }
 
-    // The CPU-visible contents pointer of a dynamic buffer, for callers that write
-    // vertices straight into GPU-visible memory (the UI compositor's hot path).
+    // The CPU-visible base of a dynamic buffer, for callers that write vertices
+    // straight into GPU-visible memory (the UI compositor's hot path). The buffer
+    // holds one slot per frame in flight, so every write through this pointer must be
+    // offset by the frame's own slot — see dynamicBufferFrameStart.
     function dynamicBufferContents(buffer: borrow GraphicsBuffer) -> RawPtr {
         if self.backend == GraphicsBackend.Metal {
             return metalDynamicBufferContents(self.metalContext, buffer.id)
         }
         graphicsDiagnostic("Kira Graphics: dynamicBufferContents is only implemented on the Metal backend")
         return self.metalContext
+    }
+
+    // Claim this frame's slot in a dynamic buffer and return the byte offset every
+    // write into it this frame must add to its own. Call once per frame, before
+    // writing: the frame the GPU is still drawing keeps the slot it was recorded
+    // with, so nothing written past this offset can tear it.
+    function dynamicBufferFrameStart(buffer: borrow GraphicsBuffer) -> Int {
+        if self.backend == GraphicsBackend.Metal {
+            return metalDynamicBufferFrameStart(self.metalContext, buffer.id)
+        }
+        return 0
     }
 
     // Overwrite the first data.count f32 slots of a dynamic buffer's contents.

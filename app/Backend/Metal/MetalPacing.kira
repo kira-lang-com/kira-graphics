@@ -1,0 +1,201 @@
+// Frame pacing: how far the CPU may run ahead of the GPU, and where data written
+// for the next frame goes so it does not land in memory the current one is still
+// reading.
+//
+// Uniform and dynamic vertex buffers are `StorageModeShared` and used to be
+// rewritten in place every frame. Presenting a drawable sequences the GPU's own work
+// but says nothing about the CPU's next write, so with a scene big enough that a
+// frame is still running when the next one starts writing, a shader could read a
+// matrix — or a vertex — halfway through being replaced. On uniforms that is geometry
+// shifted slightly, and only once there is enough of it; on the UI's shared vertex
+// stream it is part of the window drawn from one frame and part from the next.
+// Measured on the 24-dragon editor scene: 25 of 25 uniform writes per frame landed
+// while the previous frame was still in flight.
+//
+// The fix is the standard one, in two halves that only work together:
+//
+//   1. Each CPU-rewritten buffer owns a ring of `metalRingSlots()` slots inside one
+//      allocation. A write advances to the next slot and binds read that offset, so
+//      the frame being built never writes the bytes an earlier frame bound.
+//   2. A pass waits for the command buffer from `metalFramesInFlight()` commits
+//      ago before recording. That bounds how far ahead the CPU can get — without
+//      it, a CPU far enough ahead would lap the ring and reintroduce the tear.
+//
+// Three is the usual number of frames in flight and matches what CAMetalLayer hands
+// out by default, so on-screen the wait almost never fires: the drawable pool blocks
+// first.
+function metalFramesInFlight() -> U64 { return 3 }
+
+// One MORE slot than there can be frames in flight, because a frame's buffers are
+// written BEFORE its first pass — and therefore before that pass's wait. At that
+// moment up to `metalFramesInFlight()` earlier frames are still running, and the
+// frame being written needs a slot none of them holds. Equal counts would hand it
+// the oldest running frame's slot in the worst case (one commit per frame), which is
+// the tear again.
+function metalRingSlots() -> U64 { return metalFramesInFlight() + U64(1) }
+
+// Slot stride alignment. Buffer offsets bound to a shader must satisfy the device's
+// constant-buffer alignment: 32 bytes on Apple silicon, 256 on Intel Macs. 256
+// covers both, and rounding up costs bytes nobody counts.
+function metalRingSlotAlignment() -> U64 { return 256 }
+
+// The ring table packs stride and current offset into one U64 — `stride * 2^32 +
+// offset` — so the table stays one word per resource id, parallel to the registry.
+// Both halves fit: a UI vertex stream is megabytes at most, not gigabytes.
+// Multiplication rather than shifts keeps it readable and the two halves independent.
+function metalRingPackScale() -> U64 { return 4294967296 }
+
+// Bytes one slot occupies: the buffer's size rounded up to the binding alignment.
+function metalRingSlotStride(byteCount: U64) -> U64 {
+    let align = metalRingSlotAlignment()
+    return ((byteCount + align - U64(1)) / align) * align
+}
+
+// Bytes a whole ring occupies — what the MTLBuffer is allocated with.
+function metalRingBytes(byteCount: U64) -> U64 {
+    return metalRingSlotStride(byteCount) * metalRingSlots()
+}
+
+// Record a newly created buffer's slot stride, starting on the LAST slot so the
+// first write advances onto slot 0. Called for every ringed buffer at creation,
+// which is also what keeps a REUSED id honest: the free list hands ids back out, and
+// the entry a released resource left behind would otherwise describe a wrong stride.
+@Native
+function metalRingInit(ctx: RawPtr, id: U64, stride: U64) {
+    let table = metalMemReadPtr(ctx, metalOffsetSlotRing())
+    let lastSlot = stride * (metalRingSlots() - U64(1))
+    metalMemWriteU64(table, id * 8, stride * metalRingPackScale() + lastSlot)
+    return
+}
+
+// Move a buffer to its next slot and return the byte offset to write at. A buffer
+// written more than once in a frame simply consumes more of its ring; every write is
+// still a slot no in-flight frame bound.
+@Native
+function metalRingAdvance(ctx: RawPtr, id: U64) -> U64 {
+    let table = metalMemReadPtr(ctx, metalOffsetSlotRing())
+    let packed = metalMemReadU64(table, id * 8)
+    let stride = packed / metalRingPackScale()
+    // Stride 0 means no ring was ever recorded for this id — a static vertex or index
+    // buffer, uploaded once and never rewritten. Offset 0 is the whole resource, so
+    // those keep working rather than being handed an offset past their allocation.
+    if stride == U64(0) {
+        return U64(0)
+    }
+    var offset = packed % metalRingPackScale() + stride
+    if offset >= stride * metalRingSlots() {
+        offset = U64(0)
+    }
+    metalMemWriteU64(table, id * 8, stride * metalRingPackScale() + offset)
+    return offset
+}
+
+// The offset a bind should use: the slot the most recent write went to. A buffer not
+// written this frame keeps pointing at the slot it last wrote, which is exactly right
+// — nothing is overwriting it. An unringed resource answers 0, its whole allocation.
+@Native
+function metalRingOffset(ctx: RawPtr, id: U64) -> U64 {
+    let table = metalMemReadPtr(ctx, metalOffsetSlotRing())
+    return metalMemReadU64(table, id * 8) % metalRingPackScale()
+}
+
+// Allocate the pacing state: the per-id ring table (parallel to the registry, grown
+// with it) and the ring of in-flight command buffers.
+@Native
+function metalPacingInit(ctx: RawPtr) {
+    let table = metalMemAlloc(metalRegistryInitialCapacity() * 8)
+    metalMemWritePtr(ctx, metalOffsetSlotRing(), table)
+    let ring = metalMemAlloc(metalFramesInFlight() * 8)
+    metalMemWritePtr(ctx, metalOffsetFrameRing(), ring)
+    metalMemWriteU64(ctx, metalOffsetFrameIndex(), 0)
+    return
+}
+
+// Before recording a pass: wait out the command buffer committed
+// `metalFramesInFlight()` commits ago, so no more than that many are ever running
+// and the uniform ring can never be lapped. Nothing to wait for until the ring has
+// filled once, so the first frames pay nothing.
+@Native
+function metalPacingBeginPass(ctx: RawPtr) {
+    let ring = metalMemReadPtr(ctx, metalOffsetFrameRing())
+    if metalPtrIsNull(ring) {
+        return
+    }
+    let slot = metalMemReadU64(ctx, metalOffsetFrameIndex()) % metalFramesInFlight()
+    let pending = metalMemReadPtr(ring, slot * 8)
+    if metalPtrIsNull(pending) {
+        return
+    }
+    metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+    metalMsgSendVoid(pending, metalSel("release"))
+    metalMemWritePtr(ring, slot * 8, metalNullPtr())
+    return
+}
+
+// After committing: take the slot the wait above just cleared. Retained, because a
+// command buffer comes back autoreleased and the per-frame pool would free it long
+// before the frame that has to wait for it runs.
+@Native
+function metalPacingEndPass(ctx: RawPtr, commandBuffer: RawPtr) {
+    let ring = metalMemReadPtr(ctx, metalOffsetFrameRing())
+    if metalPtrIsNull(ring) {
+        return
+    }
+    let index = metalMemReadU64(ctx, metalOffsetFrameIndex())
+    metalMsgSendVoid(commandBuffer, metalSel("retain"))
+    metalMemWritePtr(ring, (index % metalFramesInFlight()) * 8, commandBuffer)
+    metalMemWriteU64(ctx, metalOffsetFrameIndex(), index + U64(1))
+    return
+}
+
+// Teardown: every buffer still in the ring is waited out before release, so nothing
+// the GPU is reading is freed underneath it, and freed after the registry's own
+// resources for the same reason.
+@Native
+function metalPacingFree(ctx: RawPtr) {
+    let ring = metalMemReadPtr(ctx, metalOffsetFrameRing())
+    if !metalPtrIsNull(ring) {
+        var slot: U64 = 0
+        while slot < metalFramesInFlight() {
+            let pending = metalMemReadPtr(ring, slot * 8)
+            if !metalPtrIsNull(pending) {
+                metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+                metalMsgSendVoid(pending, metalSel("release"))
+            }
+            slot = slot + U64(1)
+        }
+        metalMemFree(ring)
+        metalMemWritePtr(ctx, metalOffsetFrameRing(), metalNullPtr())
+    }
+    let table = metalMemReadPtr(ctx, metalOffsetSlotRing())
+    if !metalPtrIsNull(table) {
+        metalMemFree(table)
+        metalMemWritePtr(ctx, metalOffsetSlotRing(), metalNullPtr())
+    }
+    return
+}
+
+// `KIRA_METAL_RACE_PROBE=1` counts, per frame, how many uniform writes happened
+// while the previously committed frame was still running on the GPU. Before the
+// ring above existed that count WAS the bug — every one of those writes could tear
+// a matrix a shader was reading. With the ring it is a pipelining meter instead:
+// overlap is expected and healthy, because the write lands in a slot no running
+// frame bound, and a count that drops to zero means the CPU and GPU have stopped
+// overlapping at all.
+@Native
+function metalRaceProbeUniformWrite(ctx: RawPtr) {
+    if metalMemReadU64(ctx, metalOffsetRaceProbe()) == U64(0) {
+        return
+    }
+    metalMemWriteU64(ctx, metalOffsetRaceWrites(), metalMemReadU64(ctx, metalOffsetRaceWrites()) + U64(1))
+    let commandBuffer = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
+    if metalPtrIsNull(commandBuffer) {
+        return
+    }
+    // The stash holds the last COMMITTED buffer — the frame before this one — and
+    // retains it, so this status is safe to ask for right up until it is replaced.
+    if metalMsgSendU64(commandBuffer, metalSel("status")) < metalCommandBufferStatusCompleted() {
+        metalMemWriteU64(ctx, metalOffsetRaceOverlaps(), metalMemReadU64(ctx, metalOffsetRaceOverlaps()) + U64(1))
+    }
+    return
+}
