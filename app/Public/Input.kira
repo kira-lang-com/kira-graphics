@@ -301,6 +301,29 @@ function graphicsShowMouse(show: Bool) {
     return
 }
 
+// Lock the pointer for a look/pan drag: it stops moving on screen and stops
+// leaving the window, while movement still arrives as deltas.
+//
+// Separate from `graphicsShowMouse` because they are separate things — a hidden
+// cursor that still roams is what makes a camera drag run off the window and
+// jam at the screen edge — and paired the same way: one lock per one unlock.
+@Native
+function graphicsLockMouse(lock: Bool) {
+    sapp_lock_mouse(lock)
+    // The native Metal window path doesn't run through Sokol, so drive
+    // CoreGraphics too. Apple-only, on the same terms as `graphicsShowMouse`.
+    let platform = hostGraphicsPlatform()
+    if platform == GraphicsPlatform.MacOS || platform == GraphicsPlatform.IOS {
+        metalSetMouseLocked(lock)
+    }
+    return
+}
+
+@Native
+function graphicsMouseLocked() -> Bool {
+    return sapp_mouse_locked()
+}
+
 @Native
 function graphicsMouseShown() -> Bool {
     return sapp_mouse_shown()
