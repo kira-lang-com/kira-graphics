@@ -603,6 +603,15 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     // and snaps back to crisp native resolution when the loop resumes and re-renders.
     let gravity = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "resize")
     metalMsgSendVoidP(layer, metalSel("setContentsGravity:"), gravity)
+    // `KIRA_METAL_NO_VSYNC=1` presents without waiting for the display, so the
+    // window runs as fast as a frame costs rather than as fast as the panel
+    // refreshes. That is what makes a real workload's frame budget visible: on
+    // the beam, every frame under 16.7 ms looks the same, and the difference
+    // between 3 ms of work and 15 ms shows up only as headroom nobody can see.
+    // Opt-in, because a shipped app should present on the beam.
+    if !metalPtrIsNull(metalGetEnv("KIRA_METAL_NO_VSYNC")) {
+        metalMsgSendVoidB(layer, metalSel("setDisplaySyncEnabled:"), false)
+    }
     // Order matters: assign the layer FIRST, then turn on wantsLayer. This makes the
     // view layer-HOSTING (the CAMetalLayer is ours to drive) rather than layer-backed
     // (where AppKit owns the layer and would draw the view's opaque background over our
