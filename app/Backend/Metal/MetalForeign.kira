@@ -24,6 +24,12 @@
 // events keep arriving — which is what a look-drag needs. Re-associating puts
 // the two back together, with the cursor still under the user's hand, so no warp
 // is needed on either edge. CoreGraphics, reached through AppKit's link.
+// Whether the cursor is currently drawn. The look-drag path hides and locks
+// together, so this doubles as "is the pointer locked" without a flag of our
+// own to keep in step with the OS.
+@FFI.Extern { library: kira_metal; symbol: CGCursorIsVisible; abi: c; }
+function metalCursorIsVisible(): Bool;
+
 @FFI.Extern { library: kira_metal; symbol: CGAssociateMouseAndMouseCursorPosition; abi: c; }
 function metalAssociateMouseAndCursor(connected: Bool): I32;
 

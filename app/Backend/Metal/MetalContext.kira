@@ -35,7 +35,10 @@
 // 136  registryKinds    (raw block of per-id U8 kind tags parallel to `registry`:
 //                        1 = Objective-C object (teardown releases it), 2 = raw
 //                        metalMemAlloc block such as a bind group (teardown frees it))
-function metalContextSize() -> U64 { return 144 }
+// 144  lockSeeded       (U64; 1 once the locked pointer has an anchor to walk from)
+// 152  lockedX          (F64 bits; the virtual pointer's window-space x while locked)
+// 160  lockedY          (F64 bits; the virtual pointer's window-space y while locked)
+function metalContextSize() -> U64 { return 168 }
 function metalOffsetDevice() -> U64 { return 0 }
 function metalOffsetQueue() -> U64 { return 8 }
 function metalOffsetColorTexture() -> U64 { return 16 }
@@ -54,6 +57,9 @@ function metalOffsetLastFrameNs() -> U64 { return 112 }
 function metalOffsetFrameDurationNs() -> U64 { return 120 }
 function metalOffsetPhysicalWidth() -> U64 { return 128 }
 function metalOffsetRegistryKinds() -> U64 { return 136 }
+function metalOffsetLockSeeded() -> U64 { return 144 }
+function metalOffsetLockedX() -> U64 { return 152 }
+function metalOffsetLockedY() -> U64 { return 160 }
 
 // Registry entry kinds (parallel `registryKinds` table). An entry is either a
 // +1-owned Objective-C object (released at teardown) or a raw metalMemAlloc block
