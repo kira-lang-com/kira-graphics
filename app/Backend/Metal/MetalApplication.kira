@@ -418,21 +418,21 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     }
     onInit(move initGraphics)
 
-    let onFrame: (borrow mut GraphicsFrame) -> Void = app.frameHandler
-
-    // Install a window-resize delegate that keeps the drawable size in sync during
-    // a drag. While the user drags the window edge, AppKit runs a modal
-    // resize-tracking loop inside -sendEvent: that blocks this loop; the delegate
-    // must not render (see MetalLiveState) — the first frame after the drag ends
-    // re-lays-out at the final size.
+    // Install a window-resize delegate that renders during a drag. AppKit runs a
+    // modal resize-tracking loop inside -sendEvent:, so this main loop cannot
+    // update layout until the delegate re-enters the frame handler.
     let liveStorage = nativeState(MetalLiveState {
         ctx: ctxPtr
+        userData: userData
+        runtimeUserData: runtimeUserData
     })
     let liveHandle = nativeUserData(liveStorage)
     let hostWindow = metalMsgSend(view, metalSel("window"))
     if !metalPtrIsNull(hostWindow) {
         metalInstallResizeDelegate(hostWindow, liveHandle)
     }
+
+    let onFrame: (borrow mut GraphicsFrame) -> Void = app.frameHandler
 
     // Bound ONCE for the whole loop (like onFrame): calling a closure does not
     // consume it, but re-taking it from the app each frame would move its

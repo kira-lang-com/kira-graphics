@@ -2,6 +2,7 @@
 zig-out/
 .kira/
 .kira-build/
+.codex/tmp/
 
 **/generated/
 kira.lock
