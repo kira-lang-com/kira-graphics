@@ -6078,9 +6078,13 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         // During a live resize AppKit coalesces/throttles -drawRect, so going
         // through -setNeedsDisplay caps the drag at ~10fps no matter how often
         // the timer fires. Render directly here instead to track the drag at the
-        // timer rate. This is safe (unlike rendering from -windowDidResize)
-        // because vsync is disabled for the duration of the resize in
+        // timer rate. Sample the current view bounds first: AppKit may defer
+        // -windowDidResize until the tracking loop ends, and rendering with the
+        // last delivered dimensions makes the UI appear frozen until mouse-up.
+        // This is safe (unlike rendering from -windowDidResize) because vsync is
+        // disabled for the duration of the resize in
         // -windowWillStartLiveResize, so the -flushBuffer swap does not block.
+        _sapp_macos_update_dimensions();
         _sapp_macos_frame();
     } else {
         [self setNeedsDisplay:YES];
@@ -14457,7 +14461,6 @@ SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
 }
 
 #endif /* SOKOL_APP_IMPL */
-
 
 
 

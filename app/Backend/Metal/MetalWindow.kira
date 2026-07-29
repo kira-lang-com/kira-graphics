@@ -406,21 +406,40 @@ function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr) -> [GraphicsEve
     return move out
 }
 
-// State the live-resize delegate needs: only the Metal context. The delegate
-// must NOT render by calling the app's frame closure: closures do not survive
-// repeated extraction from nativeState — the first -windowDidResize: consumed
-// the captured environment and every later tick of the drag rendered through a
-// dangling capture (the long-standing resize SIGSEGV). The delegate now only
-// keeps the drawable size in sync while AppKit's modal resize-tracking loop
-// blocks the frame loop; content scales during the drag and the main loop
-// renders the properly re-laid-out frame the moment the drag ends.
+// State the live-resize delegate needs. It contains only opaque handles, so the
+// Objective-C callback crosses no native-backed Kira struct.
 struct MetalLiveState {
     var ctx: RawPtr
+    var userData: RawPtr
+    var runtimeUserData: RawPtr
+}
+
+// Keep frame construction and the application's frame-handler call behind a
+// native-to-native RawPtr-only seam. In a hybrid build the Objective-C callback
+// must not make GraphicsFrame cross through the bytecode half.
+@Native
+function metalRenderLiveFrame(ctx: RawPtr, userData: RawPtr, runtimeUserData: RawPtr) {
+    let pool = metalAutoreleasePoolPush()
+    metalContextTickFrameTime(ctx)
+    metalContextSyncViewportFromView(ctx)
+    let graphics = Graphics {
+        userData: userData
+        backend: GraphicsBackend.Metal
+        metalContext: ctx
+    }
+    var frame = graphics.frame()
+    var runtimeState = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    runtimeState.app.frameHandler(frame)
+    graphicsSubmitFrame(frame)
+    metalAutoreleasePoolPop(pool)
+    return
 }
 
 // The -windowDidResize: IMP. AppKit posts this repeatedly while the user drags
 // the window edge — inside its modal resize-tracking loop, where the manual
-// Kira frame loop is blocked.
+// Kira frame loop is blocked. Submit a complete app frame here so layout and
+// rendering follow every intermediate window size instead of stretching the
+// last texture until mouse-up.
 @Native
 function metalResizeImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr): Void {
     let value = metalObjcGetAssociatedObject(selfObj, metalSel("kiraLiveState"))
@@ -432,7 +451,7 @@ function metalResizeImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr): Voi
         return
     }
     var state = nativeRecover<MetalLiveState>(statePtr)
-    metalContextSyncViewportFromView(state.ctx)
+    metalRenderLiveFrame(state.ctx, state.userData, state.runtimeUserData)
     return
 }
 

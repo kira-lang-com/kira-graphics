@@ -761,11 +761,10 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     if !metalPtrIsNull(onScreenDumpEnv) {
         metalMsgSendVoidB(layer, metalSel("setFramebufferOnly:"), false)
     }
-    // During a live drag the Kira frame loop is blocked inside AppKit's modal resize
-    // tracking, so no new frame is presented until the drag ends. contentsGravity
-    // "resize" makes the last presented frame stretch to fill the growing/shrinking
-    // layer in the meantime, so the content visually tracks the window during the drag
-    // and snaps back to crisp native resolution when the loop resumes and re-renders.
+    // Keep Core Animation's fallback resize behavior correct between delegate
+    // callbacks. The live-resize delegate submits newly laid-out frames during
+    // AppKit's modal tracking loop; contentsGravity covers only the brief interval
+    // between those submissions.
     let gravity = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "resize")
     metalMsgSendVoidP(layer, metalSel("setContentsGravity:"), gravity)
     // `KIRA_METAL_NO_VSYNC=1` presents without waiting for the display, so the
