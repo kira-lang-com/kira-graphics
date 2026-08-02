@@ -170,6 +170,55 @@ function metalKvcValueInto(obj: RawPtr, key: RawPtr, buf: RawPtr) {
     return
 }
 
+// Is our window the one the window server has at the cursor, or is something else
+// on top of it? A hover-driven UI cannot answer this from coordinates alone: an
+// overlay owned by ANOTHER process — Stage Manager's window strip is the everyday
+// case, notification banners another — is drawn over our frame while our window
+// keeps receiving the moves, so the events arrive with perfectly in-bounds
+// locations pointing at elements the user cannot even see.
+//
+// +[NSWindow windowNumberAtPoint:belowWindowWithWindowNumber:] asks the window
+// server what is frontmost at a screen point across every application, so a
+// mismatch against our own -windowNumber means the pointer is over someone else.
+// `mouseLocation` is used rather than the event's own location because the answer
+// has to be in screen space, and it is the current cursor position either way.
+@Native
+function metalWindowIsUnderCursor(app: RawPtr, window: RawPtr) -> Bool {
+    // System-posted moves can carry no window; the key window is the one they
+    // would have been delivered to, so it is what the comparison is against.
+    var ours = window
+    if metalPtrIsNull(ours) {
+        ours = metalMsgSend(app, metalSel("keyWindow"))
+    }
+    if metalPtrIsNull(ours) {
+        return true
+    }
+    let cursor = metalMsgSendPoint(metalObjcGetClass("NSEvent"), metalSel("mouseLocation"))
+    let front = metalMsgSendWindowNumberAtPoint(
+        metalObjcGetClass("NSWindow"),
+        metalSel("windowNumberAtPoint:belowWindowWithWindowNumber:"),
+        cursor.x,
+        cursor.y,
+        0
+    )
+    let mine = metalMsgSendU64(ours, metalSel("windowNumber"))
+    // KIRA_HOVER_PROBE=1 prints the pair the gate decides on — 727272, then the
+    // window the server has at the cursor, then ours. Equal numbers mean the
+    // pointer is genuinely on our window; a different front number is an overlay
+    // and the event is dropped; a front of 0 is the desktop.
+    if !metalPtrIsNull(metalGetEnv("KIRA_HOVER_PROBE")) {
+        print(727272)
+        print(Int(front))
+        print(Int(mine))
+    }
+    // 0 means the server has nothing there (desktop, another space): not ours
+    // either, but nothing is obscuring us, so let the viewport bounds decide.
+    if front == 0 {
+        return true
+    }
+    return front == mine
+}
+
 // Modifier state from -[NSEvent modifierFlags] (bit 17 shift, 18 control,
 // 19 option, 20 command), extracted with div/mod (no bitwise ops needed).
 @Native
@@ -247,6 +296,19 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> Graphi
     }
     let flags = Int(metalMsgSendU64(event, metalSel("modifierFlags")))
     if isPointer {
+        // Hover and scroll belong to whoever is on top at the cursor; when that is
+        // not us, the pointer has left as far as this app is concerned, however
+        // in-bounds the coordinates look. A DRAG is exempt: the press captured the
+        // pointer, so it may legitimately travel over anything while held.
+        let hoverOnly = etype == metalNsMoved() || etype == metalNsScroll()
+        if hoverOnly {
+            if !metalWindowIsUnderCursor(metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication")), metalMsgSend(event, metalSel("window"))) {
+                return GraphicsEvent {
+                    kind: GraphicsEventKind.PointerExited
+                    modifiers: metalModifiersFromFlags(flags)
+                }
+            }
+        }
         // Geometry through KVC + NSValue/NSNumber -getValue: into a buffer:
         // direct CGRect/NSPoint/CGFloat message RETURNS do not marshal across
         // the FFI (they read back as garbage — the same gap the viewport sync
@@ -412,6 +474,7 @@ struct MetalLiveState {
     var ctx: RawPtr
     var userData: RawPtr
     var runtimeUserData: RawPtr
+    var closed: Bool = false
 }
 
 // Keep frame construction and the application's frame-handler call behind a
@@ -420,7 +483,7 @@ struct MetalLiveState {
 @Native
 function metalRenderLiveFrame(ctx: RawPtr, userData: RawPtr, runtimeUserData: RawPtr) {
     let pool = metalAutoreleasePoolPush()
-    metalContextTickFrameTime(ctx)
+    metalContextBeginFrameTiming(ctx)
     metalContextSyncViewportFromView(ctx)
     let graphics = Graphics {
         userData: userData
@@ -431,6 +494,7 @@ function metalRenderLiveFrame(ctx: RawPtr, userData: RawPtr, runtimeUserData: Ra
     var runtimeState = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
     runtimeState.app.frameHandler(frame)
     graphicsSubmitFrame(frame)
+    metalContextEndFrameTiming(ctx)
     metalAutoreleasePoolPop(pool)
     return
 }
@@ -455,23 +519,62 @@ function metalResizeImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr): Voi
     return
 }
 
+// Closing is distinct from hiding or minimising: hidden windows deliberately keep
+// rendering at half display cadence, while a real close terminates the app loop.
+@Native
+function metalWindowCloseImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr): Void {
+    let value = metalObjcGetAssociatedObject(selfObj, metalSel("kiraLiveState"))
+    if metalPtrIsNull(value) {
+        return
+    }
+    let statePtr = metalMsgSend(value, metalSel("pointerValue"))
+    if metalPtrIsNull(statePtr) {
+        return
+    }
+    var state = nativeRecover<MetalLiveState>(statePtr)
+    state.closed = true
+    return
+}
+
+@Native
+function metalLiveStateClosed(statePtr: RawPtr) -> Bool {
+    let state = nativeRecover<MetalLiveState>(statePtr)
+    return state.closed
+}
+
 // Build (once) an NSWindowDelegate class whose -windowDidResize: is the Kira IMP
 // above, instantiate it, associate the live state with it, and set it as the window's
-// delegate. OBJC_ASSOCIATION_RETAIN_NONATOMIC = 1 keeps the NSValue (and thus the
-// state) alive for the app's lifetime.
+// delegate. OBJC_ASSOCIATION_RETAIN_NONATOMIC = 1 keeps the NSValue carrying the
+// state pointer alive until `metalRemoveResizeDelegate` tears the callback down.
 @Native
-function metalInstallResizeDelegate(window: RawPtr, statePtr: RawPtr) {
+function metalInstallResizeDelegate(window: RawPtr, statePtr: RawPtr) -> RawPtr {
     var cls = metalObjcGetClass("KiraMetalResizeDelegate")
     if metalPtrIsNull(cls) {
         cls = metalObjcAllocateClassPair(metalObjcGetClass("NSObject"), "KiraMetalResizeDelegate", 0)
         let added = metalClassAddMethod(cls, metalSel("windowDidResize:"), metalResizeImp, "v@:@")
         let ignored = added
+        let closeAdded = metalClassAddMethod(cls, metalSel("windowWillClose:"), metalWindowCloseImp, "v@:@")
+        let closeIgnored = closeAdded
         metalObjcRegisterClassPair(cls)
     }
     let delegate = metalMsgSend(metalMsgSend(cls, metalSel("alloc")), metalSel("init"))
     let value = metalMsgSendP(metalObjcGetClass("NSValue"), metalSel("valueWithPointer:"), statePtr)
     metalObjcSetAssociatedObject(delegate, metalSel("kiraLiveState"), value, 1)
     metalMsgSendVoidP(window, metalSel("setDelegate:"), delegate)
+    return delegate
+}
+
+// Detach the callback before its native state is destroyed. The delegate was
+// created with `alloc`, so clearing the association and releasing it here also
+// balances the Objective-C ownership established by installation.
+@Native
+function metalRemoveResizeDelegate(window: RawPtr, delegate: RawPtr) {
+    if metalPtrIsNull(delegate) {
+        return
+    }
+    metalMsgSendVoidP(window, metalSel("setDelegate:"), metalNullPtr())
+    metalObjcSetAssociatedObject(delegate, metalSel("kiraLiveState"), metalNullPtr(), 1)
+    metalMsgSendVoid(delegate, metalSel("release"))
     return
 }
 
@@ -483,4 +586,67 @@ function metalViewWindowVisible(view: RawPtr) -> Bool {
         return false
     }
     return metalMsgSendBoolEmpty(window, metalSel("isVisible"))
+}
+
+// 1 = focused and visible, 2 = unfocused but still visible/unoccluded,
+// 3 = hidden, minimised, or occluded. Both visible states run at full display
+// cadence; only state 3 is throttled.
+@Native
+function metalViewWindowState(view: RawPtr) -> Int {
+    let window = metalMsgSend(view, metalSel("window"))
+    if metalPtrIsNull(window) {
+        return 3
+    }
+    let visible = metalMsgSendBoolEmpty(window, metalSel("isVisible"))
+    let miniaturized = metalMsgSendBoolEmpty(window, metalSel("isMiniaturized"))
+    let occlusion = metalMsgSendU64(window, metalSel("occlusionState"))
+    let occlusionVisible = (occlusion / U64(2)) - ((occlusion / U64(2)) / U64(2)) * U64(2) == U64(1)
+    if !visible || miniaturized || !occlusionVisible {
+        return 3
+    }
+    if metalMsgSendBoolEmpty(window, metalSel("isKeyWindow")) {
+        return 1
+    }
+    return 2
+}
+
+@Native
+function metalViewMaximumFramesPerSecond(view: RawPtr) -> Int {
+    let window = metalMsgSend(view, metalSel("window"))
+    if metalPtrIsNull(window) {
+        return 60
+    }
+    let screen = metalMsgSend(window, metalSel("screen"))
+    if metalPtrIsNull(screen) {
+        return 60
+    }
+    let refresh = Int(metalMsgSendU64(screen, metalSel("maximumFramesPerSecond")))
+    if refresh > 0 {
+        return refresh
+    }
+    return 60
+}
+
+function metalWindowTargetInterval(state: Int, maximumFramesPerSecond: Int) -> Float {
+    if state != 3 || maximumFramesPerSecond <= 0 {
+        return 0.0
+    }
+    return 2.0 / Float(maximumFramesPerSecond)
+}
+
+// Return only the unspent part of the hidden-window frame budget. Sleeping for a
+// full 1/30 s after 14 ms of GPU work would produce ~21 FPS, not half-vsync.
+@Native
+function metalWindowRemainingInterval(frameStartNs: U64, state: Int, maximumFramesPerSecond: Int) -> Float {
+    let target = metalWindowTargetInterval(state, maximumFramesPerSecond)
+    if state != 3 { return 0.0 }
+    let now = metalClockNs(metalClockUptimeRaw())
+    var elapsed = 0.0
+    if now > frameStartNs {
+        elapsed = Float(now - frameStartNs) / 1000000000.0
+    }
+    if elapsed >= target {
+        return 0.0
+    }
+    return target - elapsed
 }

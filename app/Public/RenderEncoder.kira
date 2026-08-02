@@ -154,6 +154,58 @@ class RenderEncoder {
         return
     }
 
+    // Pixel-space scissor in the current render target. Both Metal and Sokol
+    // implement it; callers restore the full target explicitly when finished.
+    function setScissorRect(x: Int, y: Int, width: Int, height: Int) {
+        var state = nativeRecover<RenderEncoderState>(self.storage)
+        if !state.passActive || width <= 0 || height <= 0 {
+            return
+        }
+        if metalContextActive(state.metalContext) {
+            metalEncoderSetScissorRect(state.metalContext, x, y, width, height)
+            return
+        }
+        sgApplyScissorRect(x, y, width, height, true)
+        return
+    }
+
+    function drawIndexedRange(indexCount: Int, firstIndex: Int) {
+        var state = nativeRecover<RenderEncoderState>(self.storage)
+        state.indexCount = indexCount
+        state.vertexCount = 0
+        state.instanceCount = 1
+        if state.passActive && state.hasPipeline && state.pipelineId != 0 {
+            if metalContextActive(state.metalContext) {
+                if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup0Id) }
+                if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup1Id) }
+                if state.hasBindGroup2 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup2Id) }
+                if state.hasBindGroup3 { metalEncoderApplyBindGroup(state.metalContext, state.bindGroup3Id) }
+                metalEncoderDrawIndexedRange(state.metalContext, state.pipelineId, state.vertexBufferId, state.hasVertexBuffer, state.indexBufferId, state.indexCount, state.instanceCount, firstIndex)
+                return
+            }
+            kgSetDrawBaseElement(firstIndex)
+            sokolApplyPipelineBindingsAndDrawFlat(
+                state.pipelineId,
+                state.vertexBufferId,
+                state.hasVertexBuffer ? 1 : 0,
+                state.indexBufferId,
+                state.hasIndexBuffer ? 1 : 0,
+                state.bindGroup0Id,
+                state.hasBindGroup0 ? 1 : 0,
+                state.bindGroup1Id,
+                state.hasBindGroup1 ? 1 : 0,
+                state.bindGroup2Id,
+                state.hasBindGroup2 ? 1 : 0,
+                state.bindGroup3Id,
+                state.hasBindGroup3 ? 1 : 0,
+                state.vertexCount,
+                state.indexCount,
+                state.instanceCount
+            )
+        }
+        return
+    }
+
     // GPU-driven draw: arguments come from a compute-written indirect buffer.
     function drawIndirect(indirectBufferId: Int) {
         var state = nativeRecover<RenderEncoderState>(self.storage)

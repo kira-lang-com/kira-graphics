@@ -215,6 +215,65 @@ function metalDispatchDepthComputeN(ctx: RawPtr, pipelineId: Int, buffers: borro
     return
 }
 
+// Two-stage texture compute inside the active logical frame command buffer.
+// Stage H reads one capture and writes two horizontal blur radii; stage V reads
+// those intermediates and writes the corresponding final textures. Keeping both
+// stages on the frame command buffer preserves render -> compute -> render order
+// without a commit or CPU wait. Non-Metal callers never enter this helper.
+@Native
+function metalDispatchTextureComputePair(
+    ctx: RawPtr,
+    horizontalPipelineId: Int,
+    verticalPipelineId: Int,
+    sourceTextureId: Int,
+    tempNearTextureId: Int,
+    tempFarTextureId: Int,
+    outputNearTextureId: Int,
+    outputFarTextureId: Int,
+    width: Int,
+    height: Int,
+) {
+    if horizontalPipelineId == 0 || verticalPipelineId == 0 || width <= 0 || height <= 0 {
+        return
+    }
+    let commandBuffer = metalContextActiveCommandBuffer(ctx)
+    let source = metalLookup(ctx, sourceTextureId)
+    let tempNear = metalLookup(ctx, tempNearTextureId)
+    let tempFar = metalLookup(ctx, tempFarTextureId)
+    let outputNear = metalLookup(ctx, outputNearTextureId)
+    let outputFar = metalLookup(ctx, outputFarTextureId)
+
+    let gridSize = metalMemAlloc(24)
+    metalMemWriteU64(gridSize, 0, width)
+    metalMemWriteU64(gridSize, 8, height)
+    metalMemWriteU64(gridSize, 16, 1)
+    let tgSize = metalMemAlloc(24)
+    metalMemWriteU64(tgSize, 0, 16)
+    metalMemWriteU64(tgSize, 8, 16)
+    metalMemWriteU64(tgSize, 16, 1)
+
+    let horizontal = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
+    metalMsgSendVoidP(horizontal, metalSel("setComputePipelineState:"), metalLookup(ctx, horizontalPipelineId))
+    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), source, 0)
+    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempNear, 1)
+    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempFar, 2)
+    metalMsgSendVoidPP(horizontal, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
+    metalMsgSendVoid(horizontal, metalSel("endEncoding"))
+
+    let vertical = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
+    metalMsgSendVoidP(vertical, metalSel("setComputePipelineState:"), metalLookup(ctx, verticalPipelineId))
+    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), tempNear, 0)
+    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), tempFar, 1)
+    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), outputNear, 2)
+    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), outputFar, 3)
+    metalMsgSendVoidPP(vertical, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
+    metalMsgSendVoid(vertical, metalSel("endEncoding"))
+
+    metalMemFree(gridSize)
+    metalMemFree(tgSize)
+    return
+}
+
 // Shared-storage buffer of raw 32-bit words from Ints (uint table entries etc.).
 @Native
 function metalCreateStorageBufferU32(ctx: RawPtr, data: borrow [Int]) -> Int {

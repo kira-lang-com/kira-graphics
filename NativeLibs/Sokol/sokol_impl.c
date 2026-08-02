@@ -4444,6 +4444,12 @@ uint32_t kg_begin_render_pass(
     return 0;
 }
 
+static int kg_draw_base_element = 0;
+
+void kg_set_draw_base_element(int64_t base_element) {
+    kg_draw_base_element = base_element > 0 ? (int)base_element : 0;
+}
+
 uint32_t kg_apply_pipeline_bindings_and_draw(
     uint32_t pipeline_id,
     uint32_t vertex_buffer_id,
@@ -4612,10 +4618,11 @@ uint32_t kg_apply_pipeline_bindings_and_draw(
     }
 
     if (index_count > 0) {
-        sg_draw(0, (int)index_count, (int)instance_count);
+        sg_draw(kg_draw_base_element, (int)index_count, (int)instance_count);
     } else if (vertex_count > 0) {
         sg_draw(0, (int)vertex_count, (int)instance_count);
     }
+    kg_draw_base_element = 0;
     return 1;
 }
 

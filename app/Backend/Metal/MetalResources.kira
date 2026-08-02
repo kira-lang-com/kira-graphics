@@ -279,6 +279,7 @@ function metalEncoderDraw(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, has
         let buffer = metalLookup(ctx, vertexBufferId)
         metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
     }
+    metalContextCountDraw(ctx, (vertexCount / 3) * instanceCount)
     if instanceCount > 1 {
         metalMsgSendDrawPrimitivesInstanced(encoder, metalSel("drawPrimitives:vertexStart:vertexCount:instanceCount:"), metalPrimitiveTriangle(), 0, vertexCount, instanceCount)
         return
@@ -300,6 +301,7 @@ function metalEncoderDrawIndirect(ctx: RawPtr, pipelineId: Int, vertexBufferId: 
         metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
     }
     let indirect = metalLookup(ctx, indirectBufferId)
+    metalContextCountDraw(ctx, 0)
     metalMsgSendDrawPrimitivesIndirect(encoder, metalSel("drawPrimitives:indirectBuffer:indirectBufferOffset:"), metalPrimitiveTriangle(), indirect, 0)
     return
 }
@@ -308,6 +310,12 @@ function metalEncoderDrawIndirect(ctx: RawPtr, pipelineId: Int, vertexBufferId: 
 // `indexCount` triangle indices (uint32) from the index buffer.
 @Native
 function metalEncoderDrawIndexed(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, hasVertexBuffer: Bool, indexBufferId: Int, indexCount: Int, instanceCount: Int) {
+    metalEncoderDrawIndexedRange(ctx, pipelineId, vertexBufferId, hasVertexBuffer, indexBufferId, indexCount, instanceCount, 0)
+    return
+}
+
+@Native
+function metalEncoderDrawIndexedRange(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, hasVertexBuffer: Bool, indexBufferId: Int, indexCount: Int, instanceCount: Int, firstIndex: Int) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let pipeline = metalLookup(ctx, pipelineId)
     metalMsgSendVoidP(encoder, metalSel("setRenderPipelineState:"), pipeline)
@@ -316,6 +324,25 @@ function metalEncoderDrawIndexed(ctx: RawPtr, pipelineId: Int, vertexBufferId: I
         metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
     }
     let indexBuffer = metalLookup(ctx, indexBufferId)
-    metalMsgSendDrawIndexed(encoder, metalSel("drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:"), metalPrimitiveTriangle(), indexCount, metalIndexTypeUInt32(), indexBuffer, 0)
+    metalContextCountDraw(ctx, (indexCount / 3) * instanceCount)
+    metalMsgSendDrawIndexed(encoder, metalSel("drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:"), metalPrimitiveTriangle(), indexCount, metalIndexTypeUInt32(), indexBuffer, firstIndex * 4)
+    return
+}
+
+// MTLScissorRect is four NSUIntegers (32 bytes), passed indirectly on arm64 just
+// like MTLRegion. Limit fill work without changing vertex coordinates or UVs.
+@Native
+function metalEncoderSetScissorRect(ctx: RawPtr, x: Int, y: Int, width: Int, height: Int) {
+    let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
+    if metalPtrIsNull(encoder) || width <= 0 || height <= 0 {
+        return
+    }
+    let rect = metalMemAlloc(32)
+    metalMemWriteU64(rect, 0, x)
+    metalMemWriteU64(rect, 8, y)
+    metalMemWriteU64(rect, 16, width)
+    metalMemWriteU64(rect, 24, height)
+    metalMsgSendVoidP(encoder, metalSel("setScissorRect:"), rect)
+    metalMemFree(rect)
     return
 }

@@ -389,6 +389,59 @@ class Graphics {
         }
     }
 
+    // An EMPTY bind group, filled by the three `bindGroupAdd*` calls below.
+    //
+    // The one-shot constructors around it each fix how many resources a group
+    // holds, which the shader — not the constructor — decides: a KSL shader
+    // numbers every resource in a group sequentially, so a group may carry two
+    // texture/sampler pairs, or a buffer beside a texture, and no fixed shape
+    // covers them all. A renderer with more resources than the encoder's four
+    // group slots has nowhere to put them otherwise.
+    function beginBindGroup(label: borrow String) -> BindGroup {
+        if self.backend == GraphicsBackend.Metal {
+            let metalBindGroupId = metalCreateBindGroup(self.metalContext)
+            return BindGroup {
+                handle: BackendBindGroupHandle {
+                    id: metalBindGroupId
+                }
+                id: metalBindGroupId
+            }
+        }
+        let bindGroupId = sokolCreateBindGroupId(label)
+        return BindGroup {
+            handle: BackendBindGroupHandle {
+                id: bindGroupId
+            }
+            id: bindGroupId
+        }
+    }
+
+    // Add a texture at `slot`; the fragment stage reads it at [[texture(slot)]].
+    function bindGroupAddTexture(group: borrow BindGroup, slot: Int, texture: borrow GraphicsTexture) {
+        if self.backend == GraphicsBackend.Metal {
+            metalBindGroupAddEntry(self.metalContext, group.id, metalBindEntryKindTexture(), slot, texture.id)
+        }
+        return
+    }
+
+    // Add a sampler at `slot`; the fragment stage reads it at [[sampler(slot)]].
+    function bindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: borrow GraphicsSampler) {
+        if self.backend == GraphicsBackend.Metal {
+            metalBindGroupAddEntry(self.metalContext, group.id, metalBindEntryKindSampler(), slot, sampler.id)
+        }
+        return
+    }
+
+    // Add a raw registered buffer at a uniform-style slot: the vertex stage reads
+    // it at [[buffer(slot+1)]] (vertex buffer 0 holds the attribute stream), the
+    // fragment stage at [[buffer(slot)]].
+    function bindGroupAddBuffer(group: borrow BindGroup, slot: Int, bufferId: Int) {
+        if self.backend == GraphicsBackend.Metal {
+            metalBindGroupAddEntry(self.metalContext, group.id, metalBindEntryKindUniform(), slot, bufferId)
+        }
+        return
+    }
+
     function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroup {
         if self.backend == GraphicsBackend.Metal {
             let metalBindGroupId = metalCreateBindGroup(self.metalContext)
@@ -532,7 +585,13 @@ class Graphics {
         if self.backend == GraphicsBackend.Metal {
             // Render-target-capable + sampled, in the requested format (enables
             // multi-pass rendering, e.g. the deferred-resolve visibility texture).
-            let metalTextureId = metalCreateColorTargetTexture(self.metalContext, descriptor.width, descriptor.height, metalPixelFormatForTexture(descriptor.format))
+            let metalTextureId = metalCreateColorTargetTexture(
+                self.metalContext,
+                descriptor.width,
+                descriptor.height,
+                metalPixelFormatForTexture(descriptor.format),
+                descriptor.storageMode
+            )
             return GraphicsTexture {
                 handle: BackendTextureHandle {
                     id: metalTextureId

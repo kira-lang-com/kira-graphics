@@ -105,9 +105,38 @@ function metalRingOffset(ctx: RawPtr, id: U64) -> U64 {
 function metalPacingInit(ctx: RawPtr) {
     let table = metalMemAlloc(metalRegistryInitialCapacity() * 8)
     metalMemWritePtr(ctx, metalOffsetSlotRing(), table)
-    let ring = metalMemAlloc(metalFramesInFlight() * 8)
+    // Two words per slot: retained command-buffer pointer, then the logical app
+    // frame serial it belongs to. The serial lets the HUD combine a multi-pass
+    // frame's asynchronous GPU timestamps into one honest GPU-time sample.
+    let ring = metalMemAlloc(metalFramesInFlight() * 16)
     metalMemWritePtr(ctx, metalOffsetFrameRing(), ring)
     metalMemWriteU64(ctx, metalOffsetFrameIndex(), 0)
+    return
+}
+
+// Fold one completed command buffer into its logical frame's GPU busy time.
+// MTLCommandBuffer exposes seconds as scalar doubles; metalMsgSendPoint's `.x`
+// reads the shared v0 return register used by that scalar on arm64.
+@Native
+function metalPacingCollectGpuTime(ctx: RawPtr, commandBuffer: RawPtr, serial: U64) {
+    if serial == 0 {
+        return
+    }
+    let started = metalMsgSendPoint(commandBuffer, metalSel("GPUStartTime")).x
+    let ended = metalMsgSendPoint(commandBuffer, metalSel("GPUEndTime")).x
+    if ended <= started {
+        return
+    }
+    let durationNs = U64(Int(Float(ended - started) * 1000000000.0 + 0.5))
+    let accumulating = metalMemReadU64(ctx, metalOffsetGpuAccumSerial())
+    if accumulating != serial {
+        if accumulating != 0 {
+            metalMemWriteU64(ctx, metalOffsetGpuFrameDurationNs(), metalMemReadU64(ctx, metalOffsetGpuAccumDurationNs()))
+        }
+        metalMemWriteU64(ctx, metalOffsetGpuAccumSerial(), serial)
+        metalMemWriteU64(ctx, metalOffsetGpuAccumDurationNs(), 0)
+    }
+    metalMemWriteU64(ctx, metalOffsetGpuAccumDurationNs(), metalMemReadU64(ctx, metalOffsetGpuAccumDurationNs()) + durationNs)
     return
 }
 
@@ -122,13 +151,15 @@ function metalPacingBeginPass(ctx: RawPtr) {
         return
     }
     let slot = metalMemReadU64(ctx, metalOffsetFrameIndex()) % metalFramesInFlight()
-    let pending = metalMemReadPtr(ring, slot * 8)
+    let pending = metalMemReadPtr(ring, slot * 16)
     if metalPtrIsNull(pending) {
         return
     }
     metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+    metalPacingCollectGpuTime(ctx, pending, metalMemReadU64(ring, slot * 16 + 8))
     metalMsgSendVoid(pending, metalSel("release"))
-    metalMemWritePtr(ring, slot * 8, metalNullPtr())
+    metalMemWritePtr(ring, slot * 16, metalNullPtr())
+    metalMemWriteU64(ring, slot * 16 + 8, 0)
     return
 }
 
@@ -143,7 +174,9 @@ function metalPacingEndPass(ctx: RawPtr, commandBuffer: RawPtr) {
     }
     let index = metalMemReadU64(ctx, metalOffsetFrameIndex())
     metalMsgSendVoid(commandBuffer, metalSel("retain"))
-    metalMemWritePtr(ring, (index % metalFramesInFlight()) * 8, commandBuffer)
+    let slot = (index % metalFramesInFlight()) * 16
+    metalMemWritePtr(ring, slot, commandBuffer)
+    metalMemWriteU64(ring, slot + 8, metalMemReadU64(ctx, metalOffsetLogicalFrameSerial()))
     metalMemWriteU64(ctx, metalOffsetFrameIndex(), index + U64(1))
     return
 }
@@ -157,9 +190,10 @@ function metalPacingFree(ctx: RawPtr) {
     if !metalPtrIsNull(ring) {
         var slot: U64 = 0
         while slot < metalFramesInFlight() {
-            let pending = metalMemReadPtr(ring, slot * 8)
+            let pending = metalMemReadPtr(ring, slot * 16)
             if !metalPtrIsNull(pending) {
                 metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+                metalPacingCollectGpuTime(ctx, pending, metalMemReadU64(ring, slot * 16 + 8))
                 metalMsgSendVoid(pending, metalSel("release"))
             }
             slot = slot + U64(1)
