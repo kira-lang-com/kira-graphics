@@ -134,6 +134,12 @@ function kgBeginRenderPass(label: CString, colorTargetKind: I64, colorTextureId:
 @FFI.Extern { library: sokol; symbol: kg_apply_pipeline_bindings_and_draw; abi: c; }
 function kgApplyPipelineBindingsAndDraw(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, bindGroup0Id: U32, hasBindGroup0: I64, bindGroup1Id: U32, hasBindGroup1: I64, bindGroup2Id: U32, hasBindGroup2: I64, bindGroup3Id: U32, hasBindGroup3: I64, vertexCount: I64, indexCount: I64, instanceCount: I64): U32;
 
+@FFI.Extern { library: sokol; symbol: kg_set_draw_base_element; abi: c; }
+function kgSetDrawBaseElement(baseElement: I64): Void;
+
+@FFI.Extern { library: sokol; symbol: sg_apply_scissor_rect; abi: c; }
+function sgApplyScissorRect(x: I64, y: I64, width: I64, height: I64, originTopLeft: Bool): Void;
+
 @FFI.Extern { library: sokol; symbol: kg_log_submit_state; abi: c; }
 function kgLogSubmitState(pipelineId: U32, vertexBufferId: U32, hasVertexBuffer: I64, indexBufferId: U32, hasIndexBuffer: I64, vertexCount: I64, indexCount: I64, instanceCount: I64): Void;
 

@@ -131,6 +131,13 @@ struct MetalNSPoint {
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendPoint(obj: RawPtr, op: RawPtr): MetalNSPoint;
 
+// (NSPoint, NSInteger) -> NSInteger — +[NSWindow windowNumberAtPoint:
+// belowWindowWithWindowNumber:], which answers which window (of ANY application) the
+// window server has at a screen point. The NSPoint argument is an HFA of two doubles
+// passed as two F64 scalars, exactly like the CGRect argument below.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendWindowNumberAtPoint(cls: RawPtr, op: RawPtr, x: F64, y: F64, below: U64): U64;
+
 // (CGRect) -> CGRect  — e.g. -[NSView convertRectToBacking:]. The argument CGRect is
 // an HFA-of-4-doubles passed as four F64 scalars (v0-v3, like setClearColor:), and the
 // result is the same four-F64 struct. Used to get physical (backing) pixel sizes
@@ -270,6 +277,13 @@ function metalFClose(stream: RawPtr): Void;
 @FFI.Extern { library: kira_metal; symbol: clock_gettime_nsec_np; abi: c; }
 function metalClockNs(clockId: U32): U64;
 function metalClockUptimeRaw() -> U32 { return 8 }
+
+@FFI.Extern { library: kira_metal; symbol: mach_absolute_time; abi: c; }
+function metalMachAbsoluteTime(): U64;
+@FFI.Extern { library: kira_metal; symbol: mach_wait_until; abi: c; }
+function metalMachWaitUntil(deadline: U64): U32;
+@FFI.Extern { library: kira_metal; symbol: mach_timebase_info; abi: c; }
+function metalMachTimebaseInfo(info: RawPtr): U32;
 
 // ---------------------------------------------------------------------------
 // kira_runtime raw memory helpers (build by-reference structs, read pixels)

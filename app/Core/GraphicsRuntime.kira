@@ -9,6 +9,7 @@ function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
     let selection = validateGraphicsBackend(app.backend, app.platform)
     if (!selection.supported) {
         graphicsDiagnostic(selection.reason)
+        nativeStateFree(runtimeState)
         return
     }
 
@@ -18,5 +19,6 @@ function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
         Vulkan -> graphicsDiagnostic("Kira Graphics Vulkan backend selected but no validated Vulkan runtime is linked");
         DirectX12 -> graphicsDiagnostic("Kira Graphics DirectX 12 backend selected but no validated DirectX 12 runtime is linked");
     }
+    nativeStateFree(runtimeState)
     return
 }

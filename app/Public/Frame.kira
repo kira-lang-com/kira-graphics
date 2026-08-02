@@ -154,6 +154,37 @@ class GraphicsFrame {
         return
     }
 
+    // Metal texture-compute specialization used by effects that have a portable
+    // render-pass fallback. On other backends this is deliberately a no-op; the
+    // caller selects its fallback when its compute pipeline ids are zero.
+    function dispatchTextureComputePair(
+        horizontalPipeline: Int,
+        verticalPipeline: Int,
+        sourceTextureId: Int,
+        tempNearTextureId: Int,
+        tempFarTextureId: Int,
+        outputNearTextureId: Int,
+        outputFarTextureId: Int,
+        width: Int,
+        height: Int,
+    ) {
+        if self.backend == GraphicsBackend.Metal {
+            metalDispatchTextureComputePair(
+                self.metalContext,
+                horizontalPipeline,
+                verticalPipeline,
+                sourceTextureId,
+                tempNearTextureId,
+                tempFarTextureId,
+                outputNearTextureId,
+                outputFarTextureId,
+                width,
+                height,
+            )
+        }
+        return
+    }
+
     function readStorageU32(bufferId: Int, index: Int) -> U32 {
         if self.backend == GraphicsBackend.Metal {
             return metalReadStorageBufferU32(self.metalContext, bufferId, index)

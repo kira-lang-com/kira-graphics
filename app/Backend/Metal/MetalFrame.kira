@@ -31,17 +31,17 @@ function metalBeginRenderPassFromFrame(frame: borrow GraphicsFrame, ctxPtr: RawP
     return true
 }
 
-// End the current pass and submit it (offscreen: commit + wait).
+// End this pass's encoder. The frame hook commits all pass encoders together.
 @Native
 function metalEndPassAndCommit(ctxPtr: RawPtr) {
-    metalContextEndAndCommit(ctxPtr)
+    metalContextEndPass(ctxPtr)
     return
 }
 
-// Frame submission hook. The clear pass already committed in endPass, so this is
-// a no-op for the current offscreen path; on-screen presentation will hook here.
+// Submit the complete logical frame as one Metal command buffer.
 @Native
 function metalSubmitFrame(frame: borrow GraphicsFrame) {
+    metalContextSubmitActiveFrame(frame.metalContext)
     return
 }
 
@@ -91,5 +91,28 @@ function metalReportImageDigest(ctxPtr: RawPtr, width: Int, height: Int) {
 function metalReportBench(totalNs: Int, frames: Int) {
     print(424242)
     print(totalNs / frames)
+    return
+}
+
+// Opt-in per-frame benchmark trace. The aggregate benchmark is the throughput
+// gate; this trace exposes queue bursts instead of averaging them away. GPU time
+// is the newest completed logical frame and therefore trails the CPU sample by the
+// configured in-flight depth.
+@Native
+function metalReportBenchFrame(ctxPtr: RawPtr, frameIndex: Int) {
+    print(434343)
+    print(frameIndex)
+    print(Int(metalMemReadU64(ctxPtr, metalOffsetFrameDurationNs())))
+    print(Int(metalMemReadU64(ctxPtr, metalOffsetCpuFrameDurationNs())))
+    print(Int(metalMemReadU64(ctxPtr, metalOffsetGpuFrameDurationNs())))
+    return
+}
+
+@Native
+function metalReportBenchWorst(frameNs: Int, cpuNs: Int, gpuNs: Int) {
+    print(444444)
+    print(frameNs)
+    print(cpuNs)
+    print(gpuNs)
     return
 }
