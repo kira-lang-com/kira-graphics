@@ -13,6 +13,12 @@ function metalMapLoadAction(publicLoadAction: Int) -> U64 {
     if publicLoadAction == 2 {
         return metalLoadActionLoad()
     }
+    // Discard, which the public layer spells 3. A pass whose first draw covers
+    // every pixel opaquely has nothing to keep and nothing to clear: a clear
+    // writes the colour into every tile so the next draw can overwrite all of it.
+    if publicLoadAction == 3 {
+        return metalLoadActionDontCare()
+    }
     return metalLoadActionClear()
 }
 
@@ -114,5 +120,118 @@ function metalReportBenchWorst(frameNs: Int, cpuNs: Int, gpuNs: Int) {
     print(frameNs)
     print(cpuNs)
     print(gpuNs)
+    return
+}
+
+// --- on-screen percentile bench ---------------------------------------------
+// KIRA_METAL_ONSCREEN_BENCH=N runs the REAL window loop — visible window, a
+// presented drawable every frame, nothing offscreen — for N measured frames
+// after warmup, then prints a percentile summary per series. The GPU series is
+// command-buffer residency (GPUStartTime to GPUEndTime): it includes every
+// stall and neighbour on the GPU timeline, so read it as a ceiling; the
+// per-encoder truth needs a Metal System Trace (docs/frame-cost.md).
+
+function metalBenchDigit(digit: Int) -> String {
+    if digit == 1 { return "1" }
+    if digit == 2 { return "2" }
+    if digit == 3 { return "3" }
+    if digit == 4 { return "4" }
+    if digit == 5 { return "5" }
+    if digit == 6 { return "6" }
+    if digit == 7 { return "7" }
+    if digit == 8 { return "8" }
+    if digit == 9 { return "9" }
+    return "0"
+}
+
+function metalBenchInt(value: Int) -> String {
+    if value <= 0 {
+        return "0"
+    }
+    var out = ""
+    var rest = value
+    while rest > 0 {
+        out = metalBenchDigit(rest % 10) + out
+        rest = rest / 10
+    }
+    return out
+}
+
+// Nanoseconds as milliseconds with three decimals ("1.234").
+function metalBenchMs(ns: Int) -> String {
+    let micros = (ns + 500) / 1000
+    var frac = metalBenchInt(micros % 1000)
+    while frac.count < 3 {
+        frac = "0" + frac
+    }
+    return metalBenchInt(micros / 1000) + "." + frac
+}
+
+// In-place insertion sort: a bench window is a few thousand samples, sorted
+// once at exit — no allocation, no dependency.
+function metalBenchSort(samples: borrow mut [Int]) {
+    var i = 1
+    while i < samples.count {
+        let value = samples[i]
+        var j = i
+        while j > 0 && samples[j - 1] > value {
+            samples[j] = samples[j - 1]
+            j = j - 1
+        }
+        samples[j] = value
+        i = i + 1
+    }
+    return
+}
+
+function metalBenchPercentile(sorted: borrow [Int], num: Int, den: Int) -> Int {
+    if sorted.count == 0 {
+        return 0
+    }
+    var index = sorted.count * num / den
+    if index >= sorted.count {
+        index = sorted.count - 1
+    }
+    return sorted[index]
+}
+
+function metalBenchReportSeries(name: String, samples: borrow mut [Int]) {
+    if samples.count == 0 {
+        return
+    }
+    metalBenchSort(samples)
+    print("kira-bench " + name
+        + "  p50 " + metalBenchMs(metalBenchPercentile(samples, 50, 100))
+        + "  p75 " + metalBenchMs(metalBenchPercentile(samples, 75, 100))
+        + "  p90 " + metalBenchMs(metalBenchPercentile(samples, 90, 100))
+        + "  p95 " + metalBenchMs(metalBenchPercentile(samples, 95, 100))
+        + "  p99 " + metalBenchMs(metalBenchPercentile(samples, 99, 100))
+        + "  p999 " + metalBenchMs(metalBenchPercentile(samples, 999, 1000))
+        + "  max " + metalBenchMs(samples[samples.count - 1])
+        + "  ms")
+    return
+}
+
+// Collect one frame's samples (called after end-frame timing; the GPU sample
+// trails the CPU one by the in-flight depth, which percentiles do not mind).
+@Native
+function metalBenchCollect(ctxPtr: RawPtr, frameNs: borrow mut [Int], cpuNs: borrow mut [Int], gpuNs: borrow mut [Int]) {
+    frameNs.append(Int(metalMemReadU64(ctxPtr, metalOffsetFrameDurationNs())))
+    cpuNs.append(Int(metalMemReadU64(ctxPtr, metalOffsetCpuFrameDurationNs())))
+    gpuNs.append(Int(metalMemReadU64(ctxPtr, metalOffsetGpuFrameDurationNs())))
+    return
+}
+
+@Native
+function metalBenchReport(ctxPtr: RawPtr, frameNs: borrow mut [Int], cpuNs: borrow mut [Int], gpuNs: borrow mut [Int]) {
+    let scale = metalContextScale(ctxPtr)
+    let pxW = Int(Float(metalContextWidth(ctxPtr)) * scale)
+    let pxH = Int(Float(metalContextHeight(ctxPtr)) * scale)
+    print("kira-bench on-screen  " + metalBenchInt(pxW) + "x" + metalBenchInt(pxH)
+        + " px  frames " + metalBenchInt(frameNs.count)
+        + "  (gpu = command-buffer residency, a ceiling)")
+    metalBenchReportSeries("frame", frameNs)
+    metalBenchReportSeries("cpu  ", cpuNs)
+    metalBenchReportSeries("gpu  ", gpuNs)
     return
 }

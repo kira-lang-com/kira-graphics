@@ -523,6 +523,14 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     var running = true
     var liveFramePresented = false
     var nextFrameDeadlineNs: U64 = 0
+    // A visible window stays UNCAPPED. Pacing the loop to the display would make
+    // every frame even, but only by refusing to let the app run: it caps the
+    // measurement at the refresh period, so a frame that costs 1.5 ms and one
+    // that costs 16 ms both read as 16.7 ms. A renderer is judged on the work a
+    // frame takes, and a limiter is the one change guaranteed to hide it.
+    //
+    // An app that genuinely wants a cadence sets `targetFrameDurationNs`.
+    let framePacingNs = app.targetFrameDurationNs
     // On-screen visual proof: the env VALUE is the destination path for the raw
     // BGRA8 bytes of the drawable this loop presented. A window's own pixels are
     // the only thing that settles "it renders" for a session that cannot look at
@@ -531,6 +539,32 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     // run ended. Requires the layer to have opted out of framebufferOnly, which
     // the same variable does at attach time.
     let onScreenDumpEnv = metalGetEnv("KIRA_METAL_ONSCREEN_DUMP")
+    // Per-frame trace for the ON-SCREEN loop, the counterpart of the benchmark's
+    // KIRA_METAL_BENCH_DETAIL. The offscreen benchmark measures a compositor with
+    // nothing to present to, so it cannot see the presentation path at all; only
+    // this measures what a window does. A frame rate that swings has to be read
+    // frame by frame — the HUD's own readout is one frame's delta, which shows
+    // the swing without saying what it is made of.
+    let onScreenTraceEnv = metalGetEnv("KIRA_METAL_ONSCREEN_TRACE")
+    // KIRA_METAL_ONSCREEN_BENCH=N: the real-window percentile bench. N frames
+    // are measured after a short warmup, on this same visible, presenting
+    // loop; the summary prints at exit (metalBenchReport). Sets its own frame
+    // limit so a bench run is bounded by construction.
+    var benchFrames = 0
+    let onScreenBenchEnv = metalGetEnv("KIRA_METAL_ONSCREEN_BENCH")
+    if !metalPtrIsNull(onScreenBenchEnv) {
+        let parsedBench = metalEnvInt(onScreenBenchEnv)
+        if parsedBench > 0 {
+            benchFrames = parsedBench
+        }
+    }
+    let benchWarmup = 30
+    if benchFrames > 0 && onScreenFrameLimit == 0 {
+        onScreenFrameLimit = benchWarmup + benchFrames
+    }
+    var benchFrameNs: [Int] = []
+    var benchCpuNs: [Int] = []
+    var benchGpuNs: [Int] = []
     // Deterministic scheduler verification. Production leaves this unset and uses
     // AppKit visibility/occlusion; tests can force 1/2/3 without automating Finder.
     var windowStateOverride = 0
@@ -643,6 +677,12 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         onFrame(frame)
         graphicsSubmitFrame(frame)
         metalContextEndFrameTiming(ctxPtr)
+        if !metalPtrIsNull(onScreenTraceEnv) {
+            metalReportBenchFrame(ctxPtr, onFrameIndex)
+        }
+        if benchFrames > 0 && onFrameIndex > benchWarmup && benchFrameNs.count < benchFrames {
+            metalBenchCollect(ctxPtr, benchFrameNs, benchCpuNs, benchGpuNs)
+        }
         // The frame's passes ended+committed inside graphicsSubmitFrame ->
         // metalContextEndAndCommit, which presented a real on-screen drawable.
         // Signal the live supervisor once (the sokol backend does the same from
@@ -674,17 +714,30 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                 metalSpinRunLoop(remainingInterval)
             }
             nextFrameDeadlineNs = 0
-        } else if app.targetFrameDurationNs > 0 {
+        } else if framePacingNs > 0 {
             if nextFrameDeadlineNs == 0 {
-                nextFrameDeadlineNs = frameStartNs + U64(app.targetFrameDurationNs)
+                nextFrameDeadlineNs = frameStartNs + U64(framePacingNs)
             }
             metalContextWaitUntilNs(ctxPtr, nextFrameDeadlineNs)
-            // Deadline misses start a new cadence here. We deliberately never
-            // submit catch-up frames against deadlines that are already past.
-            nextFrameDeadlineNs = metalClockNs(metalClockUptimeRaw()) + U64(app.targetFrameDurationNs)
+            // Advance the beat rather than restarting it from now: a wait
+            // overshoots its deadline by a little, and folding that overshoot
+            // into the next period makes every frame late by it, which is a
+            // cadence that drifts — 17.5 ms against a 16.7 ms display.
+            //
+            // A deadline already in the past is a real miss, and there the
+            // cadence does restart: we deliberately never submit catch-up frames
+            // against deadlines that have gone.
+            let pacedNow = metalClockNs(metalClockUptimeRaw())
+            nextFrameDeadlineNs = nextFrameDeadlineNs + U64(framePacingNs)
+            if nextFrameDeadlineNs < pacedNow {
+                nextFrameDeadlineNs = pacedNow + U64(framePacingNs)
+            }
         }
     }
 
+    if benchFrames > 0 {
+        metalBenchReport(ctxPtr, benchFrameNs, benchCpuNs, benchGpuNs)
+    }
     if !metalPtrIsNull(hostWindow) {
         metalRemoveResizeDelegate(hostWindow, resizeDelegate)
     }
