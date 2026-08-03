@@ -70,6 +70,39 @@ function metalUpdateTextureRegion(ctx: RawPtr, textureId: Int, x: Int, y: Int, w
     return
 }
 
+// Re-tile a sampled texture's contents into the GPU-optimal layout. A
+// shared-storage texture keeps the CPU-writable linear rows `replaceRegion:`
+// needs, and every sample of it pays for that layout. After the last CPU
+// upload, one blit pass lets Metal re-lay the pixels out (and losslessly
+// compress them on Apple GPUs). One-shot and synchronous, so a caller can
+// treat the upload as complete when this returns; wrong for textures that
+// keep taking CPU writes, like the glyph atlas.
+@Native
+function metalOptimizeTextureForGpu(ctx: RawPtr, textureId: Int) {
+    let texture = metalLookup(ctx, textureId)
+    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
+    let commandBuffer = metalMsgSend(queue, metalSel("commandBuffer"))
+    let blit = metalMsgSend(commandBuffer, metalSel("blitCommandEncoder"))
+    metalMsgSendVoidP(blit, metalSel("optimizeContentsForGPUAccess:"), texture)
+    metalMsgSendVoid(blit, metalSel("endEncoding"))
+    metalMsgSendVoid(commandBuffer, metalSel("commit"))
+    metalMsgSendVoid(commandBuffer, metalSel("waitUntilCompleted"))
+    return
+}
+
+// As metalOptimizeTextureForGpu, but encoded on the FRAME's active command
+// buffer, ordered after whatever the frame already encoded — the shape a
+// mid-frame producer (the blur compute) needs, where a separate committed
+// buffer would race the uncommitted writes it must follow.
+@Native
+function metalContextOptimizeTextureInFrame(ctx: RawPtr, textureId: Int) {
+    let commandBuffer = metalContextActiveCommandBuffer(ctx)
+    let blit = metalMsgSend(commandBuffer, metalSel("blitCommandEncoder"))
+    metalMsgSendVoidP(blit, metalSel("optimizeContentsForGPUAccess:"), metalLookup(ctx, textureId))
+    metalMsgSendVoid(blit, metalSel("endEncoding"))
+    return
+}
+
 // Create an MTLSamplerState with the given min/mag filters and address mode.
 @Native
 function metalCreateSampler(ctx: RawPtr, minFilter: U64, magFilter: U64, addressMode: U64) -> Int {

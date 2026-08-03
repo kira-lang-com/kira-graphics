@@ -185,6 +185,20 @@ class GraphicsFrame {
         return
     }
 
+    // Re-tile a texture's contents into the GPU-optimal layout, ordered after
+    // everything already encoded this frame. A compute pass writes through the
+    // shader-write usage, which forfeits the compressed layout render passes
+    // get — and every later sample of that texture pays uncompressed-fetch
+    // latency for it. One blit after the writes restores the fast layout. On
+    // non-Metal backends this is a no-op, matching dispatchTextureComputePair,
+    // whose outputs are the textures this exists to repair.
+    function optimizeTexture(textureId: Int) {
+        if self.backend == GraphicsBackend.Metal {
+            metalContextOptimizeTextureInFrame(self.metalContext, textureId)
+        }
+        return
+    }
+
     function readStorageU32(bufferId: Int, index: Int) -> U32 {
         if self.backend == GraphicsBackend.Metal {
             return metalReadStorageBufferU32(self.metalContext, bufferId, index)
