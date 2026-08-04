@@ -49,6 +49,19 @@ class GraphicsFrame {
     var backend: GraphicsBackend = GraphicsBackend.Sokol
     var metalContext: RawPtr
 
+    // How many frames this backend keeps in flight — the depth of its pacing
+    // ring, and what a telemetry readout means by "frames in flight".
+    //
+    // Asked of the frame rather than imported from a backend's own module, so a
+    // caller that only wants the number does not have to name the backend that
+    // happens to answer it. A backend that submits and waits has one.
+    function framesInFlight() -> Int {
+        if self.backend == .Metal {
+            return Int(metalFramesInFlight())
+        }
+        return 1
+    }
+
     function beginRenderPass(descriptor: borrow RenderPassDescriptor) -> RenderEncoder {
         var colorAttachment = descriptor.primaryColorAttachment
         self.hasColorAttachment = descriptor.hasPrimaryColorAttachment
