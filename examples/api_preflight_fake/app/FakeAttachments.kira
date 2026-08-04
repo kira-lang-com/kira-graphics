@@ -1,4 +1,5 @@
 import KiraGraphics
+import Foundation
 
 struct FakeRenderTarget {
     var kind: FakeRenderTargetKind = FakeRenderTargetKind.swapchain

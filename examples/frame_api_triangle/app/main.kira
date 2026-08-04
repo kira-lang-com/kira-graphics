@@ -1,4 +1,5 @@
 import KiraGraphics
+import Foundation
 
 struct FrameTriangleState {
     var shader: GraphicsShader

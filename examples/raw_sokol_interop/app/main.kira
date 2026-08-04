@@ -1,12 +1,11 @@
 import KiraGraphics
-import KiraGraphics.sokol
 
 @FFI.Extern { library: sokol; symbol: kg_begin_swapchain_pass; abi: c; }
 function kgBeginSwapchainPass(r: F32, g: F32, b: F32, a: F32): Void;
 
 struct RawSokolState {
-    var shader: sg_shader
-    var pipeline: sg_pipeline
+    var shaderId: U32 = 0
+    var pipelineId: U32 = 0
 }
 
 function rawTriangleVertexSource() -> String {
@@ -34,13 +33,13 @@ function rawSokolInit(data: RawPtr) -> Void {
         }
         label: "raw-sokol-triangle-shader"
     }
-    state.shader = sg_make_shader(move shaderDesc)
+    state.shaderId = sg_make_shader(move shaderDesc).id
 
     let pipelineDesc = sg_pipeline_desc {
-        shader: state.shader
+        shader: sg_shader { id: state.shaderId }
         label: "raw-sokol-triangle-pipeline"
     }
-    state.pipeline = sg_make_pipeline(move pipelineDesc)
+    state.pipelineId = sg_make_pipeline(move pipelineDesc).id
     return
 }
 
@@ -49,7 +48,7 @@ function rawSokolFrame(data: RawPtr) -> Void {
     var state = nativeRecover<RawSokolState>(data)
     kgBeginSwapchainPass(0.04, 0.05, 0.08, 1.0)
     sg_apply_viewport(0, 0, sapp_width(), sapp_height(), true)
-    sg_apply_pipeline(state.pipeline)
+    sg_apply_pipeline(sg_pipeline { id: state.pipelineId })
     sg_draw(0, 3, 1)
     sg_end_pass()
     sg_commit()
@@ -60,8 +59,8 @@ function rawSokolFrame(data: RawPtr) -> Void {
 @Native
 function rawSokolCleanup(data: RawPtr) -> Void {
     var state = nativeRecover<RawSokolState>(data)
-    sg_destroy_pipeline(state.pipeline)
-    sg_destroy_shader(state.shader)
+    sg_destroy_pipeline(sg_pipeline { id: state.pipelineId })
+    sg_destroy_shader(sg_shader { id: state.shaderId })
     sg_shutdown()
     return
 }
@@ -69,14 +68,7 @@ function rawSokolCleanup(data: RawPtr) -> Void {
 @Main
 @Native
 function main() {
-    var state = nativeState(RawSokolState {
-        shader: sg_shader {
-            id: 0
-        }
-        pipeline: sg_pipeline {
-            id: 0
-        }
-    })
+    var state = nativeState(RawSokolState {})
     let desc = sapp_desc {
         init_userdata_cb: rawSokolInit
         frame_userdata_cb: rawSokolFrame

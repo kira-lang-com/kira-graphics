@@ -1,4 +1,5 @@
 import KiraGraphics
+import Foundation
 
 // A real triangle through the from-scratch Metal backend (no shim): MSL shader
 // compiled at runtime, an MTLRenderPipelineState, a vertex MTLBuffer and a draw,

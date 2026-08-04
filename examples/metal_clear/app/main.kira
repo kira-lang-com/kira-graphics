@@ -1,4 +1,5 @@
 import KiraGraphics
+import Foundation
 
 // Offscreen Metal clear through the real Kira Graphics public API.
 // Selects the from-scratch Metal backend (CAMetalLayer-class path, no Sokol);
@@ -27,6 +28,6 @@ function main() {
         return
     }
 
-    app.run(0)
+    app.run(metalNullPtr())
     return
 }
