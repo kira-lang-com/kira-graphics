@@ -35,7 +35,7 @@ function kiraGraphicsSokolInit(runtimeUserData: RawPtr): Void {
     let onInit: (Graphics) -> Void = state.app.initHandler
     let graphics = Graphics {
         userData: state.userData
-        backend: GraphicsBackend.Sokol
+        backend: .Sokol
         metalContext: metalNullPtr()
     }
     onInit(move graphics)
@@ -57,7 +57,7 @@ function kiraGraphicsSokolFrame(runtimeUserData: RawPtr): Void {
     let onFrame: (borrow mut GraphicsFrame) -> Void = state.app.frameHandler
     let graphics = Graphics {
         userData: state.userData
-        backend: GraphicsBackend.Sokol
+        backend: .Sokol
         metalContext: metalNullPtr()
     }
     var frame = graphics.frame()
@@ -76,7 +76,7 @@ function kiraGraphicsSokolCleanup(runtimeUserData: RawPtr): Void {
     let onCleanup: (Graphics) -> Void = state.app.cleanupHandler
     let graphics = Graphics {
         userData: state.userData
-        backend: GraphicsBackend.Sokol
+        backend: .Sokol
         metalContext: metalNullPtr()
     }
 

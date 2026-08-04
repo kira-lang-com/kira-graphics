@@ -304,7 +304,7 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> Graphi
         if hoverOnly {
             if !metalWindowIsUnderCursor(metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication")), metalMsgSend(event, metalSel("window"))) {
                 return GraphicsEvent {
-                    kind: GraphicsEventKind.PointerExited
+                    kind: .PointerExited
                     modifiers: metalModifiersFromFlags(flags)
                 }
             }
@@ -387,7 +387,7 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> Graphi
             mappedKey = 300
         }
         return GraphicsEvent {
-            kind: GraphicsEventKind.KeyDown
+            kind: .KeyDown
             keyCode: mappedKey
             keyRepeat: metalMsgSendBoolEmpty(event, metalSel("isARepeat"))
             modifiers: metalModifiersFromFlags(flags)
@@ -395,13 +395,13 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> Graphi
     }
     if etype == metalNsKeyUp() {
         return GraphicsEvent {
-            kind: GraphicsEventKind.KeyUp
+            kind: .KeyUp
             keyCode: metalMapKeyCode(Int(metalMsgSendU64(event, metalSel("keyCode"))))
             modifiers: metalModifiersFromFlags(flags)
         }
     }
     return GraphicsEvent {
-        kind: GraphicsEventKind.None
+        kind: .None
     }
 }
 
@@ -429,7 +429,7 @@ function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr) -> [GraphicsEve
             draining = false
         } else {
             let translated = metalTranslateEvent(event, view, ctx)
-            if translated.kind != GraphicsEventKind.None {
+            if translated.kind != .None {
                 out.append(move translated)
             }
             let etype = Int(metalMsgSendU64(event, metalSel("type")))
@@ -455,7 +455,7 @@ function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr) -> [GraphicsEve
                             let b0 = raw8 - (raw8 / 256) * 256
                             if b0 >= 32 && b0 < 127 {
                                 out.append(GraphicsEvent {
-                                    kind: GraphicsEventKind.TextInput
+                                    kind: .TextInput
                                     textCodepoint: Int(b0)
                                 })
                             }
@@ -487,7 +487,7 @@ function metalRenderLiveFrame(ctx: RawPtr, userData: RawPtr, runtimeUserData: Ra
     metalContextSyncViewportFromView(ctx)
     let graphics = Graphics {
         userData: userData
-        backend: GraphicsBackend.Metal
+        backend: .Metal
         metalContext: ctx
     }
     var frame = graphics.frame()

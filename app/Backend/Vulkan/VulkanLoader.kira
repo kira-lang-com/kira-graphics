@@ -50,21 +50,21 @@ function vulkanGlobalSymbol(index: Int) -> VulkanLoaderSymbol {
     if index == 0 {
         return VulkanLoaderSymbol {
             name: "vkGetInstanceProcAddr"
-            scope: VulkanSymbolScope.Global
+            scope: .Global
             required: true
         }
     }
     if index == 1 {
         return VulkanLoaderSymbol {
             name: "vkEnumerateInstanceExtensionProperties"
-            scope: VulkanSymbolScope.Global
+            scope: .Global
             required: true
         }
     }
     if index == 2 {
         return VulkanLoaderSymbol {
             name: "vkEnumerateInstanceLayerProperties"
-            scope: VulkanSymbolScope.Global
+            scope: .Global
             required: true
         }
     }
@@ -75,35 +75,35 @@ function vulkanInstanceSymbol(index: Int) -> VulkanLoaderSymbol {
     if index == 0 {
         return VulkanLoaderSymbol {
             name: "vkCreateInstance"
-            scope: VulkanSymbolScope.Instance
+            scope: .Instance
             required: true
         }
     }
     if index == 1 {
         return VulkanLoaderSymbol {
             name: "vkDestroyInstance"
-            scope: VulkanSymbolScope.Instance
+            scope: .Instance
             required: true
         }
     }
     if index == 2 {
         return VulkanLoaderSymbol {
             name: "vkEnumeratePhysicalDevices"
-            scope: VulkanSymbolScope.Instance
+            scope: .Instance
             required: true
         }
     }
     if index == 3 {
         return VulkanLoaderSymbol {
             name: "vkGetPhysicalDeviceQueueFamilyProperties"
-            scope: VulkanSymbolScope.Instance
+            scope: .Instance
             required: true
         }
     }
     if index == 4 {
         return VulkanLoaderSymbol {
             name: "vkGetPhysicalDeviceSurfaceSupportKHR"
-            scope: VulkanSymbolScope.Instance
+            scope: .Instance
             required: true
         }
     }
@@ -114,28 +114,28 @@ function vulkanDeviceSymbol(index: Int) -> VulkanLoaderSymbol {
     if index == 0 {
         return VulkanLoaderSymbol {
             name: "vkCreateDevice"
-            scope: VulkanSymbolScope.Device
+            scope: .Device
             required: true
         }
     }
     if index == 1 {
         return VulkanLoaderSymbol {
             name: "vkGetDeviceProcAddr"
-            scope: VulkanSymbolScope.Device
+            scope: .Device
             required: true
         }
     }
     if index == 2 {
         return VulkanLoaderSymbol {
             name: "vkCreateSwapchainKHR"
-            scope: VulkanSymbolScope.Device
+            scope: .Device
             required: true
         }
     }
     if index == 3 {
         return VulkanLoaderSymbol {
             name: "vkQueuePresentKHR"
-            scope: VulkanSymbolScope.Device
+            scope: .Device
             required: true
         }
     }

@@ -21,12 +21,10 @@ function sokolCreateUniformId(label: borrow String, expectedFloatCount: Int) -> 
 
 @Native
 function updateGraphicsUniform(uniform: borrow GraphicsUniform, data: borrow [Float]) {
-    var index = 0
-    while index < data.count {
+        for index in 0..data.count {
         let nativeIndex: I64 = index
         kgSetUniformFloat(uniform.id, nativeIndex, data[index])
-        index = index + 1
-    }
+            }
     let nativeCount: I64 = data.count
     kgFinishUniformUpdate(uniform.id, nativeCount)
     return

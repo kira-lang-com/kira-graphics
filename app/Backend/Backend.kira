@@ -37,10 +37,10 @@ function defaultGraphicsBackend() -> GraphicsBackend {
 @Native
 function graphicsDefaultBackend() -> GraphicsBackend {
     let platform = hostGraphicsPlatform()
-    if platform == GraphicsPlatform.MacOS {
+    if platform == .MacOS {
         return GraphicsBackend.Metal
     }
-    if platform == GraphicsPlatform.IOS {
+    if platform == .IOS {
         return GraphicsBackend.Metal
     }
     return GraphicsBackend.Sokol
@@ -52,7 +52,7 @@ function hostGraphicsPlatform() -> GraphicsPlatform {
 }
 
 function effectiveGraphicsPlatform(requested: GraphicsPlatform) -> GraphicsPlatform {
-    if requested == GraphicsPlatform.Unknown {
+    if requested == .Unknown {
         return hostGraphicsPlatform()
     }
     return requested
@@ -100,9 +100,9 @@ function validateGraphicsBackend(backend: GraphicsBackend, platform: GraphicsPla
 
 @Native
 function validateMetalBackend(platform: GraphicsPlatform) -> GraphicsBackendSelection {
-    if platform == GraphicsPlatform.MacOS {
+    if platform == .MacOS {
         return GraphicsBackendSelection {
-            backend: GraphicsBackend.Metal
+            backend: .Metal
             platform: platform
             supported: true
             loaderName: "metal"
@@ -110,9 +110,9 @@ function validateMetalBackend(platform: GraphicsPlatform) -> GraphicsBackendSele
             reason: ""
         }
     }
-    if platform == GraphicsPlatform.IOS {
+    if platform == .IOS {
         return GraphicsBackendSelection {
-            backend: GraphicsBackend.Metal
+            backend: .Metal
             platform: platform
             supported: true
             loaderName: "metal"
@@ -124,30 +124,52 @@ function validateMetalBackend(platform: GraphicsPlatform) -> GraphicsBackendSele
 }
 
 @Native
+// Vulkan: the loader is probed, and the answer is still `supported: false`.
+//
+// The probe says whether the loader is *present*, which is a different question
+// from whether this package can render with it — there is no device, no frame
+// path and no encoder behind `GraphicsBackend.Vulkan`, only the generated
+// bindings and this loader. Reporting `supported: true` because the driver is
+// installed told a caller it could select a backend that would then draw
+// nothing.
+//
+// The probe still runs, because its answer is the useful half of the reason: a
+// machine without the loader and a machine with one are different states, and
+// the message says which.
 function validateVulkanBackend(platform: GraphicsPlatform) -> GraphicsBackendSelection {
     let contract = vulkanLoaderContract(platform)
     let probe = vulkanRuntimeProbe(contract)
+    var reason = "the Kira Graphics Vulkan backend is not implemented: no device or frame path exists behind the loader"
+    if probe.supported == false {
+        reason = reason + " (and " + probe.reason + ")"
+    }
     return GraphicsBackendSelection {
-        backend: GraphicsBackend.Vulkan
+        backend: .Vulkan
         platform: contract.platform
-        supported: probe.supported
+        supported: false
         loaderName: contract.libraryName
         requiredSymbolCount: contract.globalSymbolCount + contract.instanceSymbolCount + contract.deviceSymbolCount
-        reason: probe.reason
+        reason: reason
     }
 }
 
 @Native
+// DirectX 12: the same arrangement, for the same reason. See
+// `validateVulkanBackend`.
 function validateDirectX12Backend(platform: GraphicsPlatform) -> GraphicsBackendSelection {
     let contract = directX12LoaderContract(platform)
     let probe = directX12RuntimeProbe(contract)
+    var reason = "the Kira Graphics DirectX 12 backend is not implemented: no device or frame path exists behind the loader"
+    if probe.supported == false {
+        reason = reason + " (and " + probe.reason + ")"
+    }
     return GraphicsBackendSelection {
-        backend: GraphicsBackend.DirectX12
+        backend: .DirectX12
         platform: contract.platform
-        supported: probe.supported
+        supported: false
         loaderName: contract.d3d12LibraryName
         requiredSymbolCount: contract.loaderSymbolCount
-        reason: probe.reason
+        reason: reason
     }
 }
 

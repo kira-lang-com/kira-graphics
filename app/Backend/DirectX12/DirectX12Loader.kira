@@ -115,7 +115,7 @@ function directX12CoreInterface(index: Int) -> DirectXComInterface {
     if index == 0 {
         return DirectXComInterface {
             name: "IDXGIFactory4"
-            kind: DirectXComInterfaceKind.Factory
+            kind: .Factory
             iid: directXGuid(0x1bc6ea02, 0xef36, 0x464f, 0xbf, 0x0c, 0x21, 0xca, 0x39, 0xe5, 0x16, 0x8a)
             minimumVTableSlots: 29
             ownsReference: true
@@ -124,7 +124,7 @@ function directX12CoreInterface(index: Int) -> DirectXComInterface {
     if index == 1 {
         return DirectXComInterface {
             name: "IDXGIAdapter1"
-            kind: DirectXComInterfaceKind.Adapter
+            kind: .Adapter
             iid: directXGuid(0x29038f61, 0x3839, 0x4626, 0x91, 0xfd, 0x08, 0x68, 0x79, 0x01, 0x1a, 0x05)
             minimumVTableSlots: 10
             ownsReference: true
@@ -133,7 +133,7 @@ function directX12CoreInterface(index: Int) -> DirectXComInterface {
     if index == 2 {
         return DirectXComInterface {
             name: "ID3D12Device"
-            kind: DirectXComInterfaceKind.Device
+            kind: .Device
             iid: directXGuid(0x189819f1, 0x1db6, 0x4b57, 0xbe, 0x54, 0x18, 0x21, 0x33, 0x9b, 0x85, 0xf7)
             minimumVTableSlots: 44
             ownsReference: true
@@ -142,7 +142,7 @@ function directX12CoreInterface(index: Int) -> DirectXComInterface {
     if index == 3 {
         return DirectXComInterface {
             name: "ID3D12CommandQueue"
-            kind: DirectXComInterfaceKind.CommandQueue
+            kind: .CommandQueue
             iid: directXGuid(0x0ec870a6, 0x5d7e, 0x4c22, 0x8c, 0xfc, 0x5b, 0xaa, 0xe0, 0x76, 0x16, 0xed)
             minimumVTableSlots: 18
             ownsReference: true
@@ -156,7 +156,7 @@ function directXHResultSucceeded(result: DirectXHResult) -> Bool {
 }
 
 function directX12LoaderContract(platform: borrow GraphicsPlatform) -> DirectX12LoaderContract {
-    if platform == GraphicsPlatform.Windows {
+    if platform == .Windows {
         return DirectX12LoaderContract {
             platform: platform
             d3d12LibraryName: "d3d12.dll"
@@ -167,7 +167,7 @@ function directX12LoaderContract(platform: borrow GraphicsPlatform) -> DirectX12
             reason: "DirectX 12 loader can be probed through Kira dynamic FFI"
         }
     }
-    if platform == GraphicsPlatform.Unknown {
+    if platform == .Unknown {
         return DirectX12LoaderContract {
             platform: platform
             reason: "Kira Graphics cannot validate DirectX 12 without a concrete Windows platform"
