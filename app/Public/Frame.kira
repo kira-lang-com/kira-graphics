@@ -141,14 +141,14 @@ class GraphicsFrame {
     // Metal render -> compute seam: bind this frame context's persistent depth
     // attachment as texture(0), with caller buffers at slots 0..n-1.
     function dispatchDepthComputeBuffers(pipeline: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
-        if self.backend == GraphicsBackend.Metal {
+        if self.backend == .Metal {
             metalDispatchDepthComputeN(self.metalContext, pipeline, buffers, count, threadsPerGroup)
         }
         return
     }
 
     function dispatchComputeBuffers(pipeline: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
-        if self.backend == GraphicsBackend.Metal {
+        if self.backend == .Metal {
             metalDispatchComputeN(self.metalContext, pipeline, buffers, count, threadsPerGroup)
         }
         return
@@ -165,10 +165,13 @@ class GraphicsFrame {
         tempFarTextureId: Int,
         outputNearTextureId: Int,
         outputFarTextureId: Int,
+        // The kernels sample through this rather than declaring a sampler
+        // inline, which is not something a compute stage can express.
+        samplerId: Int,
         width: Int,
         height: Int,
     ) {
-        if self.backend == GraphicsBackend.Metal {
+        if self.backend == .Metal {
             metalDispatchTextureComputePair(
                 self.metalContext,
                 horizontalPipeline,
@@ -178,6 +181,7 @@ class GraphicsFrame {
                 tempFarTextureId,
                 outputNearTextureId,
                 outputFarTextureId,
+                samplerId,
                 width,
                 height,
             )
@@ -193,14 +197,14 @@ class GraphicsFrame {
     // non-Metal backends this is a no-op, matching dispatchTextureComputePair,
     // whose outputs are the textures this exists to repair.
     function optimizeTexture(textureId: Int) {
-        if self.backend == GraphicsBackend.Metal {
+        if self.backend == .Metal {
             metalContextOptimizeTextureInFrame(self.metalContext, textureId)
         }
         return
     }
 
     function readStorageU32(bufferId: Int, index: Int) -> U32 {
-        if self.backend == GraphicsBackend.Metal {
+        if self.backend == .Metal {
             return metalReadStorageBufferU32(self.metalContext, bufferId, index)
         }
         return U32(0)

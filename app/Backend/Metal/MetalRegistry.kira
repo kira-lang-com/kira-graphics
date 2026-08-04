@@ -1,0 +1,230 @@
+// The Metal context's handle registry, and the Metal enum constants the rest of
+// the backend passes to Objective-C.
+//
+// Every Objective-C object and raw block the backend creates is handed out as a
+// small integer id rather than a pointer: a Kira value that crosses the FFI seam
+// is a number, and a number cannot be dereferenced by mistake. The registry is
+// the table those ids index, and it records what each one *is* — a +1-owned
+// object to release or a `metalMemAlloc` block to free — because the untyped
+// pointer it stores cannot say.
+
+// MTLCommandBufferStatus.Completed. Anything below it — NotEnqueued, Enqueued,
+// Committed, Scheduled — is a buffer whose GPU work may still be running.
+function metalCommandBufferStatusCompleted() -> U64 { return 4 }
+
+// Registry entry kinds (parallel `registryKinds` table). An entry is either a
+// +1-owned Objective-C object (released at teardown) or a raw metalMemAlloc block
+// such as a bind group (freed at teardown); the untyped pointer registry cannot
+// tell them apart, so the kind is recorded when the handle is registered.
+function metalRegistryKindObject() -> U8 { return 1 }
+function metalRegistryKindRawBlock() -> U8 { return 2 }
+// A slot whose resource was released. Its pointer word holds the next free id
+// rather than a resource, so nothing may release or free what it points at.
+function metalRegistryKindFree() -> U8 { return 0 }
+
+// Stash the frame's command buffer for the DEFERRED readback wait (the GPU wait was
+// moved out of endAndCommit into metalContextReadPixel so offscreen frames pipeline).
+// `[queue commandBuffer]` returns an AUTORELEASED buffer, so the enclosing per-frame
+// autorelease pool would free it at frame end — before the post-loop readback runs.
+// Retain it here (releasing the previous frame's committed buffer) so it survives the
+// pool pop; metalContextFree releases the last one.
+@Native
+function metalStashCommandBuffer(ctx: RawPtr, commandBuffer: RawPtr) {
+    let previous = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
+    if !metalPtrIsNull(previous) {
+        metalMsgSendVoid(previous, metalSel("release"))
+    }
+    metalMsgSendVoid(commandBuffer, metalSel("retain"))
+    metalMemWritePtr(ctx, metalOffsetCommandBuffer(), commandBuffer)
+    return
+}
+
+// Allocate one command buffer for the whole logical application frame. Render-pass
+// boundaries still end their encoders (so texture writes are visible to later
+// encoders), but capture/blur/composite no longer pay a commit and pacing wait per
+// pass. The frame submission hook commits this buffer once.
+@Native
+function metalContextActiveCommandBuffer(ctx: RawPtr) -> RawPtr {
+    var commandBuffer = metalMemReadPtr(ctx, metalOffsetActiveCommandBuffer())
+    if !metalPtrIsNull(commandBuffer) {
+        return commandBuffer
+    }
+    metalPacingBeginPass(ctx)
+    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
+    commandBuffer = metalMsgSend(queue, metalSel("commandBuffer"))
+    metalMemWritePtr(ctx, metalOffsetActiveCommandBuffer(), commandBuffer)
+    return commandBuffer
+}
+
+// The resource registry maps small integer handle ids (stored as U32 in the public
+// handle types) to the Objective-C resource pointers (MTLBuffer / MTLLibrary /
+// MTLRenderPipelineState / ...). Ids start at 1 so 0 stays a sentinel, and they are
+// never reused — nothing unregisters — so the table has to grow with the scene.
+//
+// It used to be a fixed 1024 with no bounds check, which is not a limit but a
+// silent heap corruption: id 1024 wrote one word past the table and one byte past
+// the kinds block, into whatever the allocator had put there. A scene that built
+// enough resources — a lot of entities, each with its own buffers — would start
+// finding its own data changed underneath it, which reads as geometry shifting
+// slightly for no reason.
+function metalRegistryInitialCapacity() -> U64 { return 1024 }
+
+// Make room for id `needed`, doubling until it fits.
+//
+// Copies both parallel blocks and frees the old ones. Growth is amortised, so a
+// scene that registers n resources copies O(n) entries in total rather than per
+// registration.
+function metalRegistryReserve(ctx: RawPtr, needed: U64) {
+    let cap = metalMemReadU64(ctx, metalOffsetRegistryCap())
+    if needed < cap {
+        return
+    }
+    var grown = cap
+    if grown == 0 {
+        grown = metalRegistryInitialCapacity()
+    }
+    while needed >= grown {
+        grown = grown * U64(2)
+    }
+    let oldRegistry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    let oldKinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
+    let oldRings = metalMemReadPtr(ctx, metalOffsetSlotRing())
+    let registry = metalMemAlloc(grown * 8)
+    let kinds = metalMemAlloc(grown)
+    let rings = metalMemAlloc(grown * 8)
+    var id: U64 = 0
+    while id < cap {
+        metalMemWritePtr(registry, id * 8, metalMemReadPtr(oldRegistry, id * 8))
+        metalMemWriteU8(kinds, id, metalMemReadU8(oldKinds, id))
+        metalMemWriteU64(rings, id * 8, metalMemReadU64(oldRings, id * 8))
+        id = id + U64(1)
+    }
+    metalMemFree(oldRegistry)
+    metalMemFree(oldKinds)
+    metalMemFree(oldRings)
+    metalMemWritePtr(ctx, metalOffsetRegistry(), registry)
+    metalMemWritePtr(ctx, metalOffsetRegistryKinds(), kinds)
+    metalMemWritePtr(ctx, metalOffsetSlotRing(), rings)
+    metalMemWriteU64(ctx, metalOffsetRegistryCap(), grown)
+    return
+}
+
+// Register a +1-owned Objective-C resource pointer and return its handle id. The
+// entry is tagged as an object so teardown releases it.
+@Native
+function metalRegister(ctx: RawPtr, object: RawPtr) -> Int {
+    let id = metalTakeId(ctx)
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    metalMemWritePtr(registry, id * 8, object)
+    let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
+    metalMemWriteU8(kinds, id, metalRegistryKindObject())
+    return id
+}
+
+// Register a raw metalMemAlloc block (e.g. a bind group) and return its handle id.
+// The entry is tagged as a raw block so teardown frees it with metalMemFree rather
+// than sending it an Objective-C `release` (which would crash on a non-object).
+@Native
+function metalRegisterRawBlock(ctx: RawPtr, block: RawPtr) -> Int {
+    let id = metalTakeId(ctx)
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    metalMemWritePtr(registry, id * 8, block)
+    let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
+    metalMemWriteU8(kinds, id, metalRegistryKindRawBlock())
+    return id
+}
+
+// The id a new resource takes: a released one if any are waiting, otherwise the
+// next never-used one, growing the table to fit it.
+//
+// Reuse is what keeps a long session bounded. Ids are handed out per resource and
+// a scene rebuilds its per-entity uniforms whenever the entity count changes, so
+// without reuse the table grows by the whole scene every rebuild and never
+// shrinks — which is a leak of both ids and the memory they index.
+// Reuse also means the ring entry a released resource left behind must not describe
+// the id's next occupant: every bind asks this table for its offset, so a static
+// vertex buffer handed a dead uniform's slot would be bound part-way into itself.
+// Clearing on the way OUT (rather than trusting each creator to overwrite it) keeps
+// that true for every resource kind, ringed or not.
+function metalTakeId(ctx: RawPtr) -> U64 {
+    let free = metalMemReadU64(ctx, metalOffsetFreeId())
+    if free != 0 {
+        let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+        metalMemWriteU64(ctx, metalOffsetFreeId(), metalMemReadU64(registry, free * 8))
+        metalMemWriteU64(metalMemReadPtr(ctx, metalOffsetSlotRing()), free * 8, 0)
+        return free
+    }
+    let id = metalMemReadU64(ctx, metalOffsetNextId())
+    metalRegistryReserve(ctx, id)
+    metalMemWriteU64(metalMemReadPtr(ctx, metalOffsetSlotRing()), id * 8, 0)
+    metalMemWriteU64(ctx, metalOffsetNextId(), id + U64(1))
+    return id
+}
+
+// Release the resource behind a handle id and put the id back in circulation.
+//
+// Releasing twice, or releasing an id that was never registered, does nothing:
+// the kind tag says what a slot holds, and a freed slot holds neither an object
+// nor a block. That matters because a caller cannot see the difference — a
+// double `destroyUniform` would otherwise over-release an Objective-C object and
+// take the process down some frames later.
+@Native
+function metalUnregister(ctx: RawPtr, id: Int) {
+    if id <= 0 {
+        return
+    }
+    let slot = U64(id)
+    if slot >= metalMemReadU64(ctx, metalOffsetNextId()) {
+        return
+    }
+    let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
+    let kind = metalMemReadU8(kinds, slot)
+    if kind == metalRegistryKindFree() {
+        return
+    }
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    let entry = metalMemReadPtr(registry, slot * 8)
+    if !metalPtrIsNull(entry) {
+        if kind == metalRegistryKindRawBlock() {
+            metalMemFree(entry)
+        } else {
+            metalMsgSendVoid(entry, metalSel("release"))
+        }
+    }
+    // The slot's pointer word becomes the link to the next free id, which is why
+    // the kind has to say "free" before anything reads it as a resource again.
+    metalMemWriteU8(kinds, slot, metalRegistryKindFree())
+    metalMemWriteU64(registry, slot * 8, metalMemReadU64(ctx, metalOffsetFreeId()))
+    metalMemWriteU64(ctx, metalOffsetFreeId(), slot)
+    return
+}
+
+// Resolve a handle id back to its Objective-C resource pointer.
+@Native
+function metalLookup(ctx: RawPtr, id: Int) -> RawPtr {
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    return metalMemReadPtr(registry, id * 8)
+}
+
+
+// Resolve a handle id (as U64) to its Objective-C resource pointer. Used by the
+// bind-group apply loop, which carries ids as U64 in its raw entry block.
+@Native
+function metalLookupU64(ctx: RawPtr, id: U64) -> RawPtr {
+    let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
+    return metalMemReadPtr(registry, id * 8)
+}
+
+// Metal enum constants we reference (kept local and explicit, not magic numbers
+// at the call sites).
+function metalPixelFormatBGRA8Unorm() -> U64 { return 80 }
+function metalTextureUsageRenderTarget() -> U64 { return 4 }
+function metalStorageModeShared() -> U64 { return 0 }
+function metalLoadActionClear() -> U64 { return 2 }
+function metalLoadActionLoad() -> U64 { return 1 }
+function metalLoadActionDontCare() -> U64 { return 0 }
+function metalStoreActionStore() -> U64 { return 1 }
+function metalStoreActionDontCare() -> U64 { return 0 }
+function metalPixelFormatDepth32Float() -> U64 { return 252 }
+function metalStorageModePrivate() -> U64 { return 2 }
+function metalCompareFunctionLess() -> U64 { return 1 }

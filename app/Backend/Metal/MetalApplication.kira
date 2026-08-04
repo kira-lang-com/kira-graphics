@@ -12,109 +12,6 @@
 // verification (the kik Test harness asserts pixels through the same paths via the
 // MetalSelfTest entry points).
 
-// Byte at `index` of a NUL-terminated env value, via aligned U64 reads (the
-// U8-returning FFI extern is a lowering gap today; U64 reads lower fine).
-@Native
-function metalEnvByte(value: RawPtr, index: Int) -> Int {
-    let chunk = (index / 8) * 8
-    let v = metalMemReadU64(value, U64(chunk))
-    var rem = index - chunk
-    var d: U64 = U64(1)
-    while rem > 0 {
-        d = d * U64(256)
-        rem = rem - 1
-    }
-    let shifted = v / d
-    let b = shifted - (shifted / U64(256)) * U64(256)
-    return Int(b)
-}
-
-// Non-negative integer at the start of a NUL-terminated env value (0 when the
-// value does not start with digits).
-@Native
-function metalEnvInt(value: RawPtr) -> Int {
-    var out = 0
-    var i = 0
-    var scanning = true
-    while scanning {
-        let b = metalEnvByte(value, i)
-        if b >= 48 {
-            if b <= 57 {
-                out = out * 10 + (b - 48)
-                i = i + 1
-            } else {
-                scanning = false
-            }
-        } else {
-            scanning = false
-        }
-        if i > 15 {
-            scanning = false
-        }
-    }
-    return out
-}
-
-// Every integer (optionally '-'-signed) in a NUL-terminated env value, in
-// order; any other byte separates. KIRA_UI_CLICK_SCRIPT carries (frame, x, y)
-// triples, e.g. "2@303,47;4@361,47".
-@Native
-function metalEnvInts(value: RawPtr) -> [Int] {
-    var out: [Int] = []
-    var i = 0
-    var going = true
-    while going {
-        let b = metalEnvByte(value, i)
-        if b == 0 {
-            going = false
-        } else {
-            var isDigit = false
-            if b >= 48 {
-                if b <= 57 {
-                    isDigit = true
-                }
-            }
-            var sign = 1
-            if b == 45 {
-                let nextByte = metalEnvByte(value, i + 1)
-                if nextByte >= 48 {
-                    if nextByte <= 57 {
-                        isDigit = true
-                        sign = 0 - 1
-                        i = i + 1
-                    }
-                }
-            }
-            if isDigit {
-                var v = 0
-                var digits = true
-                while digits {
-                    let c = metalEnvByte(value, i)
-                    var cDigit = false
-                    if c >= 48 {
-                        if c <= 57 {
-                            cDigit = true
-                        }
-                    }
-                    if cDigit {
-                        v = v * 10 + (c - 48)
-                        i = i + 1
-                    } else {
-                        digits = false
-                    }
-                }
-                out.append(v * sign)
-            } else {
-                i = i + 1
-            }
-        }
-        if i > 65536 {
-            going = false
-        }
-    }
-    return move out
-}
-
 @Native
 function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
     // Become a foreground GUI app BEFORE creating the Metal device. The device
@@ -143,7 +40,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         let onInitOffscreen: (Graphics) -> Void = app.initHandler
         let initGraphicsOffscreen = Graphics {
             userData: userData
-            backend: GraphicsBackend.Metal
+            backend: .Metal
             metalContext: ctxPtr
         }
         onInitOffscreen(move initGraphicsOffscreen)
@@ -181,7 +78,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             let warmPool = metalAutoreleasePoolPush()
             let warmGraphics = Graphics {
                 userData: userData
-                backend: GraphicsBackend.Metal
+                backend: .Metal
                 metalContext: ctxPtr
             }
             var warmFrame = warmGraphics.frame()
@@ -203,7 +100,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                 }
                 let benchGraphics = Graphics {
                     userData: userData
-                    backend: GraphicsBackend.Metal
+                    backend: .Metal
                     metalContext: ctxPtr
                 }
                 var benchFrame = benchGraphics.frame()
@@ -309,13 +206,13 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                     let px = Float(clicks[ci + 1])
                     let py = Float(clicks[ci + 2])
                     let down = GraphicsEvent {
-                        kind: GraphicsEventKind.PointerDown
+                        kind: .PointerDown
                         pointerX: px
                         pointerY: py
                     }
                     onEventOffscreen(down)
                     let up = GraphicsEvent {
-                        kind: GraphicsEventKind.PointerUp
+                        kind: .PointerUp
                         pointerX: px
                         pointerY: py
                     }
@@ -333,7 +230,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                     let button = graphicsPointerButtonFromRaw(drags[di + 5])
                     if fi == start {
                         let down = GraphicsEvent {
-                            kind: GraphicsEventKind.PointerDown
+                            kind: .PointerDown
                             pointerButton: button
                             pointerX: bx
                             pointerY: by
@@ -349,7 +246,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                         let my = by + Float(drags[di + 4]) * t
                         if fi <= start + steps {
                             let moved = GraphicsEvent {
-                                kind: GraphicsEventKind.PointerMoved
+                                kind: .PointerMoved
                                 pointerButton: button
                                 pointerX: mx
                                 pointerY: my
@@ -357,7 +254,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                             onEventOffscreen(moved)
                         } else {
                             let up = GraphicsEvent {
-                                kind: GraphicsEventKind.PointerUp
+                                kind: .PointerUp
                                 pointerButton: button
                                 pointerX: mx
                                 pointerY: my
@@ -387,7 +284,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             while txi + 2 <= textScript.count {
                 if textScript[txi] == fi {
                     let textEvent = GraphicsEvent {
-                        kind: GraphicsEventKind.TextInput
+                        kind: .TextInput
                         textCodepoint: textScript[txi + 1]
                     }
                     onEventOffscreen(textEvent)
@@ -398,7 +295,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             while si + 4 <= scrolls.count {
                 if scrolls[si] == fi {
                     let scrollEvent = GraphicsEvent {
-                        kind: GraphicsEventKind.Scroll
+                        kind: .Scroll
                         pointerX: Float(scrolls[si + 1])
                         pointerY: Float(scrolls[si + 2])
                         scrollY: Float(scrolls[si + 3]) / 10.0
@@ -409,7 +306,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             }
             let frameGraphicsOffscreen = Graphics {
                 userData: userData
-                backend: GraphicsBackend.Metal
+                backend: .Metal
                 metalContext: ctxPtr
             }
             var frameOffscreen = frameGraphicsOffscreen.frame()
@@ -456,7 +353,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     let onInit: (Graphics) -> Void = app.initHandler
     let initGraphics = Graphics {
         userData: userData
-        backend: GraphicsBackend.Metal
+        backend: .Metal
         metalContext: ctxPtr
     }
     onInit(move initGraphics)
@@ -584,13 +481,13 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                 let opx = Float(onClicks[oci + 1])
                 let opy = Float(onClicks[oci + 2])
                 let odown = GraphicsEvent {
-                    kind: GraphicsEventKind.PointerDown
+                    kind: .PointerDown
                     pointerX: opx
                     pointerY: opy
                 }
                 onWindowEvent(odown)
                 let oup = GraphicsEvent {
-                    kind: GraphicsEventKind.PointerUp
+                    kind: .PointerUp
                     pointerX: opx
                     pointerY: opy
                 }
@@ -611,7 +508,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                 let obutton = graphicsPointerButtonFromRaw(onDrags[odi + 5])
                 if onFrameIndex == dragStart {
                     onWindowEvent(GraphicsEvent {
-                        kind: GraphicsEventKind.PointerDown
+                        kind: .PointerDown
                         pointerButton: obutton
                         pointerX: obx
                         pointerY: oby
@@ -626,14 +523,14 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                     let omy = oby + Float(onDrags[odi + 4]) * ot
                     if onFrameIndex <= dragStart + dragSteps {
                         onWindowEvent(GraphicsEvent {
-                            kind: GraphicsEventKind.PointerMoved
+                            kind: .PointerMoved
                             pointerButton: obutton
                             pointerX: omx
                             pointerY: omy
                         })
                     } else {
                         onWindowEvent(GraphicsEvent {
-                            kind: GraphicsEventKind.PointerUp
+                            kind: .PointerUp
                             pointerButton: obutton
                             pointerX: omx
                             pointerY: omy
@@ -670,7 +567,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         metalContextSyncViewportFromView(ctxPtr)
         let frameGraphics = Graphics {
             userData: userData
-            backend: GraphicsBackend.Metal
+            backend: .Metal
             metalContext: ctxPtr
         }
         var frame = frameGraphics.frame()
@@ -745,7 +642,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     let onCleanup: (Graphics) -> Void = app.cleanupHandler
     let cleanupGraphics = Graphics {
         userData: userData
-        backend: GraphicsBackend.Metal
+        backend: .Metal
         metalContext: ctxPtr
     }
     onCleanup(move cleanupGraphics)

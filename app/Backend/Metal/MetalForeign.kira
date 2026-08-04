@@ -171,6 +171,13 @@ function metalMsgSendNewBufferLength(obj: RawPtr, op: RawPtr, length: U64, optio
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendSetFragmentBuffer(obj: RawPtr, op: RawPtr, buffer: RawPtr, offset: U64, index: U64): Void;
 
+// setBytes:length:atIndex: — a small uniform written straight into the encoder's
+// argument buffer. Same call shape as setFragmentBuffer:offset:atIndex: but a
+// different method, and a caller that confused the two would pass a pointer
+// where an offset belongs, so it gets its own name.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendSetBytes(obj: RawPtr, op: RawPtr, bytes: RawPtr, length: U64, index: U64): Void;
+
 // (id, NSUInteger) -> void  (setFragmentTexture:atIndex: / setFragmentSamplerState:atIndex:)
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendVoidPU(obj: RawPtr, op: RawPtr, a: RawPtr, index: U64): Void;

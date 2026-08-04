@@ -1,0 +1,112 @@
+// Reading configuration out of the environment, for the Metal backend.
+//
+// The backend is driven headlessly by environment variables — one frame
+// offscreen, a click script, a pixel dump — so a GUI app can be verified
+// deterministically without a display. Parsing them is its own concern from
+// running the app, and it is all here.
+//
+// Read byte by byte through aligned U64 loads: the U8-returning FFI extern is a
+// lowering gap today, and U64 reads lower fine.
+
+// Byte at `index` of a NUL-terminated env value, via aligned U64 reads (the
+// U8-returning FFI extern is a lowering gap today; U64 reads lower fine).
+@Native
+function metalEnvByte(value: RawPtr, index: Int) -> Int {
+    let chunk = (index / 8) * 8
+    let v = metalMemReadU64(value, U64(chunk))
+    var rem = index - chunk
+    var d: U64 = U64(1)
+    while rem > 0 {
+        d = d * U64(256)
+        rem = rem - 1
+    }
+    let shifted = v / d
+    let b = shifted - (shifted / U64(256)) * U64(256)
+    return Int(b)
+}
+
+// Non-negative integer at the start of a NUL-terminated env value (0 when the
+// value does not start with digits).
+@Native
+function metalEnvInt(value: RawPtr) -> Int {
+    var out = 0
+    var i = 0
+    var scanning = true
+    while scanning {
+        let b = metalEnvByte(value, i)
+        if b >= 48 {
+            if b <= 57 {
+                out = out * 10 + (b - 48)
+                i = i + 1
+            } else {
+                scanning = false
+            }
+        } else {
+            scanning = false
+        }
+        if i > 15 {
+            scanning = false
+        }
+    }
+    return out
+}
+
+// Every integer (optionally '-'-signed) in a NUL-terminated env value, in
+// order; any other byte separates. KIRA_UI_CLICK_SCRIPT carries (frame, x, y)
+// triples, e.g. "2@303,47;4@361,47".
+@Native
+function metalEnvInts(value: RawPtr) -> [Int] {
+    var out: [Int] = []
+    var i = 0
+    var going = true
+    while going {
+        let b = metalEnvByte(value, i)
+        if b == 0 {
+            going = false
+        } else {
+            var isDigit = false
+            if b >= 48 {
+                if b <= 57 {
+                    isDigit = true
+                }
+            }
+            var sign = 1
+            if b == 45 {
+                let nextByte = metalEnvByte(value, i + 1)
+                if nextByte >= 48 {
+                    if nextByte <= 57 {
+                        isDigit = true
+                        sign = 0 - 1
+                        i = i + 1
+                    }
+                }
+            }
+            if isDigit {
+                var v = 0
+                var digits = true
+                while digits {
+                    let c = metalEnvByte(value, i)
+                    var cDigit = false
+                    if c >= 48 {
+                        if c <= 57 {
+                            cDigit = true
+                        }
+                    }
+                    if cDigit {
+                        v = v * 10 + (c - 48)
+                        i = i + 1
+                    } else {
+                        digits = false
+                    }
+                }
+                out.append(v * sign)
+            } else {
+                i = i + 1
+            }
+        }
+        if i > 65536 {
+            going = false
+        }
+    }
+    return move out
+}

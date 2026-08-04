@@ -1,0 +1,86 @@
+// GPU compute, as methods on `Graphics`.
+//
+// Written as `extend Graphics` rather than inside the class body: a class's
+// methods may be declared across files, and compute is a bounded job path with
+// its own vocabulary — raw registry ints for handles rather than the
+// render-graph resource structs — so it reads better beside itself than buried
+// in the middle of the rendering surface.
+//
+// KSL compute shaders lower to an MSL kernel; these build a compute pipeline,
+// shared-storage buffers, dispatch, and read results back. Non-Metal backends
+// return 0 / no-op.
+
+extend Graphics {
+    function createComputePipeline(shader: borrow GraphicsShader, entryName: borrow String) -> Int {
+        if self.backend == .Metal {
+            return metalCreateComputePipeline(self.metalContext, shader.id, entryName)
+        }
+        return 0
+    }
+
+    function createStorageBufferFloats(data: borrow [Float]) -> Int {
+        if self.backend == .Metal {
+            return metalCreateStorageBufferF32(self.metalContext, data)
+        }
+        return 0
+    }
+
+    function createEmptyStorageBuffer(wordCount: Int) -> Int {
+        if self.backend == .Metal {
+            return metalCreateEmptyStorageBuffer(self.metalContext, wordCount)
+        }
+        return 0
+    }
+
+    function createCullParams(count: Int, planeX: Float, planeD: Float) -> Int {
+        if self.backend == .Metal {
+            return metalCreateCullParamsBuffer(self.metalContext, count, planeX, planeD)
+        }
+        return 0
+    }
+
+    function dispatchCompute3(pipeline: Int, buf0: Int, buf1: Int, buf2: Int, count: Int, threadsPerGroup: Int) {
+        if self.backend == .Metal {
+            metalDispatchCompute3(self.metalContext, pipeline, buf0, buf1, buf2, count, threadsPerGroup)
+        }
+        return
+    }
+
+    function dispatchCompute4(pipeline: Int, buf0: Int, buf1: Int, buf2: Int, buf3: Int, count: Int, threadsPerGroup: Int) {
+        if self.backend == .Metal {
+            metalDispatchCompute4(self.metalContext, pipeline, buf0, buf1, buf2, buf3, count, threadsPerGroup)
+        }
+        return
+    }
+
+    // Generic form: bind any number of buffers at slots 0..n-1.
+    function dispatchComputeBuffers(pipeline: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
+        if self.backend == .Metal {
+            metalDispatchComputeN(self.metalContext, pipeline, buffers, count, threadsPerGroup)
+        }
+        return
+    }
+
+    function createStorageBufferWords(data: borrow [Int]) -> Int {
+        if self.backend == .Metal {
+            return metalCreateStorageBufferU32(self.metalContext, data)
+        }
+        return 0
+    }
+
+    function createParams4(a: Int, b: Int, c: Int, d: Int) -> Int {
+        if self.backend == .Metal {
+            return metalCreateParams4U32(self.metalContext, a, b, c, d)
+        }
+        return 0
+    }
+
+
+    function readStorageU32(bufferId: Int, index: Int) -> U32 {
+        if self.backend == .Metal {
+            return metalReadStorageBufferU32(self.metalContext, bufferId, index)
+        }
+        return U32(0)
+    }
+
+}

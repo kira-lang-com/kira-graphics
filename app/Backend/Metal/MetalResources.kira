@@ -217,11 +217,9 @@ function metalUpdateDynamicBuffer(ctx: RawPtr, bufferId: Int, data: borrow [Floa
     let buffer = metalLookup(ctx, bufferId)
     let contents = metalMsgSend(buffer, metalSel("contents"))
     let base = Int(metalRingAdvance(ctx, U64(bufferId)))
-    var i = 0
-    while i < data.count {
+        for i in 0..data.count {
         metalMemWriteF32(contents, base + i * 4, data[i])
-        i = i + 1
-    }
+            }
     return
 }
 
@@ -249,11 +247,9 @@ function metalUpdateUniform(ctx: RawPtr, uniformId: Int, data: borrow [Float]) {
     let buffer = metalLookup(ctx, uniformId)
     let contents = metalMsgSend(buffer, metalSel("contents"))
     let base = Int(metalRingAdvance(ctx, U64(uniformId)))
-    var i = 0
-    while i < data.count {
+        for i in 0..data.count {
         metalMemWriteF32(contents, base + i * 4, data[i])
-        i = i + 1
-    }
+            }
     return
 }
 

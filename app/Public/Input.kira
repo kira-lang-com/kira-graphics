@@ -173,34 +173,34 @@ function graphicsModifierStateFromRaw(raw: Int) -> GraphicsModifierState {
 }
 
 function graphicsEventUsesPointerPosition(kind: borrow GraphicsEventKind) -> Bool {
-    if kind == GraphicsEventKind.PointerDown {
+    if kind == .PointerDown {
         return true
     }
-    if kind == GraphicsEventKind.PointerUp {
+    if kind == .PointerUp {
         return true
     }
-    if kind == GraphicsEventKind.PointerMoved {
+    if kind == .PointerMoved {
         return true
     }
-    if kind == GraphicsEventKind.PointerEntered {
+    if kind == .PointerEntered {
         return true
     }
-    if kind == GraphicsEventKind.PointerExited {
+    if kind == .PointerExited {
         return true
     }
-    if kind == GraphicsEventKind.Scroll {
+    if kind == .Scroll {
         return true
     }
-    if kind == GraphicsEventKind.TouchesBegan {
+    if kind == .TouchesBegan {
         return true
     }
-    if kind == GraphicsEventKind.TouchesMoved {
+    if kind == .TouchesMoved {
         return true
     }
-    if kind == GraphicsEventKind.TouchesEnded {
+    if kind == .TouchesEnded {
         return true
     }
-    if kind == GraphicsEventKind.TouchesCancelled {
+    if kind == .TouchesCancelled {
         return true
     }
     return false
@@ -295,7 +295,7 @@ function graphicsShowMouse(show: Bool) {
     // Apple-only: the ObjC runtime does not exist elsewhere (on wasm the objc
     // externs are abort-stubs), so gate on the actual host platform.
     let platform = hostGraphicsPlatform()
-    if platform == GraphicsPlatform.MacOS || platform == GraphicsPlatform.IOS {
+    if platform == .MacOS || platform == .IOS {
         metalSetCursorHidden(show == false)
     }
     return
@@ -313,7 +313,7 @@ function graphicsLockMouse(lock: Bool) {
     // The native Metal window path doesn't run through Sokol, so drive
     // CoreGraphics too. Apple-only, on the same terms as `graphicsShowMouse`.
     let platform = hostGraphicsPlatform()
-    if platform == GraphicsPlatform.MacOS || platform == GraphicsPlatform.IOS {
+    if platform == .MacOS || platform == .IOS {
         metalSetMouseLocked(lock)
     }
     return

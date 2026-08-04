@@ -230,6 +230,7 @@ function metalDispatchTextureComputePair(
     tempFarTextureId: Int,
     outputNearTextureId: Int,
     outputFarTextureId: Int,
+    samplerId: Int,
     width: Int,
     height: Int,
 ) {
@@ -242,6 +243,16 @@ function metalDispatchTextureComputePair(
     let tempFar = metalLookup(ctx, tempFarTextureId)
     let outputNear = metalLookup(ctx, outputNearTextureId)
     let outputFar = metalLookup(ctx, outputFarTextureId)
+    let sampler = metalLookup(ctx, samplerId)
+
+    // Both kernels take their target extent in a uniform and their filtering
+    // from a bound sampler: a compute stage written in KSL can neither query a
+    // texture's size nor declare a sampler inline, and the caller knows the size
+    // it allocated. They declare uniform, sampler, reads, writes in that order,
+    // so one slot layout serves the pair.
+    let extent = metalMemAlloc(8)
+    metalMemWriteU32(extent, 0, width)
+    metalMemWriteU32(extent, 4, height)
 
     let gridSize = metalMemAlloc(24)
     metalMemWriteU64(gridSize, 0, width)
@@ -254,21 +265,28 @@ function metalDispatchTextureComputePair(
 
     let horizontal = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
     metalMsgSendVoidP(horizontal, metalSel("setComputePipelineState:"), metalLookup(ctx, horizontalPipelineId))
-    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), source, 0)
-    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempNear, 1)
-    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempFar, 2)
+    metalMsgSendSetBytes(horizontal, metalSel("setBytes:length:atIndex:"), extent, 8, 0)
+    metalMsgSendVoidPU(horizontal, metalSel("setSamplerState:atIndex:"), sampler, 1)
+    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), source, 2)
+    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempNear, 3)
+    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempFar, 4)
     metalMsgSendVoidPP(horizontal, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
     metalMsgSendVoid(horizontal, metalSel("endEncoding"))
 
     let vertical = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
     metalMsgSendVoidP(vertical, metalSel("setComputePipelineState:"), metalLookup(ctx, verticalPipelineId))
-    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), tempNear, 0)
-    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), tempFar, 1)
-    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), outputNear, 2)
-    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), outputFar, 3)
+    metalMsgSendSetBytes(vertical, metalSel("setBytes:length:atIndex:"), extent, 8, 0)
+    metalMsgSendVoidPU(vertical, metalSel("setSamplerState:atIndex:"), sampler, 1)
+    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), tempNear, 2)
+    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), tempFar, 3)
+    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), outputNear, 4)
+    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), outputFar, 5)
     metalMsgSendVoidPP(vertical, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
     metalMsgSendVoid(vertical, metalSel("endEncoding"))
 
+    // `setBytes:` copies into the encoder's own storage, so the extent may go
+    // back as soon as both encoders have taken it.
+    metalMemFree(extent)
     metalMemFree(gridSize)
     metalMemFree(tgSize)
     return
