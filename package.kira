@@ -70,8 +70,17 @@ Package KiraGraphics {
             ],
         },
         NativeLibrary {
+            // Apple's own frameworks, so a target row exists only where they do.
+            // Optional for exactly that reason: on Windows or Linux there is no
+            // row, the binding is excluded, and its calls trap by name instead
+            // of leaving `objc_msgSend` and `MTLCreateSystemDefaultDevice`
+            // undefined at link — which is what a build there hit, because the
+            // Metal backend is compiled in everywhere even though only an Apple
+            // target ever selects it. Nothing changes on a platform that has a
+            // row: exclusion needs both the marker and a missing row.
             name: "kira_metal",
             linkMode: LinkMode.Dynamic,
+            availability: Availability.Optional,
             nativeTargets: [
                 NativeTarget { triple: "aarch64-macos-none", frameworks: ["Foundation", "QuartzCore", "Metal", "AppKit"], systemLibs: ["objc"] },
                 NativeTarget { triple: "aarch64-ios-none", frameworks: ["Foundation", "QuartzCore", "Metal", "UIKit"], systemLibs: ["objc"] },
