@@ -1,3 +1,4 @@
+import Foundation
 struct FakeBlendState {
     var enabled: Bool = false
     var preset: FakeBlendPreset = FakeBlendPreset.replace

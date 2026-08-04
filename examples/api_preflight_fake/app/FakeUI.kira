@@ -1,4 +1,5 @@
 import KiraGraphics
+import Foundation
 
 struct FakeUiSurface {
     var x: Float = 0.0
@@ -160,7 +161,7 @@ function fakeSetupUi(graphics: FakeGraphics) -> FakeUiEffectsState {
     }
 }
 
-function fakeEncodeUiPass(encoder: borrow FakeRenderEncoder, state: borrow FakeUiEffectsState) {
+function fakeEncodeUiPass(encoder: borrow mut FakeRenderEncoder, state: borrow FakeUiEffectsState) {
     encoder.setPipeline(state.pipeline)
     encoder.setVertexBuffer(state.vertices)
     encoder.setBindGroup(0, state.bindGroup)
@@ -168,7 +169,7 @@ function fakeEncodeUiPass(encoder: borrow FakeRenderEncoder, state: borrow FakeU
     return
 }
 
-function fakeDrawUi(frame: FakeGraphicsFrame, state: FakeUiEffectsState) {
+function fakeDrawUi(frame: borrow mut FakeGraphicsFrame, state: FakeUiEffectsState) {
     let scenePass = FakeRenderPassDescriptor {
         label: "offscreen-pass"
         colorAttachments: [
@@ -216,11 +217,11 @@ function fakeDrawUi(frame: FakeGraphicsFrame, state: FakeUiEffectsState) {
         ]
     }
 
-    let sceneEncoder = frame.beginRenderPass(scenePass)
+    var sceneEncoder = frame.beginRenderPass(scenePass)
     fakeEncodeUiPass(sceneEncoder, state)
     frame.endPass()
 
-    let presentEncoder = frame.beginRenderPass(presentPass)
+    var presentEncoder = frame.beginRenderPass(presentPass)
     fakeEncodeUiPass(presentEncoder, state)
     frame.endPass()
     return

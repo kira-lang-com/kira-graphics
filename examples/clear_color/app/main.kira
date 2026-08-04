@@ -1,4 +1,5 @@
 import KiraGraphics
+import Foundation
 
 @Main
 @Native
@@ -23,6 +24,6 @@ function main() {
         return
     }
 
-    app.run(0)
+    app.run(metalNullPtr())
     return
 }
