@@ -353,20 +353,20 @@ struct sapp_environment {
 
 @FFI.Struct { layout: c; }
 struct sapp_environment_defaults {
-    var color_format: U32
-    var depth_format: U32
+    var color_format: I32
+    var depth_format: I32
     var sample_count: I32
 }
 
 @FFI.Struct { layout: c; }
 struct sapp_event {
     var frame_count: U64
-    var type_value: U32
-    var key_code: U32
+    var type_value: I32
+    var key_code: I32
     var char_code: U32
     var key_repeat: Bool
     var modifiers: U32
-    var mouse_button: U32
+    var mouse_button: I32
     var mouse_x: F32
     var mouse_y: F32
     var mouse_dx: F32
@@ -420,7 +420,7 @@ struct sapp_html5_fetch_request {
 @FFI.Struct { layout: c; }
 struct sapp_html5_fetch_response {
     var succeeded: Bool
-    var error_code: U32
+    var error_code: I32
     var file_index: I32
     var data: sapp_range
     var buffer: sapp_range
@@ -476,8 +476,8 @@ struct sapp_swapchain {
     var width: I32
     var height: I32
     var sample_count: I32
-    var color_format: U32
-    var depth_format: U32
+    var color_format: I32
+    var depth_format: I32
     var metal: sapp_metal_swapchain
     var d3d11: sapp_d3d11_swapchain
     var wgpu: sapp_wgpu_swapchain
@@ -490,7 +490,7 @@ struct sapp_touchpoint {
     var identifier: U64
     var pos_x: F32
     var pos_y: F32
-    var android_tooltype: U32
+    var android_tooltype: I32
     var changed: Bool
 }
 
@@ -563,12 +563,12 @@ struct sg_bindings {
 @FFI.Struct { layout: c; }
 struct sg_blend_state {
     var enabled: Bool
-    var src_factor_rgb: U32
-    var dst_factor_rgb: U32
-    var op_rgb: U32
-    var src_factor_alpha: U32
-    var dst_factor_alpha: U32
-    var op_alpha: U32
+    var src_factor_rgb: I32
+    var dst_factor_rgb: I32
+    var op_rgb: I32
+    var src_factor_alpha: I32
+    var dst_factor_alpha: I32
+    var op_alpha: I32
 }
 
 @FFI.Struct { layout: c; }
@@ -627,15 +627,15 @@ struct sg_color {
 
 @FFI.Struct { layout: c; }
 struct sg_color_attachment_action {
-    var load_action: U32
-    var store_action: U32
+    var load_action: I32
+    var store_action: I32
     var clear_value: sg_color
 }
 
 @FFI.Struct { layout: c; }
 struct sg_color_target_state {
-    var pixel_format: U32
-    var write_mask: U32
+    var pixel_format: I32
+    var write_mask: I32
     var blend: sg_blend_state
 }
 
@@ -705,15 +705,15 @@ struct sg_d3d11_view_info {
 
 @FFI.Struct { layout: c; }
 struct sg_depth_attachment_action {
-    var load_action: U32
-    var store_action: U32
+    var load_action: I32
+    var store_action: I32
     var clear_value: F32
 }
 
 @FFI.Struct { layout: c; }
 struct sg_depth_state {
-    var pixel_format: U32
-    var compare: U32
+    var pixel_format: I32
+    var compare: I32
     var write_enabled: Bool
     var bias: F32
     var bias_slope_scale: F32
@@ -754,8 +754,8 @@ struct sg_environment {
 
 @FFI.Struct { layout: c; }
 struct sg_environment_defaults {
-    var color_format: U32
-    var depth_format: U32
+    var color_format: I32
+    var depth_format: I32
     var sample_count: I32
 }
 
@@ -1030,7 +1030,7 @@ struct sg_gl_view_info {
 
 @FFI.Struct { layout: c; }
 struct sg_glsl_shader_uniform {
-    var type_value: U32
+    var type_value: I32
     var array_count: U16
     var glsl_name: CString
 }
@@ -1048,13 +1048,13 @@ struct sg_image_data {
 @FFI.Struct { layout: c; }
 struct sg_image_desc {
     var _start_canary: U32
-    var type_value: U32
+    var type_value: I32
     var usage: sg_image_usage
     var width: I32
     var height: I32
     var num_slices: I32
     var num_mipmaps: I32
-    var pixel_format: U32
+    var pixel_format: I32
     var sample_count: I32
     var data: sg_image_data
     var label: CString
@@ -1205,10 +1205,10 @@ struct sg_pipeline_desc {
     var stencil: sg_stencil_state
     var color_count: I32
     var colors: sg_color_target_state_array_8
-    var primitive_type: U32
-    var index_type: U32
-    var cull_mode: U32
-    var face_winding: U32
+    var primitive_type: I32
+    var index_type: I32
+    var cull_mode: I32
+    var face_winding: I32
     var sample_count: I32
     var blend_color: sg_color
     var alpha_to_coverage_enabled: Bool
@@ -1249,16 +1249,16 @@ struct sg_sampler {
 @FFI.Struct { layout: c; }
 struct sg_sampler_desc {
     var _start_canary: U32
-    var min_filter: U32
-    var mag_filter: U32
-    var mipmap_filter: U32
-    var wrap_u: U32
-    var wrap_v: U32
-    var wrap_w: U32
+    var min_filter: I32
+    var mag_filter: I32
+    var mipmap_filter: I32
+    var wrap_u: I32
+    var wrap_v: I32
+    var wrap_w: I32
     var min_lod: F32
     var max_lod: F32
-    var border_color: U32
-    var compare: U32
+    var border_color: I32
+    var compare: I32
     var max_anisotropy: U32
     var label: CString
     var gl_sampler: U32
@@ -1310,8 +1310,8 @@ struct sg_shader_info {
 
 @FFI.Struct { layout: c; }
 struct sg_shader_sampler {
-    var stage: U32
-    var sampler_type: U32
+    var stage: I32
+    var sampler_type: I32
     var hlsl_register_s_n: U8
     var msl_sampler_n: U8
     var wgsl_group1_binding_n: U8
@@ -1320,7 +1320,7 @@ struct sg_shader_sampler {
 
 @FFI.Struct { layout: c; }
 struct sg_shader_storage_buffer_view {
-    var stage: U32
+    var stage: I32
     var readonly: Bool
     var hlsl_register_t_n: U8
     var hlsl_register_u_n: U8
@@ -1332,9 +1332,9 @@ struct sg_shader_storage_buffer_view {
 
 @FFI.Struct { layout: c; }
 struct sg_shader_storage_image_view {
-    var stage: U32
-    var image_type: U32
-    var access_format: U32
+    var stage: I32
+    var image_type: I32
+    var access_format: I32
     var writeonly: Bool
     var hlsl_register_u_n: U8
     var msl_texture_n: U8
@@ -1345,7 +1345,7 @@ struct sg_shader_storage_image_view {
 
 @FFI.Struct { layout: c; }
 struct sg_shader_texture_sampler_pair {
-    var stage: U32
+    var stage: I32
     var view_slot: U8
     var sampler_slot: U8
     var glsl_name: CString
@@ -1353,9 +1353,9 @@ struct sg_shader_texture_sampler_pair {
 
 @FFI.Struct { layout: c; }
 struct sg_shader_texture_view {
-    var stage: U32
-    var image_type: U32
-    var sample_type: U32
+    var stage: I32
+    var image_type: I32
+    var sample_type: I32
     var multisampled: Bool
     var hlsl_register_t_n: U8
     var msl_texture_n: U8
@@ -1365,19 +1365,19 @@ struct sg_shader_texture_view {
 
 @FFI.Struct { layout: c; }
 struct sg_shader_uniform_block {
-    var stage: U32
+    var stage: I32
     var size: U32
     var hlsl_register_b_n: U8
     var msl_buffer_n: U8
     var wgsl_group0_binding_n: U8
     var spirv_set0_binding_n: U8
-    var layout: U32
+    var layout: I32
     var glsl_uniforms: sg_glsl_shader_uniform_array_16
 }
 
 @FFI.Struct { layout: c; }
 struct sg_shader_vertex_attr {
-    var base_type: U32
+    var base_type: I32
     var glsl_name: CString
     var hlsl_sem_name: CString
     var hlsl_sem_index: U8
@@ -1392,7 +1392,7 @@ struct sg_shader_view {
 
 @FFI.Struct { layout: c; }
 struct sg_slot_info {
-    var state: U32
+    var state: I32
     var res_id: U32
     var uninit_count: U32
 }
@@ -1406,17 +1406,17 @@ struct sg_stats {
 
 @FFI.Struct { layout: c; }
 struct sg_stencil_attachment_action {
-    var load_action: U32
-    var store_action: U32
+    var load_action: I32
+    var store_action: I32
     var clear_value: U8
 }
 
 @FFI.Struct { layout: c; }
 struct sg_stencil_face_state {
-    var compare: U32
-    var fail_op: U32
-    var depth_fail_op: U32
-    var pass_op: U32
+    var compare: I32
+    var fail_op: I32
+    var depth_fail_op: I32
+    var pass_op: I32
 }
 
 @FFI.Struct { layout: c; }
@@ -1434,8 +1434,8 @@ struct sg_swapchain {
     var width: I32
     var height: I32
     var sample_count: I32
-    var color_format: U32
-    var depth_format: U32
+    var color_format: I32
+    var depth_format: I32
     var metal: sg_metal_swapchain
     var d3d11: sg_d3d11_swapchain
     var wgpu: sg_wgpu_swapchain
@@ -1544,13 +1544,13 @@ struct sg_trace_hooks {
 struct sg_vertex_attr_state {
     var buffer_index: I32
     var offset: I32
-    var format: U32
+    var format: I32
 }
 
 @FFI.Struct { layout: c; }
 struct sg_vertex_buffer_layout_state {
     var stride: I32
-    var step_func: U32
+    var step_func: I32
     var step_rate: I32
 }
 
@@ -1720,13 +1720,13 @@ struct sg_view_desc_ptr {}
 function sapp_android_get_native_activity(): RawPtr;
 
 @FFI.Extern { library: sokol; symbol: sapp_bind_mouse_cursor_image; abi: c; }
-function sapp_bind_mouse_cursor_image(cursor: U32, desc: sapp_image_desc_ptr): U32;
+function sapp_bind_mouse_cursor_image(cursor: I32, desc: sapp_image_desc_ptr): I32;
 
 @FFI.Extern { library: sokol; symbol: sapp_cancel_quit; abi: c; }
 function sapp_cancel_quit(): Void;
 
 @FFI.Extern { library: sokol; symbol: sapp_color_format; abi: c; }
-function sapp_color_format(): U32;
+function sapp_color_format(): I32;
 
 @FFI.Extern { library: sokol; symbol: sapp_consume_event; abi: c; }
 function sapp_consume_event(): Void;
@@ -1735,7 +1735,7 @@ function sapp_consume_event(): Void;
 function sapp_d3d11_get_swap_chain(): RawPtr;
 
 @FFI.Extern { library: sokol; symbol: sapp_depth_format; abi: c; }
-function sapp_depth_format(): U32;
+function sapp_depth_format(): I32;
 
 @FFI.Extern { library: sokol; symbol: sapp_dpi_scale; abi: c; }
 function sapp_dpi_scale(): F32;
@@ -1765,7 +1765,7 @@ function sapp_get_dropped_file_path(index: I32): CString;
 function sapp_get_environment(): sapp_environment;
 
 @FFI.Extern { library: sokol; symbol: sapp_get_mouse_cursor; abi: c; }
-function sapp_get_mouse_cursor(): U32;
+function sapp_get_mouse_cursor(): I32;
 
 @FFI.Extern { library: sokol; symbol: sapp_get_num_dropped_files; abi: c; }
 function sapp_get_num_dropped_files(): I32;
@@ -1846,7 +1846,7 @@ function sapp_set_clipboard_string(str: CString): Void;
 function sapp_set_icon(icon_desc: sapp_icon_desc_ptr): Void;
 
 @FFI.Extern { library: sokol; symbol: sapp_set_mouse_cursor; abi: c; }
-function sapp_set_mouse_cursor(cursor: U32): Void;
+function sapp_set_mouse_cursor(cursor: I32): Void;
 
 @FFI.Extern { library: sokol; symbol: sapp_set_window_title; abi: c; }
 function sapp_set_window_title(str: CString): Void;
@@ -1861,7 +1861,7 @@ function sapp_show_mouse(show: Bool): Void;
 function sapp_toggle_fullscreen(): Void;
 
 @FFI.Extern { library: sokol; symbol: sapp_unbind_mouse_cursor_image; abi: c; }
-function sapp_unbind_mouse_cursor_image(cursor: U32): Void;
+function sapp_unbind_mouse_cursor_image(cursor: I32): Void;
 
 @FFI.Extern { library: sokol; symbol: sapp_userdata; abi: c; }
 function sapp_userdata(): RawPtr;
@@ -2119,7 +2119,7 @@ function sg_pop_debug_group(): Void;
 function sg_push_debug_group(name: CString): Void;
 
 @FFI.Extern { library: sokol; symbol: sg_query_backend; abi: c; }
-function sg_query_backend(): U32;
+function sg_query_backend(): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_buffer_defaults; abi: c; }
 function sg_query_buffer_defaults(desc: sg_buffer_desc_ptr): sg_buffer_desc;
@@ -2137,7 +2137,7 @@ function sg_query_buffer_overflow(buf: sg_buffer): Bool;
 function sg_query_buffer_size(buf: sg_buffer): U64;
 
 @FFI.Extern { library: sokol; symbol: sg_query_buffer_state; abi: c; }
-function sg_query_buffer_state(buf: sg_buffer): U32;
+function sg_query_buffer_state(buf: sg_buffer): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_buffer_usage; abi: c; }
 function sg_query_buffer_usage(buf: sg_buffer): sg_buffer_usage;
@@ -2170,16 +2170,16 @@ function sg_query_image_num_mipmaps(img: sg_image): I32;
 function sg_query_image_num_slices(img: sg_image): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_image_pixelformat; abi: c; }
-function sg_query_image_pixelformat(img: sg_image): U32;
+function sg_query_image_pixelformat(img: sg_image): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_image_sample_count; abi: c; }
 function sg_query_image_sample_count(img: sg_image): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_image_state; abi: c; }
-function sg_query_image_state(img: sg_image): U32;
+function sg_query_image_state(img: sg_image): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_image_type; abi: c; }
-function sg_query_image_type(img: sg_image): U32;
+function sg_query_image_type(img: sg_image): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_image_usage; abi: c; }
 function sg_query_image_usage(img: sg_image): sg_image_usage;
@@ -2200,13 +2200,13 @@ function sg_query_pipeline_desc(pip: sg_pipeline): sg_pipeline_desc;
 function sg_query_pipeline_info(pip: sg_pipeline): sg_pipeline_info;
 
 @FFI.Extern { library: sokol; symbol: sg_query_pipeline_state; abi: c; }
-function sg_query_pipeline_state(pip: sg_pipeline): U32;
+function sg_query_pipeline_state(pip: sg_pipeline): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_pixelformat; abi: c; }
-function sg_query_pixelformat(fmt: U32): sg_pixelformat_info;
+function sg_query_pixelformat(fmt: I32): sg_pixelformat_info;
 
 @FFI.Extern { library: sokol; symbol: sg_query_row_pitch; abi: c; }
-function sg_query_row_pitch(fmt: U32, width: I32, row_align_bytes: I32): I32;
+function sg_query_row_pitch(fmt: I32, width: I32, row_align_bytes: I32): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_sampler_defaults; abi: c; }
 function sg_query_sampler_defaults(desc: sg_sampler_desc_ptr): sg_sampler_desc;
@@ -2218,7 +2218,7 @@ function sg_query_sampler_desc(smp: sg_sampler): sg_sampler_desc;
 function sg_query_sampler_info(smp: sg_sampler): sg_sampler_info;
 
 @FFI.Extern { library: sokol; symbol: sg_query_sampler_state; abi: c; }
-function sg_query_sampler_state(smp: sg_sampler): U32;
+function sg_query_sampler_state(smp: sg_sampler): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_shader_defaults; abi: c; }
 function sg_query_shader_defaults(desc: sg_shader_desc_ptr): sg_shader_desc;
@@ -2230,13 +2230,13 @@ function sg_query_shader_desc(shd: sg_shader): sg_shader_desc;
 function sg_query_shader_info(shd: sg_shader): sg_shader_info;
 
 @FFI.Extern { library: sokol; symbol: sg_query_shader_state; abi: c; }
-function sg_query_shader_state(shd: sg_shader): U32;
+function sg_query_shader_state(shd: sg_shader): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_stats; abi: c; }
 function sg_query_stats(): sg_stats;
 
 @FFI.Extern { library: sokol; symbol: sg_query_surface_pitch; abi: c; }
-function sg_query_surface_pitch(fmt: U32, width: I32, height: I32, row_align_bytes: I32): I32;
+function sg_query_surface_pitch(fmt: I32, width: I32, height: I32, row_align_bytes: I32): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_view_buffer; abi: c; }
 function sg_query_view_buffer(view: sg_view): sg_buffer;
@@ -2254,10 +2254,10 @@ function sg_query_view_image(view: sg_view): sg_image;
 function sg_query_view_info(view: sg_view): sg_view_info;
 
 @FFI.Extern { library: sokol; symbol: sg_query_view_state; abi: c; }
-function sg_query_view_state(view: sg_view): U32;
+function sg_query_view_state(view: sg_view): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_query_view_type; abi: c; }
-function sg_query_view_type(view: sg_view): U32;
+function sg_query_view_type(view: sg_view): I32;
 
 @FFI.Extern { library: sokol; symbol: sg_remove_commit_listener; abi: c; }
 function sg_remove_commit_listener(listener: sg_commit_listener): Bool;

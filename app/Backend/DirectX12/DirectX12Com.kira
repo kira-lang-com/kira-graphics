@@ -1,0 +1,203 @@
+// COM calling, which is what Direct3D 12 is made of.
+//
+// Almost nothing in D3D12 is an exported symbol. `D3D12CreateDevice` is, and
+// eight siblings are, and everything after that — every queue, allocator, list,
+// resource and descriptor heap — is a method reached through the object itself:
+//
+//     object  -> lpVtbl -> [ QueryInterface, AddRef, Release, ... , Method ]
+//
+// The object's first field is a pointer to a table of function pointers, and a
+// method is a slot index in that table. The index is fixed by the interface's
+// declaration order and is not a name anything can look up, so `@FFI.Extern`
+// has nothing to bind: it names symbols, and there is no symbol here.
+//
+// So a call is assembled instead. Read the table out of the object, read the
+// slot out of the table, push `this` and the arguments, and invoke. That is
+// what `comCall*` below does, once, so no caller open-codes pointer arithmetic.
+//
+// # Every method takes `this` first
+//
+// A COM method's first argument is always the object it was reached through —
+// the C++ compiler passes it implicitly, and C spells it out. `comCall*` pushes
+// it, so a caller passes only the arguments the documentation lists.
+
+// Slot indices every COM interface begins with, inherited from `IUnknown`.
+//
+// Fixed by the ABI rather than by Direct3D: an interface's own methods start at
+// slot 3, after these three, and `ID3D12Object`'s four come before any device
+// method. Named here so a call site reads as a method rather than a number.
+enum ComSlot {
+    QueryInterface
+    AddRef
+    Release
+}
+
+function comSlotIndex(slot: ComSlot) -> U64 {
+    match slot {
+        QueryInterface -> return 0;
+        AddRef -> return 1;
+        Release -> return 2;
+    }
+    return 0
+}
+
+// The size of a vtable entry, which is one pointer.
+function comSlotStride() -> U64 {
+    return 8
+}
+
+// An `HRESULT` of zero: `S_OK`.
+//
+// Direct3D reports failure as a negative `HRESULT` and success as zero or
+// positive, so success is a sign test rather than an equality test — `S_FALSE`
+// is a success the caller may still need to distinguish.
+function comSucceeded(result: I32) -> Bool {
+    return result >= 0
+}
+
+// Resolves the method in `slot` of `object`'s vtable.
+//
+// Returns null when `object` is null, so a caller that failed to create
+// something and did not check gets a refused call rather than a jump through a
+// null table. The invoke refuses a null target too, which makes this two
+// checks deep on purpose: this is the layer where a mistake is silent.
+function comMethod(object: RawPtr, slot: U64) -> RawPtr {
+    if kiraDynamicPtrIsNull(object) {
+        return kiraDynamicNullPtr()
+    }
+    let vtable = kiraDynamicReadPtr(object)
+    if kiraDynamicPtrIsNull(vtable) {
+        return kiraDynamicNullPtr()
+    }
+    return kiraDynamicReadPtrAt(vtable, slot * comSlotStride())
+}
+
+// Calls a method taking only `this`, for its `HRESULT`.
+function comCall0(object: RawPtr, slot: U64) -> I32 {
+    let method = comMethod(object, slot)
+    let call = kiraDynamicCallNew(1)
+    kiraDynamicCallArgPtr(call, object)
+    let result = kiraDynamicCallInvokeI32(call, method)
+    kiraDynamicCallFree(call)
+    return result
+}
+
+// Calls a method taking `this` and one pointer, for its `HRESULT`.
+function comCall1Ptr(object: RawPtr, slot: U64, arg0: RawPtr) -> I32 {
+    let method = comMethod(object, slot)
+    let call = kiraDynamicCallNew(2)
+    kiraDynamicCallArgPtr(call, object)
+    kiraDynamicCallArgPtr(call, arg0)
+    let result = kiraDynamicCallInvokeI32(call, method)
+    kiraDynamicCallFree(call)
+    return result
+}
+
+// Calls a method taking `this` and two pointers, for its `HRESULT`.
+//
+// The shape of every `QueryInterface`-like method: an interface id in, an
+// out-pointer the result lands in.
+function comCall2Ptr(object: RawPtr, slot: U64, arg0: RawPtr, arg1: RawPtr) -> I32 {
+    let method = comMethod(object, slot)
+    let call = kiraDynamicCallNew(3)
+    kiraDynamicCallArgPtr(call, object)
+    kiraDynamicCallArgPtr(call, arg0)
+    kiraDynamicCallArgPtr(call, arg1)
+    let result = kiraDynamicCallInvokeI32(call, method)
+    kiraDynamicCallFree(call)
+    return result
+}
+
+// Calls a method taking only `this`, for its `ULONG` — the reference count.
+//
+// `AddRef` and `Release` are the two, and both answer with the count that
+// remains rather than with an `HRESULT`.
+function comCallRefCount(object: RawPtr, slot: U64) -> U32 {
+    let method = comMethod(object, slot)
+    let call = kiraDynamicCallNew(1)
+    kiraDynamicCallArgPtr(call, object)
+    let result = kiraDynamicCallInvokeU32(call, method)
+    kiraDynamicCallFree(call)
+    return result
+}
+
+// Releases `object`, answering the reference count that remains.
+//
+// Zero means the object is gone. A null object releases nothing and answers
+// zero, so a cleanup path over a partly-built context needs no null checks of
+// its own — the case where half the objects were never created is the case a
+// failed initialization always leaves behind.
+function comRelease(object: RawPtr) -> U32 {
+    if kiraDynamicPtrIsNull(object) {
+        return 0
+    }
+    return comCallRefCount(object, comSlotIndex(.Release))
+}
+
+// Adds a reference to `object`, answering the new count.
+function comAddRef(object: RawPtr) -> U32 {
+    if kiraDynamicPtrIsNull(object) {
+        return 0
+    }
+    return comCallRefCount(object, comSlotIndex(.AddRef))
+}
+
+// Asks `object` for another interface, writing it to `out`.
+//
+// `iid` and `out` are blocks the caller allocated: an interface id is sixteen
+// bytes, and the result lands in a pointer-sized slot.
+function comQueryInterface(object: RawPtr, iid: RawPtr, out: RawPtr) -> I32 {
+    return comCall2Ptr(object, comSlotIndex(.QueryInterface), iid, out)
+}
+
+// Writes a COM interface id into a sixteen-byte block.
+//
+// A `GUID` is not sixteen bytes of one kind: it is a 32-bit field, two 16-bit
+// fields, then eight bytes, each stored in the host's own byte order. Writing
+// it as text or as two 64-bit halves gets the byte order wrong on the first
+// three fields, which is why every field is written at its own offset here.
+function comWriteIid(
+    block: RawPtr,
+    data1: U32,
+    data2: U16,
+    data3: U16,
+    data4_0: U8,
+    data4_1: U8,
+    data4_2: U8,
+    data4_3: U8,
+    data4_4: U8,
+    data4_5: U8,
+    data4_6: U8,
+    data4_7: U8
+) -> Void {
+    kiraDynamicWriteU32At(block, 0, data1)
+    kiraDynamicWriteU16At(block, 4, data2)
+    kiraDynamicWriteU16At(block, 6, data3)
+    kiraDynamicWriteU8At(block, 8, data4_0)
+    kiraDynamicWriteU8At(block, 9, data4_1)
+    kiraDynamicWriteU8At(block, 10, data4_2)
+    kiraDynamicWriteU8At(block, 11, data4_3)
+    kiraDynamicWriteU8At(block, 12, data4_4)
+    kiraDynamicWriteU8At(block, 13, data4_5)
+    kiraDynamicWriteU8At(block, 14, data4_6)
+    kiraDynamicWriteU8At(block, 15, data4_7)
+}
+
+// The number of bytes an interface id occupies.
+function comIidSize() -> U64 {
+    return 16
+}
+
+// `IID_ID3D12Device`, the interface `D3D12CreateDevice` is asked for.
+//
+// {189819f1-1db6-4b57-be54-1821339b85f7}
+function comWriteDeviceIid(block: RawPtr) -> Void {
+    comWriteIid(block, 0x189819f1, 0x1db6, 0x4b57, 0xbe, 0x54, 0x18, 0x21, 0x33, 0x9b, 0x85, 0xf7)
+}
+
+// `IID_IDXGIFactory4`, the factory an adapter is enumerated from.
+//
+// {1bc6ea02-ef36-464f-bf0c-21ca39e5168a}
+function comWriteDxgiFactory4Iid(block: RawPtr) -> Void {
+    comWriteIid(block, 0x1bc6ea02, 0xef36, 0x464f, 0xbf, 0x0c, 0x21, 0xca, 0x39, 0xe5, 0x16, 0x8a)
+}

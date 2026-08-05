@@ -1,0 +1,144 @@
+// Creating a real Direct3D 12 device, and calling a method on it.
+//
+// This is the first thing in this package that reaches D3D12's COM surface
+// rather than describing it. `directX12DeviceProbe` opens the loader, creates a
+// device, calls `Release` on it through its own vtable, and reports what
+// happened at each step.
+//
+// # Why the release matters as much as the creation
+//
+// `D3D12CreateDevice` is an exported symbol: calling it proves the loader
+// works and says nothing about COM. `Release` is slot 2 of the device's vtable
+// — no symbol, no name, just an offset — so a reference count that comes back
+// from it is proof the vtable path is right. A probe that only created a device
+// would report success for a backend that still could not call a single method.
+//
+// # What this does not claim
+//
+// A device is not a renderer. There is no queue, no swap chain, no frame path
+// behind this, so `validateDirectX12Backend` still reports the backend as
+// unsupported — it just now says which of the two reasons applies, because a
+// machine with no D3D12 at all and a machine whose device this package can
+// drive are different states and the message should say which.
+
+// `D3D_FEATURE_LEVEL_11_0`, the floor D3D12 itself requires.
+function directX12MinimumFeatureLevel() -> U32 {
+    return 0xb000
+}
+
+// Probes the device on whatever platform this program is running on.
+//
+// The contract comes from the host rather than from an argument, so a caller
+// asking "can this machine do Direct3D 12" does not first have to know which
+// machine it is on.
+//
+// Deliberately not `@Native`, and reaching for `dynamicFfiHostPlatform` rather
+// than `hostGraphicsPlatform`: both answer the same question, but the latter is
+// `@Native` and answers with a `GraphicsPlatform`, and an enum cannot cross the
+// `@Native`/`@Runtime` boundary. Either annotation put that crossing somewhere,
+// and the hybrid backend rejects it by name. The unannotated pair keeps the
+// enum on one engine, so this runs on all three backends.
+//
+// Nothing is lost by it: `dynamicFfiHostPlatform` reads the platform the
+// compiler already knows at expansion time, rather than asking a C library.
+function directX12HostDeviceProbe() -> DirectX12DeviceProbe {
+    let contract = directX12LoaderContract(dynamicFfiHostPlatform())
+    return directX12DeviceProbe(contract)
+}
+
+// What a device probe found, step by step.
+//
+// Each field answers a different question, because a single boolean would
+// collapse "no driver on this machine" into "the COM path is broken", and those
+// call for opposite responses.
+struct DirectX12DeviceProbe {
+    // The loader library opened.
+    var libraryOpened: Bool = false
+    // `D3D12CreateDevice` resolved out of it.
+    var entryPointFound: Bool = false
+    // The call returned a succeeding `HRESULT` and a non-null device.
+    var deviceCreated: Bool = false
+    // A method reached through the device's vtable answered.
+    var vtableCallReturned: Bool = false
+    // What `Release` reported, which is zero for a device nothing else holds.
+    var referencesRemaining: U32 = 0
+    // The `HRESULT` from `D3D12CreateDevice`, kept for a failing report.
+    var hresult: I32 = 0
+    var reason: String = ""
+}
+
+// Opens the loader, creates a device, and releases it through its vtable.
+//
+// Every exit frees what it allocated and closes what it opened: a probe runs on
+// a machine that may be about to select a different backend, and one that
+// leaked a device on the way to reporting failure would be a poor neighbour.
+function directX12DeviceProbe(contract: borrow DirectX12LoaderContract) -> DirectX12DeviceProbe {
+    if !contract.canAttemptLoad {
+        return DirectX12DeviceProbe {
+            reason: contract.reason
+        }
+    }
+
+    let library = kiraDynamicLibraryOpen(contract.d3d12LibraryName)
+    if kiraDynamicPtrIsNull(library) {
+        return DirectX12DeviceProbe {
+            reason: "the Direct3D 12 loader library could not be opened"
+        }
+    }
+
+    let createDevice = kiraDynamicLibrarySymbol(library, "D3D12CreateDevice")
+    if kiraDynamicPtrIsNull(createDevice) {
+        kiraDynamicLibraryClose(library)
+        return DirectX12DeviceProbe {
+            libraryOpened: true
+            reason: "the Direct3D 12 loader exports no D3D12CreateDevice"
+        }
+    }
+
+    // The interface asked for, and the slot the device lands in. Both are
+    // blocks rather than values because C takes them by address.
+    let iid = kiraDynamicAlloc(comIidSize())
+    comWriteDeviceIid(iid)
+    let out = kiraDynamicAlloc(8)
+
+    // D3D12CreateDevice(pAdapter, MinimumFeatureLevel, riid, ppDevice).
+    // A null adapter selects the default one, which is what a probe wants:
+    // enumerating adapters is the renderer's job, not this one's.
+    let call = kiraDynamicCallNew(4)
+    kiraDynamicCallArgPtr(call, kiraDynamicNullPtr())
+    kiraDynamicCallArgU32(call, directX12MinimumFeatureLevel())
+    kiraDynamicCallArgPtr(call, iid)
+    kiraDynamicCallArgPtr(call, out)
+    let hresult = kiraDynamicCallInvokeI32(call, createDevice)
+    kiraDynamicCallFree(call)
+
+    let device = kiraDynamicReadPtr(out)
+    kiraDynamicFree(out)
+    kiraDynamicFree(iid)
+
+    if !comSucceeded(hresult) || kiraDynamicPtrIsNull(device) {
+        kiraDynamicLibraryClose(library)
+        return DirectX12DeviceProbe {
+            libraryOpened: true
+            entryPointFound: true
+            hresult: hresult
+            reason: "D3D12CreateDevice returned a failing HRESULT: " + String(hresult)
+        }
+    }
+
+    // The COM half. `Release` is slot 2 of the device's own vtable, reached by
+    // offset rather than by name — if this answers, every other method on every
+    // other D3D12 interface is reachable the same way.
+    let remaining = comRelease(device)
+    kiraDynamicLibraryClose(library)
+
+    return DirectX12DeviceProbe {
+        libraryOpened: true
+        entryPointFound: true
+        deviceCreated: true
+        vtableCallReturned: true
+        referencesRemaining: remaining
+        hresult: hresult
+        reason: "a Direct3D 12 device was created and released through its vtable"
+    }
+}

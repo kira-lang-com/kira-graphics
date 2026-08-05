@@ -1,0 +1,17 @@
+// Direct3D 12 COM test harness — Foundation `Test`-construct shape (kik).
+//
+// Each Test drives the real Direct3D 12 loader on the host: it creates a device
+// through `D3D12CreateDevice` and then calls a method on that device through
+// the device's own vtable, which is the path every D3D12 call in this package
+// will take. Nothing here asserts a marker — the values checked are an
+// `HRESULT` from the driver and a reference count from `Release`.
+//
+// Windows only, in the same way the Metal suite is Apple only: there is no
+// `d3d12.dll` to open elsewhere, and a test that passed without one would be
+// asserting nothing. Run with:
+//
+//   KIRA_PURE_TEST=1 kira test --backend vm tests/d3d12_kik
+//   KIRA_PURE_TEST=1 kira test --backend llvm tests/d3d12_kik
+//
+// Both backends must agree, because the whole point of the call builder is that
+// a COM call is made the same way whether Kira is interpreting or compiled.

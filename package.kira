@@ -42,12 +42,13 @@ Package KiraGraphics {
             ],
         },
         NativeLibrary {
-            // The libffi-backed call builder and symbol lookup the Vulkan and
-            // Direct3D loaders use to reach a driver they cannot link against.
-            // This toolchain provides none of it, and declaring no target row
-            // says so: those calls are excluded and trap by name rather than
-            // failing the link. Neither loader runs on Apple platforms, so
-            // nothing here is reachable there.
+            // Kept for the two fixed call shapes the Vulkan probe still uses,
+            // and for nothing else. The call builder and symbol lookup the
+            // Direct3D loader reaches for moved to `kira_runtime`, where the
+            // toolchain actually implements them — declaring no target row here
+            // means anything still named against this library is excluded and
+            // traps by name rather than failing the link, which is the honest
+            // answer for a library that exists nowhere.
             name: "kira_dynamic_ffi",
             linkMode: LinkMode.Runtime,
             availability: Availability.Optional,
@@ -56,9 +57,15 @@ Package KiraGraphics {
         NativeLibrary {
             // Kira's own runtime archive, already on every native link line.
             // The raw-memory primitives a backend lays its C-shaped context out
-            // with live there; the libffi call machinery the Vulkan and Direct3D
-            // loaders reach for does not, and those calls trap by name on a
-            // platform that never makes them.
+            // with live there — and so, now, do shared-library loading and the
+            // run-time call builder the Direct3D 12 backend dispatches COM
+            // through. A method reached by vtable slot has no symbol to bind, so
+            // it cannot be an `@FFI.Extern`; it is assembled and invoked instead.
+            //
+            // Required rather than optional, and that distinction carries
+            // weight: on Windows an *optional* runtime-linked library with no
+            // artifact is treated as absent, because PE cannot leave a symbol
+            // undefined for load time to bind. This one is never absent.
             name: "kira_runtime",
             linkMode: LinkMode.Runtime,
             nativeTargets: [
