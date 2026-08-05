@@ -156,12 +156,20 @@ function validateVulkanBackend(platform: GraphicsPlatform) -> GraphicsBackendSel
 @Native
 // DirectX 12: the same arrangement, for the same reason. See
 // `validateVulkanBackend`.
+//
+// The probe now goes further than the loader: it creates a real device and
+// calls `Release` on it through the device's own vtable, so the reason
+// distinguishes a machine with no Direct3D 12 from one whose device this
+// package can already drive. Neither is `supported: true` — a device is not a
+// frame path, and there is still no queue, swap chain or encoder behind it.
 function validateDirectX12Backend(platform: GraphicsPlatform) -> GraphicsBackendSelection {
     let contract = directX12LoaderContract(platform)
-    let probe = directX12RuntimeProbe(contract)
-    var reason = "the Kira Graphics DirectX 12 backend is not implemented: no device or frame path exists behind the loader"
-    if probe.supported == false {
+    let probe = directX12DeviceProbe(contract)
+    var reason = "the Kira Graphics DirectX 12 backend is not implemented: no frame path exists behind the device"
+    if probe.deviceCreated == false {
         reason = reason + " (and " + probe.reason + ")"
+    } else {
+        reason = reason + " (" + probe.reason + ")"
     }
     return GraphicsBackendSelection {
         backend: .DirectX12

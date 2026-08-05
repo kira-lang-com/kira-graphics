@@ -1,0 +1,41 @@
+import Foundation
+import KiraGraphics
+// Direct3D 12 COM Tests. Names use the dxk / Dxk prefix.
+
+Test DxkLoaderOpens {
+    test { return directX12HostDeviceProbe().libraryOpened }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test DxkCreateDeviceResolves {
+    test { return directX12HostDeviceProbe().entryPointFound }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test DxkDeviceCreates {
+    test { return directX12HostDeviceProbe().deviceCreated }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+// The COM assertion. `Release` is slot 2 of the device's vtable — reached by
+// offset, with no symbol to resolve — so an answer from it is what says the
+// vtable path is right rather than merely that the loader is present.
+Test DxkVtableCallReturns {
+    test { return directX12HostDeviceProbe().vtableCallReturned }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+// Nothing else holds the device, so the count `Release` reports is zero. A
+// non-zero count would mean the call reached something, but not the method the
+// slot was supposed to name.
+Test DxkReleaseDropsTheLastReference {
+    test { return directX12HostDeviceProbe().referencesRemaining == 0 }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+// A succeeding `HRESULT` is zero or positive; a driver that refused would
+// answer a negative one, and this pins which side of that the probe saw.
+Test DxkCreateDeviceSucceeded {
+    test { return directX12HostDeviceProbe().hresult >= 0 }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
