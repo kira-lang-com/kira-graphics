@@ -74,10 +74,25 @@ shader BasicCube {
             let result: FragmentOut
 
             let n = normalize(fragmentIn.worldNormal)
+            // The face colour is the normal, as it has always been; what is new
+            // is that the scene's light actually reaches it. `SceneUniforms`
+            // carried a direction and a colour that no stage read, so under GL —
+            // where a uniform is addressed by the name the linked program has —
+            // the driver stripped both and the host reported two members it
+            // could not find. A light a shader declares and ignores is the
+            // mismatch; using it is the fix.
+            let toLight = normalize(Float3(
+                scene.lightDirection.x,
+                scene.lightDirection.y,
+                scene.lightDirection.z
+            ))
+            let lambert = saturate(dot(n, toLight))
+            let ambient = 0.35
+            let level = ambient + (1.0 - ambient) * lambert
             result.color = Float4(
-                absolute(n.x),
-                absolute(n.y),
-                absolute(n.z),
+                absolute(n.x) * level * scene.lightColor.x,
+                absolute(n.y) * level * scene.lightColor.y,
+                absolute(n.z) * level * scene.lightColor.z,
                 fragmentIn.color.w
             )
 
