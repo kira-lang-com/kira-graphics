@@ -15,7 +15,7 @@ function frameTriangleFragmentSource() -> String {
     return "#version 330 core\nin vec4 color;\nout vec4 frag_color;\nvoid main() {\n    frag_color = color;\n}\n"
 }
 
-function frameTriangleVertices() -> [Float] {
+function frameTriangleVertices() -> [F32] {
     return [
         0.0, 0.55,
         0.55, -0.55,
@@ -41,22 +41,21 @@ function main() {
     app.onInit { graphics in
         var triangleState = nativeRecover<FrameTriangleState>(graphics.userData)
 
-        triangleState.shader = graphics.createShader(ShaderDescriptor {
+        triangleState.shader = shaderOrReport(graphics.createShader(ShaderDescriptor {
             label: "frame-api-triangle-shader"
             vertexSource: frameTriangleVertexSource()
             fragmentSource: frameTriangleFragmentSource()
             vertexPath: ""
             fragmentPath: ""
-        })
+        }), "shader")
 
-        triangleState.vertices = graphics.createBuffer(BufferDescriptor {
+        triangleState.vertices = bufferOrReport(graphics.createBuffer(BufferDescriptor {
             label: "frame-api-triangle-vertices"
-            usage: bufferUsageVertex()
-            stride: 8
+            usage: BufferUsage.Vertex
             data: frameTriangleVertices()
-        })
+        }), "vertices")
 
-        triangleState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+        triangleState.pipeline = pipelineOrReport(graphics.createRenderPipeline(RenderPipelineDescriptor {
             label: "frame-api-triangle-pipeline"
             shader: triangleState.shader
             vertexLayout: VertexLayout {
@@ -65,34 +64,34 @@ function main() {
                     VertexAttribute {
                         name: "position"
                         location: 0
-                        format: vertexFormatFloat2()
+                        format: VertexFormat.Float2
                         offset: 0
                     }
                 ]
             }
             colorTargets: [
                 ColorTargetDescriptor {
-                    format: textureFormatSwapchain()
+                    format: TextureFormat.Swapchain
                     blend: BlendState {
                         enabled: false
-                        preset: blendPresetReplace()
+                        preset: BlendPreset.Replace
                     }
                 }
             ]
             depthStencil: DepthStencilDescriptor {
                 depthEnabled: false
                 depthWriteEnabled: false
-                depthCompare: compareFunctionAlways()
-                format: textureFormatDepth24Stencil8()
+                depthCompare: CompareFunction.Always
+                format: TextureFormat.None
             }
             rasterization: RasterizationDescriptor {
-                cullMode: cullModeNone()
-                frontFace: frontFaceCounterClockwise()
+                cullMode: CullMode.None
+                frontFace: FrontFace.CounterClockwise
             }
             primitive: PrimitiveDescriptor {
-                topology: primitiveTopologyTriangleList()
+                topology: PrimitiveTopology.TriangleList
             }
-        })
+        }), "pipeline")
         return
     }
 

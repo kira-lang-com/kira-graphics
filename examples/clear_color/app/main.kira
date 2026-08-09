@@ -24,6 +24,6 @@ function main() {
         return
     }
 
-    app.run(metalNullPtr())
+    app.run(nullPointer())
     return
 }

@@ -7,7 +7,7 @@ struct TriangleState {
     var vertices: GraphicsBuffer
 }
 
-function triangleVertices() -> [Float] {
+function triangleVertices() -> [F32] {
     return [
         0.0, 0.55,
         0.55, -0.55,
@@ -22,7 +22,7 @@ function triangleVertexLayout() -> VertexLayout {
             VertexAttribute {
                 name: "position"
                 location: 0
-                format: vertexFormatFloat2()
+                format: VertexFormat.Float2
                 offset: 0
             }
         ]
@@ -35,8 +35,8 @@ function trianglePass() -> RenderPassDescriptor {
         colorAttachments: [
             ColorAttachment {
                 target: swapchainRenderTarget()
-                loadAction: loadActionClear()
-                storeAction: storeActionStore()
+                loadAction: LoadAction.Clear
+                storeAction: StoreAction.Store
                 clearColor: Color {
                     r: 0.04
                     g: 0.05
@@ -49,8 +49,8 @@ function trianglePass() -> RenderPassDescriptor {
         ]
         primaryColorAttachment: ColorAttachment {
             target: swapchainRenderTarget()
-            loadAction: loadActionClear()
-            storeAction: storeActionStore()
+            loadAction: LoadAction.Clear
+            storeAction: StoreAction.Store
             clearColor: Color {
                 r: 0.04
                 g: 0.05
@@ -86,46 +86,45 @@ function main() {
     app.onInit { graphics in
         var triangleState = nativeRecover<TriangleState>(graphics.userData)
 
-        triangleState.shader = graphics.createShaderFromKsl(KslShaderDescriptor {
+        triangleState.shader = shaderOrReport(graphics.createShaderFromKsl(KslShaderDescriptor {
             label: "basic-triangle-shader"
             asset: "BasicTriangle"
             directory: "generated/Shaders"
-        })
+        }), "shader")
 
-        triangleState.vertices = graphics.createBuffer(BufferDescriptor {
+        triangleState.vertices = bufferOrReport(graphics.createBuffer(BufferDescriptor {
             label: "basic-triangle-vertices"
-            usage: bufferUsageVertex()
-            stride: 8
+            usage: BufferUsage.Vertex
             data: triangleVertices()
-        })
+        }), "vertices")
 
-        triangleState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+        triangleState.pipeline = pipelineOrReport(graphics.createRenderPipeline(RenderPipelineDescriptor {
             label: "basic-triangle-pipeline"
             shader: triangleState.shader
             vertexLayout: triangleVertexLayout()
             colorTargets: [
                 ColorTargetDescriptor {
-                    format: textureFormatSwapchain()
+                    format: TextureFormat.Swapchain
                     blend: BlendState {
                         enabled: false
-                        preset: blendPresetReplace()
+                        preset: BlendPreset.Replace
                     }
                 }
             ]
             depthStencil: DepthStencilDescriptor {
                 depthEnabled: false
                 depthWriteEnabled: false
-                depthCompare: compareFunctionAlways()
-                format: textureFormatDepth24Stencil8()
+                depthCompare: CompareFunction.Always
+                format: TextureFormat.None
             }
             rasterization: RasterizationDescriptor {
-                cullMode: cullModeNone()
-                frontFace: frontFaceCounterClockwise()
+                cullMode: CullMode.None
+                frontFace: FrontFace.CounterClockwise
             }
             primitive: PrimitiveDescriptor {
-                topology: primitiveTopologyTriangleList()
+                topology: PrimitiveTopology.TriangleList
             }
-        })
+        }), "pipeline")
         return
     }
 
