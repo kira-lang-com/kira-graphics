@@ -1,0 +1,256 @@
+import Foundation
+// Everything a renderer asks of the GPU, as one construct family.
+//
+// This replaces 43 hand-written `match self.backend` sites spread across
+// `Graphics` (34), `RenderFrame` (7) and `Graphics`'s compute extension (2).
+// Each was a two-arm switch over `RenderBackendKind`, so a third backend would
+// have had to find all 43 by hand, and two of them were `if self.backend ==
+// .Metal` with nothing on the other side: the non-Metal path did nothing and
+// said nothing.
+//
+// # Every member is `@Required`, and none has a body
+//
+// That is the whole point of writing it as a family rather than as a class with
+// overridable defaults. A member with a default body silently absorbs a new
+// backend — the backend inherits an answer it never wrote, and the first sign is
+// a black frame. With no defaults, a third backend is a wall of `KSEM234`
+// naming exactly what it has not implemented, before it runs once.
+//
+// The same rule is why nothing here answers `.Error(.BackendLacksCapability)`.
+// A capability a backend lacks is a compile-time fact about that backend, not a
+// runtime failure for a caller to branch on. Where the two backends genuinely do
+// different amounts of work for the same request — `optimizeTexture`, which is a
+// blit on Metal and nothing under GL — both write the member and the one that
+// does nothing says in its own body why there is nothing to do.
+//
+// # What is NOT here
+//
+// Decoding an image file. `Graphics.createTextureFromFile` decodes in Kira and
+// then calls `createTextureFromPixels`, which both backends implement, so
+// loading a PNG is not a question about which GPU is in the machine.
+//
+// The draw path. `RenderEncoder` carries its own backend selection through the
+// native state a pass hands it, and a draw is the one call frequent enough that
+// re-deriving a backend value per invocation would show up.
+construct RenderBackend {
+    // --- shaders ---------------------------------------------------------
+    @Required function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult
+    // Compile a KSL asset that `kira shader build` has already written out.
+    // Each backend reads the file its own device compiles: the GLSL/WGSL pair
+    // on sokol, the combined `.metal` library on Metal.
+    @Required function createShaderFromKsl(descriptor: borrow KslShaderDescriptor) -> ShaderResult
+    // Shader creation from an inline `ksl!` artifact, which carries every
+    // target's precompiled text and the entry names beside them. Which of those
+    // a backend reads is the backend's business — combined MSL on Metal, WGSL
+    // on WebGPU, GLSL on desktop GL, and the compute kernel rather than the
+    // graphics pair when the shader has one.
+    @Required function createShaderFromKslArtifact(label: borrow String, artifact: borrow KslArtifact) -> ShaderResult
+    @Required function destroyShader(shader: borrow GraphicsShader) -> Void
+
+    // --- pipelines -------------------------------------------------------
+    @Required function createRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> PipelineResult
+    @Required function destroyPipeline(pipeline: borrow RenderPipeline) -> Void
+
+    // --- buffers ---------------------------------------------------------
+    // A persistent buffer of `floatCapacity` f32 slots that the CPU rewrites,
+    // and the memory it writes into. The memory arrives with the buffer because
+    // the two are not always the same storage: on Metal a write lands where the
+    // GPU reads, on sokol it lands in a staging block `commitDynamicBuffer`
+    // hands over.
+    @Required function createDynamicBuffer(label: borrow String, floatCapacity: Int) -> DynamicBufferResult
+    // Claim this frame's slot in a dynamic buffer and return the byte offset
+    // every write into it this frame must add to its own. Called once per frame
+    // before writing, so the frame the GPU is still drawing keeps the slot it
+    // was recorded with.
+    @Required function dynamicBufferFrameStart(buffer: borrow GraphicsBuffer) -> Int
+    // Hand the first `floatCount` slots written into `contents` to the GPU. A
+    // call of its own rather than something every write does, because a backend
+    // that stages may run it at most ONCE per buffer per frame.
+    @Required function commitDynamicBuffer(buffer: borrow GraphicsBuffer, contents: RawPtr, floatCount: Int) -> Void
+    @Required function createBuffer(descriptor: borrow BufferDescriptor) -> BufferResult
+    @Required function createIndexBuffer(descriptor: borrow IndexBufferDescriptor) -> BufferResult
+    @Required function destroyBuffer(buffer: borrow GraphicsBuffer) -> Void
+
+    // --- uniforms --------------------------------------------------------
+    @Required function createUniform(descriptor: borrow UniformDescriptor) -> UniformResult
+    @Required function updateUniform(uniform: borrow Uniform, data: borrow [F32]) -> Void
+    @Required function destroyUniform(uniform: borrow Uniform) -> Void
+
+    // --- bind groups -----------------------------------------------------
+    @Required function createBindGroup(descriptor: borrow BindGroupDescriptor) -> BindGroupResult
+    @Required function createUniformBindGroup(label: borrow String, uniformSlot: Int, uniform: borrow Uniform) -> BindGroupResult
+    // Bind a buffer a shader reads as storage — the compositor's quad stream, or
+    // any per-instance table a vertex stage indexes by vertex id.
+    @Required function createStorageBufferBindGroup(label: borrow String, slot: Int, bufferId: U32) -> BindGroupResult
+    // An EMPTY bind group, filled by the two `bindGroupAdd*` members below.
+    //
+    // The one-shot constructors around it each fix how many resources a group
+    // holds, which the shader — not the constructor — decides: a KSL shader
+    // numbers every resource in a group sequentially, so a group may carry two
+    // texture/sampler pairs, or a buffer beside a texture, and no fixed shape
+    // covers them all.
+    @Required function beginBindGroup(label: borrow String) -> BindGroupResult
+    @Required function bindGroupAddTexture(group: borrow BindGroup, slot: Int, texture: borrow GraphicsTexture) -> Void
+    @Required function bindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: borrow GraphicsSampler) -> Void
+    @Required function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroupResult
+    @Required function destroyBindGroup(bindGroup: borrow BindGroup) -> Void
+
+    // --- textures and samplers -------------------------------------------
+    @Required function createTexture(descriptor: borrow TextureDescriptor) -> TextureResult
+    // Create a texture that already has its pixels: RGBA8, row-major, four bytes
+    // per pixel and no header. One step rather than create-then-upload because a
+    // backend can do better when the contents arrive with the image.
+    @Required function createTextureFromPixels(descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult
+    // Replace a texture's pixels, whole-image — the shape both backends share,
+    // since sokol has no sub-region upload at all.
+    @Required function updateTexture(texture: borrow GraphicsTexture, width: Int, height: Int, pixels: borrow [U8]) -> Void
+    // Replace a texture's contents from raw memory the caller already owns, for
+    // a texture the caller composites into itself — a glyph atlas, whose CPU
+    // side has to exist anyway so a new glyph can be packed beside the old ones.
+    @Required function updateTextureBytes(texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) -> Void
+    @Required function destroyTexture(texture: borrow GraphicsTexture) -> Void
+    @Required function createSampler(descriptor: borrow SamplerDescriptor) -> SamplerResult
+    @Required function destroySampler(sampler: borrow GraphicsSampler) -> Void
+
+    // --- the drawable ----------------------------------------------------
+    // The Retina backing scale (physical pixels per point) of the current
+    // drawable, and its size in framebuffer pixels. A host rendering
+    // context-sized offscreen targets reads these rather than a backend's own
+    // window API.
+    @Required function backingScale() -> Float
+    @Required function contextWidth() -> Int
+    @Required function contextHeight() -> Int
+    // The live viewport in logical POINTS, which is the space a UI lays out and
+    // hit-tests in: a Retina framebuffer renders at native pixel resolution
+    // without the interface shrinking to match.
+    //
+    // A separate question from `contextWidth`, and asked of the backend for the
+    // same reason: a resize moves this while the drawable it is derived from
+    // differs per backend, so a caller that wants "how big is the window to a
+    // human" should not have to know which one it is running on.
+    //
+    // Float, because a point is not a whole number of pixels: a 1.25x scale puts
+    // a 1924-pixel drawable at 1539.2 points, and truncating that at the source
+    // would lose the fraction every layout pass below needs.
+    @Required function viewportWidth() -> Float
+    @Required function viewportHeight() -> Float
+    // How the window is presented right now, and moving it to another mode.
+    //
+    // Read from the window itself rather than remembered from the last request:
+    // a user can leave fullscreen through the window manager without the program
+    // being asked, so a stored copy would go stale the moment it mattered. A
+    // backend whose window system cannot tell two of the modes apart therefore
+    // reads back the one it actually put on screen.
+    @Required function windowMode() -> WindowMode
+    @Required function setWindowMode(mode: borrow WindowMode) -> Void
+
+    // --- compute ---------------------------------------------------------
+    // Whether this backend can build and encode a compute pipeline at all.
+    //
+    // Asked instead of naming a backend: a caller with a compute shader and a
+    // render-pass fallback chooses between them on the capability, so a backend
+    // that grows compute starts running the compute path without every caller
+    // being edited to add its name to a list.
+    @Required function supportsCompute() -> Bool
+    @Required function createComputePipeline(label: borrow String, shader: borrow GraphicsShader, entryName: borrow String) -> Int
+    // Run a two-axis separable blur over `source`, one dispatch per axis. Both
+    // kernels produce two levels at once — near and far read the same input and
+    // write their own target — so the pyramid costs one dispatch per axis rather
+    // than one per level.
+    //
+    // Textures rather than ids, because the two backends bind different things:
+    // Metal binds the texture object, and sokol binds a *view* — a sampled one
+    // for what the kernel reads and a storage-image one for what it writes, and
+    // neither can be recovered from an image id.
+    @Required function dispatchTextureComputePair(
+        horizontalPipeline: Int,
+        verticalPipeline: Int,
+        source: borrow GraphicsTexture,
+        tempNear: borrow GraphicsTexture,
+        tempFar: borrow GraphicsTexture,
+        outputNear: borrow GraphicsTexture,
+        outputFar: borrow GraphicsTexture,
+        sampler: borrow GraphicsSampler,
+        width: Int,
+        height: Int,
+    ) -> Void
+    // One dispatch over BUFFERS — the shape a simulation kernel has, beside the
+    // texture pair above that an image filter has. The ids bind in order at
+    // `buffer(0)`, `buffer(1)`, … which is how a KSL kernel numbers its own
+    // storage arguments.
+    //
+    // A backend without compute declines it exactly as it declines the pair;
+    // `supportsCompute` is what a caller asks first.
+    @Required function dispatchComputeBuffers(
+        pipeline: Int,
+        bufferIds: borrow [U32],
+        threadCount: Int,
+        threadsPerGroup: Int,
+    ) -> Void
+    // The same dispatch with a depth texture bound ahead of the buffers, for a
+    // kernel that reads the depth a pass just rasterized.
+    @Required function dispatchDepthComputeBuffers(
+        pipeline: Int,
+        depth: borrow GraphicsTexture,
+        bufferIds: borrow [U32],
+        threadCount: Int,
+        threadsPerGroup: Int,
+    ) -> Void
+    // One 32-bit word out of a buffer a kernel has written, for a headless gate
+    // that checks what a dispatch produced. A backend that cannot read a buffer
+    // back answers 0 and says so.
+    @Required function readBufferU32(buffer: borrow GraphicsBuffer, index: Int) -> U32
+    // A storage buffer whose payload is 32-bit WORDS. A kernel's parameter block
+    // is counts and flags, and handing those over as floats would give the
+    // shader different numbers than the caller wrote.
+    @Required function createStorageBufferWords(label: borrow String, data: borrow [U32]) -> BufferResult
+    // Put a texture a compute pass has just written back into the layout later
+    // samples read fastest, ordered after everything already encoded this frame.
+    @Required function optimizeTexture(textureId: Int) -> Void
+
+    // --- frames and passes -----------------------------------------------
+    // Nanoseconds on a monotonic clock.
+    //
+    // Reading a clock is a platform call — `clock_gettime_nsec_np` on Apple,
+    // whatever sokol's own timer sits on elsewhere — so it is the backend's to
+    // answer. A caller timing its frame asks the backend it already has rather
+    // than naming a platform's clock, which is what made a host that timed
+    // itself refuse to start anywhere but macOS.
+    @Required function monotonicNanoseconds() -> U64
+    // How many frames this backend keeps in flight — the depth of its pacing
+    // ring, and what a telemetry readout means by "frames in flight".
+    @Required function framesInFlight() -> Int
+    // What the frame BEFORE this one cost. An application lays its HUD out while
+    // the frame the HUD will appear in is still being built, so the last
+    // completed frame is what there is to report.
+    @Required function statistics() -> FrameStatistics
+    @Required function beginRenderPass(frame: borrow RenderFrame) -> Bool
+    @Required function endPassAndCommit(frame: borrow RenderFrame) -> Void
+    // The encoder a pass hands its caller. It selects its draw path on which of
+    // the two context pointers it was given, so the backend that built it is the
+    // side that decides which one is filled.
+    @Required function makeEncoder(passActive: Bool) -> RenderEncoder
+    @Required function submitFrame(frame: borrow RenderFrame) -> Void
+
+    // --- the run loop ----------------------------------------------------
+    // Open the window and drive the application's frames. This is the one member
+    // called before a backend context exists, so it is the one whose `context`
+    // is null: the run loop is what creates the context every other member
+    // reads.
+    @Required function runApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Void
+}
+
+// The backend a selection names, holding the per-run context every member reads.
+//
+// The one place a `RenderBackendKind` still decides anything. `RenderBackendKind`
+// stays the *selection* vocabulary — what a `GraphicsApplication` asks for and
+// what `validateRenderBackend` checks against a platform, both of which happen
+// before any context exists — and `Any RenderBackend` is the *dispatch*
+// vocabulary. Everything past this line asks the backend rather than asking
+// which backend it is.
+function renderBackendFor(backend: RenderBackendKind, context: RawPtr) -> Any RenderBackend {
+    match backend {
+        Metal -> return MetalRenderBackend(context: context);
+        Sokol -> return SokolRenderBackend(context: context);
+    }
+}

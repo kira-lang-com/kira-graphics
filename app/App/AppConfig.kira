@@ -2,11 +2,11 @@ function graphicsApplicationDefaultInit(graphics: Graphics) {
     return
 }
 
-function graphicsApplicationDefaultFrame(frame: borrow mut GraphicsFrame) {
+function graphicsApplicationDefaultFrame(frame: borrow mut RenderFrame) {
     return
 }
 
-function graphicsApplicationDefaultEvent(event: borrow GraphicsEvent) {
+function graphicsApplicationDefaultEvent(event: borrow AppEvent) {
     return
 }
 
@@ -25,18 +25,22 @@ struct GraphicsApplication {
     // stays in logical points (pixels / dpi_scale) so nothing shrinks, while the
     // framebuffer is rendered at native resolution for crisp text and vector edges.
     var highDpi: Bool = true
+    // The mode the window OPENS in. `width`/`height` are what a windowed mode is
+    // given; a fullscreen window takes the display's size instead, so a program
+    // that starts there reads its viewport back off the frame.
+    var windowMode: WindowMode = .Windowed
     // Optional fixed frame cadence in nanoseconds. Zero keeps the backend
     // uncapped; a positive value uses absolute deadlines and never emits catch-up
     // bursts after an overrun.
     var targetFrameDurationNs: Int = 0
     // Offscreen color-target format (Metal). Default swapchain (BGRA8); set to
-    // textureFormatR32Uint() to render a visibility buffer.
-    var colorFormat: Int = -1
-    var backend: GraphicsBackend = GraphicsBackend.Sokol
-    var platform: GraphicsPlatform = GraphicsPlatform.Unknown
+    // the `R32Uint` texture format to render a visibility buffer.
+    var colorFormat: TextureFormat = .Swapchain
+    var backend: RenderBackendKind = .Sokol
+    var platform: Platform = .Unknown
     var initHandler: (Graphics) -> Void = graphicsApplicationDefaultInit
-    var frameHandler: (borrow mut GraphicsFrame) -> Void = graphicsApplicationDefaultFrame
-    var eventHandler: (borrow GraphicsEvent) -> Void = graphicsApplicationDefaultEvent
+    var frameHandler: (borrow mut RenderFrame) -> Void = graphicsApplicationDefaultFrame
+    var eventHandler: (borrow AppEvent) -> Void = graphicsApplicationDefaultEvent
     var cleanupHandler: (Graphics) -> Void = graphicsApplicationDefaultCleanup
 
     function onInit(body: (Graphics) -> Void) {
@@ -44,12 +48,12 @@ struct GraphicsApplication {
         return
     }
 
-    function onFrame(body: (borrow mut GraphicsFrame) -> Void) {
+    function onFrame(body: (borrow mut RenderFrame) -> Void) {
         self.frameHandler = body
         return
     }
 
-    function onEvent(body: (borrow GraphicsEvent) -> Void) {
+    function onEvent(body: (borrow AppEvent) -> Void) {
         self.eventHandler = body
         return
     }
