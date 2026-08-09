@@ -59,7 +59,7 @@ function Assert-ZeroLifetimeReport {
         [string]$Context
     )
 
-    Assert-Contains -Output $Output -Needle "Kira Graphics lifetime report: shaders=0 pipelines=0 textures=0 uniforms=0 bindGroups=0" -Context $Context
+    Assert-Contains -Output $Output -Needle "Kira Graphics lifetime report: buffers=0 images=0 samplers=0 views=0 shaders=0 pipelines=0" -Context $Context
 }
 
 function Run-CubeFrames {
@@ -75,7 +75,7 @@ function Run-CubeFrames {
     if ($Detailed) {
         $env.KIRA_GRAPHICS_LIFETIME_DETAIL = "1"
     }
-    $output = Run-Kira -Command "kira run examples\basic_3d_cube" -Environment $env
+    $output = Run-Kira -Command "cd examples\basic_3d_cube && kira run" -Environment $env
     Assert-ZeroLifetimeReport -Output $output -Context "basic_3d_cube $Frames frames"
     if ($Detailed) {
         Assert-Contains -Output $output -Needle "Kira Graphics lifetime detail:" -Context "basic_3d_cube $Frames frame detail"
@@ -85,6 +85,8 @@ function Run-CubeFrames {
     return $output
 }
 
+Run-Kira -Command "cd examples\basic_3d_cube && kira shader build" | Out-Null
+
 Run-CubeFrames -Frames 3 | Out-Null
 Run-CubeFrames -Frames 60 | Out-Null
 Run-CubeFrames -Frames 300 -Detailed | Out-Null
@@ -92,11 +94,10 @@ if ($RunThousandFrames) {
     Run-CubeFrames -Frames 1000 -Detailed | Out-Null
 }
 
-Run-Kira -Command "kira shader check examples\lifetime_stress\Shaders\LifetimeStress.ksl" | Out-Null
-Run-Kira -Command "kira shader build examples\lifetime_stress\Shaders\LifetimeStress.ksl --out-dir examples\lifetime_stress\generated\shaders" | Out-Null
+Run-Kira -Command "cd examples\lifetime_stress && kira shader build" | Out-Null
 Run-Kira -Command "kira check examples\lifetime_stress" | Out-Null
 
-$stressOutput = Run-Kira -Command "kira run examples\lifetime_stress" -Environment @{
+$stressOutput = Run-Kira -Command "cd examples\lifetime_stress && kira run" -Environment @{
     KIRA_GRAPHICS_LIFETIME_REPORT = "1"
     KIRA_GRAPHICS_LIFETIME_DETAIL = "1"
 }
