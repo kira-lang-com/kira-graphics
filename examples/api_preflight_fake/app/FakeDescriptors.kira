@@ -109,7 +109,7 @@ struct FakePrimitiveDescriptor {
 struct FakeBufferDescriptor {
     var label: String = ""
     var usage: FakeBufferUsage = FakeBufferUsage.vertex
-    var floatData: [Float] = []
+    var floatData: [F32] = []
     var uint16Data: [U16] = []
     var uint32Data: [U32] = []
     var stride: Int = 0
@@ -163,7 +163,7 @@ struct FakeBindEntry {
     var buffer: FakeGraphicsBuffer = FakeGraphicsBuffer {}
     var texture: FakeGraphicsTexture = FakeGraphicsTexture {}
     var sampler: FakeGraphicsSampler = FakeGraphicsSampler {}
-    var uniform: FakeGraphicsUniform = FakeGraphicsUniform {}
+    var uniform: FakeUniform = FakeUniform {}
 }
 
 struct FakeBindGroupDescriptor {
@@ -188,7 +188,7 @@ struct FakeSamplerBindEntry {
 
 struct FakeUniformBindEntry {
     var name: String = ""
-    var uniform: FakeGraphicsUniform = FakeGraphicsUniform {}
+    var uniform: FakeUniform = FakeUniform {}
 }
 
 struct FakeKslShaderDescriptor {
@@ -197,7 +197,7 @@ struct FakeKslShaderDescriptor {
     var directory: String = "generated/shaders"
 }
 
-function fakeTriangleVertices() -> [Float] {
+function fakeTriangleVertices() -> [F32] {
     return [
         0.0, 0.55,
         0.55, -0.55,

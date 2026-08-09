@@ -1,28 +1,27 @@
 struct FakeShader {
-    var handle: FakeBackendShaderHandle = FakeBackendShaderHandle {}
+    var id: U32 = 0
 }
 
 struct FakeRenderPipeline {
-    var handle: FakeBackendPipelineHandle = FakeBackendPipelineHandle {}
+    var id: U32 = 0
 }
 
 struct FakeGraphicsBuffer {
-    var handle: FakeBackendBufferHandle = FakeBackendBufferHandle {}
+    var id: U32 = 0
 }
 
 struct FakeGraphicsTexture {
-    var handle: FakeBackendTextureHandle = FakeBackendTextureHandle {}
+    var id: U32 = 0
 }
 
 struct FakeGraphicsSampler {
-    var handle: FakeBackendSamplerHandle = FakeBackendSamplerHandle {}
+    var id: U32 = 0
 }
 
 struct FakeBindGroup {
-    var handle: FakeBackendBindGroupHandle = FakeBackendBindGroupHandle {}
+    var id: U32 = 0
 }
 
-struct FakeGraphicsUniform {
-    var handle: FakeBackendUniformHandle = FakeBackendUniformHandle {}
+struct FakeUniform {
+    var id: U32 = 0
 }
-

@@ -12,7 +12,7 @@ struct FakeCubeState {
     var indexCount: Int = 0
 }
 
-function fakeCubeVertices() -> [Float] {
+function fakeCubeVertices() -> [F32] {
     return [
         -1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
         1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
@@ -147,7 +147,7 @@ function fakeEncodeCubePass(encoder: borrow mut FakeRenderEncoder, state: borrow
     return
 }
 
-function fakeDrawCube(frame: borrow mut FakeGraphicsFrame, state: FakeCubeState) {
+function fakeDrawCube(frame: borrow mut FakeRenderFrame, state: FakeCubeState) {
     let pass = FakeRenderPassDescriptor {
         label: "fake-3d-cube-pass"
         colorAttachments: [
