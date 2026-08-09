@@ -60,7 +60,7 @@ function fakeUiSurfaces() -> [FakeUiSurface] {
     ]
 }
 
-function fakeUiVertexData() -> [Float] {
+function fakeUiVertexData() -> [F32] {
     return [
         0.0, 0.0,
         1.0, 0.0,
@@ -169,7 +169,7 @@ function fakeEncodeUiPass(encoder: borrow mut FakeRenderEncoder, state: borrow F
     return
 }
 
-function fakeDrawUi(frame: borrow mut FakeGraphicsFrame, state: FakeUiEffectsState) {
+function fakeDrawUi(frame: borrow mut FakeRenderFrame, state: FakeUiEffectsState) {
     let scenePass = FakeRenderPassDescriptor {
         label: "offscreen-pass"
         colorAttachments: [

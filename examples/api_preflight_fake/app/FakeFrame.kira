@@ -1,4 +1,4 @@
-class FakeGraphicsFrame {
+class FakeRenderFrame {
     var descriptor: FakeRenderPassDescriptor = FakeRenderPassDescriptor {}
     var encoder: FakeRenderEncoder = FakeRenderEncoder {}
 
@@ -24,57 +24,43 @@ class FakeGraphicsFrame {
 class FakeGraphics {
     function createShaderFromKsl(descriptor: borrow FakeKslShaderDescriptor) -> FakeShader {
         return FakeShader {
-            handle: FakeBackendShaderHandle {
-                id: 1
-            }
+            id: 1
         }
     }
 
     function createBuffer(descriptor: borrow FakeBufferDescriptor) -> FakeGraphicsBuffer {
         return FakeGraphicsBuffer {
-            handle: FakeBackendBufferHandle {
-                id: 1
-            }
+            id: 1
         }
     }
 
     function createTexture(descriptor: borrow FakeTextureDescriptor) -> FakeGraphicsTexture {
         return FakeGraphicsTexture {
-            handle: FakeBackendTextureHandle {
-                id: 1
-            }
+            id: 1
         }
     }
 
     function createSampler(descriptor: borrow FakeSamplerDescriptor) -> FakeGraphicsSampler {
         return FakeGraphicsSampler {
-            handle: FakeBackendSamplerHandle {
-                id: 1
-            }
+            id: 1
         }
     }
 
     function createRenderPipeline(descriptor: borrow FakePipelineDescriptor) -> FakeRenderPipeline {
         return FakeRenderPipeline {
-            handle: FakeBackendPipelineHandle {
-                id: 1
-            }
+            id: 1
         }
     }
 
     function createBindGroup(descriptor: borrow FakeBindGroupDescriptor) -> FakeBindGroup {
         return FakeBindGroup {
-            handle: FakeBackendBindGroupHandle {
-                id: 1
-            }
+            id: 1
         }
     }
 
-    function createUniform() -> FakeGraphicsUniform {
-        return FakeGraphicsUniform {
-            handle: FakeBackendUniformHandle {
-                id: 1
-            }
+    function createUniform() -> FakeUniform {
+        return FakeUniform {
+            id: 1
         }
     }
 
