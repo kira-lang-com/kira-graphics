@@ -1,10 +1,5 @@
-function graphicsSubmitFrame(frame: borrow GraphicsFrame) {
-    match frame.backend {
-        Metal -> metalSubmitFrame(frame);
-        Sokol -> sokolSubmitFrame(frame);
-        Vulkan -> sokolSubmitFrame(frame);
-        DirectX12 -> sokolSubmitFrame(frame);
-    }
+function graphicsSubmitFrame(frame: borrow RenderFrame) {
+    frame.renderBackend().submitFrame(frame)
     // Submission is the end of the frame: the placeholder encoder installed by
     // Graphics.frame() or the last endPass is never recovered again. Release it
     // here so per-frame native-state allocations do not accumulate.

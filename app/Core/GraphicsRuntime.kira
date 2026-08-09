@@ -6,19 +6,16 @@ function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
         frameIndex: 0
     })
 
-    let selection = validateGraphicsBackend(app.backend, app.platform)
+    let selection = validateRenderBackend(app.backend, app.platform)
     if (!selection.supported) {
         graphicsDiagnostic(selection.reason)
         nativeStateFree(runtimeState)
         return
     }
 
-    match app.backend {
-        Sokol -> sokolRunApplication(app, nativeUserData(runtimeState));
-        Metal -> metalRunApplication(app, nativeUserData(runtimeState));
-        Vulkan -> graphicsDiagnostic("Kira Graphics Vulkan backend selected but no validated Vulkan runtime is linked");
-        DirectX12 -> graphicsDiagnostic("Kira Graphics DirectX 12 backend selected but no validated DirectX 12 runtime is linked");
-    }
+    // The one backend value built with a null context: the run loop is what
+    // creates the context every other member reads.
+    renderBackendFor(app.backend, nullPointer()).runApplication(app, nativeUserData(runtimeState))
     nativeStateFree(runtimeState)
     return
 }
