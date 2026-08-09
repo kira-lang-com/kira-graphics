@@ -1,395 +1,138 @@
+import Foundation
+// The public graphics surface: one method per thing a renderer asks for, and
+// nothing else.
+//
+// Every method here forwards to `RenderBackend`, the construct family whose two
+// declarations — `MetalRenderBackend` and `SokolRenderBackend` — do the work.
+// This class used to hold 34 hand-written `match self.backend` blocks; the
+// dispatch is `renderBackendFor` now, in one place, and adding a backend is a
+// declaration rather than an edit at every method.
+//
+// The one method that names no backend is `createTextureFromFile`, because
+// decoding an image is not a backend's work.
 class Graphics {
     var userData: RawPtr
-    var backend: GraphicsBackend = GraphicsBackend.Sokol
-    var metalContext: RawPtr
+    var backend: RenderBackendKind = .Sokol
+    // The backend's own per-run context: Metal's context object, and on sokol
+    // the `GraphicsAppRuntimeState` the run loop keeps its frame counters on.
+    // It was called `metalContext` and it was null on every backend but Metal,
+    // which is why callers started reading `!pointerIsNull(...)` as "am I
+    // Metal" — a question about identity wearing the name of a resource.
+    var backendContext: RawPtr
 
-    function createShader(descriptor: borrow ShaderDescriptor) -> GraphicsShader {
-        if self.backend == .Metal {
-            let metalShaderId = metalCreateShader(self.metalContext, descriptor.vertexSource)
-            return GraphicsShader {
-                handle: BackendShaderHandle {
-                    id: metalShaderId
-                }
-                id: metalShaderId
-            }
-        }
-        let shaderId = sokolCreateShaderId(descriptor.label, descriptor.vertexSource, descriptor.fragmentSource, descriptor.vertexPath, descriptor.fragmentPath)
-        return GraphicsShader {
-            handle: BackendShaderHandle {
-                id: shaderId
-            }
-            id: shaderId
-        }
+    // The selected backend as a value that answers, rather than as a tag to
+    // switch on. Built per call: it is the backend enum and the context pointer
+    // and nothing else, and no method below is on the per-draw path — a draw
+    // goes through `RenderEncoder`, which carries its own.
+    function renderBackend() -> Any RenderBackend {
+        return renderBackendFor(self.backend, self.backendContext)
     }
 
-    function createShaderFromKsl(descriptor: borrow KslShaderDescriptor) -> GraphicsShader {
-        let shaderId = sokolCreateShaderFromKslId(descriptor.label, descriptor.asset, descriptor.directory)
-        return GraphicsShader {
-            handle: BackendShaderHandle {
-                id: shaderId
-            }
-            id: shaderId
-        }
+    function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult {
+        return self.renderBackend().createShader(descriptor)
     }
 
-    // Backend-aware shader creation from inline `ksl!` KslArtifact sources. The
-    // caller passes each backend's precompiled shader text (the KslArtifact
-    // fields) plus the KSL stage entry names; this selects the variant the active
-    // backend needs — combinedMsl on Metal, WGSL on WebGPU/wasm, GLSL on desktop
-    // GL — with no shader-file IO. Entry names follow the KSL
-    // `{Shader}__{stage}__main` convention and are shared by the MSL and WGSL
-    // backends; GLSL stage functions are always `main` (handled natively).
-    function createShaderFromKslArtifact(label: borrow String, combinedMsl: borrow String, vertexWgsl: borrow String, fragmentWgsl: borrow String, vertexGlsl: borrow String, fragmentGlsl: borrow String, vertexEntry: borrow String, fragmentEntry: borrow String, uniformReflection: borrow String) -> GraphicsShader {
-        if self.backend == .Metal {
-            let metalShaderId = metalCreateShader(self.metalContext, combinedMsl)
-            return GraphicsShader {
-                handle: BackendShaderHandle {
-                    id: metalShaderId
-                }
-                id: metalShaderId
-            }
-        }
-        let shaderId = sokolCreateShaderKslInlineId(label, vertexWgsl, fragmentWgsl, vertexGlsl, fragmentGlsl, vertexEntry, fragmentEntry, uniformReflection)
-        return GraphicsShader {
-            handle: BackendShaderHandle {
-                id: shaderId
-            }
-            id: shaderId
-        }
+    // Compile a KSL asset `kira shader build` has written out. Each backend
+    // reads the file its own device compiles.
+    function createShaderFromKsl(descriptor: borrow KslShaderDescriptor) -> ShaderResult {
+        return self.renderBackend().createShaderFromKsl(descriptor)
+    }
+
+    // Shader creation from an inline `ksl!` artifact — the whole artifact rather
+    // than a list of its fields, because which target's text a backend reads is
+    // the backend's business. Nothing is read from a file.
+    function createShaderFromKslArtifact(label: borrow String, artifact: borrow KslArtifact) -> ShaderResult {
+        return self.renderBackend().createShaderFromKslArtifact(label, artifact)
     }
 
     function destroyShader(shader: GraphicsShader) {
-        if self.backend == .Metal {
-            metalUnregister(self.metalContext, shader.id)
-            return
-        }
-        sokolDestroyShaderId(shader.id)
+        self.renderBackend().destroyShader(shader)
         return
     }
 
-    function createRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> RenderPipeline {
-        if self.backend == .Metal {
-            var blendEnabled = false
-            if descriptor.colorTargets.count > 0 {
-                blendEnabled = descriptor.colorTargets[0].blend.enabled
-            }
-            var attrFormats: [Int] = []
-            var attrOffsets: [Int] = []
-            var ai = 0
-            while ai < descriptor.vertexLayout.attributes.count {
-                attrFormats.append(descriptor.vertexLayout.attributes[ai].format)
-                attrOffsets.append(descriptor.vertexLayout.attributes[ai].offset)
-                ai = ai + 1
-            }
-            var colorFmt = metalPixelFormatBGRA8Unorm()
-            if descriptor.colorTargets.count > 0 {
-                colorFmt = metalPixelFormatForTexture(descriptor.colorTargets[0].format)
-            }
-            let metalPipelineId = metalCreateRenderPipelineWithEntries(self.metalContext, descriptor.shader.id, colorFmt, descriptor.depthStencil.depthEnabled, blendEnabled, descriptor.vertexEntry, descriptor.fragmentEntry, descriptor.vertexLayout.stride, attrFormats, attrOffsets)
-            return RenderPipeline {
-                handle: BackendPipelineHandle {
-                    id: metalPipelineId
-                }
-                id: metalPipelineId
-            }
-        }
-        return sokolCreateRenderPipeline(descriptor)
-    }
-
-    // A persistent, CPU-writable vertex buffer sized for `floatCapacity` f32 slots.
-    // The UI compositor allocates one and rewrites its contents every frame
-    // (updateDynamicBuffer), avoiding per-frame buffer churn. Bind it like any
-    // vertex buffer through the render encoder.
-    function createDynamicBuffer(floatCapacity: Int) -> GraphicsBuffer {
-        if self.backend == .Metal {
-            let id = metalCreateDynamicBuffer(self.metalContext, floatCapacity)
-            return GraphicsBuffer {
-                handle: BackendBufferHandle {
-                    id: id
-                }
-                id: id
-            }
-        }
-        graphicsDiagnostic("Kira Graphics: createDynamicBuffer is only implemented on the Metal backend")
-        return GraphicsBuffer {
-            handle: BackendBufferHandle {
-                id: 0
-            }
-            id: 0
-        }
-    }
-
-    // The Retina backing scale (physical pixels per point) of the current drawable.
-    // 1.0 off Metal or before the first viewport sync.
-    function backingScale() -> Float {
-        if self.backend == .Metal {
-            return metalContextScale(self.metalContext)
-        }
-        return sokolDpiScale()
-    }
-
-    // The CPU-visible base of a dynamic buffer, for callers that write vertices
-    // straight into GPU-visible memory (the UI compositor's hot path). The buffer
-    // holds one slot per frame in flight, so every write through this pointer must be
-    // offset by the frame's own slot — see dynamicBufferFrameStart.
-    function dynamicBufferContents(buffer: borrow GraphicsBuffer) -> RawPtr {
-        if self.backend == .Metal {
-            return metalDynamicBufferContents(self.metalContext, buffer.id)
-        }
-        graphicsDiagnostic("Kira Graphics: dynamicBufferContents is only implemented on the Metal backend")
-        return self.metalContext
-    }
-
-    // Claim this frame's slot in a dynamic buffer and return the byte offset every
-    // write into it this frame must add to its own. Call once per frame, before
-    // writing: the frame the GPU is still drawing keeps the slot it was recorded
-    // with, so nothing written past this offset can tear it.
-    function dynamicBufferFrameStart(buffer: borrow GraphicsBuffer) -> Int {
-        if self.backend == .Metal {
-            return metalDynamicBufferFrameStart(self.metalContext, buffer.id)
-        }
-        return 0
-    }
-
-    // Overwrite the first data.count f32 slots of a dynamic buffer's contents.
-    function updateDynamicBuffer(buffer: borrow GraphicsBuffer, data: borrow [Float]) {
-        if self.backend == .Metal {
-            metalUpdateDynamicBuffer(self.metalContext, buffer.id, data)
-            return
-        }
-        graphicsDiagnostic("Kira Graphics: updateDynamicBuffer is only implemented on the Metal backend")
-        return
-    }
-
-    // Upload RGBA8 bytes into a sub-region of a texture (the UI glyph atlas blits one
-    // rasterized glyph at a time into its packed slot).
-    function updateTextureRegion(texture: borrow GraphicsTexture, x: Int, y: Int, width: Int, height: Int, data: borrow [Int]) {
-        if self.backend == .Metal {
-            metalUpdateTextureRegion(self.metalContext, texture.id, x, y, width, height, data)
-            return
-        }
-        graphicsDiagnostic("Kira Graphics: updateTextureRegion is only implemented on the Metal backend")
-        return
+    function createRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> PipelineResult {
+        return self.renderBackend().createRenderPipeline(descriptor)
     }
 
     function destroyPipeline(pipeline: borrow RenderPipeline) {
-        if self.backend == .Metal {
-            metalUnregister(self.metalContext, pipeline.id)
-            return
-        }
-        sokolDestroyRenderPipelineId(pipeline.id)
+        self.renderBackend().destroyPipeline(pipeline)
         return
     }
 
     function destroyRenderPipeline(pipeline: borrow RenderPipeline) {
-        if self.backend == .Metal {
-            metalUnregister(self.metalContext, pipeline.id)
-            return
-        }
         destroyPipeline(pipeline)
         return
     }
 
-    function createBuffer(descriptor: borrow BufferDescriptor) -> GraphicsBuffer {
-        if self.backend == .Metal {
-            let metalBufferId = metalCreateVertexBuffer(self.metalContext, descriptor.data)
-            return GraphicsBuffer {
-                handle: BackendBufferHandle {
-                    id: metalBufferId
-                }
-                id: metalBufferId
-            }
-        }
-        let uploadId = sokolBeginFloatBufferUpload(descriptor.label, descriptor.usage, descriptor.stride, descriptor.data.count)
-        var index = 0
-
-        while index < descriptor.data.count {
-            sokolSetFloatBufferUploadValue(uploadId, index, descriptor.data[index])
-            index = index + 1
-        }
-
-        let bufferId = sokolFinalizeFloatBufferUpload(uploadId)
-        return GraphicsBuffer {
-            handle: BackendBufferHandle {
-                id: bufferId
-            }
-            id: bufferId
-        }
+    // A persistent buffer of `floatCapacity` f32 slots that the CPU rewrites,
+    // and the memory it writes into. The UI compositor allocates one per
+    // emission stream and refills it every frame rather than churning buffers.
+    //
+    // The memory arrives with the buffer because the two are not always the same
+    // storage: on Metal a write lands where the GPU reads, on sokol it lands in a
+    // staging block `commitDynamicBuffer` hands over. See `DynamicBuffer`.
+    function createDynamicBuffer(label: borrow String, floatCapacity: Int) -> DynamicBufferResult {
+        return self.renderBackend().createDynamicBuffer(label, floatCapacity)
     }
 
-    function createIndexBuffer(descriptor: borrow IndexBufferDescriptor) -> GraphicsBuffer {
-        if self.backend == .Metal {
-            let metalIndexId = metalCreateIndexBuffer(self.metalContext, descriptor.data)
-            return GraphicsBuffer {
-                handle: BackendBufferHandle {
-                    id: metalIndexId
-                }
-                id: metalIndexId
-            }
-        }
-        let uploadId = sokolBeginIndexBufferUpload(descriptor.label, descriptor.usage, descriptor.data.count)
-        var index = 0
+    // Claim this frame's slot in a dynamic buffer and return the byte offset
+    // every write into it this frame must add to its own. Call once per frame,
+    // before writing: the frame the GPU is still drawing keeps the slot it was
+    // recorded with, so nothing written past this offset can tear it.
+    function dynamicBufferFrameStart(buffer: borrow GraphicsBuffer) -> Int {
+        return self.renderBackend().dynamicBufferFrameStart(buffer)
+    }
 
-        while index < descriptor.data.count {
-            sokolSetIndexBufferUploadValue(uploadId, index, descriptor.data[index])
-            index = index + 1
-        }
+    // Hand the first `floatCount` slots written into `contents` to the GPU. A
+    // call of its own rather than something every write does, because a backend
+    // that stages may run it at most ONCE per buffer per frame.
+    function commitDynamicBuffer(buffer: borrow GraphicsBuffer, contents: RawPtr, floatCount: Int) {
+        self.renderBackend().commitDynamicBuffer(buffer, contents, floatCount)
+        return
+    }
 
-        let bufferId = sokolFinalizeIndexBufferUpload(uploadId)
-        return GraphicsBuffer {
-            handle: BackendBufferHandle {
-                id: bufferId
-            }
-            id: bufferId
-        }
+    function createBuffer(descriptor: borrow BufferDescriptor) -> BufferResult {
+        return self.renderBackend().createBuffer(descriptor)
+    }
+
+    function createIndexBuffer(descriptor: borrow IndexBufferDescriptor) -> BufferResult {
+        return self.renderBackend().createIndexBuffer(descriptor)
     }
 
     function destroyBuffer(buffer: borrow GraphicsBuffer) {
-        if self.backend == .Metal {
-            metalUnregister(self.metalContext, buffer.id)
-            return
-        }
-        sokolDestroyBufferId(buffer.id)
+        self.renderBackend().destroyBuffer(buffer)
         return
     }
 
-    function createUniform(descriptor: borrow UniformDescriptor) -> GraphicsUniform {
-        if self.backend == .Metal {
-            let metalUniformId = metalCreateUniform(self.metalContext, descriptor.expectedFloatCount)
-            metalUpdateUniform(self.metalContext, metalUniformId, descriptor.data)
-            return GraphicsUniform {
-                handle: BackendUniformHandle {
-                    id: metalUniformId
-                }
-                id: metalUniformId
-            }
-        }
-        let uniformId = sokolCreateUniformId(descriptor.label, descriptor.expectedFloatCount)
-        let uniform = GraphicsUniform {
-            handle: BackendUniformHandle {
-                id: uniformId
-            }
-            id: uniformId
-        }
-        updateUniform(uniform, descriptor.data)
-        return uniform
+    function createUniform(descriptor: borrow UniformDescriptor) -> UniformResult {
+        return self.renderBackend().createUniform(descriptor)
     }
 
-    function updateUniform(uniform: borrow GraphicsUniform, data: borrow [Float]) {
-        if self.backend == .Metal {
-            metalUpdateUniform(self.metalContext, uniform.id, data)
-            return
-        }
-        updateGraphicsUniform(uniform, data)
+    function updateUniform(uniform: borrow Uniform, data: borrow [F32]) {
+        self.renderBackend().updateUniform(uniform, data)
         return
     }
 
-    function destroyUniform(uniform: borrow GraphicsUniform) {
-        if self.backend == .Metal {
-            metalUnregister(self.metalContext, uniform.id)
-            return
-        }
-        sokolDestroyUniformId(uniform.id)
+    function destroyUniform(uniform: borrow Uniform) {
+        self.renderBackend().destroyUniform(uniform)
         return
     }
 
-    function createBindGroup(descriptor: borrow BindGroupDescriptor) -> BindGroup {
-        if self.backend == .Metal {
-            let metalBindGroupId = metalCreateBindGroup(self.metalContext)
-            var mi = 0
-            while mi < descriptor.uniformEntries.count {
-                let uEntry = descriptor.uniformEntries[mi]
-                metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindUniform(), uEntry.uniformSlot, uEntry.uniform.id)
-                mi = mi + 1
-            }
-            mi = 0
-            while mi < descriptor.textureEntries.count {
-                let tEntry = descriptor.textureEntries[mi]
-                metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindTexture(), tEntry.textureSlot, tEntry.texture.id)
-                mi = mi + 1
-            }
-            mi = 0
-            while mi < descriptor.samplerEntries.count {
-                let sEntry = descriptor.samplerEntries[mi]
-                metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindSampler(), sEntry.samplerSlot, sEntry.sampler.id)
-                mi = mi + 1
-            }
-            return BindGroup {
-                handle: BackendBindGroupHandle {
-                    id: metalBindGroupId
-                }
-                id: metalBindGroupId
-            }
-        }
-        let bindGroupId = sokolCreateBindGroupId(descriptor.label)
-        var index = 0
-        while index < descriptor.uniformEntries.count {
-            let entry = descriptor.uniformEntries[index]
-            sokolSetBindGroupUniform(bindGroupId, index, entry.uniformSlot, entry.uniform.id)
-            index = index + 1
-        }
-        index = 0
-        while index < descriptor.textureEntries.count {
-            let entry = descriptor.textureEntries[index]
-            sokolSetBindGroupTexture(bindGroupId, index, entry.textureSlot, entry.texture.id)
-            index = index + 1
-        }
-        index = 0
-        while index < descriptor.samplerEntries.count {
-            let entry = descriptor.samplerEntries[index]
-            sokolSetBindGroupSampler(bindGroupId, index, entry.samplerSlot, entry.sampler.id)
-            index = index + 1
-        }
-        return BindGroup {
-            handle: BackendBindGroupHandle {
-                id: bindGroupId
-            }
-            id: bindGroupId
-        }
+    function createBindGroup(descriptor: borrow BindGroupDescriptor) -> BindGroupResult {
+        return self.renderBackend().createBindGroup(descriptor)
     }
 
-    function createUniformBindGroup(label: borrow String, uniformSlot: Int, uniform: borrow GraphicsUniform) -> BindGroup {
-        if self.backend == .Metal {
-            let metalBindGroupId = metalCreateBindGroup(self.metalContext)
-            metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindUniform(), uniformSlot, uniform.id)
-            return BindGroup {
-                handle: BackendBindGroupHandle {
-                    id: metalBindGroupId
-                }
-                id: metalBindGroupId
-            }
-        }
-        let bindGroupId = sokolCreateBindGroupId(label)
-        sokolSetBindGroupUniform(bindGroupId, 0, uniformSlot, uniform.id)
-        return BindGroup {
-            handle: BackendBindGroupHandle {
-                id: bindGroupId
-            }
-            id: bindGroupId
-        }
+    function createUniformBindGroup(label: borrow String, uniformSlot: Int, uniform: borrow Uniform) -> BindGroupResult {
+        return self.renderBackend().createUniformBindGroup(label, uniformSlot, uniform)
     }
 
-    // Bind a raw registered buffer (e.g. a storage buffer of per-instance data) at a
-    // uniform-style slot: vertex stage reads it at [[buffer(slot+1)]], fragment at
-    // [[buffer(slot)]] (the standard bind-group rule).
-    function createBufferBindGroup(label: borrow String, slot: Int, bufferId: Int) -> BindGroup {
-        if self.backend == .Metal {
-            let metalBindGroupId = metalCreateBindGroup(self.metalContext)
-            metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindUniform(), slot, bufferId)
-            return BindGroup {
-                handle: BackendBindGroupHandle {
-                    id: metalBindGroupId
-                }
-                id: metalBindGroupId
-            }
-        }
-        return BindGroup {
-            handle: BackendBindGroupHandle { id: 0 }
-            id: 0
-        }
+    // Bind a buffer a shader reads as storage — the compositor's quad stream, or
+    // any per-instance table a vertex stage indexes by vertex id.
+    function createStorageBufferBindGroup(label: borrow String, slot: Int, bufferId: U32) -> BindGroupResult {
+        return self.renderBackend().createStorageBufferBindGroup(label, slot, bufferId)
     }
 
-    // An EMPTY bind group, filled by the three `bindGroupAdd*` calls below.
+    // An EMPTY bind group, filled by the two `bindGroupAdd*` calls below.
     //
     // The one-shot constructors around it each fix how many resources a group
     // holds, which the shader — not the constructor — decides: a KSL shader
@@ -397,265 +140,164 @@ class Graphics {
     // texture/sampler pairs, or a buffer beside a texture, and no fixed shape
     // covers them all. A renderer with more resources than the encoder's four
     // group slots has nowhere to put them otherwise.
-    function beginBindGroup(label: borrow String) -> BindGroup {
-        if self.backend == .Metal {
-            let metalBindGroupId = metalCreateBindGroup(self.metalContext)
-            return BindGroup {
-                handle: BackendBindGroupHandle {
-                    id: metalBindGroupId
-                }
-                id: metalBindGroupId
-            }
-        }
-        let bindGroupId = sokolCreateBindGroupId(label)
-        return BindGroup {
-            handle: BackendBindGroupHandle {
-                id: bindGroupId
-            }
-            id: bindGroupId
-        }
+    function beginBindGroup(label: borrow String) -> BindGroupResult {
+        return self.renderBackend().beginBindGroup(label)
     }
 
     // Add a texture at `slot`; the fragment stage reads it at [[texture(slot)]].
     function bindGroupAddTexture(group: borrow BindGroup, slot: Int, texture: borrow GraphicsTexture) {
-        if self.backend == .Metal {
-            metalBindGroupAddEntry(self.metalContext, group.id, metalBindEntryKindTexture(), slot, texture.id)
-        }
+        self.renderBackend().bindGroupAddTexture(group, slot, texture)
         return
     }
 
     // Add a sampler at `slot`; the fragment stage reads it at [[sampler(slot)]].
     function bindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: borrow GraphicsSampler) {
-        if self.backend == .Metal {
-            metalBindGroupAddEntry(self.metalContext, group.id, metalBindEntryKindSampler(), slot, sampler.id)
-        }
+        self.renderBackend().bindGroupAddSampler(group, slot, sampler)
         return
     }
 
-    // Add a raw registered buffer at a uniform-style slot: the vertex stage reads
-    // it at [[buffer(slot+1)]] (vertex buffer 0 holds the attribute stream), the
-    // fragment stage at [[buffer(slot)]].
-    function bindGroupAddBuffer(group: borrow BindGroup, slot: Int, bufferId: Int) {
-        if self.backend == .Metal {
-            metalBindGroupAddEntry(self.metalContext, group.id, metalBindEntryKindUniform(), slot, bufferId)
-        }
-        return
-    }
-
-    function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroup {
-        if self.backend == .Metal {
-            let metalBindGroupId = metalCreateBindGroup(self.metalContext)
-            metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindTexture(), textureSlot, texture.id)
-            metalBindGroupAddEntry(self.metalContext, metalBindGroupId, metalBindEntryKindSampler(), samplerSlot, sampler.id)
-            return BindGroup {
-                handle: BackendBindGroupHandle {
-                    id: metalBindGroupId
-                }
-                id: metalBindGroupId
-            }
-        }
-        let bindGroupId = sokolCreateBindGroupId(label)
-        sokolSetBindGroupTexture(bindGroupId, 0, textureSlot, texture.id)
-        sokolSetBindGroupSampler(bindGroupId, 0, samplerSlot, sampler.id)
-        return BindGroup {
-            handle: BackendBindGroupHandle {
-                id: bindGroupId
-            }
-            id: bindGroupId
-        }
+    function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroupResult {
+        return self.renderBackend().createTextureSamplerBindGroup(label, textureSlot, texture, samplerSlot, sampler)
     }
 
     function destroyBindGroup(bindGroup: borrow BindGroup) {
-        if self.backend == .Metal {
-            metalUnregister(self.metalContext, bindGroup.id)
-            return
-        }
-        sokolDestroyBindGroupId(bindGroup.id)
+        self.renderBackend().destroyBindGroup(bindGroup)
         return
     }
 
-    // Attach a Depth32Float depth buffer + less/write depth-stencil state to the
-    // context, sized to the current color target. Passes whose descriptor sets
-    // hasDepthAttachment then depth-test (nearest fragment wins), enabling occlusion
-    // in a visibility pass. Non-breaking: passes that don't request depth are
-    // unaffected. Metal-only for now (offscreen + on-screen both size from the context).
-    function enableDepth() {
-        if self.backend == .Metal {
-            metalContextAttachDepth(self.metalContext)
-        }
-        return
+    // The Retina backing scale (physical pixels per point) of the current
+    // drawable.
+    function backingScale() -> Float {
+        return self.renderBackend().backingScale()
     }
 
-    // Backend-agnostic drawable size in framebuffer pixels. On Metal the drawable
-    // dimensions are recorded on the context (Sokol's sapp_* are not valid there);
-    // on the Sokol backend (desktop GL / WebGPU / wasm) they come from sapp_width/height.
-    // Hosts that render context-sized offscreen targets must use this rather than the
-    // Metal-only metalContextWidth/Height, which read 0 on the Sokol backend.
+    // Drawable size in framebuffer pixels. A host rendering context-sized
+    // offscreen targets must use these rather than the Metal-only
+    // `metalContextWidth`/`Height`, which read 0 on sokol.
     function contextWidth() -> Int {
-        if self.backend == .Metal {
-            return metalContextWidth(self.metalContext)
-        }
-        return sokolDrawableWidth()
+        return self.renderBackend().contextWidth()
     }
 
     function contextHeight() -> Int {
-        if self.backend == .Metal {
-            return metalContextHeight(self.metalContext)
-        }
-        return sokolDrawableHeight()
+        return self.renderBackend().contextHeight()
     }
 
-    function createTexture(descriptor: borrow TextureDescriptor) -> GraphicsTexture {
-        if self.backend == .Metal {
-            // Render-target-capable + sampled, in the requested format (enables
-            // multi-pass rendering, e.g. the deferred-resolve visibility texture).
-            let metalTextureId = metalCreateColorTargetTexture(
-                self.metalContext,
-                descriptor.width,
-                descriptor.height,
-                metalPixelFormatForTexture(descriptor.format),
-                descriptor.storageMode
-            )
-            return GraphicsTexture {
-                handle: BackendTextureHandle {
-                    id: metalTextureId
-                }
-                id: metalTextureId
-            }
-        }
-        let textureId = sokolCreateTextureId(
-            descriptor.label,
-            descriptor.width,
-            descriptor.height,
-            descriptor.format,
-            descriptor.usage,
-            descriptor.sampleCount,
-            descriptor.storageMode
-        )
-        return GraphicsTexture {
-            handle: BackendTextureHandle {
-                id: textureId
-            }
-            id: textureId
-        }
+    function createTexture(descriptor: borrow TextureDescriptor) -> TextureResult {
+        return self.renderBackend().createTexture(descriptor)
     }
 
-    function destroyTexture(texture: borrow GraphicsTexture) {
-        if self.backend == .Metal {
-            metalUnregister(self.metalContext, texture.id)
-            return
-        }
-        sokolDestroyTextureId(texture.id)
+    // Create a texture that already has its pixels.
+    //
+    // `pixels` is RGBA8, row-major, four bytes per pixel and no header —
+    // `width * height * 4` entries. One step rather than create-then-upload
+    // because a backend can do better when the contents arrive with the image:
+    // sokol keeps it immutable, and Metal re-tiles it once into the layout every
+    // later sample reads.
+    function createTextureFromPixels(descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
+        return self.renderBackend().createTextureFromPixels(descriptor, pixels)
+    }
+
+    // Replace a texture's pixels.
+    //
+    // Whole-image, which is the shape both backends share: sokol has no
+    // sub-region upload at all. A caller changing part of an atlas composites
+    // into its own array and hands the whole thing over, so no backend keeps a
+    // CPU copy of a texture nobody asked it to remember.
+    //
+    // The texture must have been created with the `SampledStreaming` usage.
+    function updateTexture(texture: borrow GraphicsTexture, width: Int, height: Int, pixels: borrow [U8]) {
+        self.renderBackend().updateTexture(texture, width, height, pixels)
         return
     }
 
-    function createTextureFromFile(label: borrow String, path: borrow String) -> GraphicsTexture {
-        let textureId = sokolCreateTextureFromFileId(label, path)
-        return GraphicsTexture {
-            handle: BackendTextureHandle {
-                id: textureId
+    // Replace a texture's contents from raw memory the caller already owns.
+    //
+    // For a texture the caller composites into itself — a glyph atlas, whose CPU
+    // side has to exist anyway so a new glyph can be packed beside the old ones.
+    // Handing over the pointer avoids copying a megabyte-scale image into a Kira
+    // array first, and one whole-image upload per changed frame is fewer uploads
+    // than one per glyph, which is what the sub-region form cost.
+    //
+    // The texture must have been created with the `SampledStreaming` usage,
+    // and on sokol this may run at most ONCE per texture per frame.
+    function updateTextureBytes(texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) {
+        self.renderBackend().updateTextureBytes(texture, bytes, byteCount)
+        return
+    }
+
+    function destroyTexture(texture: borrow GraphicsTexture) {
+        self.renderBackend().destroyTexture(texture)
+        return
+    }
+
+    // Decode an image file (PNG, JPEG) into a sampled texture.
+    //
+    // The one method here that names no backend, because decoding is not a
+    // backend's work. `decodeImageFile` is Foundation's, reaches no device, and
+    // hands back the same RGBA8 that `createTextureFromPixels` already takes on
+    // both backends. This used to be a member sokol answered and Metal
+    // declined, which made "can this program load a PNG" a question about which
+    // GPU was in the machine.
+    //
+    // The pixels arrive with their first row at the top, which is where every
+    // one of these formats puts it and what `createTextureFromPixels` means by
+    // row zero. A renderer whose texture coordinates run the other way flips
+    // them in its own shader.
+    function createTextureFromFile(label: borrow String, path: borrow String) -> TextureResult {
+        match decodeImageFile(path) {
+            Ok(image) -> {
+                return self.createTextureFromPixels(TextureDescriptor {
+                    label: label
+                    width: image.width
+                    height: image.height
+                    format: .Rgba8Unorm
+                    usage: .Sampled
+                    sampleCount: 1
+                    storage: .Persistent
+                }, image.pixels)
             }
-            id: textureId
+            // A path with nothing at it, bytes that are not an image, and an
+            // image whose bytes are damaged are one answer to a caller loading
+            // an asset: it could not be read.
+            Error(reason) -> { return .Error(.AssetUnreadable) }
         }
     }
 
-    function createSampler(descriptor: borrow SamplerDescriptor) -> GraphicsSampler {
-        if self.backend == .Metal {
-            var metalMin = metalSamplerFilterNearest()
-            if descriptor.minFilter == textureFilterLinear() {
-                metalMin = metalSamplerFilterLinear()
-            }
-            var metalMag = metalSamplerFilterNearest()
-            if descriptor.magFilter == textureFilterLinear() {
-                metalMag = metalSamplerFilterLinear()
-            }
-            let metalSamplerId = metalCreateSampler(self.metalContext, metalMin, metalMag, metalSamplerAddressClampToEdge())
-            return GraphicsSampler {
-                handle: BackendSamplerHandle {
-                    id: metalSamplerId
-                }
-                id: metalSamplerId
-            }
-        }
-        let samplerId = sokolCreateSamplerId(
-            descriptor.label,
-            descriptor.minFilter,
-            descriptor.magFilter,
-            descriptor.addressModeU,
-            descriptor.addressModeV
-        )
-        return GraphicsSampler {
-            handle: BackendSamplerHandle {
-                id: samplerId
-            }
-            id: samplerId
-        }
+    function createSampler(descriptor: borrow SamplerDescriptor) -> SamplerResult {
+        return self.renderBackend().createSampler(descriptor)
     }
 
     function destroySampler(sampler: borrow GraphicsSampler) {
-        if self.backend == .Metal {
-            metalUnregister(self.metalContext, sampler.id)
-            return
-        }
-        sokolDestroySamplerId(sampler.id)
+        self.renderBackend().destroySampler(sampler)
         return
     }
 
     @Native
     function runLifetimeStress(iterations: Int, shaderDirectory: borrow String, shaderAsset: borrow String) -> Bool {
-        let nativeIterations: I64 = iterations
+        let nativeIterations: Int = iterations
         return kgRunLifetimeStress(nativeIterations, shaderDirectory, shaderAsset) != 0
     }
 
     @Native
-    function frame() -> GraphicsFrame {
-        return GraphicsFrame {
-            hasColorAttachment: false
-            colorTargetKind: 0
-            colorTextureId: 0
-            colorMipLevel: 0
-            colorArrayLayer: 0
-            colorLoadAction: 0
-            colorStoreAction: 0
-            clearR: 0.0
-            clearG: 0.0
-            clearB: 0.0
-            clearA: 1.0
-            hasResolveTarget: false
-            resolveTextureId: 0
-            resolveMipLevel: 0
-            resolveArrayLayer: 0
-            hasDepthAttachment: false
-            depthTextureId: 0
-            depthLoadAction: 0
-            depthStoreAction: 0
-            clearDepth: 1.0
-            depthReadOnly: false
-            hasStencilAttachment: false
-            stencilTextureId: 0
-            stencilLoadAction: 0
-            stencilStoreAction: 0
-            clearStencil: 0
-            stencilReadOnly: false
-            encoderPipelineId: 0
-            encoderHasPipeline: false
-            encoderVertexBufferId: 0
-            encoderHasVertexBuffer: false
-            encoderIndexBufferId: 0
-            encoderHasIndexBuffer: false
-            encoderIndexFormat: indexFormatUint32()
-            encoderVertexCount: 0
-            encoderIndexCount: 0
-            encoderInstanceCount: 1
+    function frame() -> RenderFrame {
+        return RenderFrame {
+            attachments: PassAttachments {
+                color: ColorAttachment {
+                    target: swapchainRenderTarget()
+                    clearColor: Color {}
+                    resolveTarget: emptyRenderTarget()
+                }
+                depth: emptyDepthAttachment()
+                stencil: emptyStencilAttachment()
+            }
             hasRenderPass: false
             renderPassActive: false
             currentEncoder: makeRenderEncoder()
-            shouldPresent: false
             passSubmitted: false
             shouldQuit: false
             userData: self.userData
             backend: self.backend
-            metalContext: self.metalContext
+            backendContext: self.backendContext
         }
     }
 }

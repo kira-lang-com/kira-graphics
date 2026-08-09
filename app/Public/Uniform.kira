@@ -1,72 +1,80 @@
-struct GraphicsUniform {
-    var handle: BackendUniformHandle
+// A uniform buffer, and the CPU-side floats a draw call reads directly off it.
+//
+// The floats live behind `storage`, recovered through `nativeState` exactly
+// as `RenderEncoder`'s and `UiBatch`'s own state is: a caller almost always
+// holds a `Uniform` through a `let`, and `nativeRecover` mutates what
+// `storage` points to regardless of whether the binding that read it was a
+// `let` or a `var`. A bind group's `UniformBindEntry` copies this same
+// `Uniform` value — same `storage` pointer — so `setUniformValues`
+// reaches every bind group that ever captured it, exactly as it did when a
+// C-side table held the values behind an id. There is no such table anymore:
+// sokol has no `sg_uniform` object, uniforms were never a resource it
+// tracked, and the values now live in the one place everyone already shares.
+struct UniformState {
+    var label: String = ""
+    var expectedFloatCount: Int = 0
+    var values: [F32] = []
+}
+
+class Uniform {
+    var storage: RawPtr
     var id: U32 = 0
 }
 
 @Native
-function emptyGraphicsUniform() -> GraphicsUniform {
-    return GraphicsUniform {
-        handle: BackendUniformHandle {
-            id: 0
-        }
+function emptyUniform() -> Uniform {
+    return Uniform {
+        storage: nativeUserData(nativeState(UniformState {}))
         id: 0
     }
 }
 
+// Sokol's half of `Graphics.createUniform`. Validates the descriptor and
+// hands back the live value the draw path reads from — there is no device
+// call to make: a uniform's bytes reach the GPU only at the draw that binds
+// them, through `sokolApplyUniformFloats`.
 @Native
-function sokolCreateUniformId(label: borrow String, expectedFloatCount: Int) -> U32 {
-    let nativeExpectedFloatCount: I64 = expectedFloatCount
-    return kgCreateUniformId(label, nativeExpectedFloatCount)
+function sokolCreateUniform(descriptor: borrow UniformDescriptor) -> Uniform {
+    if descriptor.expectedFloatCount <= 0 {
+        graphicsDiagnostic("Kira Graphics: uniform buffer '" + descriptor.label + "' needs a positive expected float count")
+        return emptyUniform()
+    }
+    if descriptor.data.count != descriptor.expectedFloatCount {
+        graphicsDiagnostic("Kira Graphics: uniform buffer '" + descriptor.label + "' upload size does not match its expected float count")
+        return emptyUniform()
+    }
+    // 1 rather than a counter: sokol keys nothing on this id anymore, so every
+    // live uniform answers the same "not empty" sentinel `uniformResult` reads.
+    return Uniform {
+        storage: nativeUserData(nativeState(UniformState {
+            label: descriptor.label
+            expectedFloatCount: descriptor.expectedFloatCount
+            values: descriptor.data
+        }))
+        id: 1
+    }
 }
 
+// Replaces a uniform's current values in place.
 @Native
-function updateGraphicsUniform(uniform: borrow GraphicsUniform, data: borrow [Float]) {
-        for index in 0..data.count {
-        let nativeIndex: I64 = index
-        kgSetUniformFloat(uniform.id, nativeIndex, data[index])
-            }
-    let nativeCount: I64 = data.count
-    kgFinishUniformUpdate(uniform.id, nativeCount)
+function setUniformValues(uniform: borrow Uniform, data: borrow [F32]) {
+    var state = nativeRecover<UniformState>(uniform.storage)
+    state.values = data
     return
 }
 
+// The uniform's current values, for the draw path (see `SokolDraw.kira`) to
+// read.
+@Native
+function sokolUniformState(uniform: borrow Uniform) -> UniformState {
+    return nativeRecover<UniformState>(uniform.storage)
+}
+
+// A no-op on Sokol: a `Uniform` is an ordinary Kira value with no
+// device resource behind it, so there is nothing to release beyond what
+// Kira's own memory management already does when the last reference goes
+// away.
 @Native
 function sokolDestroyUniformId(uniformId: U32) {
-    kgDestroyUniformId(uniformId)
-    return
-}
-
-@Native
-function sokolCreateBindGroupId(label: borrow String) -> U32 {
-    return kgCreateBindGroupId(label)
-}
-
-@Native
-function sokolSetBindGroupUniform(bindGroupId: U32, entryIndex: Int, uniformSlot: Int, uniformId: U32) {
-    let nativeEntryIndex: I64 = entryIndex
-    let nativeUniformSlot: I64 = uniformSlot
-    kgSetBindGroupUniform(bindGroupId, nativeEntryIndex, nativeUniformSlot, uniformId)
-    return
-}
-
-@Native
-function sokolSetBindGroupTexture(bindGroupId: U32, entryIndex: Int, textureSlot: Int, textureId: U32) {
-    let nativeEntryIndex: I64 = entryIndex
-    let nativeTextureSlot: I64 = textureSlot
-    kgSetBindGroupTexture(bindGroupId, nativeEntryIndex, nativeTextureSlot, textureId)
-    return
-}
-
-@Native
-function sokolSetBindGroupSampler(bindGroupId: U32, entryIndex: Int, samplerSlot: Int, samplerId: U32) {
-    let nativeEntryIndex: I64 = entryIndex
-    let nativeSamplerSlot: I64 = samplerSlot
-    kgSetBindGroupSampler(bindGroupId, nativeEntryIndex, nativeSamplerSlot, samplerId)
-    return
-}
-
-@Native
-function sokolDestroyBindGroupId(bindGroupId: U32) {
-    kgDestroyBindGroupId(bindGroupId)
     return
 }

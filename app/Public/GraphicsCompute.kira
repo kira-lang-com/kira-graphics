@@ -2,85 +2,85 @@
 //
 // Written as `extend Graphics` rather than inside the class body: a class's
 // methods may be declared across files, and compute is a bounded job path with
-// its own vocabulary — raw registry ints for handles rather than the
-// render-graph resource structs — so it reads better beside itself than buried
-// in the middle of the rendering surface.
-//
-// KSL compute shaders lower to an MSL kernel; these build a compute pipeline,
-// shared-storage buffers, dispatch, and read results back. Non-Metal backends
-// return 0 / no-op.
+// its own vocabulary — a pipeline id rather than the render-graph resource
+// structs — so it reads better beside itself than buried in the middle of the
+// rendering surface.
 
 extend Graphics {
-    function createComputePipeline(shader: borrow GraphicsShader, entryName: borrow String) -> Int {
-        if self.backend == .Metal {
-            return metalCreateComputePipeline(self.metalContext, shader.id, entryName)
-        }
-        return 0
+    // Whether this backend can build and encode a compute pipeline at all.
+    //
+    // Asked instead of naming a backend: a caller with a compute shader and a
+    // render-pass fallback chooses between them on the capability, so a backend
+    // that grows compute starts running the compute path without every caller
+    // being edited to add its name to a list.
+    function supportsCompute() -> Bool {
+        return self.renderBackend().supportsCompute()
     }
 
-    function createStorageBufferFloats(data: borrow [Float]) -> Int {
-        if self.backend == .Metal {
-            return metalCreateStorageBufferF32(self.metalContext, data)
-        }
-        return 0
+    // Build a pipeline that runs `shader`'s compute stage.
+    function createComputePipeline(label: borrow String, shader: borrow GraphicsShader, entryName: borrow String) -> Int {
+        return self.renderBackend().createComputePipeline(label, shader, entryName)
     }
 
-    function createEmptyStorageBuffer(wordCount: Int) -> Int {
-        if self.backend == .Metal {
-            return metalCreateEmptyStorageBuffer(self.metalContext, wordCount)
-        }
-        return 0
-    }
-
-    function createCullParams(count: Int, planeX: Float, planeD: Float) -> Int {
-        if self.backend == .Metal {
-            return metalCreateCullParamsBuffer(self.metalContext, count, planeX, planeD)
-        }
-        return 0
-    }
-
-    function dispatchCompute3(pipeline: Int, buf0: Int, buf1: Int, buf2: Int, count: Int, threadsPerGroup: Int) {
-        if self.backend == .Metal {
-            metalDispatchCompute3(self.metalContext, pipeline, buf0, buf1, buf2, count, threadsPerGroup)
-        }
+    // Run `pipeline` over `threadCount` threads, binding each id in order at
+    // `buffer(0)`, `buffer(1)`, … — the shape a simulation step has, where what
+    // the kernel reads and writes is a buffer of state rather than an image.
+    //
+    // Encoded on the frame that is already open, so a step called before a draw
+    // is ordered before it.
+    function dispatchComputeBuffers(pipeline: Int, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
+        self.renderBackend().dispatchComputeBuffers(pipeline, bufferIds, threadCount, threadsPerGroup)
         return
     }
 
-    function dispatchCompute4(pipeline: Int, buf0: Int, buf1: Int, buf2: Int, buf3: Int, count: Int, threadsPerGroup: Int) {
-        if self.backend == .Metal {
-            metalDispatchCompute4(self.metalContext, pipeline, buf0, buf1, buf2, buf3, count, threadsPerGroup)
-        }
-        return
+    // A storage buffer holding `data`.
+    //
+    // `createBuffer` with the storage usage, named: what a kernel binds is a
+    // buffer of floats often enough that spelling the descriptor at every site
+    // buried the one thing that differed between them.
+    function createStorageBufferFloats(label: borrow String, data: borrow [F32]) -> BufferResult {
+        return self.createBuffer(BufferDescriptor {
+            label: label
+            usage: .Storage
+            data: data
+        })
     }
 
-    // Generic form: bind any number of buffers at slots 0..n-1.
-    function dispatchComputeBuffers(pipeline: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
-        if self.backend == .Metal {
-            metalDispatchComputeN(self.metalContext, pipeline, buffers, count, threadsPerGroup)
+    // A storage buffer of `floatCount` zeroed slots — what a kernel WRITES,
+    // where the contents come from the dispatch rather than from the CPU.
+    //
+    // Zero-filled rather than uninitialised because a kernel that writes only
+    // some of its slots leaves the rest readable, and a device buffer's
+    // untouched bytes are whatever the allocator last had there.
+    function createEmptyStorageBuffer(label: borrow String, floatCount: Int) -> BufferResult {
+        var zeros: [F32] = []
+        var i = 0
+        while i < floatCount {
+            zeros.append(0.0)
+            i = i + 1
         }
-        return
+        return self.createStorageBufferFloats(label, zeros)
     }
 
-    function createStorageBufferWords(data: borrow [Int]) -> Int {
-        if self.backend == .Metal {
-            return metalCreateStorageBufferU32(self.metalContext, data)
-        }
-        return 0
+    // A storage buffer of 32-bit words — a kernel's parameter block, where a
+    // count is a count. Floats would reach the shader as different numbers.
+    function createStorageBufferWords(label: borrow String, data: borrow [U32]) -> BufferResult {
+        return self.renderBackend().createStorageBufferWords(label, data)
     }
 
-    function createParams4(a: Int, b: Int, c: Int, d: Int) -> Int {
-        if self.backend == .Metal {
-            return metalCreateParams4U32(self.metalContext, a, b, c, d)
-        }
-        return 0
+    // The four-word parameter block a compute kernel reads its bounds out of:
+    // the shape almost every dispatch here wants, and short enough that spelling
+    // the array at each site was the whole call.
+    function createParams4(label: borrow String, a: Int, b: Int, c: Int, d: Int) -> BufferResult {
+        return self.createStorageBufferWords(label, [U32(a), U32(b), U32(c), U32(d)])
     }
 
-
-    function readStorageU32(bufferId: Int, index: Int) -> U32 {
-        if self.backend == .Metal {
-            return metalReadStorageBufferU32(self.metalContext, bufferId, index)
-        }
-        return U32(0)
+    // One 32-bit word out of a buffer a kernel has written.
+    //
+    // For a headless gate that dispatches and then checks the answer. A backend
+    // that cannot read a buffer back answers 0 and says so in a diagnostic, so a
+    // gate that gets zeros knows to look at where it ran.
+    function readStorageU32(buffer: borrow GraphicsBuffer, index: Int) -> U32 {
+        return self.renderBackend().readBufferU32(buffer, index)
     }
-
 }

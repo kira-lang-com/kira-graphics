@@ -30,26 +30,6 @@ struct Float4x4 {
     var m33: Float = 1.0
 }
 
-@Native
-function graphicsMathSqrt(value: Float) -> Float {
-    return kgMathSqrt(value)
-}
-
-@Native
-function graphicsMathSin(value: Float) -> Float {
-    return kgMathSin(value)
-}
-
-@Native
-function graphicsMathCos(value: Float) -> Float {
-    return kgMathCos(value)
-}
-
-@Native
-function graphicsMathTan(value: Float) -> Float {
-    return kgMathTan(value)
-}
-
 function float3(x: Float, y: Float, z: Float) -> Float3 {
     return Float3 { x: x y: y z: z }
 }
@@ -79,7 +59,7 @@ function subtract3(a: borrow Float3, b: borrow Float3) -> Float3 {
 }
 
 function length3(v: borrow Float3) -> Float {
-    return graphicsMathSqrt(dot3(v, v))
+    return sqrt(dot3(v, v))
 }
 
 function normalize3(v: borrow Float3) -> Float3 {
@@ -115,8 +95,8 @@ function matrixScale(scale: borrow Float3) -> Float4x4 {
 }
 
 function matrixRotationX(radians: Float) -> Float4x4 {
-    let c = graphicsMathCos(radians)
-    let s = graphicsMathSin(radians)
+    let c = cos(radians)
+    let s = sin(radians)
     return Float4x4 {
         m11: c
         m12: 0.0 - s
@@ -126,8 +106,8 @@ function matrixRotationX(radians: Float) -> Float4x4 {
 }
 
 function matrixRotationY(radians: Float) -> Float4x4 {
-    let c = graphicsMathCos(radians)
-    let s = graphicsMathSin(radians)
+    let c = cos(radians)
+    let s = sin(radians)
     return Float4x4 {
         m00: c
         m02: s
@@ -137,8 +117,8 @@ function matrixRotationY(radians: Float) -> Float4x4 {
 }
 
 function matrixRotationZ(radians: Float) -> Float4x4 {
-    let c = graphicsMathCos(radians)
-    let s = graphicsMathSin(radians)
+    let c = cos(radians)
+    let s = sin(radians)
     return Float4x4 {
         m00: c
         m01: 0.0 - s
@@ -172,7 +152,7 @@ function matrixMultiply(a: borrow Float4x4, b: borrow Float4x4) -> Float4x4 {
 }
 
 function matrixPerspectiveRightHanded(fovYRadians: Float, aspect: Float, nearPlane: Float, farPlane: Float) -> Float4x4 {
-    let f = 1.0 / graphicsMathTan(fovYRadians * 0.5)
+    let f = 1.0 / tan(fovYRadians * 0.5)
     return Float4x4 {
         m00: f / aspect
         m11: f

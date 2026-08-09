@@ -1,6 +1,6 @@
 import Foundation
 struct RenderTarget {
-    var kind: Int
+    var kind: RenderTargetKind = .Swapchain
     var texture: GraphicsTexture
     var mipLevel: Int = 0
     var arrayLayer: Int = 0
@@ -8,8 +8,8 @@ struct RenderTarget {
 
 struct ColorAttachment {
     var target: RenderTarget
-    var loadAction: Int
-    var storeAction: Int
+    var loadAction: LoadAction = .Clear
+    var storeAction: StoreAction = .Store
     var clearColor: Color
     var resolveTarget: RenderTarget
     var hasResolveTarget: Bool = false
@@ -17,16 +17,16 @@ struct ColorAttachment {
 
 struct DepthAttachment {
     var texture: GraphicsTexture
-    var loadAction: Int
-    var storeAction: Int
+    var loadAction: LoadAction = .Clear
+    var storeAction: StoreAction = .Store
     var clearDepth: Float = 1.0
     var readOnly: Bool = false
 }
 
 struct StencilAttachment {
     var texture: GraphicsTexture
-    var loadAction: Int
-    var storeAction: Int
+    var loadAction: LoadAction = .Clear
+    var storeAction: StoreAction = .Store
     var clearStencil: Int = 0
     var readOnly: Bool = false
 }
@@ -45,7 +45,7 @@ struct RenderPassDescriptor {
 @Native
 function emptyRenderTarget() -> RenderTarget {
     return RenderTarget {
-        kind: renderTargetKindSwapchain()
+        kind: .Swapchain
         texture: emptyGraphicsTexture()
         mipLevel: 0
         arrayLayer: 0
@@ -56,8 +56,8 @@ function emptyRenderTarget() -> RenderTarget {
 function emptyDepthAttachment() -> DepthAttachment {
     return DepthAttachment {
         texture: emptyGraphicsTexture()
-        loadAction: loadActionClear()
-        storeAction: storeActionStore()
+        loadAction: .Clear
+        storeAction: .Store
         clearDepth: 1.0
         readOnly: false
     }
@@ -67,8 +67,8 @@ function emptyDepthAttachment() -> DepthAttachment {
 function swapchainDepthAttachment() -> DepthAttachment {
     return DepthAttachment {
         texture: emptyGraphicsTexture()
-        loadAction: loadActionClear()
-        storeAction: storeActionDontCare()
+        loadAction: .Clear
+        storeAction: .DontCare
         clearDepth: 1.0
         readOnly: false
     }
@@ -78,8 +78,8 @@ function swapchainDepthAttachment() -> DepthAttachment {
 function emptyStencilAttachment() -> StencilAttachment {
     return StencilAttachment {
         texture: emptyGraphicsTexture()
-        loadAction: loadActionClear()
-        storeAction: storeActionStore()
+        loadAction: .Clear
+        storeAction: .Store
         clearStencil: 0
         readOnly: false
     }
@@ -88,7 +88,7 @@ function emptyStencilAttachment() -> StencilAttachment {
 @Native
 function swapchainRenderTarget() -> RenderTarget {
     return RenderTarget {
-        kind: renderTargetKindSwapchain()
+        kind: .Swapchain
         texture: emptyGraphicsTexture()
         mipLevel: 0
         arrayLayer: 0
@@ -102,8 +102,8 @@ function clearSwapchainRenderPass(clearColor: borrow Color) -> RenderPassDescrip
         colorAttachments: [
             ColorAttachment {
                 target: swapchainRenderTarget()
-                loadAction: loadActionClear()
-                storeAction: storeActionStore()
+                loadAction: .Clear
+                storeAction: .Store
                 clearColor: clearColor
                 resolveTarget: emptyRenderTarget()
                 hasResolveTarget: false
@@ -111,8 +111,8 @@ function clearSwapchainRenderPass(clearColor: borrow Color) -> RenderPassDescrip
         ]
         primaryColorAttachment: ColorAttachment {
             target: swapchainRenderTarget()
-            loadAction: loadActionClear()
-            storeAction: storeActionStore()
+            loadAction: .Clear
+            storeAction: .Store
             clearColor: clearColor
             resolveTarget: emptyRenderTarget()
             hasResolveTarget: false

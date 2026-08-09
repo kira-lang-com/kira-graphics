@@ -1,7 +1,7 @@
 struct VertexAttribute {
     var name: String = ""
     var location: Int = 0
-    var format: Int
+    var format: VertexFormat = .Float4
     var offset: Int = 0
 }
 
@@ -12,28 +12,36 @@ struct VertexLayout {
 
 struct BlendState {
     var enabled: Bool = false
-    var preset: Int
+    var preset: BlendPreset = .PremultipliedAlpha
 }
 
 struct ColorTargetDescriptor {
-    var format: Int
+    var format: TextureFormat = .Swapchain
     var blend: BlendState
 }
 
 struct DepthStencilDescriptor {
     var depthEnabled: Bool = false
     var depthWriteEnabled: Bool = false
-    var depthCompare: Int
-    var format: Int
+    var depthCompare: CompareFunction = .Less
+    // No depth buffer unless a pipeline asks for one.
+    //
+    // A backend may bake this into the pipeline object and check it against the
+    // pass being drawn into — sokol does — so a pipeline naming a depth format
+    // is a pipeline that can only be used in a pass carrying that attachment.
+    // Defaulting to a real format made every pipeline claim one, and a pipeline
+    // drawn into an offscreen colour target with no depth was then refused at
+    // the draw with nothing in its descriptor to say why.
+    var format: TextureFormat = .None
 }
 
 struct RasterizationDescriptor {
-    var cullMode: Int
-    var frontFace: Int
+    var cullMode: CullMode = .None
+    var frontFace: FrontFace = .CounterClockwise
 }
 
 struct PrimitiveDescriptor {
-    var topology: Int
+    var topology: PrimitiveTopology = .TriangleList
 }
 
 struct RenderPipelineDescriptor {

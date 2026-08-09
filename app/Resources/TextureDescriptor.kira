@@ -2,16 +2,16 @@ struct TextureDescriptor {
     var label: String = ""
     var width: Int = 1
     var height: Int = 1
-    var format: Int
-    var usage: Int
+    var format: TextureFormat = .Rgba8Unorm
+    var usage: TextureUsage = .Sampled
     var sampleCount: Int = 1
-    var storageMode: Int
+    var storage: AttachmentStorage = .Persistent
 }
 
 struct SamplerDescriptor {
     var label: String = ""
-    var minFilter: Int
-    var magFilter: Int
-    var addressModeU: Int
-    var addressModeV: Int
+    var minFilter: TextureFilter = .Nearest
+    var magFilter: TextureFilter = .Nearest
+    var addressModeU: AddressMode = .ClampToEdge
+    var addressModeV: AddressMode = .ClampToEdge
 }

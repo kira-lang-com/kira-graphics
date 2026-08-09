@@ -1,14 +1,28 @@
+// A compiled render pipeline.
+//
+// Sokol pipelines are immutable about index type, so building one from a
+// `RenderPipelineDescriptor` actually makes two Sokol pipeline objects — one
+// for a non-indexed draw, one for an indexed draw — and `id` is the "draw"
+// one's, which is what every other backend's single id means and what a
+// caller compares against zero. `drawPipelineId` / `indexedPipelineId` are
+// both kept so a draw call can pick the one it needs without a lookup: this,
+// plus the shader reflection fields below, replaces the Sokol backend's old
+// `kg_pipeline_records` table, keyed by a public id this struct's own `id`
+// now is.
 struct RenderPipeline {
-    var handle: BackendPipelineHandle
     var id: U32 = 0
+    var drawPipelineId: U32 = 0
+    var indexedPipelineId: U32 = 0
+    // Copied from the shader this pipeline was built from, at creation.
+    var hasPositionAttribute: Bool = false
+    var requiredUniformMask: Int = 0
+    var availableUniformMask: Int = 0
+    var uniformBlocks: [UniformBlockDescriptor] = []
 }
 
 @Native
 function emptyRenderPipeline() -> RenderPipeline {
     return RenderPipeline {
-        handle: BackendPipelineHandle {
-            id: 0
-        }
         id: 0
     }
 }

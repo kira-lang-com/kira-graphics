@@ -1,0 +1,85 @@
+// What the frame's current render pass is attached to.
+//
+// `RenderFrame` used to carry this as 32 loose fields — `colorTextureId`,
+// `colorWidth`, `clearR`/`G`/`B`/`A`, `depthLoadAction`, `stencilReadOnly` and
+// so on — copied one assignment at a time out of the `RenderPassDescriptor` the
+// caller handed to `beginRenderPass`. They were a flattened `ColorAttachment`,
+// `DepthAttachment` and `StencilAttachment`: the same three types the descriptor
+// is already made of, spelled again with a prefix per group. So the frame holds
+// the attachments themselves, and the flattening is gone in both directions —
+// `beginRenderPass` copies three values rather than thirty-two, and a backend
+// reads the attachment it is asking about rather than a field whose name says
+// which one it belongs to.
+//
+// The `has*` flags stay beside the attachments rather than inside them: a
+// descriptor may carry a depth attachment it does not enable, and "is there one"
+// is a question about the pass, not about the attachment's own contents.
+//
+// The methods below are the reads every backend does — a view id out of an
+// attachment's texture, the colour target's extent, the image a later sample
+// will read. Each is one place rather than a field a caller has to know is a
+// *view* id and not an image id.
+struct PassAttachments {
+    var hasColor: Bool = false
+    var color: ColorAttachment
+    var hasDepth: Bool = false
+    var depth: DepthAttachment
+    var hasStencil: Bool = false
+    var stencil: StencilAttachment
+
+    // Whether the pass draws into a texture the program owns rather than into
+    // the window's swapchain.
+    function isOffscreen() -> Bool {
+        return self.color.target.kind == .Texture
+    }
+
+    // Whether the pass keeps what its colour target already holds. A backend
+    // whose framebuffer row order differs from an upload's has to correct the
+    // stored rows before a load, or the pass loads them mirrored.
+    function loadsColor() -> Bool {
+        return self.color.loadAction == .Load
+    }
+
+    // The attachment *views* a backend attaches through, not the images. Metal
+    // repeats its one texture id into every view field, so both backends read
+    // the same thing here.
+    function colorViewId() -> U32 {
+        return self.color.target.texture.colorViewId
+    }
+
+    function resolveViewId() -> U32 {
+        return self.color.resolveTarget.texture.colorViewId
+    }
+
+    function depthViewId() -> U32 {
+        return self.depth.texture.depthViewId
+    }
+
+    function stencilViewId() -> U32 {
+        return self.stencil.texture.depthViewId
+    }
+
+    // The colour target's extent, which sizes the pass and any managed depth
+    // buffer provisioned to match it.
+    function colorWidth() -> Int {
+        return self.color.target.texture.width
+    }
+
+    function colorHeight() -> Int {
+        return self.color.target.texture.height
+    }
+
+    function colorSampleCount() -> Int {
+        return self.color.target.texture.sampleCount
+    }
+
+    // The texture the pass leaves behind for later sampling: the resolve target
+    // when the pass has one, because that is the single-sampled image a shader
+    // reads.
+    function sampledTexture() -> GraphicsTexture {
+        if self.color.hasResolveTarget {
+            return self.color.resolveTarget.texture
+        }
+        return self.color.target.texture
+    }
+}

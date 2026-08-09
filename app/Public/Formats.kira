@@ -1,0 +1,148 @@
+// The closed sets a pipeline is described with.
+//
+// These were 232 free functions returning an `Int` — a C `#define` table typed
+// out longhand, which let `format: 7` compile and gave a reader nothing to match
+// against. As enums the compiler checks them: every `match` below names every
+// variant with no `_` arm, so adding a format is a compile error at each site
+// that must learn about it rather than a value that silently falls through.
+//
+// Each carries its wire `code`, which is the integer the backends already speak.
+// That is what lets the typed surface land without touching a backend: the enum
+// is the API, the code is the protocol underneath it.
+
+@Derive(Equatable, Clone)
+enum TextureFormat {
+    Rgba8Unorm
+    Rgba16Float
+    Depth24Stencil8
+    R32Uint
+    // Whatever the swapchain's colour format turns out to be. A pipeline created
+    // with it bakes in that format, so a target sampled by that pipeline has to
+    // resolve the sentinel the same way rather than assume RGBA8.
+    Swapchain
+    None
+}
+
+function textureFormatCode(format: TextureFormat) -> Int {
+    match format {
+        Rgba8Unorm -> return 1;
+        Rgba16Float -> return 2;
+        Depth24Stencil8 -> return 3;
+        R32Uint -> return 10;
+        Swapchain -> return 0 - 1;
+        None -> return 0;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum VertexFormat {
+    Float
+    Float2
+    Float3
+    Float4
+}
+
+function vertexFormatCode(format: VertexFormat) -> Int {
+    match format {
+        Float -> return 0;
+        Float2 -> return 1;
+        Float3 -> return 2;
+        Float4 -> return 3;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum BlendPreset {
+    Replace
+    Alpha
+    PremultipliedAlpha
+    Additive
+}
+
+function blendPresetCode(preset: BlendPreset) -> Int {
+    match preset {
+        Replace -> return 1;
+        Alpha -> return 2;
+        PremultipliedAlpha -> return 3;
+        Additive -> return 4;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum CompareFunction {
+    Never
+    Less
+    LessEqual
+    Equal
+    GreaterEqual
+    Greater
+    Always
+}
+
+function compareFunctionCode(compare: CompareFunction) -> Int {
+    match compare {
+        Never -> return 0;
+        Less -> return 1;
+        LessEqual -> return 2;
+        Equal -> return 3;
+        GreaterEqual -> return 4;
+        Greater -> return 5;
+        Always -> return 6;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum CullMode {
+    None
+    Front
+    Back
+}
+
+function cullModeCode(mode: CullMode) -> Int {
+    match mode {
+        None -> return 0;
+        Front -> return 1;
+        Back -> return 2;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum FrontFace {
+    CounterClockwise
+    Clockwise
+}
+
+function frontFaceCode(face: FrontFace) -> Int {
+    match face {
+        CounterClockwise -> return 1;
+        Clockwise -> return 2;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum PrimitiveTopology {
+    TriangleList
+    TriangleStrip
+    LineList
+}
+
+function primitiveTopologyCode(topology: PrimitiveTopology) -> Int {
+    match topology {
+        TriangleList -> return 1;
+        TriangleStrip -> return 2;
+        LineList -> return 3;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum IndexFormat {
+    Uint16
+    Uint32
+}
+
+function indexFormatCode(format: IndexFormat) -> Int {
+    match format {
+        Uint16 -> return 1;
+        Uint32 -> return 2;
+    }
+}

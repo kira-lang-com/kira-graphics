@@ -1,0 +1,58 @@
+// Finding every declared pipeline.
+//
+// A `Pipeline` declaration is not a value: it can be qualified —
+// `GlassComposite.shader()` — but not passed, so a renderer cannot hold a list
+// of them and build each in turn. Every other macro form is attached to the
+// declaration or the call it rewrites, so none of them can ask what a program
+// contains. A `collector` runs once for the whole program and is handed every
+// declaration in it, which is exactly that question.
+//
+// This is the shape Foundation's `TestRunner` uses for `Test`, and nothing here
+// is privileged either: the selection is `d.family == "Pipeline"`, a string
+// compare against the family a declaration was written in.
+//
+// What it emits is `declaredPipelines()`, a plan per declaration in declaration
+// order, each carrying the name it was declared with. A renderer builds them
+// once at startup and looks one up by name, so adding a pipeline is adding a
+// declaration — no registration call, no enum to extend, no switch to update.
+
+comptime macro PipelineRegistry {
+    kind { collector }
+    expand(declarations: [Declaration]) -> Syntax {
+        var rows: [Syntax] = []
+        for declaration in declarations {
+            if declaration.family == "Pipeline" {
+                // Each member is asked once, here, rather than by the renderer:
+                // the plan is what travels, so a declaration's members never run
+                // again after startup.
+                rows.append(quote {
+                    plans.append(PipelinePlan(
+                        label: #{declaration.name.asString()},
+                        shader: #{declaration.name}.shader(),
+                        vertices: #{declaration.name}.vertices(),
+                        blending: #{declaration.name}.blending(),
+                        depth: #{declaration.name}.depth(),
+                        raster: #{declaration.name}.raster(),
+                        colorFormat: #{declaration.name}.colorFormat(),
+                    ))
+                })
+            }
+        }
+        // A program that declares no pipelines gets nothing. A collector runs for
+        // every program that links this package, so emitting the registry
+        // unconditionally would put a function naming `PipelinePlan` into
+        // programs that never import the type — which is a compile error in a
+        // program whose only crime is not using the feature.
+        if rows.count == 0 {
+            return quote { }
+        }
+        return quote {
+            // Every `Pipeline` declaration in this program, in declaration order.
+            function declaredPipelines() -> [PipelinePlan] {
+                var plans: [PipelinePlan] = []
+                #{rows}
+                return plans
+            }
+        }
+    }
+}

@@ -1,12 +1,12 @@
 struct UniformDescriptor {
     var label: String = ""
     var expectedFloatCount: Int = 0
-    var data: [Float]
+    var data: [F32]
 }
 
 struct UniformBindEntry {
     var uniformSlot: Int = 0
-    var uniform: GraphicsUniform
+    var uniform: Uniform
 }
 
 struct TextureBindEntry {
@@ -17,6 +17,15 @@ struct TextureBindEntry {
 struct SamplerBindEntry {
     var samplerSlot: Int = 0
     var sampler: GraphicsSampler
+}
+
+// A storage buffer bound at a shader's view slot, held as the sokol VIEW rather
+// than the buffer: sokol reaches a buffer's contents from a shader through a
+// view exactly as it reaches an image's, and the view is minted once with the
+// group instead of per draw.
+struct StorageBindEntry {
+    var storageSlot: Int = 0
+    var viewId: U32 = 0
 }
 
 struct BindGroupDescriptor {
