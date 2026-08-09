@@ -1,0 +1,53 @@
+// Raw memory from Kira's own runtime, and which platform this program is for.
+//
+// The bytes a C API reads have to live somewhere a Kira array does not: an
+// `sg_range` is a pointer and a length, so a texture upload stages its pixels
+// here first. These come from `kira_runtime`, which is on every native link
+// line, rather than from a library that might be absent.
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
+function allocateBytes(size: U64) -> RawPtr;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_free; abi: c; }
+function freeBytes(ptr: RawPtr): Void;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u8_at; abi: c; }
+function writeByte(ptr: RawPtr, offset: U64, value: U8): Void;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_null_ptr; abi: c; }
+function nullPointer(): RawPtr;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_ptr_is_null; abi: c; }
+function pointerIsNull(ptr: RawPtr): Bool;
+
+// Which platform this program was built for.
+//
+// Answered by the compiler at expansion time rather than by asking a C library
+// at run time: the target is something the build already knows, and a program
+// that had to open a library to find out could not run on a machine where that
+// library is missing.
+@Native
+comptime macro hostPlatformName {
+    kind { function }
+    expand(input: Syntax) -> Syntax {
+        let name = Build.platform()
+        return quote { #{name} }
+    }
+}
+
+function hostPlatform() -> Platform {
+    let name = hostPlatformName!()
+    if name == "windows" {
+        return .Windows
+    }
+    if name == "linux" {
+        return .Linux
+    }
+    if name == "macos" {
+        return .MacOS
+    }
+    if name == "ios" {
+        return .IOS
+    }
+    return .Unknown
+}

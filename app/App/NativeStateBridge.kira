@@ -2,4 +2,36 @@ struct GraphicsAppRuntimeState {
     var app: GraphicsApplication
     var userData: RawPtr
     var frameIndex: Int = 0
+    // The Sokol backend's running lifetime-peak counters (see
+    // `SokolLifetime.kira`). Lives here because this is the one state blob
+    // both `kiraGraphicsSokolFrame` (which samples every frame) and
+    // `kiraGraphicsSokolCleanup` (which reports at the end) already recover.
+    var lifetimePeaks: LifetimePeaks = LifetimePeaks {}
+    // The Sokol backend's row-order correction (see `SokolRowOrder.kira`): one
+    // compute pipeline, built the first time a render pass writes a target that
+    // will be sampled. Here for the same reason the peaks are — this is the
+    // state blob every frame already recovers.
+    var rowFlip: SokolRowFlip = SokolRowFlip {}
+    // The Sokol backend's render-pass state (see `SokolPass.kira`): whether a
+    // pass is open, its extent, and the managed offscreen depth buffer. These
+    // were C statics until the legacy immediate-mode UI renderer that shared
+    // them was deleted.
+    var pass: SokolPassState = SokolPassState {}
+    // The harness knobs, read once at init rather than per frame.
+    //
+    // They are launch settings — nothing changes them while a process runs — and
+    // asking the environment for one costs a linear scan and a fresh string on
+    // every frame, in a callback whose whole job is not to allocate. Read once,
+    // the frame callback only compares two integers.
+    var quitAfterFrames: Int = 0
+    var captureAtFrame: Int = 0
+    var capturePath: String = ""
+    // Sokol's copy of the UI driving script. It is parsed once at init and
+    // injected through the normal AppEvent handler before a frame draws.
+    var clickScript: [Int] = []
+    // What the Sokol backend answers `frame.statistics()` with. Here because a
+    // frame's counters have to outlive the frame that produced them: a HUD is
+    // laid out while the frame it describes is still being built, so what it
+    // can honestly show is the frame before it.
+    var frameStats: SokolFrameStats = SokolFrameStats {}
 }
