@@ -1,0 +1,56 @@
+// Swap a texture's rows top for bottom, in place.
+//
+// What it is for: a backend whose framebuffer origin is the bottom-left stores
+// a render target's first row where a sampler reads its last one, while a
+// texture uploaded from CPU pixels keeps its first row first. The two disagree,
+// and a shader that samples one cannot tell which it was handed. The Sokol
+// backend runs this over a colour target as the pass writing it ends, so every
+// sampled texture reads the same way whichever way it was filled.
+//
+// One invocation owns a row PAIR: it reads both texels and writes both back
+// swapped, so no two invocations touch the same texel and the dispatch needs no
+// ordering between them. Half the rows are dispatched for that reason.
+
+type RowFlipExtent {
+    let width: UInt
+    let height: UInt
+}
+
+type RowFlipThread {
+    @builtin(thread_id)
+    let gid: UInt3
+}
+
+shader FlipRenderTargetRows {
+    group RowFlip {
+        uniform rowFlip: RowFlipExtent
+        // Read and written through the same image binding: an in-place swap has
+        // nowhere else to put the row it lifts.
+        texture read_write target: Texture2d
+    }
+
+    compute {
+        input RowFlipThread
+        threads(16, 16, 1)
+
+        function entry(thread: RowFlipThread) {
+            // A dispatch is rounded up to whole threadgroups, so the tail
+            // threads address texels that do not exist.
+            if thread.gid.x >= rowFlip.width {
+                return
+            }
+            // The middle row of an odd-height target is already where it
+            // belongs, and integer division leaves it out.
+            if thread.gid.y >= rowFlip.height / UInt(2) {
+                return
+            }
+            let low = UInt2(thread.gid.x, thread.gid.y)
+            let high = UInt2(thread.gid.x, rowFlip.height - UInt(1) - thread.gid.y)
+            let lowTexel = load(target, low)
+            let highTexel = load(target, high)
+            store(target, low, highTexel)
+            store(target, high, lowTexel)
+            return
+        }
+    }
+}
