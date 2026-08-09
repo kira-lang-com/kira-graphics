@@ -6,14 +6,13 @@ Kira Graphics is organized around a stable public facade, explicit descriptor da
 
 `app/Public/`
 
-- user-facing API objects and handles such as `GraphicsApplication`, `Graphics`, `GraphicsFrame`, `RenderEncoder`, `GraphicsBuffer`, `GraphicsTexture`, `GraphicsShader`, and `RenderPipeline`
+- user-facing API objects and handles such as `GraphicsApplication`, `Graphics`, `RenderFrame`, `RenderEncoder`, `GraphicsBuffer`, `GraphicsTexture`, `GraphicsShader`, and `RenderPipeline`
 - compiler-safe Int helper constants in `Constants.kira`
 - lifecycle callback surface that examples import directly through `KiraGraphics`
 
 `app/Core/`
 
 - runtime flow from lifecycle callbacks to frame submission
-- validation helpers such as `graphicsValidatePipeline`, `graphicsValidateBuffer`, and `graphicsValidateTexture`
 - diagnostics and bookkeeping that should stay backend-agnostic
 
 `app/Resources/` and `app/Shader/`
@@ -95,7 +94,7 @@ That path keeps today’s compiler-safe API honest while preserving the intended
 
 ## The Metal Backend (no shim)
 
-`GraphicsBackend.Metal` is a from-scratch Metal backend for Apple platforms,
+`RenderBackendKind.Metal` is a from-scratch Metal backend for Apple platforms,
 selected per-platform alongside Sokol (which still serves Windows/Linux/Web). It
 replaces the legacy OpenGL path used by Sokol on macOS with a real `CAMetalLayer`
 surface.

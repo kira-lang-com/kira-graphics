@@ -51,7 +51,7 @@ function Assert-ZeroLifetimeReport {
         [string]$Context
     )
 
-    $expected = "Kira Graphics lifetime report: shaders=0 pipelines=0 textures=0 uniforms=0 bindGroups=0"
+    $expected = "Kira Graphics lifetime report: buffers=0 images=0 samplers=0 views=0 shaders=0 pipelines=0"
     if ($Output -notlike "*$expected*") {
         throw "$Context did not end with zero Kira Graphics lifetime counters."
     }

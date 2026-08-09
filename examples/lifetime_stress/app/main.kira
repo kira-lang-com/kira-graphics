@@ -26,7 +26,7 @@ function main() {
         if (!stressState.didRun) {
             let graphics = Graphics {
                 userData: frame.userData
-                metalContext: metalNullPtr()
+                backendContext: nullPointer()
             }
             stressState.success = graphics.runLifetimeStress(200, "generated/shaders", "LifetimeStress")
             stressState.didRun = true
