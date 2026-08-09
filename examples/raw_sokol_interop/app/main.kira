@@ -1,8 +1,5 @@
 import KiraGraphics
 
-@FFI.Extern { library: sokol; symbol: kg_begin_swapchain_pass; abi: c; }
-function kgBeginSwapchainPass(r: F32, g: F32, b: F32, a: F32): Void;
-
 struct RawSokolState {
     var shaderId: U32 = 0
     var pipelineId: U32 = 0
@@ -46,7 +43,21 @@ function rawSokolInit(data: RawPtr) -> Void {
 @Native
 function rawSokolFrame(data: RawPtr) -> Void {
     var state = nativeRecover<RawSokolState>(data)
-    kgBeginSwapchainPass(0.04, 0.05, 0.08, 1.0)
+    sg_begin_pass(move sg_pass {
+        action: sg_pass_action {
+            colors: sg_color_attachment_action_array_8 {
+                elements: [
+                    sg_color_attachment_action {
+                        load_action: 1
+                        store_action: 1
+                        clear_value: sg_color { r: 0.04 g: 0.05 b: 0.08 a: 1.0 }
+                    }
+                ]
+            }
+        }
+        swapchain: sglue_swapchain()
+        label: "raw-sokol-swapchain-pass"
+    })
     sg_apply_viewport(0, 0, sapp_width(), sapp_height(), true)
     sg_apply_pipeline(sg_pipeline { id: state.pipelineId })
     sg_draw(0, 3, 1)

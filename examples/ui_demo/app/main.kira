@@ -7,7 +7,7 @@ struct UiDemoState {
     var vertices: GraphicsBuffer
 }
 
-function uiDemoVertices() -> [Float] {
+function uiDemoVertices() -> [F32] {
     return [
         -0.44, -0.24,
         0.44, -0.24,
@@ -39,7 +39,7 @@ function uiDemoVertexLayout() -> VertexLayout {
             VertexAttribute {
                 name: "position"
                 location: 0
-                format: vertexFormatFloat2()
+                format: VertexFormat.Float2
                 offset: 0
             }
         ]
@@ -64,48 +64,47 @@ function main() {
     app.onInit { graphics in
         var uiState = nativeRecover<UiDemoState>(graphics.userData)
 
-        uiState.shader = graphics.createShader(ShaderDescriptor {
+        uiState.shader = shaderOrReport(graphics.createShader(ShaderDescriptor {
             label: "ui-demo-shader"
             vertexSource: ""
             fragmentSource: ""
             vertexPath: "generated/shaders/UiDemo.vert.glsl"
             fragmentPath: "generated/shaders/UiDemo.frag.glsl"
-        })
+        }), "shader")
 
-        uiState.vertices = graphics.createBuffer(BufferDescriptor {
+        uiState.vertices = bufferOrReport(graphics.createBuffer(BufferDescriptor {
             label: "ui-demo-vertices"
-            usage: bufferUsageVertex()
-            stride: 8
+            usage: BufferUsage.Vertex
             data: uiDemoVertices()
-        })
+        }), "vertices")
 
-        uiState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+        uiState.pipeline = pipelineOrReport(graphics.createRenderPipeline(RenderPipelineDescriptor {
             label: "ui-demo-pipeline"
             shader: uiState.shader
             vertexLayout: uiDemoVertexLayout()
             colorTargets: [
                 ColorTargetDescriptor {
-                    format: textureFormatSwapchain()
+                    format: TextureFormat.Swapchain
                     blend: BlendState {
                         enabled: false
-                        preset: blendPresetReplace()
+                        preset: BlendPreset.Replace
                     }
                 }
             ]
             depthStencil: DepthStencilDescriptor {
                 depthEnabled: false
                 depthWriteEnabled: false
-                depthCompare: compareFunctionAlways()
-                format: textureFormatDepth24Stencil8()
+                depthCompare: CompareFunction.Always
+                format: TextureFormat.None
             }
             rasterization: RasterizationDescriptor {
-                cullMode: cullModeNone()
-                frontFace: frontFaceCounterClockwise()
+                cullMode: CullMode.None
+                frontFace: FrontFace.CounterClockwise
             }
             primitive: PrimitiveDescriptor {
-                topology: primitiveTopologyTriangleList()
+                topology: PrimitiveTopology.TriangleList
             }
-        })
+        }), "pipeline")
         return
     }
 

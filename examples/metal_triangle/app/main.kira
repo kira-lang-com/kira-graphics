@@ -13,7 +13,7 @@ struct TriangleState {
     var vertices: GraphicsBuffer
 }
 
-function triangleVertices() -> [Float] {
+function triangleVertices() -> [F32] {
     return [
         0.0, 0.7,
         0.7, -0.7,
@@ -32,7 +32,7 @@ function triangleLayout() -> VertexLayout {
             VertexAttribute {
                 name: "position"
                 location: 0
-                format: vertexFormatFloat2()
+                format: VertexFormat.Float2
                 offset: 0
             }
         ]
@@ -45,8 +45,8 @@ function trianglePass() -> RenderPassDescriptor {
         colorAttachments: [
             ColorAttachment {
                 target: swapchainRenderTarget()
-                loadAction: loadActionClear()
-                storeAction: storeActionStore()
+                loadAction: LoadAction.Clear
+                storeAction: StoreAction.Store
                 clearColor: Color {
                     r: 0.05
                     g: 0.05
@@ -59,8 +59,8 @@ function trianglePass() -> RenderPassDescriptor {
         ]
         primaryColorAttachment: ColorAttachment {
             target: swapchainRenderTarget()
-            loadAction: loadActionClear()
-            storeAction: storeActionStore()
+            loadAction: LoadAction.Clear
+            storeAction: StoreAction.Store
             clearColor: Color {
                 r: 0.05
                 g: 0.05
@@ -86,7 +86,7 @@ function main() {
         width: 480
         height: 480
         sampleCount: 1
-        backend: GraphicsBackend.Metal
+        backend: RenderBackendKind.Metal
     }
     let state = nativeState(TriangleState {
         shader: emptyGraphicsShader()
@@ -96,46 +96,45 @@ function main() {
 
     app.onInit { graphics in
         var triangleState = nativeRecover<TriangleState>(graphics.userData)
-        triangleState.shader = graphics.createShader(ShaderDescriptor {
+        triangleState.shader = shaderOrReport(graphics.createShader(ShaderDescriptor {
             label: "metal-triangle-shader"
             vertexSource: triangleSource()
             fragmentSource: ""
             vertexPath: ""
             fragmentPath: ""
-        })
-        triangleState.vertices = graphics.createBuffer(BufferDescriptor {
+        }), "shader")
+        triangleState.vertices = bufferOrReport(graphics.createBuffer(BufferDescriptor {
             label: "metal-triangle-vertices"
-            usage: bufferUsageVertex()
-            stride: 8
+            usage: BufferUsage.Vertex
             data: triangleVertices()
-        })
-        triangleState.pipeline = graphics.createRenderPipeline(RenderPipelineDescriptor {
+        }), "vertices")
+        triangleState.pipeline = pipelineOrReport(graphics.createRenderPipeline(RenderPipelineDescriptor {
             label: "metal-triangle-pipeline"
             shader: triangleState.shader
             vertexLayout: triangleLayout()
             colorTargets: [
                 ColorTargetDescriptor {
-                    format: textureFormatSwapchain()
+                    format: TextureFormat.Swapchain
                     blend: BlendState {
                         enabled: false
-                        preset: blendPresetReplace()
+                        preset: BlendPreset.Replace
                     }
                 }
             ]
             depthStencil: DepthStencilDescriptor {
                 depthEnabled: false
                 depthWriteEnabled: false
-                depthCompare: compareFunctionAlways()
-                format: textureFormatDepth24Stencil8()
+                depthCompare: CompareFunction.Always
+                format: TextureFormat.None
             }
             rasterization: RasterizationDescriptor {
-                cullMode: cullModeNone()
-                frontFace: frontFaceCounterClockwise()
+                cullMode: CullMode.None
+                frontFace: FrontFace.CounterClockwise
             }
             primitive: PrimitiveDescriptor {
-                topology: primitiveTopologyTriangleList()
+                topology: PrimitiveTopology.TriangleList
             }
-        })
+        }), "pipeline")
         return
     }
 
