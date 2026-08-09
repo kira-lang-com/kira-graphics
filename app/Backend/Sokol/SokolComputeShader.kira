@@ -1,0 +1,314 @@
+import Foundation
+// A compute shader and its pipeline, built in Kira from KSL reflection.
+//
+// The graphics shader path still goes through `kg_make_shader_ksl_inline`,
+// which greps a vertex/fragment pair's source for the legacy scene/object
+// convention when a shader carries no reflection. A compute shader has no
+// legacy to be compatible with: every one of them comes from `ksl!` and
+// therefore carries a digest, so this path is reflection-only and builds its
+// `sg_shader_desc` directly through the generated bindings.
+//
+// What the digest decides here: which slot each texture, sampler and storage
+// image binds at, which GL image unit a written texture's `layout(binding = n)`
+// named, and what type each uniform member is loaded as. Nothing below is
+// hardcoded per shader.
+
+// sokol's `sg_shader_stage` ordinals. Compute is the only one this file names —
+// a resource declared in a compute shader is read by the compute stage.
+function sokolShaderStageNone() -> I32 {
+    return 0
+}
+
+function sokolShaderStageCompute() -> I32 {
+    return 3
+}
+
+// `SG_IMAGESAMPLETYPE_FLOAT` and `SG_SAMPLERTYPE_FILTERING`, past each enum's
+// reserved default at 0.
+function sokolImageSampleTypeFloat() -> I32 {
+    return 1
+}
+
+function sokolSamplerTypeFiltering() -> I32 {
+    return 1
+}
+
+// `SG_UNIFORMLAYOUT_STD140`. The KSL compiler lays every uniform block out to
+// std140 and reports the offsets it produced, so telling sokol the rule is what
+// makes the offsets it computes for itself agree with them.
+function sokolUniformLayoutStd140() -> I32 {
+    return 2
+}
+
+// sokol's `sg_uniform_type` ordinals, from `SG_UNIFORMTYPE_FLOAT` at 1.
+function sokolUniformTypeFloat() -> I32 {
+    return 1
+}
+
+function sokolUniformTypeInt() -> I32 {
+    return 5
+}
+
+// The sokol uniform type one member's kind and width name.
+//
+// The float and integer families are four wide each and run in parallel, so a
+// width picks the offset within a family and the kind picks the family. An
+// unsigned member takes the integer family: sokol has no unsigned uniform type,
+// and a four-byte integral uniform is what `glUniform*iv` loads.
+@Native
+function sokolUniformMemberType(member: borrow KslUniformMember) -> I32 {
+    var family = sokolUniformTypeFloat()
+    match member.kind {
+        Floating -> family = sokolUniformTypeFloat();
+        Signed -> family = sokolUniformTypeInt();
+        Unsigned -> family = sokolUniformTypeInt();
+    }
+    if member.size == 8 {
+        return family + 1
+    }
+    if member.size == 12 {
+        return family + 2
+    }
+    if member.size == 16 {
+        return family + 3
+    }
+    // A 4x4 matrix is the one member wider than a vector, and it is float-only.
+    if member.size == 64 {
+        return 9
+    }
+    return family
+}
+
+// A view slot no stage reads, which is how a shader desc says the slot is not
+// there at all.
+@Native
+function sokolEmptyShaderView() -> sg_shader_view {
+    return sg_shader_view {
+        texture: sg_shader_texture_view {
+            stage: sokolShaderStageNone()
+        }
+    }
+}
+
+// The name GL looks a uniform block member up by: the block's own name, dotted.
+// The GLSL backend emits a struct-typed uniform rather than an interface block,
+// so `params.width` is the name in the linked program.
+@Native
+function sokolUniformMemberName(block: borrow KslUniformBlock, member: borrow KslUniformMember) -> String {
+    return block.name + "." + member.name
+}
+
+@Native
+function sokolComputeUniformBlocks(reflection: borrow KslResourceReflection) -> [sg_shader_uniform_block] {
+    var blocks: [sg_shader_uniform_block] = []
+    var index = 0
+    while index < reflection.uniforms.count {
+        let block = reflection.uniforms[index]
+        while blocks.count <= block.binding {
+            blocks.append(sg_shader_uniform_block {
+                stage: sokolShaderStageNone()
+            })
+        }
+        var members: [sg_glsl_shader_uniform] = []
+        var memberIndex = 0
+        while memberIndex < block.members.count {
+            let member = block.members[memberIndex]
+            members.append(sg_glsl_shader_uniform {
+                type_value: sokolUniformMemberType(member)
+                array_count: U16(1)
+                glsl_name: sokolUniformMemberName(block, member)
+            })
+            memberIndex = memberIndex + 1
+        }
+        blocks[block.binding] = sg_shader_uniform_block {
+            stage: sokolShaderStageCompute()
+            size: U32(block.size)
+            layout: sokolUniformLayoutStd140()
+            wgsl_group0_binding_n: U8(block.binding)
+            msl_buffer_n: U8(block.binding)
+            hlsl_register_b_n: U8(block.binding)
+            spirv_set0_binding_n: U8(block.binding)
+            glsl_uniforms: sg_glsl_shader_uniform_array_16 {
+                elements: members
+            }
+        }
+        index = index + 1
+    }
+    return blocks
+}
+
+@Native
+function sokolComputeSamplers(reflection: borrow KslResourceReflection) -> [sg_shader_sampler] {
+    var samplers: [sg_shader_sampler] = []
+    var index = 0
+    while index < reflection.samplers.count {
+        let sampler = reflection.samplers[index]
+        while samplers.count <= sampler.binding {
+            samplers.append(sg_shader_sampler {
+                stage: sokolShaderStageNone()
+            })
+        }
+        samplers[sampler.binding] = sg_shader_sampler {
+            stage: sokolShaderStageCompute()
+            sampler_type: sokolSamplerTypeFiltering()
+            hlsl_register_s_n: U8(sampler.binding)
+            msl_sampler_n: U8(sampler.binding)
+            wgsl_group1_binding_n: U8(sampler.binding)
+            spirv_set1_binding_n: U8(sampler.binding)
+        }
+        index = index + 1
+    }
+    return samplers
+}
+
+// Textures and storage images share one slot space, because `sg_bindings.views`
+// is one array — which is also why a shader numbers both out of it.
+@Native
+function sokolComputeViews(reflection: borrow KslResourceReflection) -> [sg_shader_view] {
+    var views: [sg_shader_view] = []
+    var index = 0
+    while index < reflection.textures.count {
+        let texture = reflection.textures[index]
+        while views.count <= texture.binding {
+            views.append(sokolEmptyShaderView())
+        }
+        views[texture.binding] = sg_shader_view {
+            texture: sg_shader_texture_view {
+                stage: sokolShaderStageCompute()
+                image_type: sokolImageType2d()
+                sample_type: sokolImageSampleTypeFloat()
+                hlsl_register_t_n: U8(texture.binding)
+                msl_texture_n: U8(texture.binding)
+                wgsl_group1_binding_n: U8(texture.binding)
+                spirv_set1_binding_n: U8(texture.binding)
+            }
+        }
+        index = index + 1
+    }
+    index = 0
+    while index < reflection.images.count {
+        let image = reflection.images[index]
+        while views.count <= image.binding {
+            views.append(sokolEmptyShaderView())
+        }
+        views[image.binding] = sg_shader_view {
+            storage_image: sg_shader_storage_image_view {
+                stage: sokolShaderStageCompute()
+                image_type: sokolImageType2d()
+                // The format the emitted `layout(binding = n, rgba8)` names. It
+                // is spelled in the shader because GLSL resolves an
+                // `imageStore`'s texel conversion from it, and GL wants the same
+                // format at `glBindImageTexture`.
+                access_format: sokolPixelFormatRgba8()
+                writeonly: image.writeOnly
+                glsl_binding_n: U8(image.glslBinding)
+                hlsl_register_u_n: U8(image.binding)
+                msl_texture_n: U8(image.binding)
+                wgsl_group1_binding_n: U8(image.binding)
+                spirv_set1_binding_n: U8(image.binding)
+            }
+        }
+        index = index + 1
+    }
+    return views
+}
+
+// The texture/sampler pairs GL needs, because it has no standalone sampler:
+// a texture and the sampler its body reads it with collapse into one
+// `sampler2D`, and `glslName` is what that one is called.
+@Native
+function sokolComputeTextureSamplerPairs(reflection: borrow KslResourceReflection) -> [sg_shader_texture_sampler_pair] {
+    var pairs: [sg_shader_texture_sampler_pair] = []
+    var index = 0
+    while index < reflection.textures.count {
+        let texture = reflection.textures[index]
+        if texture.samplerBinding < 12 {
+            pairs.append(sg_shader_texture_sampler_pair {
+                stage: sokolShaderStageCompute()
+                view_slot: U8(texture.binding)
+                sampler_slot: U8(texture.samplerBinding)
+                glsl_name: texture.glslName
+            })
+        }
+        index = index + 1
+    }
+    return pairs
+}
+
+// `SG_BACKEND_WGPU`, the one sokol backend here that reads WGSL rather than
+// GLSL. Asked of the running context rather than decided by a build flag, so a
+// binary that could bring up either picks the source the device compiles.
+function sokolBackendWgpu() -> I32 {
+    return 6
+}
+
+// Create a compute shader from the artifact's kernel, in the language the
+// running backend compiles.
+//
+// GLSL's entry point is always `main` — the emitter writes the stage function
+// as `void main()` because that is what GL links — while WGSL keeps the name
+// KSL gave it, which is what `computeEntry` carries.
+@Native
+function sokolCreateComputeShader(label: borrow String, artifact: borrow KslArtifact) -> ShaderResult {
+    var source = artifact.computeGlsl
+    var entry = "main"
+    if sg_query_backend() == sokolBackendWgpu() {
+        source = artifact.computeWgsl
+        entry = artifact.computeEntry
+    }
+    if source.count == 0 {
+        // A shader, not a backend: the kernel compiled to nothing for the
+        // language this device reads, so there is no source to hand over.
+        graphicsDiagnostic("Kira Graphics: '" + label + "' has no compute source for this backend")
+        return .Error(.ShaderRejected)
+    }
+    let reflection = kslParseResourceReflection(artifact.resourceReflection)
+    // A storage buffer in a compute shader would need the dispatch to name the
+    // buffer that fills it, and no dispatch here takes one. Refused rather than
+    // left undeclared: an undeclared block reaches the driver, binds nothing,
+    // and reads zero.
+    if reflection.storageBufferCount > 0 {
+        graphicsDiagnostic("Kira Graphics: '" + label + "' declares a storage buffer, which the compute dispatch cannot bind")
+        return .Error(.ShaderRejected)
+    }
+    let shader = sg_make_shader(move sg_shader_desc {
+        compute_func: sg_shader_function {
+            source: source
+            entry: entry
+        }
+        uniform_blocks: sg_shader_uniform_block_array_8 {
+            elements: sokolComputeUniformBlocks(reflection)
+        }
+        views: sg_shader_view_array_32 {
+            elements: sokolComputeViews(reflection)
+        }
+        samplers: sg_shader_sampler_array_12 {
+            elements: sokolComputeSamplers(reflection)
+        }
+        texture_sampler_pairs: sg_shader_texture_sampler_pair_array_32 {
+            elements: sokolComputeTextureSamplerPairs(reflection)
+        }
+        label: label
+    })
+    if shader.id == 0 {
+        return .Error(.ShaderRejected)
+    }
+    return .Ok(GraphicsShader {
+        id: shader.id
+    })
+}
+
+// A pipeline that runs a compute shader. It carries no vertex layout, no colour
+// targets and no depth state, which is what `compute: true` says.
+@Native
+function sokolCreateComputePipelineId(label: borrow String, shader: borrow GraphicsShader) -> Int {
+    if shader.id == 0 {
+        return 0
+    }
+    let pipeline = sg_make_pipeline(move sg_pipeline_desc {
+        compute: true
+        shader: sg_shader { id: shader.id }
+        label: label
+    })
+    return Int(pipeline.id)
+}

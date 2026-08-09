@@ -1,0 +1,265 @@
+// The Sokol backend's draw path: applying a pipeline, its vertex/index
+// buffers, its bound textures/samplers and its bound uniforms, then issuing
+// the draw call — directly through the generated `sg_*` bindings.
+//
+// This replaced `kg_apply_pipeline_bindings_and_draw`, a single C function
+// that read four resource tables (`kg_shader_records`, `kg_pipeline_records`,
+// `kg_uniform_records`, `kg_bind_group_records`) to resolve a pipeline id and
+// up to four bind-group ids into what Sokol actually needs. None of those
+// tables exist anymore: `RenderPipeline` and `BindGroup` already carry
+// everything this needs as real Kira values, so there is nothing left to look
+// up. Nothing of it is in C now either: the pass Kira began is the pass Kira
+// records, so whether a draw may proceed and how big the target is are read off
+// `SokolPassState` rather than out of Sokol's private `_sg.cur_pass`.
+
+// The Sokol `uniform_blocks[]` slot(s) a bind entry's public slot maps to, as
+// a bitmask (bit N set means block N). Reflection-driven shaders answer from
+// `pipeline.uniformBlocks`; a shader with none falls back to the legacy
+// scene(0)/object(1) slot convention every pre-reflection KSL shader used.
+@Native
+function sokolUniformTargetMask(pipeline: borrow RenderPipeline, publicSlot: Int) -> Int {
+    if pipeline.uniformBlocks.count > 0 {
+        var mask = 0
+        var i = 0
+        while i < pipeline.uniformBlocks.count {
+            let block = pipeline.uniformBlocks[i]
+            if block.binding == publicSlot {
+                if block.vertexBlockSlot >= 0 {
+                    mask = mask | (1 << block.vertexBlockSlot)
+                }
+                if block.fragmentBlockSlot >= 0 {
+                    mask = mask | (1 << block.fragmentBlockSlot)
+                }
+            }
+            i = i + 1
+        }
+        return mask
+    }
+
+    var targetMask = 0
+    if publicSlot == 0 {
+        targetMask = pipeline.availableUniformMask & (1 | 4)
+    } else if publicSlot == 1 {
+        targetMask = pipeline.availableUniformMask & (2 | 8)
+    } else if publicSlot >= 0 && publicSlot < 32 {
+        targetMask = pipeline.availableUniformMask & (1 << publicSlot)
+    }
+    if targetMask == 0 && publicSlot >= 0 && publicSlot < 32 {
+        targetMask = 1 << publicSlot
+    }
+    return targetMask
+}
+
+// The std140 byte size a uniform bound at `publicSlot` is expected to have.
+// Reflection-driven: the pipeline's own block size for the binding that
+// matches. Legacy scene/object: the two hardcoded sizes every pre-reflection
+// KSL shader's scene/object blocks were built with.
+@Native
+function sokolExpectedUniformSlotSize(pipeline: borrow RenderPipeline, publicSlot: Int, actualByteSize: Int) -> Int {
+    if pipeline.uniformBlocks.count > 0 {
+        var i = 0
+        while i < pipeline.uniformBlocks.count {
+            if pipeline.uniformBlocks[i].binding == publicSlot {
+                return pipeline.uniformBlocks[i].size
+            }
+            i = i + 1
+        }
+        return actualByteSize
+    }
+    if publicSlot == 0 {
+        return 96
+    }
+    if publicSlot == 1 {
+        return 80
+    }
+    return actualByteSize
+}
+
+// Applies one bound uniform's current floats at every Sokol block slot its
+// public slot maps to, after checking its size matches what the pipeline
+// expects. Returns whether the draw may proceed.
+@Native
+function sokolApplyUniformEntry(pipeline: borrow RenderPipeline, entry: borrow UniformBindEntry) -> Bool {
+    if entry.uniform.id == 0 {
+        return true
+    }
+    let uniform = sokolUniformState(entry.uniform)
+    let byteSize = uniform.values.count * 4
+    let expectedSize = sokolExpectedUniformSlotSize(pipeline, entry.uniformSlot, byteSize)
+    if byteSize == 0 || byteSize != expectedSize {
+        graphicsDiagnostic("Kira Graphics: uniform buffer '" + uniform.label + "' upload size does not match what the pipeline expects for its bound slot")
+        return false
+    }
+    let targetMask = sokolUniformTargetMask(pipeline, entry.uniformSlot)
+    var targetSlot = 0
+    while targetSlot < 32 {
+        if (targetMask & (1 << targetSlot)) != 0 {
+            sokolApplyUniformFloats(targetSlot, uniform.values)
+        }
+        targetSlot = targetSlot + 1
+    }
+    return true
+}
+
+// Applies one uniform block's floats at the Sokol block slot Kira resolved.
+// The elements name the `sg_range`'s data pointer, so the call reaches sokol
+// with nothing of Kira's in between.
+@Native
+function sokolApplyUniformFloats(slot: Int, values: borrow [F32]) {
+    sg_apply_uniforms(I32(slot), move sg_range { ptr: values, size: U64(values.count * 4) })
+    return
+}
+
+// Applies a pipeline, its vertex/index buffers, up to four bind groups' worth
+// of textures/samplers/uniforms, then draws.
+@Native
+function sokolDrawWithBindings(
+    // The `GraphicsAppRuntimeState` the pass was begun through: a draw belongs
+    // to a pass, and the pass belongs to a running application.
+    runtime: RawPtr,
+    hasScissor: Bool, scissorX: Int, scissorY: Int, scissorWidth: Int, scissorHeight: Int,
+    pipeline: borrow RenderPipeline,
+    vertexBufferId: U32, hasVertexBuffer: Bool,
+    indexBufferId: U32, hasIndexBuffer: Bool,
+    bindGroup0: borrow BindGroup, hasBindGroup0: Bool,
+    bindGroup1: borrow BindGroup, hasBindGroup1: Bool,
+    bindGroup2: borrow BindGroup, hasBindGroup2: Bool,
+    bindGroup3: borrow BindGroup, hasBindGroup3: Bool,
+    baseElement: Int,
+    vertexCount: Int,
+    indexCount: Int,
+    instanceCount: Int
+) -> Bool {
+    if !sokolPassIsActive(runtime) {
+        graphicsDiagnostic("Kira Graphics skipped draw because no render pass is currently active")
+        return false
+    }
+
+    let wantsIndexed = indexCount > 0 && hasIndexBuffer
+    let activePipelineId = wantsIndexed ? pipeline.indexedPipelineId : pipeline.drawPipelineId
+    if activePipelineId == 0 {
+        graphicsDiagnostic("Kira Graphics skipped draw because the pipeline has no compiled Sokol pipeline for this draw")
+        return false
+    }
+    if !hasVertexBuffer && pipeline.hasPositionAttribute {
+        graphicsDiagnostic("Kira Graphics skipped draw because no valid vertex buffer was bound")
+        return false
+    }
+
+    // The extent of the pass being drawn into, not the window's. An offscreen
+    // target — a glass capture, a blur level — is its own size, and taking the
+    // drawable's here left every offscreen draw viewported to a rectangle larger
+    // than the thing it was rendering to.
+    let width = I32(sokolPassWidth(runtime))
+    let height = I32(sokolPassHeight(runtime))
+    sg_apply_viewport(0, 0, width, height, false)
+    // The encoder's scissor when it has one, the whole pass when it does not.
+    // Resetting to the whole pass unconditionally is what made
+    // `RenderEncoder.setScissorRect` a no-op here: the caller's rectangle was
+    // applied and then overwritten by the next draw, before anything was drawn
+    // through it.
+    if hasScissor {
+        sg_apply_scissor_rect(I32(scissorX), I32(scissorY), I32(scissorWidth), I32(scissorHeight), true)
+    } else {
+        sg_apply_scissor_rect(0, 0, width, height, false)
+    }
+    sg_apply_pipeline(sg_pipeline { id: activePipelineId })
+
+    var vertexBuffers: [sg_buffer] = []
+    if hasVertexBuffer {
+        vertexBuffers.append(sg_buffer { id: vertexBufferId })
+    }
+
+    let groups: [BindGroup] = [bindGroup0, bindGroup1, bindGroup2, bindGroup3]
+    let hasGroups: [Bool] = [hasBindGroup0, hasBindGroup1, hasBindGroup2, hasBindGroup3]
+
+    var views: [sg_view] = []
+    var samplers: [sg_sampler] = []
+    var groupIndex = 0
+    while groupIndex < 4 {
+        if hasGroups[groupIndex] {
+            let state = sokolBindGroupState(groups[groupIndex])
+            var textureIndex = 0
+            while textureIndex < state.textureEntries.count {
+                let entry = state.textureEntries[textureIndex]
+                while views.count <= entry.textureSlot {
+                    views.append(sg_view { id: 0 })
+                }
+                views[entry.textureSlot] = sg_view { id: U32(entry.texture.viewId) }
+                textureIndex = textureIndex + 1
+            }
+            var samplerIndex = 0
+            while samplerIndex < state.samplerEntries.count {
+                let entry = state.samplerEntries[samplerIndex]
+                while samplers.count <= entry.samplerSlot {
+                    samplers.append(sg_sampler { id: 0 })
+                }
+                samplers[entry.samplerSlot] = sg_sampler { id: entry.sampler.id }
+                samplerIndex = samplerIndex + 1
+            }
+            // Storage buffers share the view array with textures, which is why
+            // a shader numbers both out of one slot space.
+            var storageIndex = 0
+            while storageIndex < state.storageEntries.count {
+                let entry = state.storageEntries[storageIndex]
+                while views.count <= entry.storageSlot {
+                    views.append(sg_view { id: 0 })
+                }
+                views[entry.storageSlot] = sg_view { id: entry.viewId }
+                storageIndex = storageIndex + 1
+            }
+        }
+        groupIndex = groupIndex + 1
+    }
+
+    sg_apply_bindings(move sg_bindings {
+        vertex_buffers: sg_buffer_array_8 {
+            elements: vertexBuffers
+        }
+        // `wantsIndexed`, not `hasIndexBuffer`: the pipeline chosen above is the
+        // non-indexed one whenever this draw has no indices, and sokol refuses an
+        // index buffer against it (VALIDATE_ABND_EXPECTED_NO_IBUF). An encoder
+        // that set an index buffer for an earlier draw and then issued a
+        // vertex-count draw — the glass copy and blur passes do exactly that —
+        // otherwise aborted the process at the validation layer.
+        index_buffer: wantsIndexed ? sg_buffer { id: indexBufferId } : sg_buffer { id: 0 }
+        views: sg_view_array_32 {
+            elements: views
+        }
+        samplers: sg_sampler_array_12 {
+            elements: samplers
+        }
+    })
+
+    var appliedMask = 0
+    groupIndex = 0
+    while groupIndex < 4 {
+        if hasGroups[groupIndex] {
+            let state = sokolBindGroupState(groups[groupIndex])
+            var uniformIndex = 0
+            while uniformIndex < state.uniformEntries.count {
+                let entry = state.uniformEntries[uniformIndex]
+                if !sokolApplyUniformEntry(pipeline, entry) {
+                    return false
+                }
+                if entry.uniform.id != 0 {
+                    appliedMask = appliedMask | (1 << entry.uniformSlot)
+                }
+                uniformIndex = uniformIndex + 1
+            }
+        }
+        groupIndex = groupIndex + 1
+    }
+
+    if (pipeline.requiredUniformMask & appliedMask) != pipeline.requiredUniformMask {
+        graphicsDiagnostic("Kira Graphics skipped draw because the pipeline's required uniform slots were not all bound")
+        return false
+    }
+
+    if indexCount > 0 {
+        sg_draw_ex(I32(baseElement), I32(indexCount), I32(instanceCount), 0, 0)
+    } else if vertexCount > 0 {
+        sg_draw_ex(0, I32(vertexCount), I32(instanceCount), 0, 0)
+    }
+    return true
+}

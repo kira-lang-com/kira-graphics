@@ -1,0 +1,202 @@
+// Encoding a compute dispatch on the Sokol backend.
+//
+// A compute pass is its own pass: `sg_begin_pass` with `compute` set takes no
+// attachments, because what a kernel writes is bound like any other resource
+// rather than attached. The storage images it writes travel through the same
+// `sg_bindings.views` array the textures it reads do, at the slots the shader's
+// reflection numbered them with.
+//
+// sokol inserts the memory barriers between the two halves itself: it tracks
+// which images a dispatch wrote and emits the fetch barrier before the next
+// pass that samples them, so nothing here orders the reads by hand.
+
+// The threadgroup every kernel this backend dispatches declares — the blur
+// pair and the row flip. A dispatch counts whole groups, so a target whose
+// extent is not a multiple of this is covered by one more group per axis and
+// the kernels drop their tail threads themselves.
+function sokolComputeThreadgroupSize() -> Int {
+    return 16
+}
+
+@Native
+function sokolDispatchGroupCount(extent: Int) -> I32 {
+    let size = sokolComputeThreadgroupSize()
+    return I32((extent + size - 1) / size)
+}
+
+// The extent uniform both kernels read, as the words their `std140` block holds.
+//
+// Four rather than two: the block's declared size is 16 bytes and sokol checks
+// the range it is handed against it, so the padding the layout describes is
+// written rather than assumed away.
+@Native
+function sokolBlurExtentWords(width: Int, height: Int) -> [U32] {
+    return [U32(width), U32(height), U32(0), U32(0)]
+}
+
+// One dispatch over buffers: a simulation step rather than an image filter.
+//
+// Every buffer binds through a storage-buffer view, which is the only way sokol
+// binds a buffer to a shader — the same view `createStorageBufferBindGroup`
+// mints, made here per dispatch because the kernel's slots are the dispatch's
+// own and a caller holding a render bind group has nothing to hand over.
+//
+// The views are freed at the end: a view is a device object, and minting one per
+// frame without releasing it exhausts the pool as surely as a leaked buffer.
+@Native
+function sokolDispatchComputeBuffers(
+    pipelineId: Int,
+    bufferIds: borrow [U32],
+    threadCount: Int,
+    threadsPerGroup: Int,
+) {
+    if pipelineId == 0 || threadCount <= 0 || threadsPerGroup <= 0 {
+        return
+    }
+    var views: [sg_view] = []
+    var slot = 0
+    while slot < bufferIds.count {
+        let view = sg_make_view(move sg_view_desc {
+            storage_buffer: sg_buffer_view_desc {
+                buffer: sg_buffer { id: bufferIds[slot] }
+            }
+            label: "kira-graphics-compute-buffer"
+        })
+        if view.id == 0 {
+            graphicsDiagnostic("Kira Graphics skipped a compute dispatch because a buffer it binds was not created with a storage usage")
+            var undo = 0
+            while undo < views.count {
+                sg_destroy_view(views[undo])
+                undo = undo + 1
+            }
+            return
+        }
+        views.append(view)
+        slot = slot + 1
+    }
+    sg_begin_pass(move sg_pass {
+        compute: true
+        label: "kira-graphics-buffer-compute"
+    })
+    sg_apply_pipeline(sg_pipeline { id: U32(pipelineId) })
+    sg_apply_bindings(move sg_bindings {
+        views: sg_view_array_32 {
+            elements: views
+        }
+    })
+    sg_dispatch(I32((threadCount + threadsPerGroup - 1) / threadsPerGroup), 1, 1)
+    sg_end_pass()
+    var done = 0
+    while done < views.count {
+        sg_destroy_view(views[done])
+        done = done + 1
+    }
+    return
+}
+
+// One half of the blur pair: the reads at the slots after the sampler, then the
+// writes. Both kernels declare uniform, sampler, reads, writes in that order, so
+// one slot layout serves them and this takes the reads and writes as lists.
+@Native
+function sokolDispatchBlurHalf(
+    pipelineId: Int,
+    reads: borrow [GraphicsTexture],
+    writes: borrow [GraphicsTexture],
+    sampler: borrow GraphicsSampler,
+    width: Int,
+    height: Int,
+) {
+    sg_begin_pass(move sg_pass {
+        compute: true
+        label: "kira-graphics-blur-compute"
+    })
+    sg_apply_pipeline(sg_pipeline { id: U32(pipelineId) })
+
+    // Slot 0 is the uniform block, slot 1 the sampler; the views start at 2.
+    var views: [sg_view] = [sg_view { id: 0 }, sg_view { id: 0 }]
+    var index = 0
+    while index < reads.count {
+        views.append(sg_view { id: reads[index].viewId })
+        index = index + 1
+    }
+    index = 0
+    while index < writes.count {
+        views.append(sg_view { id: writes[index].storageViewId })
+        index = index + 1
+    }
+    sg_apply_bindings(move sg_bindings {
+        views: sg_view_array_32 {
+            elements: views
+        }
+        samplers: sg_sampler_array_12 {
+            elements: [sg_sampler { id: 0 }, sg_sampler { id: sampler.id }]
+        }
+    })
+
+    let extent = sokolBlurExtentWords(width, height)
+    sg_apply_uniforms(0, move sg_range {
+        ptr: extent
+        size: U64(extent.count * 4)
+    })
+    sg_dispatch(sokolDispatchGroupCount(width), sokolDispatchGroupCount(height), 1)
+    sg_end_pass()
+    return
+}
+
+// Whether every resource the pair needs actually exists.
+//
+// Checked before the first `sg_begin_pass` rather than per half: a storage view
+// that was never minted means the texture was created without asking for the
+// usage, and half a blur written is worse than none.
+@Native
+function sokolBlurPairIsBindable(
+    reads: borrow [GraphicsTexture],
+    writes: borrow [GraphicsTexture],
+    sampler: borrow GraphicsSampler,
+) -> Bool {
+    var index = 0
+    while index < reads.count {
+        if reads[index].viewId == 0 {
+            return false
+        }
+        index = index + 1
+    }
+    index = 0
+    while index < writes.count {
+        if writes[index].storageViewId == 0 {
+            return false
+        }
+        index = index + 1
+    }
+    return sampler.id != 0
+}
+
+@Native
+function sokolDispatchTextureComputePair(
+    horizontalPipelineId: Int,
+    verticalPipelineId: Int,
+    source: borrow GraphicsTexture,
+    tempNear: borrow GraphicsTexture,
+    tempFar: borrow GraphicsTexture,
+    outputNear: borrow GraphicsTexture,
+    outputFar: borrow GraphicsTexture,
+    sampler: borrow GraphicsSampler,
+    width: Int,
+    height: Int,
+) {
+    if horizontalPipelineId == 0 || verticalPipelineId == 0 || width <= 0 || height <= 0 {
+        return
+    }
+    let horizontalReads: [GraphicsTexture] = [source]
+    let horizontalWrites: [GraphicsTexture] = [tempNear, tempFar]
+    let verticalReads: [GraphicsTexture] = [tempNear, tempFar]
+    let verticalWrites: [GraphicsTexture] = [outputNear, outputFar]
+    if !sokolBlurPairIsBindable(horizontalReads, horizontalWrites, sampler)
+        || !sokolBlurPairIsBindable(verticalReads, verticalWrites, sampler) {
+        graphicsDiagnostic("Kira Graphics skipped the blur dispatch because a texture it writes was not created with a storage-image usage")
+        return
+    }
+    sokolDispatchBlurHalf(horizontalPipelineId, horizontalReads, horizontalWrites, sampler, width, height)
+    sokolDispatchBlurHalf(verticalPipelineId, verticalReads, verticalWrites, sampler, width, height)
+    return
+}

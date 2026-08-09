@@ -1,0 +1,109 @@
+import Foundation
+// The sokol backend's answers to the public `Graphics` surface.
+//
+// The counterpart of `MetalGraphics.kira`: one function per method the public
+// class dispatches, so `Graphics` stays a match and nothing else.
+
+@Native
+function sokolCreateGraphicsShader(descriptor: borrow ShaderDescriptor) -> GraphicsShader {
+    return sokolCreateShaderId(descriptor.label, descriptor.vertexSource, descriptor.fragmentSource, descriptor.vertexPath, descriptor.fragmentPath)
+}
+
+@Native
+function sokolCreateGraphicsShaderFromKsl(descriptor: borrow KslShaderDescriptor) -> GraphicsShader {
+    return sokolCreateShaderFromKslId(descriptor.label, descriptor.asset, descriptor.directory)
+}
+
+// A compute artifact and a graphics one take different routes.
+//
+// A compute shader's `sg_shader_desc` is built in Kira from the artifact's
+// reflection (`SokolComputeShader.kira`); a graphics one still goes through the
+// C helper, which also carries the pre-reflection scene/object fallback that no
+// compute shader has ever needed. `computeEntry` is what tells them apart, and
+// it is the same thing that decides which source is read.
+@Native
+function sokolCreateGraphicsShaderFromKslArtifact(label: borrow String, artifact: borrow KslArtifact) -> ShaderResult {
+    if artifact.computeEntry.count > 0 {
+        return sokolCreateComputeShader(label, artifact)
+    }
+    return shaderResult(sokolCreateShaderKslInlineId(
+        label,
+        artifact.vertexWgsl,
+        artifact.fragmentWgsl,
+        artifact.vertexGlsl,
+        artifact.fragmentGlsl,
+        artifact.vertexEntry,
+        artifact.fragmentEntry,
+        artifact.resourceReflection
+    ))
+}
+
+@Native
+function sokolGraphicsBuffer(id: U32, byteSize: Int = 0) -> GraphicsBuffer {
+    return GraphicsBuffer {
+        id: id
+        byteSize: byteSize
+    }
+}
+
+@Native
+function sokolCreateGraphicsBuffer(descriptor: borrow BufferDescriptor) -> GraphicsBuffer {
+    return sokolGraphicsBuffer(sokolMakeFloatBuffer(descriptor.label, descriptor.usage, descriptor.data), descriptor.data.count * 4)
+}
+
+@Native
+function sokolCreateGraphicsIndexBuffer(descriptor: borrow IndexBufferDescriptor) -> GraphicsBuffer {
+    return sokolGraphicsBuffer(sokolMakeIndexBuffer(descriptor.label, descriptor.data), descriptor.data.count * 4)
+}
+
+@Native
+function sokolCreateGraphicsBindGroup(descriptor: borrow BindGroupDescriptor) -> BindGroup {
+    var group = sokolCreateBindGroupId(descriptor.label)
+    var index = 0
+    while index < descriptor.uniformEntries.count {
+        let entry = descriptor.uniformEntries[index]
+        sokolBindGroupAddUniform(group, entry.uniformSlot, entry.uniform)
+        index = index + 1
+    }
+    index = 0
+    while index < descriptor.textureEntries.count {
+        let entry = descriptor.textureEntries[index]
+        sokolBindGroupAddTexture(group, entry.textureSlot, entry.texture)
+        index = index + 1
+    }
+    index = 0
+    while index < descriptor.samplerEntries.count {
+        let entry = descriptor.samplerEntries[index]
+        sokolBindGroupAddSampler(group, entry.samplerSlot, entry.sampler)
+        index = index + 1
+    }
+    return group
+}
+
+@Native
+function sokolCreateUniformBindGroup(label: borrow String, uniformSlot: Int, uniform: borrow Uniform) -> BindGroup {
+    var group = sokolCreateBindGroupId(label)
+    sokolBindGroupAddUniform(group, uniformSlot, uniform)
+    return group
+}
+
+@Native
+function sokolBeginGraphicsBindGroup(label: borrow String) -> BindGroup {
+    return sokolCreateBindGroupId(label)
+}
+
+@Native
+function sokolCreateGraphicsTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroup {
+    var group = sokolCreateBindGroupId(label)
+    sokolBindGroupAddTexture(group, textureSlot, texture)
+    sokolBindGroupAddSampler(group, samplerSlot, sampler)
+    return group
+}
+
+@Native
+function sokolCreateGraphicsSampler(descriptor: borrow SamplerDescriptor) -> GraphicsSampler {
+    let id = sokolCreateSamplerId(descriptor.label, textureFilterCode(descriptor.minFilter), textureFilterCode(descriptor.magFilter), addressModeCode(descriptor.addressModeU), addressModeCode(descriptor.addressModeV))
+    return GraphicsSampler {
+        id: id
+    }
+}

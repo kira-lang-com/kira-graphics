@@ -1,0 +1,413 @@
+import Foundation
+// The Sokol backend's render passes, owned in Kira.
+//
+// `kg_begin_render_pass`, `kg_end_pass_and_commit`, `kg_current_pass_extent_*`
+// and `kg_prepare_draw` were the last of the shim's own mutable state. They
+// stayed in C because the extent and the backing scale they tracked were shared
+// with the legacy immediate-mode UI renderer (`kg_ui_*`), so moving them would
+// have changed that renderer's behaviour without touching a line of it. That
+// renderer is gone — the retained batch is the only render path on every
+// platform — and with it the reason these were not Kira.
+//
+// `kg_prepare_draw` did not port. Its whole body was "flush the legacy batch,
+// then report whether sokol still has a valid pass", and the flush has nothing
+// left to flush. What remains is the pass-validity question, and Kira is now
+// the side that knows the answer: it begins the pass, so it records whether the
+// pass began. That is `SokolPassState.active`, and reading a private
+// `_sg.cur_pass` flag to re-ask a question this side already answered is what
+// the C function was doing.
+
+// What the backend knows about the pass it most recently began.
+//
+// Held on `GraphicsAppRuntimeState`, which is the blob a frame, a draw and the
+// run loop all already recover — the same place the lifetime peaks and the
+// row-order pipeline live. A Kira struct rather than a global, because Kira has
+// no globals and this is per-application state in any case: two windows are two
+// runtimes and two pass states, which is what the C statics could not express.
+struct SokolPassState {
+    // Whether the pass Kira began is still open. Every draw is refused while
+    // this is false, which is what stops a draw from reaching sokol outside a
+    // pass and being reported by sokol's own validation instead of by us.
+    var active: Bool = false
+    // The extent of that pass in target pixels. The draw path viewports and
+    // scissors to this rather than to the window: an offscreen target — a glass
+    // capture, a blur level — is its own size, and a viewport the size of the
+    // drawable rasterizes a fullscreen triangle over a rectangle several times
+    // larger than the texture it is filling.
+    var width: Int = 0
+    var height: Int = 0
+    // The shared, lazily-managed offscreen depth-stencil image. An offscreen
+    // pass that enables depth but supplies no depth texture of its own gets
+    // this, sized to its colour target and rebuilt when that size changes. Its
+    // format is the swapchain's, which is what every depth-enabled pipeline
+    // bakes in, so pass and pipeline agree under sokol's validation.
+    var depthImageId: U32 = 0
+    var depthViewId: U32 = 0
+    var depthWidth: Int = 0
+    var depthHeight: Int = 0
+    var depthSampleCount: Int = 0
+    // The once-per-session live markers, so a supervisor sees a real frame
+    // reach the screen exactly once rather than every frame.
+    var announcedFrameSubmitted: Bool = false
+    // Frame-rate telemetry (KIRA_GRAPHICS_LOG_FPS): committed frames per wall
+    // second, so a pacing regression is measurable instead of eyeballed.
+    var logFps: Bool = false
+    var fpsWindowStartSeconds: Float = 0.0
+    var fpsFrames: Int = 0
+}
+
+// `SG_RESOURCESTATE_VALID`, past `INITIAL` and `ALLOC`.
+function sokolResourceStateValid() -> I32 {
+    return 2
+}
+
+// sokol's `sg_load_action` / `sg_store_action` ordinals. Both enums reserve 0
+// for their `_DEFAULT` member, so neither mapping is zero.
+@Native
+function sokolLoadAction(action: LoadAction) -> I32 {
+    match action {
+        Clear -> return 1;
+        Load -> return 2;
+        DontCare -> return 3;
+    }
+}
+
+@Native
+function sokolStoreAction(action: StoreAction) -> I32 {
+    match action {
+        Store -> return 1;
+        DontCare -> return 2;
+    }
+}
+
+// Whether a view id names a view sokol actually built.
+//
+// Asked before the pass rather than after it: sokol refuses a pass attached to
+// a view that failed to create, and without this the refusal arrives as its own
+// validation abort instead of as a diagnostic naming what the caller did.
+@Native
+function sokolViewIsUsable(viewId: U32) -> Bool {
+    return viewId != 0 && sg_query_view_state(sg_view { id: viewId }) == sokolResourceStateValid()
+}
+
+// The managed offscreen depth view for a colour target of this size, built on
+// first use and rebuilt when the size or sample count changes.
+@Native
+function sokolEnsureOffscreenDepth(state: borrow mut GraphicsAppRuntimeState, width: Int, height: Int, sampleCount: Int) -> U32 {
+    if width <= 0 || height <= 0 {
+        return 0
+    }
+    let samples = sokolSampleCount(sampleCount)
+    if state.pass.depthViewId != 0
+        && state.pass.depthWidth == width
+        && state.pass.depthHeight == height
+        && state.pass.depthSampleCount == samples {
+        return state.pass.depthViewId
+    }
+    if state.pass.depthViewId != 0 {
+        sg_destroy_view(sg_view { id: state.pass.depthViewId })
+        state.pass.depthViewId = 0
+    }
+    if state.pass.depthImageId != 0 {
+        sg_destroy_image(sg_image { id: state.pass.depthImageId })
+        state.pass.depthImageId = 0
+    }
+    // The swapchain's own depth format, read back from sokol's environment
+    // rather than assumed: a depth-enabled pipeline bakes that format in, and a
+    // managed buffer in another one would fail the pass/pipeline match.
+    let image = sg_make_image(move sg_image_desc {
+        type_value: sokolImageType2d()
+        usage: sg_image_usage {
+            depth_stencil_attachment: true
+        }
+        width: I32(width)
+        height: I32(height)
+        num_slices: 1
+        num_mipmaps: 1
+        pixel_format: sg_query_desc().environment.defaults.depth_format
+        sample_count: I32(samples)
+        label: "kira-offscreen-managed-depth"
+    })
+    if image.id == 0 {
+        return 0
+    }
+    let view = sg_make_view(move sg_view_desc {
+        depth_stencil_attachment: sg_image_view_desc {
+            image: sg_image { id: image.id }
+        }
+        label: "kira-offscreen-managed-depth-view"
+    })
+    if view.id == 0 {
+        sg_destroy_image(move image)
+        return 0
+    }
+    state.pass.depthImageId = image.id
+    state.pass.depthViewId = view.id
+    state.pass.depthWidth = width
+    state.pass.depthHeight = height
+    state.pass.depthSampleCount = samples
+    return view.id
+}
+
+// The colour/depth/stencil actions a frame asks for, as one `sg_pass_action`.
+@Native
+function sokolPassAction(frame: borrow RenderFrame) -> sg_pass_action {
+    var action = sg_pass_action {
+        colors: sg_color_attachment_action_array_8 {
+            elements: [
+                sg_color_attachment_action {
+                    load_action: sokolLoadAction(frame.attachments.color.loadAction)
+                    store_action: sokolStoreAction(frame.attachments.color.storeAction)
+                    clear_value: sg_color {
+                        r: F32(frame.attachments.color.clearColor.r)
+                        g: F32(frame.attachments.color.clearColor.g)
+                        b: F32(frame.attachments.color.clearColor.b)
+                        a: F32(frame.attachments.color.clearColor.a)
+                    }
+                }
+            ]
+        }
+    }
+    if frame.attachments.hasDepth {
+        action.depth = sg_depth_attachment_action {
+            load_action: sokolLoadAction(frame.attachments.depth.loadAction)
+            store_action: sokolStoreAction(frame.attachments.depth.storeAction)
+            clear_value: F32(frame.attachments.depth.clearDepth)
+        }
+    }
+    if frame.attachments.hasStencil {
+        action.stencil = sg_stencil_attachment_action {
+            load_action: sokolLoadAction(frame.attachments.stencil.loadAction)
+            store_action: sokolStoreAction(frame.attachments.stencil.storeAction)
+            clear_value: U8(frame.attachments.stencil.clearStencil)
+        }
+    }
+    return move action
+}
+
+// Begin the frame's pass against the window's swapchain.
+@Native
+function sokolBeginSwapchainPass(state: borrow mut GraphicsAppRuntimeState, frame: borrow RenderFrame) -> Bool {
+    if frame.attachments.colorViewId() != 0 {
+        graphicsDiagnostic("Kira Graphics: swapchain render pass cannot use an explicit color texture")
+        return false
+    }
+    if frame.attachments.color.hasResolveTarget {
+        graphicsDiagnostic("Kira Graphics: swapchain render pass does not support resolve attachments")
+        return false
+    }
+    if frame.attachments.hasDepth && frame.attachments.depthViewId() != 0 {
+        graphicsDiagnostic("Kira Graphics: render pass mixes swapchain color with an explicit depth texture; use the swapchain depth buffer or render to an offscreen color texture")
+        return false
+    }
+    if frame.attachments.hasStencil && frame.attachments.stencilViewId() != 0 {
+        graphicsDiagnostic("Kira Graphics: swapchain render pass does not support an explicit stencil texture")
+        return false
+    }
+    var swapchain = sglue_swapchain()
+    if frame.attachments.hasDepth && swapchain.depth_format == sokolPixelFormatNone() {
+        graphicsDiagnostic("Kira Graphics: swapchain render pass requested depth, but the swapchain has no depth buffer")
+        return false
+    }
+    if !frame.attachments.hasDepth {
+        // A pass that asked for no depth HAS no depth, whatever the window came
+        // with. sokol bakes the depth format into a pipeline and checks it
+        // against the pass, so leaving the window's format here would make one
+        // pipeline valid in the swapchain pass and invalid in an offscreen one —
+        // which is exactly the pair a UI compositor draws through, capturing
+        // into its own target and then into the window.
+        swapchain.depth_format = sokolPixelFormatNone()
+    }
+    if swapchain.width <= 0 || swapchain.height <= 0 {
+        graphicsDiagnostic("Kira Graphics: swapchain render pass skipped because the window has no drawable area")
+        return false
+    }
+    state.pass.width = Int(swapchain.width)
+    state.pass.height = Int(swapchain.height)
+    sg_begin_pass(move sg_pass {
+        action: sokolPassAction(frame)
+        swapchain: move swapchain
+        label: "kira-swapchain-pass"
+    })
+    return true
+}
+
+// Begin the frame's pass against a colour texture it owns.
+@Native
+function sokolBeginOffscreenPass(state: borrow mut GraphicsAppRuntimeState, frame: borrow RenderFrame) -> Bool {
+    if !sokolViewIsUsable(frame.attachments.colorViewId()) {
+        graphicsDiagnostic("Kira Graphics: offscreen render pass needs a color texture with a usable attachment view")
+        return false
+    }
+    var attachments = sg_attachments {
+        colors: sg_view_array_8 {
+            elements: [sg_view { id: frame.attachments.colorViewId() }]
+        }
+    }
+    if frame.attachments.color.hasResolveTarget {
+        if !sokolViewIsUsable(frame.attachments.resolveViewId()) {
+            graphicsDiagnostic("Kira Graphics: offscreen render pass requested a resolve target, but no usable resolve view was provided")
+            return false
+        }
+        attachments.resolves = sg_view_array_8 {
+            elements: [sg_view { id: frame.attachments.resolveViewId() }]
+        }
+    }
+    if frame.attachments.hasDepth {
+        var depthView = frame.attachments.depthViewId()
+        if depthView == 0 {
+            // No explicit depth texture: hand it the managed buffer, sized to
+            // the colour target. That is parity with the Metal context's depth
+            // buffer and with the swapchain's implicit one.
+            depthView = sokolEnsureOffscreenDepth(state, frame.attachments.colorWidth(), frame.attachments.colorHeight(), frame.attachments.colorSampleCount())
+            if depthView == 0 {
+                graphicsDiagnostic("Kira Graphics: offscreen render pass could not provision a managed depth buffer")
+                return false
+            }
+        }
+        attachments.depth_stencil = sg_view { id: depthView }
+    }
+    if frame.attachments.hasStencil {
+        if frame.attachments.stencilViewId() == 0 {
+            graphicsDiagnostic("Kira Graphics: offscreen render pass has stencil enabled, but no stencil texture was provided")
+            return false
+        }
+        attachments.depth_stencil = sg_view { id: frame.attachments.stencilViewId() }
+    }
+    state.pass.width = frame.attachments.colorWidth()
+    state.pass.height = frame.attachments.colorHeight()
+    sg_begin_pass(move sg_pass {
+        action: sokolPassAction(frame)
+        attachments: move attachments
+        label: "kira-offscreen-pass"
+    })
+    return true
+}
+
+// Begin the pass the frame describes, recording its extent so the draw path can
+// viewport to it.
+@Native
+function sokolBeginPass(frame: borrow RenderFrame) -> Bool {
+    if pointerIsNull(frame.backendContext) {
+        graphicsDiagnostic("Kira Graphics skipped a render pass because the frame carries no runtime state")
+        return false
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(frame.backendContext)
+    state.pass.active = false
+    state.pass.width = 0
+    state.pass.height = 0
+    var began = false
+    match frame.attachments.color.target.kind {
+        Swapchain -> began = sokolBeginSwapchainPass(state, frame);
+        Texture -> began = sokolBeginOffscreenPass(state, frame);
+    }
+    if !began {
+        state.pass.width = 0
+        state.pass.height = 0
+        return false
+    }
+    state.pass.active = true
+    return true
+}
+
+// End the pass and commit the frame.
+@Native
+function sokolEndPassAndCommit(backendContext: RawPtr) {
+    if pointerIsNull(backendContext) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(backendContext)
+    if !state.pass.active {
+        graphicsDiagnostic("Kira Graphics: end pass skipped because no render pass is currently active")
+        state.pass.width = 0
+        state.pass.height = 0
+        return
+    }
+    sg_end_pass()
+    sg_commit()
+    state.pass.active = false
+    state.pass.width = 0
+    state.pass.height = 0
+    if !state.pass.announcedFrameSubmitted {
+        state.pass.announcedFrameSubmitted = true
+        kiraGraphicsLiveFramePresented()
+    }
+    sokolLogFrameRate(state)
+    return
+}
+
+// A number to one decimal place, without a float formatter.
+//
+// The frame rate is the one measurement here whose whole point is comparing two
+// runs, and rounding 59.6 to 60 hides exactly the difference being looked for.
+@Native
+function sokolTenths(value: Float) -> String {
+    let tenths = Int(value * 10.0 + 0.5)
+    return String(tenths / 10) + "." + String(tenths % 10)
+}
+
+// Committed frames per wall second, when the run asked for them.
+@Native
+function sokolLogFrameRate(state: borrow mut GraphicsAppRuntimeState) {
+    if !state.pass.logFps {
+        return
+    }
+    let now = kgMonotonicSeconds()
+    if state.pass.fpsWindowStartSeconds <= 0.0 {
+        state.pass.fpsWindowStartSeconds = now
+    }
+    state.pass.fpsFrames = state.pass.fpsFrames + 1
+    let elapsed = now - state.pass.fpsWindowStartSeconds
+    if elapsed >= 1.0 {
+        graphicsDiagnostic(
+            "KiraGraphics: fps=" + sokolTenths(Float(state.pass.fpsFrames) / elapsed)
+                + " frames=" + String(state.pass.fpsFrames)
+        )
+        state.pass.fpsWindowStartSeconds = now
+        state.pass.fpsFrames = 0
+    }
+    return
+}
+
+// Whether a draw issued through `backendContext` may proceed, and the extent it
+// should rasterize into.
+@Native
+function sokolPassIsActive(backendContext: RawPtr) -> Bool {
+    if pointerIsNull(backendContext) {
+        return false
+    }
+    let state = nativeRecover<GraphicsAppRuntimeState>(backendContext)
+    return state.pass.active
+}
+
+@Native
+function sokolPassWidth(backendContext: RawPtr) -> Int {
+    if pointerIsNull(backendContext) {
+        return 0
+    }
+    let state = nativeRecover<GraphicsAppRuntimeState>(backendContext)
+    return state.pass.width
+}
+
+@Native
+function sokolPassHeight(backendContext: RawPtr) -> Int {
+    if pointerIsNull(backendContext) {
+        return 0
+    }
+    let state = nativeRecover<GraphicsAppRuntimeState>(backendContext)
+    return state.pass.height
+}
+
+// Release the managed offscreen depth buffer, at shutdown.
+@Native
+function sokolDestroyPassResources(state: borrow mut GraphicsAppRuntimeState) {
+    if state.pass.depthViewId != 0 {
+        sg_destroy_view(sg_view { id: state.pass.depthViewId })
+        state.pass.depthViewId = 0
+    }
+    if state.pass.depthImageId != 0 {
+        sg_destroy_image(sg_image { id: state.pass.depthImageId })
+        state.pass.depthImageId = 0
+    }
+    return
+}

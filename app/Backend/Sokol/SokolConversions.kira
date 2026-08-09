@@ -37,18 +37,10 @@ function sokolDpiScale() -> Float {
 // Logical (point) drawable size = framebuffer pixels / dpi_scale. UI layout and
 // pointer hit-testing work in this space so a Retina framebuffer does not shrink
 // the interface; the framebuffer itself stays at native pixel resolution.
-@Native
-function sokolLogicalWidth() -> Int {
-    return Int(Float(sapp_widthf()) / sokolDpiScale())
-}
-
-@Native
-function sokolLogicalHeight() -> Int {
-    return Int(Float(sapp_heightf()) / sokolDpiScale())
-}
-
-// Logical (point) drawable width/height as Float, preserving sub-point precision
-// for viewport sizing. = framebuffer pixels / dpi_scale.
+//
+// Float, and only Float: a point is not a whole number of pixels at a
+// fractional backing scale, and truncating here would lose the fraction every
+// layout pass below needs.
 @Native
 function sokolLogicalWidthF() -> Float {
     return Float(sapp_widthf()) / sokolDpiScale()

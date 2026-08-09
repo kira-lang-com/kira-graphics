@@ -1,0 +1,82 @@
+// The peak resource counts Kira has observed this run — buffers, images,
+// samplers, views, shaders, pipelines — sampled once per frame rather than
+// after every create/destroy.
+//
+// This replaced the Sokol backend's own `kg_lifetime_peaks` static and the 47
+// `kg_update_lifetime_peaks()` calls that kept it current: a leak or a spike
+// lasts at least one frame, so frame-granularity sampling catches it exactly
+// as reliably, without a call at every resource operation. Uniforms and bind
+// groups are not tracked here — neither was ever a real Sokol resource (see
+// `Uniform.kira` / `BindGroup.kira`), so there is nothing of theirs for a leak
+// to hide in.
+//
+// A plain Kira struct rather than the `@FFI.Struct` `KgLifetimePeaks` it is
+// eventually printed through: `GraphicsAppRuntimeState` carries this across
+// frames via `nativeState`, which only ever boxes a Kira-owned value, never a
+// C-layout one.
+struct LifetimePeaks {
+    var buffers: U32 = 0
+    var images: U32 = 0
+    var samplers: U32 = 0
+    var views: U32 = 0
+    var shaders: U32 = 0
+    var pipelines: U32 = 0
+}
+
+@FFI.Struct { layout: c; }
+struct KgLifetimePeaks {
+    var buffers: U32
+    var images: U32
+    var samplers: U32
+    var views: U32
+    var shaders: U32
+    var pipelines: U32
+}
+
+// Folds the current `sg_query_stats` into the running peaks. Called once a
+// frame from `kiraGraphicsSokolFrame`.
+@Native
+function sokolSampleLifetimePeaks(peaks: borrow LifetimePeaks) -> LifetimePeaks {
+    if !sg_isvalid() {
+        return peaks
+    }
+    let stats = sg_query_stats()
+    var updated = peaks
+    if stats.total.buffers.alive > updated.buffers {
+        updated.buffers = stats.total.buffers.alive
+    }
+    if stats.total.images.alive > updated.images {
+        updated.images = stats.total.images.alive
+    }
+    if stats.total.samplers.alive > updated.samplers {
+        updated.samplers = stats.total.samplers.alive
+    }
+    if stats.total.views.alive > updated.views {
+        updated.views = stats.total.views.alive
+    }
+    if stats.total.shaders.alive > updated.shaders {
+        updated.shaders = stats.total.shaders.alive
+    }
+    if stats.total.pipelines.alive > updated.pipelines {
+        updated.pipelines = stats.total.pipelines.alive
+    }
+    return updated
+}
+
+// Prints the lifetime report, if `KIRA_GRAPHICS_LIFETIME_REPORT` asks for
+// one. Called once from `kiraGraphicsSokolCleanup`.
+@Native
+function sokolReportLifetime(peaks: borrow LifetimePeaks) {
+    if !sg_isvalid() {
+        return
+    }
+    kgReportLifetime(sg_query_stats(), KgLifetimePeaks {
+        buffers: peaks.buffers
+        images: peaks.images
+        samplers: peaks.samplers
+        views: peaks.views
+        shaders: peaks.shaders
+        pipelines: peaks.pipelines
+    })
+    return
+}
