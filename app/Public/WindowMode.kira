@@ -1,0 +1,23 @@
+// How an application's window is presented.
+//
+// Two questions wear the same vocabulary. `GraphicsApplication.windowMode` is
+// the mode the window OPENS in, which is what a library shipping an application
+// shell sets as its default; `RenderFrame.setWindowMode` is the mode a running
+// program moves to, which is what a menu item or a keyboard shortcut drives.
+// Both name a state rather than flipping a flag, so "go fullscreen" and "come
+// back to a window" are the same call with a different argument and neither
+// caller has to know which state the window is in first.
+//
+// `Windowed` is a decorated, resizable window at the size the application asked
+// for. `WindowedBorderless` is the same window with its title bar and frame
+// removed. `Fullscreen` covers the display the window is on, and the size the
+// application asked for stops applying — read `viewportWidth`/`viewportHeight`
+// off the frame rather than assuming it was honoured.
+//
+// A backend that has one undecorated window and no separate borderless state
+// says so by what `windowMode` reads back: see `sokolWindowMode`.
+enum WindowMode {
+    Windowed
+    WindowedBorderless
+    Fullscreen
+}

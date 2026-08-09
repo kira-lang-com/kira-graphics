@@ -1,111 +1,102 @@
 import Foundation
-class GraphicsFrame {
-    var hasColorAttachment: Bool = false
-    var colorTargetKind: Int = 0
-    var colorTextureId: U32 = 0
-    var colorMipLevel: Int = 0
-    var colorArrayLayer: Int = 0
-    var colorLoadAction: Int = 0
-    var colorStoreAction: Int = 0
-    var clearR: Float = 0.0
-    var clearG: Float = 0.0
-    var clearB: Float = 0.0
-    var clearA: Float = 1.0
-    var hasResolveTarget: Bool = false
-    var resolveTextureId: U32 = 0
-    var resolveMipLevel: Int = 0
-    var resolveArrayLayer: Int = 0
-    var hasDepthAttachment: Bool = false
-    var depthTextureId: U32 = 0
-    var depthLoadAction: Int = 0
-    var depthStoreAction: Int = 0
-    var clearDepth: Float = 1.0
-    var depthReadOnly: Bool = false
-    var hasStencilAttachment: Bool = false
-    var stencilTextureId: U32 = 0
-    var stencilLoadAction: Int = 0
-    var stencilStoreAction: Int = 0
-    var clearStencil: Int = 0
-    var stencilReadOnly: Bool = false
-
-    var encoderPipelineId: U32 = 0
-    var encoderHasPipeline: Bool = false
-    var encoderVertexBufferId: U32 = 0
-    var encoderHasVertexBuffer: Bool = false
-    var encoderIndexBufferId: U32 = 0
-    var encoderHasIndexBuffer: Bool = false
-    var encoderIndexFormat: Int = 0
-    var encoderVertexCount: Int = 0
-    var encoderIndexCount: Int = 0
-    var encoderInstanceCount: Int = 1
+// One frame of rendering, from the caller's side.
+//
+// The frame holds two things and nothing else: what its current pass is
+// attached to (`attachments`, see `PassAttachments.kira`) and where it is in
+// its own life — whether a pass was begun, whether one is still open, the
+// encoder that pass handed out, and whether the application asked to quit.
+//
+// Everything a backend does with a frame it does through `renderBackend()`.
+class RenderFrame {
+    var attachments: PassAttachments
 
     var hasRenderPass: Bool = false
     var renderPassActive: Bool = false
     var currentEncoder: RenderEncoder
-    var shouldPresent: Bool = false
     var passSubmitted: Bool = false
     var shouldQuit: Bool = false
     var userData: RawPtr
-    var backend: GraphicsBackend = GraphicsBackend.Sokol
-    var metalContext: RawPtr
+    var backend: RenderBackendKind = .Sokol
+    var backendContext: RawPtr
+
+    // The backend this frame belongs to, as a value that answers rather than as
+    // a tag to switch on. See `RenderBackend.kira`.
+    function renderBackend() -> Any RenderBackend {
+        return renderBackendFor(self.backend, self.backendContext)
+    }
+
+    // Nanoseconds on a monotonic clock — what a host times its own frame with.
+    //
+    // Asked of the frame for the same reason `framesInFlight` is: reading a
+    // clock is a platform call, and a host that named one platform's clock
+    // directly would refuse to start on every other.
+    function monotonicNanoseconds() -> U64 {
+        return self.renderBackend().monotonicNanoseconds()
+    }
 
     // How many frames this backend keeps in flight — the depth of its pacing
     // ring, and what a telemetry readout means by "frames in flight".
     //
     // Asked of the frame rather than imported from a backend's own module, so a
     // caller that only wants the number does not have to name the backend that
-    // happens to answer it. A backend that submits and waits has one.
+    // happens to answer it.
     function framesInFlight() -> Int {
-        if self.backend == .Metal {
-            return Int(metalFramesInFlight())
-        }
-        return 1
+        return self.renderBackend().framesInFlight()
+    }
+
+    // The live viewport in logical points — what a UI lays out and hit-tests
+    // against. Both backends answer; neither is named at the call site.
+    function viewportWidth() -> Float {
+        return self.renderBackend().viewportWidth()
+    }
+
+    function viewportHeight() -> Float {
+        return self.renderBackend().viewportHeight()
+    }
+
+    // How the window is presented, and moving it to another mode. This is where
+    // a library reaches fullscreen from: the frame is what an event handler and
+    // a render pass both already hold, and neither has to name a backend.
+    //
+    // Read rather than remembered — a user can leave fullscreen through the
+    // window manager without the program hearing about it — so this is also the
+    // way to find out whether a `setWindowMode` request was honoured.
+    function windowMode() -> WindowMode {
+        return self.renderBackend().windowMode()
+    }
+
+    function setWindowMode(mode: borrow WindowMode) -> Void {
+        self.renderBackend().setWindowMode(mode)
+        return
+    }
+
+    // What the frame BEFORE this one cost. An application lays its HUD out
+    // while the frame the HUD will appear in is still being built, so the last
+    // completed frame is what there is to report.
+    function statistics() -> FrameStatistics {
+        return self.renderBackend().statistics()
     }
 
     function beginRenderPass(descriptor: borrow RenderPassDescriptor) -> RenderEncoder {
         var colorAttachment = descriptor.primaryColorAttachment
-        self.hasColorAttachment = descriptor.hasPrimaryColorAttachment
-        if (!self.hasColorAttachment) {
+        var hasColor = descriptor.hasPrimaryColorAttachment
+        if (!hasColor) {
             if (descriptor.colorAttachments.count > 0) {
                 colorAttachment = descriptor.colorAttachments[0]
-                self.hasColorAttachment = true
+                hasColor = true
             }
         }
-        self.colorTargetKind = colorAttachment.target.kind
-        self.colorTextureId = colorAttachment.target.texture.id
-        self.colorMipLevel = colorAttachment.target.mipLevel
-        self.colorArrayLayer = colorAttachment.target.arrayLayer
-        self.colorLoadAction = colorAttachment.loadAction
-        self.colorStoreAction = colorAttachment.storeAction
-        self.clearR = colorAttachment.clearColor.r
-        self.clearG = colorAttachment.clearColor.g
-        self.clearB = colorAttachment.clearColor.b
-        self.clearA = colorAttachment.clearColor.a
-        self.hasResolveTarget = colorAttachment.hasResolveTarget
-        self.resolveTextureId = colorAttachment.resolveTarget.texture.id
-        self.resolveMipLevel = colorAttachment.resolveTarget.mipLevel
-        self.resolveArrayLayer = colorAttachment.resolveTarget.arrayLayer
-        self.hasDepthAttachment = descriptor.hasDepthAttachment
-        self.depthTextureId = descriptor.depthAttachment.texture.id
-        self.depthLoadAction = descriptor.depthAttachment.loadAction
-        self.depthStoreAction = descriptor.depthAttachment.storeAction
-        self.clearDepth = descriptor.depthAttachment.clearDepth
-        self.depthReadOnly = descriptor.depthAttachment.readOnly
-        self.hasStencilAttachment = descriptor.hasStencilAttachment
-        self.stencilTextureId = descriptor.stencilAttachment.texture.id
-        self.stencilLoadAction = descriptor.stencilAttachment.loadAction
-        self.stencilStoreAction = descriptor.stencilAttachment.storeAction
-        self.clearStencil = descriptor.stencilAttachment.clearStencil
-        self.stencilReadOnly = descriptor.stencilAttachment.readOnly
-        self.hasRenderPass = true
-        self.shouldPresent = false
-        self.passSubmitted = false
-        match self.backend {
-            Metal -> self.renderPassActive = metalBeginRenderPassFromFrame(self, self.metalContext);
-            Sokol -> self.renderPassActive = sokolBeginRenderPassFromFrame(self);
-            Vulkan -> self.renderPassActive = sokolBeginRenderPassFromFrame(self);
-            DirectX12 -> self.renderPassActive = sokolBeginRenderPassFromFrame(self);
+        self.attachments = PassAttachments {
+            hasColor: hasColor
+            color: move colorAttachment
+            hasDepth: descriptor.hasDepthAttachment
+            depth: descriptor.depthAttachment
+            hasStencil: descriptor.hasStencilAttachment
+            stencil: descriptor.stencilAttachment
         }
+        self.hasRenderPass = true
+        self.passSubmitted = false
+        self.renderPassActive = self.renderBackend().beginRenderPass(self)
 
         if (!self.renderPassActive) {
             graphicsDiagnostic("Kira Graphics skipped render pass because the backend could not begin it")
@@ -115,32 +106,15 @@ class GraphicsFrame {
         // the placeholder installed by the last endPass) is never used again once
         // a new pass begins; release its native state before overwriting it.
         nativeStateFree(self.currentEncoder.storage)
-        let encoder = makeRenderEncoderForBackend(self.renderPassActive, self.metalContext)
+        let encoder = self.renderBackend().makeEncoder(self.renderPassActive)
         self.currentEncoder = encoder
         return encoder
     }
 
     function endPass() {
-        let encoderState = nativeRecover<RenderEncoderState>(self.currentEncoder.storage)
-        self.encoderPipelineId = encoderState.pipelineId
-        self.encoderHasPipeline = encoderState.hasPipeline
-        self.encoderVertexBufferId = encoderState.vertexBufferId
-        self.encoderHasVertexBuffer = encoderState.hasVertexBuffer
-        self.encoderIndexBufferId = encoderState.indexBufferId
-        self.encoderHasIndexBuffer = encoderState.hasIndexBuffer
-        self.encoderIndexFormat = encoderState.indexFormat
-        self.encoderVertexCount = encoderState.vertexCount
-        self.encoderIndexCount = encoderState.indexCount
-        self.encoderInstanceCount = encoderState.instanceCount
-        self.shouldPresent = true
         self.passSubmitted = true
         if (self.renderPassActive) {
-            match self.backend {
-                Metal -> metalEndPassAndCommit(self.metalContext);
-                Sokol -> sokolEndPassAndCommitNative();
-                Vulkan -> sokolEndPassAndCommitNative();
-                DirectX12 -> sokolEndPassAndCommitNative();
-            }
+            self.renderBackend().endPassAndCommit(self)
         }
         self.renderPassActive = false
         // The pass is committed: encoder handles returned by beginRenderPass are
@@ -151,76 +125,89 @@ class GraphicsFrame {
         return
     }
 
-    // Metal render -> compute seam: bind this frame context's persistent depth
-    // attachment as texture(0), with caller buffers at slots 0..n-1.
-    function dispatchDepthComputeBuffers(pipeline: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
-        if self.backend == .Metal {
-            metalDispatchDepthComputeN(self.metalContext, pipeline, buffers, count, threadsPerGroup)
-        }
-        return
-    }
-
-    function dispatchComputeBuffers(pipeline: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
-        if self.backend == .Metal {
-            metalDispatchComputeN(self.metalContext, pipeline, buffers, count, threadsPerGroup)
-        }
-        return
-    }
-
-    // Metal texture-compute specialization used by effects that have a portable
-    // render-pass fallback. On other backends this is deliberately a no-op; the
-    // caller selects its fallback when its compute pipeline ids are zero.
+    // Run a two-axis separable blur over `source`, one dispatch per axis.
+    //
+    // Both kernels produce two levels at once — near and far read the same
+    // input and write their own target — so the pyramid costs one dispatch per
+    // axis rather than one per level. The horizontal half writes the two temps;
+    // the vertical half reads them and writes the two outputs.
+    //
+    // Textures rather than ids, because the two backends bind different things:
+    // Metal binds the texture object, and sokol binds a *view* — a sampled one
+    // for what the kernel reads and a storage-image one for what it writes, and
+    // neither can be recovered from an image id.
     function dispatchTextureComputePair(
         horizontalPipeline: Int,
         verticalPipeline: Int,
-        sourceTextureId: Int,
-        tempNearTextureId: Int,
-        tempFarTextureId: Int,
-        outputNearTextureId: Int,
-        outputFarTextureId: Int,
+        source: borrow GraphicsTexture,
+        tempNear: borrow GraphicsTexture,
+        tempFar: borrow GraphicsTexture,
+        outputNear: borrow GraphicsTexture,
+        outputFar: borrow GraphicsTexture,
         // The kernels sample through this rather than declaring a sampler
         // inline, which is not something a compute stage can express.
-        samplerId: Int,
+        sampler: borrow GraphicsSampler,
         width: Int,
         height: Int,
     ) {
-        if self.backend == .Metal {
-            metalDispatchTextureComputePair(
-                self.metalContext,
-                horizontalPipeline,
-                verticalPipeline,
-                sourceTextureId,
-                tempNearTextureId,
-                tempFarTextureId,
-                outputNearTextureId,
-                outputFarTextureId,
-                samplerId,
-                width,
-                height,
-            )
-        }
+        self.renderBackend().dispatchTextureComputePair(
+            horizontalPipeline,
+            verticalPipeline,
+            source,
+            tempNear,
+            tempFar,
+            outputNear,
+            outputFar,
+            sampler,
+            width,
+            height,
+        )
         return
     }
 
-    // Re-tile a texture's contents into the GPU-optimal layout, ordered after
-    // everything already encoded this frame. A compute pass writes through the
-    // shader-write usage, which forfeits the compressed layout render passes
-    // get — and every later sample of that texture pays uncompressed-fetch
-    // latency for it. One blit after the writes restores the fast layout. On
-    // non-Metal backends this is a no-op, matching dispatchTextureComputePair,
-    // whose outputs are the textures this exists to repair.
+    // One dispatch over buffers, encoded on this frame's command buffer.
+    //
+    // On the frame rather than on `Graphics` when the step belongs to a frame's
+    // ordering: a step that has to land between two passes needs the frame, and
+    // the frame is what a caller holds at that point.
+    function dispatchComputeBuffers(pipeline: Int, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
+        self.renderBackend().dispatchComputeBuffers(pipeline, bufferIds, threadCount, threadsPerGroup)
+        return
+    }
+
+    // The same dispatch with this pass's DEPTH attachment bound ahead of the
+    // buffers, for a kernel that reads the depth the frame just rasterized —
+    // seeding a Hi-Z pyramid is what needs it.
+    //
+    // The texture comes from the frame's own attachments rather than from an
+    // argument, because the depth such a kernel wants is the depth the pass
+    // wrote, and a caller passing it separately can only get that wrong.
+    function dispatchDepthComputeBuffers(pipeline: Int, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
+        self.renderBackend().dispatchDepthComputeBuffers(
+            pipeline,
+            self.attachments.depth.texture,
+            bufferIds,
+            threadCount,
+            threadsPerGroup,
+        )
+        return
+    }
+
+    // One 32-bit word out of a buffer a kernel dispatched on this frame has
+    // written — what a gate checks after stepping. A backend that cannot read a
+    // buffer back answers 0 and says so.
+    function readStorageU32(buffer: borrow GraphicsBuffer, index: Int) -> U32 {
+        return self.renderBackend().readBufferU32(buffer, index)
+    }
+
+    // Put a texture a compute pass has just written back into the layout later
+    // samples read fastest, ordered after everything already encoded this frame.
+    // Called on the outputs of `dispatchTextureComputePair`, which are the
+    // textures it exists to repair. What that costs is the backend's answer:
+    // a blit on Metal, nothing under GL, and each says so in its own body.
     function optimizeTexture(textureId: Int) {
-        if self.backend == .Metal {
-            metalContextOptimizeTextureInFrame(self.metalContext, textureId)
-        }
+        self.renderBackend().optimizeTexture(textureId)
         return
-    }
-
-    function readStorageU32(bufferId: Int, index: Int) -> U32 {
-        if self.backend == .Metal {
-            return metalReadStorageBufferU32(self.metalContext, bufferId, index)
-        }
-        return U32(0)
     }
 
     function renderPass(descriptor: borrow RenderPassDescriptor, body: (RenderEncoder) -> Void) {
@@ -246,7 +233,7 @@ class GraphicsFrame {
     }
 }
 
-function drawPass(frame: borrow mut GraphicsFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, vertexCount: Int) {
+function drawPass(frame: borrow mut RenderFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, vertexCount: Int) {
     var encoder = frame.beginRenderPass(descriptor)
     encoder.setPipeline(pipeline)
     encoder.setVertexBuffer(vertexBuffer)
@@ -255,7 +242,7 @@ function drawPass(frame: borrow mut GraphicsFrame, descriptor: borrow RenderPass
     return
 }
 
-function drawPassWithBindGroups(frame: borrow mut GraphicsFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, bindGroup0: borrow BindGroup, bindGroup1: borrow BindGroup, vertexCount: Int) {
+function drawPassWithBindGroups(frame: borrow mut RenderFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, bindGroup0: borrow BindGroup, bindGroup1: borrow BindGroup, vertexCount: Int) {
     var encoder = frame.beginRenderPass(descriptor)
     encoder.setPipeline(pipeline)
     encoder.setVertexBuffer(vertexBuffer)

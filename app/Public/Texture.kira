@@ -1,14 +1,53 @@
+// A texture, and the views a backend reaches it through.
+//
+// Metal has one object: the id is the texture, and the view fields repeat it.
+// sokol splits the two — an image holds the pixels, and a view is what a bind
+// group, a UI draw and a pass attachment each take — so the ids it mints travel
+// here with the image rather than in a table keyed on it. A caller passes a
+// `GraphicsTexture` and never learns which of the two shapes it has.
 struct GraphicsTexture {
-    var handle: BackendTextureHandle
     var id: U32 = 0
+    // The view a shader samples through, for a texture whose usage is sampled.
+    var viewId: U32 = 0
+    // The view a pass writes colour through, for a render target.
+    var colorViewId: U32 = 0
+    // The view a pass writes depth and stencil through.
+    var depthViewId: U32 = 0
+    // The view a compute kernel writes through, for a texture whose usage asks
+    // for a storage image. Distinct from `colorViewId`: an image binding and a
+    // colour attachment are different view kinds even over the same pixels.
+    var storageViewId: U32 = 0
+    // The extent the pixels cover, and how many samples each holds.
+    //
+    // Carried rather than asked for: a pass sized to this target, and a managed
+    // depth buffer matched to it, both need the numbers, and the side that
+    // created the texture is the side that knows them.
+    var width: Int = 0
+    var height: Int = 0
+    var sampleCount: Int = 1
+}
+
+// A texture value that binds through `viewId`.
+//
+// For a caller that only ever had the view id. A `TextureView` widget carries
+// one number across a widget tree, and the view is the number every backend
+// binds through — Metal repeats its texture id into `viewId`, so the same number
+// is right on both.
+//
+// Binding is all it is for. Uploading to a texture needs the image id, and
+// attaching a pass to one needs the attachment views; neither can be recovered
+// from a sampled view.
+@Native
+function sampledTextureFromViewId(viewId: U32) -> GraphicsTexture {
+    return GraphicsTexture {
+        id: viewId
+        viewId: viewId
+    }
 }
 
 @Native
 function emptyGraphicsTexture() -> GraphicsTexture {
     return GraphicsTexture {
-        handle: BackendTextureHandle {
-            id: 0
-        }
         id: 0
     }
 }

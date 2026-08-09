@@ -1750,10 +1750,10 @@ function sapp_egl_get_display(): RawPtr;
 function sapp_frame_count(): U64;
 
 @FFI.Extern { library: sokol; symbol: sapp_frame_duration; abi: c; }
-function sapp_frame_duration(): F64;
+function sapp_frame_duration(): Float;
 
 @FFI.Extern { library: sokol; symbol: sapp_frame_duration_unfiltered; abi: c; }
-function sapp_frame_duration_unfiltered(): F64;
+function sapp_frame_duration_unfiltered(): Float;
 
 @FFI.Extern { library: sokol; symbol: sapp_get_clipboard_string; abi: c; }
 function sapp_get_clipboard_string(): CString;

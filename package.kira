@@ -25,36 +25,6 @@ Package KiraGraphics {
             ],
         },
         NativeLibrary {
-            name: "vulkan",
-            // A driver, not a build dependency: it may simply be absent, so the
-            // runtime opens it on first call and a machine without it still runs.
-            linkMode: LinkMode.Runtime,
-            // And not every platform has one at all. On a target with no row
-            // here the binding is excluded: nothing links, and a call traps by
-            // name rather than the build failing.
-            availability: Availability.Optional,
-            headers: Headers { entrypoint: "${VULKAN_SDK}/Include/vulkan/vulkan.h", includeDirs: ["${VULKAN_SDK}/Include"], defines: ["VK_USE_PLATFORM_WIN32_KHR"] },
-            autobind: Autobind { module: "vulkan", headers: ["${VULKAN_SDK}/Include/vulkan/vulkan.h", "${VULKAN_SDK}/Include/vulkan/vulkan_core.h", "${VULKAN_SDK}/Include/vulkan/vulkan_win32.h"], mode: AutobindMode.AllPublic, profile: AutobindProfile.Vulkan },
-            nativeTargets: [
-                NativeTarget { triple: "x86_64-windows-msvc", dynamicLib: "" },
-                NativeTarget { triple: "x86_64-linux-gnu", dynamicLib: "" },
-                NativeTarget { triple: "wasm32-emscripten-unknown", dynamicLib: "" }
-            ],
-        },
-        NativeLibrary {
-            // Kept for the two fixed call shapes the Vulkan probe still uses,
-            // and for nothing else. The call builder and symbol lookup the
-            // Direct3D loader reaches for moved to `kira_runtime`, where the
-            // toolchain actually implements them — declaring no target row here
-            // means anything still named against this library is excluded and
-            // traps by name rather than failing the link, which is the honest
-            // answer for a library that exists nowhere.
-            name: "kira_dynamic_ffi",
-            linkMode: LinkMode.Runtime,
-            availability: Availability.Optional,
-            nativeTargets: [],
-        },
-        NativeLibrary {
             // Kira's own runtime archive, already on every native link line.
             // The raw-memory primitives a backend lays its C-shaped context out
             // with live there — and so, now, do shared-library loading and the

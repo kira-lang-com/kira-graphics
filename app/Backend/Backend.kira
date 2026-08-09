@@ -1,11 +1,17 @@
-enum GraphicsBackend {
+// Which renderer a program asks for, and the host it will run on.
+//
+// `RenderBackendKind` is the *selection* vocabulary — what a `GraphicsApplication`
+// names and what `validateRenderBackend` checks against a platform, both of which
+// happen before any device context exists. `Any RenderBackend` (see
+// `app/Public/RenderBackend.kira`) is the *dispatch* vocabulary, and everything
+// past `renderBackendFor` asks the backend rather than asking which one it is.
+enum RenderBackendKind {
     Sokol
     Metal
-    Vulkan
-    DirectX12
 }
 
-enum GraphicsPlatform {
+
+enum Platform {
     Windows
     Linux
     MacOS
@@ -14,77 +20,50 @@ enum GraphicsPlatform {
     Unknown
 }
 
-struct GraphicsBackendSelection {
-    var backend: GraphicsBackend = GraphicsBackend.Sokol
-    var platform: GraphicsPlatform = GraphicsPlatform.Unknown
+
+struct RenderBackendSelection {
+    var backend: RenderBackendKind = .Sokol
+    var platform: Platform = .Unknown
     var supported: Bool = true
     var loaderName: String = ""
     var requiredSymbolCount: Int = 0
     var reason: String = ""
 }
 
-function defaultGraphicsBackend() -> GraphicsBackend {
-    return GraphicsBackend.Sokol
-}
 
 // Platform-aware default backend for hosts that do not pick one explicitly:
 // Metal owns Apple hosts (the dynamic-FFI platform probe reports the Apple
 // platform code for macOS; iOS maps the same way), everything else defaults
 // to Sokol — the portable backend. This includes Web/WASM honestly: the
-// browser sandbox has no host-OS probe, so `hostGraphicsPlatform()` returns
-// `Unknown` there, and Unknown -> Sokol is the correct choice because Sokol
-// (WebGPU) is the only backend that exists on wasm32-emscripten.
+// browser sandbox has no host-OS probe, so `hostPlatform()` returns `Unknown`
+// there, and Unknown -> Sokol is the correct choice because Sokol (WebGPU) is
+// the only backend that exists on wasm32-emscripten.
 @Native
-function graphicsDefaultBackend() -> GraphicsBackend {
-    let platform = hostGraphicsPlatform()
+function graphicsDefaultBackend() -> RenderBackendKind {
+    let platform = hostPlatform()
     if platform == .MacOS {
-        return GraphicsBackend.Metal
+        return .Metal
     }
     if platform == .IOS {
-        return GraphicsBackend.Metal
+        return .Metal
     }
-    return GraphicsBackend.Sokol
+    return .Sokol
 }
 
-@Native
-function hostGraphicsPlatform() -> GraphicsPlatform {
-    return dynamicFfiHostPlatform()
-}
 
-function effectiveGraphicsPlatform(requested: GraphicsPlatform) -> GraphicsPlatform {
+function effectivePlatform(requested: Platform) -> Platform {
     if requested == .Unknown {
-        return hostGraphicsPlatform()
+        return hostPlatform()
     }
     return requested
 }
 
-function graphicsBackendNameFor(backend: GraphicsBackend) -> String {
-    match backend {
-        Sokol -> return "sokol";
-        Metal -> return "metal";
-        Vulkan -> return "vulkan";
-        DirectX12 -> return "directx12";
-    }
-    return "unknown"
-}
-
-function graphicsPlatformName(platform: GraphicsPlatform) -> String {
-    match platform {
-        Windows -> return "windows";
-        Linux -> return "linux";
-        MacOS -> return "macos";
-        IOS -> return "ios";
-        Web -> return "web";
-        Unknown -> return "unknown";
-    }
-    return "unknown"
-}
 
 @Native
-function validateGraphicsBackend(backend: GraphicsBackend, platform: GraphicsPlatform) -> GraphicsBackendSelection {
-    let resolvedPlatform = effectiveGraphicsPlatform(move platform)
+function validateRenderBackend(backend: RenderBackendKind, platform: Platform) -> RenderBackendSelection {
+    let resolvedPlatform = effectivePlatform(move platform)
     match backend {
-        Sokol -> return GraphicsBackendSelection {
+        Sokol -> return RenderBackendSelection {
             backend: move backend
             platform: resolvedPlatform
             supported: true
@@ -93,15 +72,14 @@ function validateGraphicsBackend(backend: GraphicsBackend, platform: GraphicsPla
             reason: ""
         };
         Metal -> return validateMetalBackend(move resolvedPlatform);
-        Vulkan -> return validateVulkanBackend(move resolvedPlatform);
-        DirectX12 -> return validateDirectX12Backend(move resolvedPlatform);
     }
 }
 
+
 @Native
-function validateMetalBackend(platform: GraphicsPlatform) -> GraphicsBackendSelection {
+function validateMetalBackend(platform: Platform) -> RenderBackendSelection {
     if platform == .MacOS {
-        return GraphicsBackendSelection {
+        return RenderBackendSelection {
             backend: .Metal
             platform: platform
             supported: true
@@ -111,7 +89,7 @@ function validateMetalBackend(platform: GraphicsPlatform) -> GraphicsBackendSele
         }
     }
     if platform == .IOS {
-        return GraphicsBackendSelection {
+        return RenderBackendSelection {
             backend: .Metal
             platform: platform
             supported: true
@@ -120,87 +98,14 @@ function validateMetalBackend(platform: GraphicsPlatform) -> GraphicsBackendSele
             reason: ""
         }
     }
-    return unsupportedBackend(GraphicsBackend.Metal, move platform, "Kira Graphics Metal backend is only supported on macOS and iOS")
+    return unsupportedBackend(.Metal, move platform, "Kira Graphics Metal backend is only supported on macOS and iOS")
 }
 
-@Native
-// Vulkan: the loader is probed, and the answer is still `supported: false`.
-//
-// The probe says whether the loader is *present*, which is a different question
-// from whether this package can render with it — there is no device, no frame
-// path and no encoder behind `GraphicsBackend.Vulkan`, only the generated
-// bindings and this loader. Reporting `supported: true` because the driver is
-// installed told a caller it could select a backend that would then draw
-// nothing.
-//
-// The probe still runs, because its answer is the useful half of the reason: a
-// machine without the loader and a machine with one are different states, and
-// the message says which.
-function validateVulkanBackend(platform: GraphicsPlatform) -> GraphicsBackendSelection {
-    let contract = vulkanLoaderContract(platform)
-    let probe = vulkanRuntimeProbe(contract)
-    var reason = "the Kira Graphics Vulkan backend is not implemented: no device or frame path exists behind the loader"
-    if probe.supported == false {
-        reason = reason + " (and " + probe.reason + ")"
-    }
-    return GraphicsBackendSelection {
-        backend: .Vulkan
-        platform: contract.platform
-        supported: false
-        loaderName: contract.libraryName
-        requiredSymbolCount: contract.globalSymbolCount + contract.instanceSymbolCount + contract.deviceSymbolCount
-        reason: reason
-    }
-}
-
-@Native
-// DirectX 12: the same arrangement, for the same reason. See
-// `validateVulkanBackend`.
-//
-// The probe now goes further than the loader: it creates a real device and
-// calls `Release` on it through the device's own vtable, so the reason
-// distinguishes a machine with no Direct3D 12 from one whose device this
-// package can already drive. Neither is `supported: true` — a device is not a
-// frame path, and there is still no queue, swap chain or encoder behind it.
-function validateDirectX12Backend(platform: GraphicsPlatform) -> GraphicsBackendSelection {
-    let contract = directX12LoaderContract(platform)
-    let probe = directX12DeviceProbe(contract)
-    var reason = "the Kira Graphics DirectX 12 backend is not implemented: no frame path exists behind the device"
-    if probe.deviceCreated == false {
-        reason = reason + " (and " + probe.reason + ")"
-    } else {
-        reason = reason + " (" + probe.reason + ")"
-    }
-    return GraphicsBackendSelection {
-        backend: .DirectX12
-        platform: contract.platform
-        supported: false
-        loaderName: contract.d3d12LibraryName
-        requiredSymbolCount: contract.loaderSymbolCount
-        reason: reason
-    }
-}
-
-function unsupportedBackend(backend: GraphicsBackend, platform: GraphicsPlatform, reason: String) -> GraphicsBackendSelection {
-    return GraphicsBackendSelection {
+function unsupportedBackend(backend: RenderBackendKind, platform: Platform, reason: String) -> RenderBackendSelection {
+    return RenderBackendSelection {
         backend: backend
         platform: platform
         supported: false
         reason: reason
     }
-}
-
-function unsupportedBackendWithLoader(backend: GraphicsBackend, platform: GraphicsPlatform, loaderName: String, requiredSymbolCount: Int, reason: String) -> GraphicsBackendSelection {
-    return GraphicsBackendSelection {
-        backend: backend
-        platform: platform
-        supported: false
-        loaderName: loaderName
-        requiredSymbolCount: requiredSymbolCount
-        reason: reason
-    }
-}
-
-function graphicsBackendName() -> String {
-    return graphicsBackendNameFor(defaultGraphicsBackend())
 }

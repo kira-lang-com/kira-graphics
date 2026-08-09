@@ -1,4 +1,4 @@
-enum GraphicsEventKind {
+enum AppEventKind {
     None
     KeyDown
     KeyUp
@@ -25,7 +25,7 @@ enum GraphicsEventKind {
     FilesDropped
 }
 
-enum GraphicsPointerButton {
+enum PointerButton {
     None
     Left
     Right
@@ -33,7 +33,7 @@ enum GraphicsPointerButton {
     Other
 }
 
-struct GraphicsModifierState {
+struct ModifierState {
     let shift: Bool = false
     let control: Bool = false
     let alt: Bool = false
@@ -43,14 +43,14 @@ struct GraphicsModifierState {
     let middlePointerButton: Bool = false
 }
 
-struct GraphicsEvent {
-    let kind: GraphicsEventKind = GraphicsEventKind.None
+struct AppEvent {
+    let kind: AppEventKind = .None
     let frameCount: Int = 0
     let keyCode: Int = 0
     let textCodepoint: Int = 0
     let keyRepeat: Bool = false
-    let modifiers: GraphicsModifierState = GraphicsModifierState {}
-    let pointerButton: GraphicsPointerButton = GraphicsPointerButton.None
+    let modifiers: ModifierState = ModifierState {}
+    let pointerButton: PointerButton = .None
     let pointerX: Float = 0.0
     let pointerY: Float = 0.0
     let pointerDeltaX: Float = 0.0
@@ -64,96 +64,96 @@ struct GraphicsEvent {
     let framebufferHeight: Int = 0
 }
 
-function graphicsEventKindFromRaw(kind: Int) -> GraphicsEventKind {
+function graphicsEventKindFromRaw(kind: Int) -> AppEventKind {
     if kind == 1 {
-        return GraphicsEventKind.KeyDown
+        return .KeyDown
     }
     if kind == 2 {
-        return GraphicsEventKind.KeyUp
+        return .KeyUp
     }
     if kind == 3 {
-        return GraphicsEventKind.TextInput
+        return .TextInput
     }
     if kind == 4 {
-        return GraphicsEventKind.PointerDown
+        return .PointerDown
     }
     if kind == 5 {
-        return GraphicsEventKind.PointerUp
+        return .PointerUp
     }
     if kind == 6 {
-        return GraphicsEventKind.Scroll
+        return .Scroll
     }
     if kind == 7 {
-        return GraphicsEventKind.PointerMoved
+        return .PointerMoved
     }
     if kind == 8 {
-        return GraphicsEventKind.PointerEntered
+        return .PointerEntered
     }
     if kind == 9 {
-        return GraphicsEventKind.PointerExited
+        return .PointerExited
     }
     if kind == 10 {
-        return GraphicsEventKind.TouchesBegan
+        return .TouchesBegan
     }
     if kind == 11 {
-        return GraphicsEventKind.TouchesMoved
+        return .TouchesMoved
     }
     if kind == 12 {
-        return GraphicsEventKind.TouchesEnded
+        return .TouchesEnded
     }
     if kind == 13 {
-        return GraphicsEventKind.TouchesCancelled
+        return .TouchesCancelled
     }
     if kind == 14 {
-        return GraphicsEventKind.Resized
+        return .Resized
     }
     if kind == 15 {
-        return GraphicsEventKind.Iconified
+        return .Iconified
     }
     if kind == 16 {
-        return GraphicsEventKind.Restored
+        return .Restored
     }
     if kind == 17 {
-        return GraphicsEventKind.Focused
+        return .Focused
     }
     if kind == 18 {
-        return GraphicsEventKind.Unfocused
+        return .Unfocused
     }
     if kind == 19 {
-        return GraphicsEventKind.Suspended
+        return .Suspended
     }
     if kind == 20 {
-        return GraphicsEventKind.Resumed
+        return .Resumed
     }
     if kind == 21 {
-        return GraphicsEventKind.QuitRequested
+        return .QuitRequested
     }
     if kind == 22 {
-        return GraphicsEventKind.ClipboardPasted
+        return .ClipboardPasted
     }
     if kind == 23 {
-        return GraphicsEventKind.FilesDropped
+        return .FilesDropped
     }
-    return GraphicsEventKind.None
+    return .None
 }
 
-function graphicsPointerButtonFromRaw(button: Int) -> GraphicsPointerButton {
+function graphicsPointerButtonFromRaw(button: Int) -> PointerButton {
     if button == 0 {
-        return GraphicsPointerButton.Left
+        return .Left
     }
     if button == 1 {
-        return GraphicsPointerButton.Right
+        return .Right
     }
     if button == 2 {
-        return GraphicsPointerButton.Middle
+        return .Middle
     }
     if button < 0 || button == 256 {
-        return GraphicsPointerButton.None
+        return .None
     }
-    return GraphicsPointerButton.Other
+    return .Other
 }
 
-function graphicsModifierStateFromRaw(raw: Int) -> GraphicsModifierState {
+function graphicsModifierStateFromRaw(raw: Int) -> ModifierState {
     let shift = (raw / 1) % 2 == 1
     let control = (raw / 2) % 2 == 1
     let alt = (raw / 4) % 2 == 1
@@ -161,7 +161,7 @@ function graphicsModifierStateFromRaw(raw: Int) -> GraphicsModifierState {
     let leftPointerButton = (raw / 256) % 2 == 1
     let rightPointerButton = (raw / 512) % 2 == 1
     let middlePointerButton = (raw / 1024) % 2 == 1
-    return GraphicsModifierState {
+    return ModifierState {
         shift: shift
         control: control
         alt: alt
@@ -172,7 +172,7 @@ function graphicsModifierStateFromRaw(raw: Int) -> GraphicsModifierState {
     }
 }
 
-function graphicsEventUsesPointerPosition(kind: borrow GraphicsEventKind) -> Bool {
+function graphicsEventUsesPointerPosition(kind: borrow AppEventKind) -> Bool {
     if kind == .PointerDown {
         return true
     }
@@ -212,10 +212,9 @@ function graphicsRawKindIsTouch(rawKind: Int) -> Bool {
 }
 
 @Native
-function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> GraphicsEvent {
-    let rawKind = kgEventType(eventPtr)
-    let rawModifiers = kgEventModifiers(eventPtr)
-    let touchCount = kgEventTouchCount(eventPtr)
+function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> AppEvent {
+    let rawKind = eventPtr.type_value
+    let touchCount = eventPtr.num_touches
     // Touch events carry their position in touches[0] rather than the mouse
     // fields. Routing the primary touch into pointerX/Y lets the shared
     // pointer hit-testing path drive hover/press/drag from touch input too.
@@ -227,54 +226,49 @@ function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> GraphicsEvent
     // layout space in the same units — otherwise hit-testing misses by the DPI
     // factor on Retina. dpi_scale is 1.0 off Retina, so this is a no-op there.
     let dpiScale = sokolDpiScale()
-    let pointerX = (isTouch ? kgEventTouchX(eventPtr, 0) : kgEventMouseX(eventPtr)) / dpiScale
-    let pointerY = (isTouch ? kgEventTouchY(eventPtr, 0) : kgEventMouseY(eventPtr)) / dpiScale
-    return GraphicsEvent {
+    let primaryTouch = eventPtr.touches[0]
+    let pointerX = (isTouch ? primaryTouch.pos_x : eventPtr.mouse_x) / dpiScale
+    let pointerY = (isTouch ? primaryTouch.pos_y : eventPtr.mouse_y) / dpiScale
+    return AppEvent {
         kind: graphicsEventKindFromRaw(rawKind)
-        frameCount: kgEventFrameCount(eventPtr)
-        keyCode: kgEventKeyCode(eventPtr)
-        textCodepoint: kgEventCharCode(eventPtr)
-        keyRepeat: kgEventKeyRepeat(eventPtr) != 0
-        modifiers: graphicsModifierStateFromRaw(rawModifiers)
-        pointerButton: graphicsPointerButtonFromRaw(kgEventMouseButton(eventPtr))
+        frameCount: eventPtr.frame_count
+        keyCode: eventPtr.key_code
+        textCodepoint: eventPtr.char_code
+        keyRepeat: eventPtr.key_repeat
+        modifiers: graphicsModifierStateFromRaw(eventPtr.modifiers)
+        pointerButton: graphicsPointerButtonFromRaw(eventPtr.mouse_button)
         pointerX: pointerX
         pointerY: pointerY
-        pointerDeltaX: kgEventMouseDx(eventPtr) / dpiScale
-        pointerDeltaY: kgEventMouseDy(eventPtr) / dpiScale
-        scrollX: kgEventScrollX(eventPtr)
-        scrollY: kgEventScrollY(eventPtr)
+        pointerDeltaX: eventPtr.mouse_dx / dpiScale
+        pointerDeltaY: eventPtr.mouse_dy / dpiScale
+        scrollX: eventPtr.scroll_x
+        scrollY: eventPtr.scroll_y
         touchCount: touchCount
-        windowWidth: kgEventWindowWidth(eventPtr)
-        windowHeight: kgEventWindowHeight(eventPtr)
-        framebufferWidth: kgEventFramebufferWidth(eventPtr)
-        framebufferHeight: kgEventFramebufferHeight(eventPtr)
+        windowWidth: eventPtr.window_width
+        windowHeight: eventPtr.window_height
+        framebufferWidth: eventPtr.framebuffer_width
+        framebufferHeight: eventPtr.framebuffer_height
     }
 }
 
 @Native
 function graphicsStringFromCodepoint(codepoint: Int) -> String {
-    let nativeCodepoint: I64 = codepoint
-    let value: String = kgCodepointUtf8(nativeCodepoint)
-    return value
+    return scalarText(codepoint)
 }
 
 @Native
 function graphicsAppendCodepoint(base: borrow String, codepoint: Int) -> String {
-    let nativeCodepoint: I64 = codepoint
-    let value: String = kgStringAppendCodepoint(base, nativeCodepoint)
-    return value
+    return base + scalarText(codepoint)
 }
 
 @Native
 function graphicsDropLastScalar(base: borrow String) -> String {
-    let value: String = kgStringDropLastScalar(base)
-    return value
+    return base.dropLastScalar()
 }
 
 @Native
 function graphicsStringConcat(a: borrow String, b: borrow String) -> String {
-    let value: String = kgStringConcat(a, b)
-    return value
+    return a + b
 }
 
 @Native
@@ -294,7 +288,7 @@ function graphicsShowMouse(show: Bool) {
     // The native Metal window path doesn't run through Sokol, so drive NSCursor too.
     // Apple-only: the ObjC runtime does not exist elsewhere (on wasm the objc
     // externs are abort-stubs), so gate on the actual host platform.
-    let platform = hostGraphicsPlatform()
+    let platform = hostPlatform()
     if platform == .MacOS || platform == .IOS {
         metalSetCursorHidden(show == false)
     }
@@ -312,7 +306,7 @@ function graphicsLockMouse(lock: Bool) {
     sapp_lock_mouse(lock)
     // The native Metal window path doesn't run through Sokol, so drive
     // CoreGraphics too. Apple-only, on the same terms as `graphicsShowMouse`.
-    let platform = hostGraphicsPlatform()
+    let platform = hostPlatform()
     if platform == .MacOS || platform == .IOS {
         metalSetMouseLocked(lock)
     }
