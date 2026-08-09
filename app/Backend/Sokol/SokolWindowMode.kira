@@ -1,0 +1,41 @@
+import Foundation
+
+// sokol_app has ONE undecorated window and it covers the display.
+//
+// `sapp_desc.fullscreen` and `sapp_toggle_fullscreen` are the whole of its
+// window-presentation surface, and its own header says the implementation is
+// free to be "a borderless fullscreen window instead of a 'real' fullscreen
+// mode" — which is exactly what it is on Win32, where the flag swaps the
+// window's style to `WS_POPUP` over the monitor rather than changing the
+// display mode. There is no undecorated window at the size the application
+// asked for, so `WindowedBorderless` gets the undecorated window sokol has.
+//
+// `sokolWindowMode` then reads back `Fullscreen`, because that is what is on
+// screen. A caller that needs to know whether its request was honoured compares
+// what it asked for with what this answers, which is the only way to find out
+// on a backend that collapses two states into one — a remembered copy of the
+// request would say yes either way.
+function sokolWindowIsCovering(mode: borrow WindowMode) -> Bool {
+    match mode {
+        Windowed -> return false;
+        WindowedBorderless -> return true;
+        Fullscreen -> return true;
+    }
+}
+
+@Native
+function sokolWindowMode() -> WindowMode {
+    if sapp_is_fullscreen() {
+        return .Fullscreen
+    }
+    return .Windowed
+}
+
+@Native
+function sokolSetWindowMode(mode: borrow WindowMode): Void {
+    if sapp_is_fullscreen() == sokolWindowIsCovering(mode) {
+        return
+    }
+    sapp_toggle_fullscreen()
+    return
+}

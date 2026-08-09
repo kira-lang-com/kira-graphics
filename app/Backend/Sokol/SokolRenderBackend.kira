@@ -1,0 +1,330 @@
+import Foundation
+// Sokol's answers to `RenderBackend`.
+//
+// The counterpart of `MetalRenderBackend.kira`. `context` is the
+// `GraphicsAppRuntimeState` the run loop keeps its frame counters, pass state
+// and lifetime peaks on; it is null only inside `runApplication`, which is what
+// creates it.
+//
+// Every member is written here, including the two whose work is genuinely
+// nothing on this backend (`dynamicBufferFrameStart`, `optimizeTexture`). Each
+// of those says in its own body why, which is the difference between an answer
+// and the silent fallthrough these replaced.
+RenderBackend SokolRenderBackend(context: RawPtr) {
+    // --- shaders ---------------------------------------------------------
+    function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult {
+        return shaderResult(sokolCreateGraphicsShader(descriptor))
+    }
+
+    function createShaderFromKsl(descriptor: borrow KslShaderDescriptor) -> ShaderResult {
+        return shaderResult(sokolCreateGraphicsShaderFromKsl(descriptor))
+    }
+
+    function createShaderFromKslArtifact(label: borrow String, artifact: borrow KslArtifact) -> ShaderResult {
+        return sokolCreateGraphicsShaderFromKslArtifact(label, artifact)
+    }
+
+    function destroyShader(shader: borrow GraphicsShader) -> Void {
+        sokolDestroyShaderId(shader.id)
+        return
+    }
+
+    // --- pipelines -------------------------------------------------------
+    function createRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> PipelineResult {
+        return pipelineResult(sokolCreateRenderPipeline(descriptor))
+    }
+
+    function destroyPipeline(pipeline: borrow RenderPipeline) -> Void {
+        sokolDestroyRenderPipelineId(pipeline)
+        return
+    }
+
+    // --- buffers ---------------------------------------------------------
+    // Metal reads its allocated bytes off the device; sokol tracks none, so the
+    // byte count is added here, where the size is still in hand, and released
+    // again in the matching destroy.
+    function createDynamicBuffer(label: borrow String, floatCapacity: Int) -> DynamicBufferResult {
+        sokolNoteAllocation(context, U64(floatCapacity * 4), false)
+        return sokolCreateDynamicBuffer(label, floatCapacity)
+    }
+
+    // Zero: there is no ring to claim a slot from. `commitDynamicBuffer` copies
+    // the written prefix and the driver owns the double buffering, so every
+    // frame writes from the buffer's own base.
+    function dynamicBufferFrameStart(buffer: borrow GraphicsBuffer) -> Int {
+        return 0
+    }
+
+    function commitDynamicBuffer(buffer: borrow GraphicsBuffer, contents: RawPtr, floatCount: Int) -> Void {
+        sokolCommitDynamicBuffer(buffer, contents, floatCount)
+        return
+    }
+
+    function createBuffer(descriptor: borrow BufferDescriptor) -> BufferResult {
+        sokolNoteAllocation(context, U64(descriptor.data.count * 4), false)
+        return bufferResult(sokolCreateGraphicsBuffer(descriptor))
+    }
+
+    function createIndexBuffer(descriptor: borrow IndexBufferDescriptor) -> BufferResult {
+        sokolNoteAllocation(context, U64(descriptor.data.count * 4), false)
+        return bufferResult(sokolCreateGraphicsIndexBuffer(descriptor))
+    }
+
+    function destroyBuffer(buffer: borrow GraphicsBuffer) -> Void {
+        sokolNoteAllocation(context, U64(buffer.byteSize), true)
+        sokolDestroyBufferId(buffer.id)
+        return
+    }
+
+    // --- uniforms --------------------------------------------------------
+    function createUniform(descriptor: borrow UniformDescriptor) -> UniformResult {
+        return uniformResult(sokolCreateUniform(descriptor))
+    }
+
+    function updateUniform(uniform: borrow Uniform, data: borrow [F32]) -> Void {
+        setUniformValues(uniform, data)
+        return
+    }
+
+    function destroyUniform(uniform: borrow Uniform) -> Void {
+        sokolDestroyUniformId(uniform.id)
+        return
+    }
+
+    // --- bind groups -----------------------------------------------------
+    function createBindGroup(descriptor: borrow BindGroupDescriptor) -> BindGroupResult {
+        return bindGroupResult(sokolCreateGraphicsBindGroup(descriptor))
+    }
+
+    function createUniformBindGroup(label: borrow String, uniformSlot: Int, uniform: borrow Uniform) -> BindGroupResult {
+        return bindGroupResult(sokolCreateUniformBindGroup(label, uniformSlot, uniform))
+    }
+
+    function createStorageBufferBindGroup(label: borrow String, slot: Int, bufferId: U32) -> BindGroupResult {
+        return sokolCreateStorageBufferBindGroup(label, slot, bufferId)
+    }
+
+    function beginBindGroup(label: borrow String) -> BindGroupResult {
+        return bindGroupResult(sokolBeginGraphicsBindGroup(label))
+    }
+
+    function bindGroupAddTexture(group: borrow BindGroup, slot: Int, texture: borrow GraphicsTexture) -> Void {
+        sokolBindGroupAddTexture(group, slot, texture)
+        return
+    }
+
+    function bindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: borrow GraphicsSampler) -> Void {
+        sokolBindGroupAddSampler(group, slot, sampler)
+        return
+    }
+
+    function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroupResult {
+        return bindGroupResult(sokolCreateGraphicsTextureSamplerBindGroup(label, textureSlot, texture, samplerSlot, sampler))
+    }
+
+    function destroyBindGroup(bindGroup: borrow BindGroup) -> Void {
+        sokolDestroyBindGroupId(bindGroup.id)
+        return
+    }
+
+    // --- textures and samplers -------------------------------------------
+    function createTexture(descriptor: borrow TextureDescriptor) -> TextureResult {
+        sokolNoteAllocation(context, textureByteSize(descriptor.width, descriptor.height, descriptor.sampleCount), false)
+        return sokolCreateTexture(descriptor)
+    }
+
+    function createTextureFromPixels(descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
+        sokolNoteAllocation(context, textureByteSize(descriptor.width, descriptor.height, descriptor.sampleCount), false)
+        return sokolCreateTextureFromPixels(descriptor, pixels)
+    }
+
+    function updateTexture(texture: borrow GraphicsTexture, width: Int, height: Int, pixels: borrow [U8]) -> Void {
+        sokolUpdateTexture(texture, pixels)
+        return
+    }
+
+    function updateTextureBytes(texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) -> Void {
+        sokolUpdateTextureBytes(texture, bytes, byteCount)
+        return
+    }
+
+    function destroyTexture(texture: borrow GraphicsTexture) -> Void {
+        sokolNoteAllocation(context, textureByteSize(texture.width, texture.height, texture.sampleCount), true)
+        sokolDestroyTexture(texture)
+        return
+    }
+
+    function createSampler(descriptor: borrow SamplerDescriptor) -> SamplerResult {
+        return samplerResult(sokolCreateGraphicsSampler(descriptor))
+    }
+
+    function destroySampler(sampler: borrow GraphicsSampler) -> Void {
+        sokolDestroySamplerId(sampler.id)
+        return
+    }
+
+    // --- the drawable ----------------------------------------------------
+    function backingScale() -> Float {
+        return sokolDpiScale()
+    }
+
+    function contextWidth() -> Int {
+        return sokolDrawableWidth()
+    }
+
+    function contextHeight() -> Int {
+        return sokolDrawableHeight()
+    }
+
+    // Framebuffer pixels over the backing scale: sokol-app reports the drawable
+    // in pixels when `high_dpi` is on, and points are what that divides to.
+    function viewportWidth() -> Float {
+        return sokolLogicalWidthF()
+    }
+
+    function viewportHeight() -> Float {
+        return sokolLogicalHeightF()
+    }
+
+    // --- compute ---------------------------------------------------------
+    function supportsCompute() -> Bool {
+        return true
+    }
+
+    // The entry was fixed when the shader was created: a `sg_shader` names one
+    // function per stage, so a compute pipeline built from it has nothing left
+    // to look up.
+    function createComputePipeline(label: borrow String, shader: borrow GraphicsShader, entryName: borrow String) -> Int {
+        return sokolCreateComputePipelineId(label, shader)
+    }
+
+    function dispatchTextureComputePair(
+        horizontalPipeline: Int,
+        verticalPipeline: Int,
+        source: borrow GraphicsTexture,
+        tempNear: borrow GraphicsTexture,
+        tempFar: borrow GraphicsTexture,
+        outputNear: borrow GraphicsTexture,
+        outputFar: borrow GraphicsTexture,
+        sampler: borrow GraphicsSampler,
+        width: Int,
+        height: Int,
+    ) -> Void {
+        sokolDispatchTextureComputePair(
+            horizontalPipeline,
+            verticalPipeline,
+            source,
+            tempNear,
+            tempFar,
+            outputNear,
+            outputFar,
+            sampler,
+            width,
+            height,
+        )
+        return
+    }
+
+    function dispatchComputeBuffers(
+        pipeline: Int,
+        bufferIds: borrow [U32],
+        threadCount: Int,
+        threadsPerGroup: Int,
+    ) {
+        sokolDispatchComputeBuffers(pipeline, bufferIds, threadCount, threadsPerGroup)
+        return
+    }
+
+    // sokol has no buffer readback: `sg_buffer` is write-only from the CPU side
+    // on every one of its device backends, and there is no map or copy-to-host
+    // call to add one with. A caller that needs the answer reads it on a backend
+    // that can give one.
+    // sokol binds a texture to a compute stage through a view, and the depth a
+    // pass wrote is an attachment view rather than a sampled one — there is no
+    // view to bind, so this declines rather than dispatching a kernel whose
+    // first read would be unbound.
+    function dispatchDepthComputeBuffers(
+        pipeline: Int,
+        depth: borrow GraphicsTexture,
+        bufferIds: borrow [U32],
+        threadCount: Int,
+        threadsPerGroup: Int,
+    ) {
+        graphicsDiagnostic("Kira Graphics cannot bind a pass's depth attachment to a compute stage on this backend")
+        return
+    }
+
+    function readBufferU32(buffer: borrow GraphicsBuffer, index: Int) -> U32 {
+        graphicsDiagnostic("Kira Graphics cannot read a buffer back on this backend")
+        return U32(0)
+    }
+
+    function createStorageBufferWords(label: borrow String, data: borrow [U32]) -> BufferResult {
+        sokolNoteAllocation(context, U64(data.count * 4), false)
+        return bufferResult(sokolGraphicsBuffer(sokolMakeWordBuffer(label, data), data.count * 4))
+    }
+
+    // Nothing to re-tile. Metal's blit exists because a Metal texture written
+    // through the shader-write usage keeps an uncompressed layout until
+    // `optimizeContentsForGPUAccess:` runs. sokol exposes no blit encoder and no
+    // layout operation of any kind — under GL the driver owns a texture's
+    // internal layout and re-picks it on use — so the fast path is already what
+    // the next sample gets.
+    function optimizeTexture(textureId: Int) -> Void {
+        return
+    }
+
+    // --- frames and passes -----------------------------------------------
+    // One. The run loop builds a frame inside sokol-app's frame callback and
+    // commits it before returning, so there is never a second frame being
+    // recorded while the first is drawn.
+    // sokol's timer answers in seconds; the contract is nanoseconds, and the
+    // multiply happens here rather than at a caller so every backend's answer
+    // has the same unit and the same resolution question.
+    function monotonicNanoseconds() -> U64 {
+        return U64(kgMonotonicSeconds() * 1000000000.0)
+    }
+
+    function framesInFlight() -> Int {
+        return 1
+    }
+
+    function statistics() -> FrameStatistics {
+        return sokolFrameStatistics(context)
+    }
+
+    function beginRenderPass(frame: borrow RenderFrame) -> Bool {
+        return sokolBeginRenderPassFromFrame(frame)
+    }
+
+    function endPassAndCommit(frame: borrow RenderFrame) -> Void {
+        sokolEndPassAndCommitFromFrame(frame)
+        return
+    }
+
+    // The run loop's state goes in the second slot; the first is the Metal
+    // context, and an encoder given a non-null one takes the Metal draw path.
+    function makeEncoder(passActive: Bool) -> RenderEncoder {
+        return makeRenderEncoderForBackend(passActive, nullPointer(), context)
+    }
+
+    function submitFrame(frame: borrow RenderFrame) -> Void {
+        sokolSubmitFrame(frame)
+        return
+    }
+
+    function windowMode() -> WindowMode {
+        return sokolWindowMode()
+    }
+
+    function setWindowMode(mode: borrow WindowMode) -> Void {
+        sokolSetWindowMode(mode)
+        return
+    }
+
+    // --- the run loop ----------------------------------------------------
+    function runApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Void {
+        sokolRunApplication(app, runtimeUserData)
+        return
+    }
+}

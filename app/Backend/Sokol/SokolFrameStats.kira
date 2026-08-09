@@ -1,0 +1,205 @@
+import Foundation
+// What the Sokol backend can say about a frame, and how it comes to know it.
+//
+// The Metal backend answers the same questions off its context object; this is
+// the other half, so `RenderFrame.statistics()` has a real answer on both
+// backends instead of one that is only ever asked of Metal. Everything here is
+// measured — the counters are incremented by the pass and draw calls that do
+// the work, the CPU time is a clock read either side of the frame callback, and
+// the GPU time is the GPU's own `GL_TIME_ELAPSED` measurement.
+//
+// Held on `GraphicsAppRuntimeState`, because a frame's counters have to outlive
+// the frame that produced them: an application lays its HUD out while the frame
+// the HUD describes is still being built, so the honest thing to show is the
+// frame before it. The `live*` fields accumulate the frame in progress and are
+// rolled into the reported ones at submit.
+
+struct SokolFrameStats {
+    // The completed frame.
+    var cpuSeconds: Float = 0.0
+    var gpuSeconds: Float = 0.0
+    var passes: Int = 0
+    var draws: Int = 0
+    var triangles: Int = 0
+    // Bytes of GPU storage alive in images and buffers Kira created. Kept here
+    // rather than asked of sokol, which does not track it.
+    var allocatedBytes: U64 = 0
+    // 1 focused, 2 unfocused, 3 hidden — the same encoding the Metal backend
+    // reports, so one label table serves both.
+    var windowState: Int = 1
+
+    // The frame in progress.
+    var frameStartSeconds: Float = 0.0
+    var livePasses: Int = 0
+    var liveDraws: Int = 0
+    var liveTriangles: Int = 0
+}
+
+// Open a frame: start the clock and the GPU query.
+@Native
+function sokolBeginFrameStats(stats: borrow SokolFrameStats) -> SokolFrameStats {
+    var next = stats
+    next.frameStartSeconds = kgMonotonicSeconds()
+    next.livePasses = 0
+    next.liveDraws = 0
+    next.liveTriangles = 0
+    kgGpuTimerBegin()
+    return next
+}
+
+// Close a frame: stop the clock and the query, and publish what this frame did.
+@Native
+function sokolEndFrameStats(stats: borrow SokolFrameStats) -> SokolFrameStats {
+    kgGpuTimerEnd()
+    var next = stats
+    next.cpuSeconds = kgMonotonicSeconds() - stats.frameStartSeconds
+    next.gpuSeconds = kgGpuFrameSeconds()
+    next.passes = stats.livePasses
+    next.draws = stats.liveDraws
+    next.triangles = stats.liveTriangles
+    return next
+}
+
+// How many resources of every kind sokol currently holds alive. The one counter
+// sokol does keep, so it is read rather than mirrored.
+@Native
+function sokolAliveResourceCount() -> Int {
+    if !sg_isvalid() {
+        return 0
+    }
+    let stats = sg_query_stats()
+    return Int(stats.total.buffers.alive) +
+        Int(stats.total.images.alive) +
+        Int(stats.total.samplers.alive) +
+        Int(stats.total.views.alive) +
+        Int(stats.total.shaders.alive) +
+        Int(stats.total.pipelines.alive)
+}
+
+// The frame counters, reachable from a `RenderFrame` through the backend
+// context it carries. A null context is a frame built outside the run loop —
+// the fake-graphics preflight example does exactly that — and reports nothing
+// rather than dereferencing.
+@Native
+function sokolNotePass(backendContext: RawPtr) {
+    if pointerIsNull(backendContext) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(backendContext)
+    state.frameStats.livePasses = state.frameStats.livePasses + 1
+    return
+}
+
+@Native
+function sokolNoteDraw(backendContext: RawPtr, elementCount: Int) {
+    if pointerIsNull(backendContext) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(backendContext)
+    state.frameStats.liveDraws = state.frameStats.liveDraws + 1
+    state.frameStats.liveTriangles = state.frameStats.liveTriangles + elementCount / 3
+    return
+}
+
+// Add or release the GPU storage of one image or buffer. Bytes rather than a
+// count, because "allocated" is what a memory readout means.
+@Native
+function sokolNoteAllocation(backendContext: RawPtr, bytes: U64, freed: Bool) {
+    if pointerIsNull(backendContext) || bytes == U64(0) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(backendContext)
+    if freed {
+        if state.frameStats.allocatedBytes < bytes {
+            state.frameStats.allocatedBytes = U64(0)
+            return
+        }
+        state.frameStats.allocatedBytes = state.frameStats.allocatedBytes - bytes
+        return
+    }
+    state.frameStats.allocatedBytes = state.frameStats.allocatedBytes + bytes
+    return
+}
+
+// The statistics as the public surface reports them.
+@Native
+function sokolFrameStatistics(backendContext: RawPtr) -> FrameStatistics {
+    var stats = FrameStatistics {
+        drawableWidth: sokolDrawableWidth()
+        drawableHeight: sokolDrawableHeight()
+        frameSeconds: rootSokolFrameDuration()
+        resourceCount: sokolAliveResourceCount()
+        framesInFlight: 1
+        frameSerial: Int(sapp_frame_count())
+        hasGpuSeconds: kgGpuTimerSupported()
+    }
+    if pointerIsNull(backendContext) {
+        return move stats
+    }
+    let runtime = nativeRecover<GraphicsAppRuntimeState>(backendContext)
+    stats.cpuSeconds = runtime.frameStats.cpuSeconds
+    stats.gpuSeconds = runtime.frameStats.gpuSeconds
+    stats.passCount = runtime.frameStats.passes
+    stats.drawCount = runtime.frameStats.draws
+    stats.triangleCount = runtime.frameStats.triangles
+    stats.allocatedBytes = runtime.frameStats.allocatedBytes
+    stats.hasAllocatedBytes = true
+    stats.windowState = runtime.frameStats.windowState
+    return move stats
+}
+
+@Native
+function rootSokolFrameDuration() -> Float {
+    return Float(sapp_frame_duration())
+}
+
+// Keep the window's reported state in step with what sokol-app says about it.
+//
+// sokol-app has no "am I focused" query — it reports the transitions and leaves
+// the tracking to whoever cares — so this is where the HUD's `Window` row comes
+// from. Hidden outranks unfocused: an iconified window is not going to receive
+// a focus event on the way down.
+@Native
+function sokolTrackWindowState(state: borrow mut GraphicsAppRuntimeState, kind: AppEventKind) {
+    match kind {
+        Focused -> state.frameStats.windowState = 1;
+        Unfocused -> state.frameStats.windowState = 2;
+        Iconified -> state.frameStats.windowState = 3;
+        Suspended -> state.frameStats.windowState = 3;
+        Restored -> state.frameStats.windowState = 1;
+        Resumed -> state.frameStats.windowState = 1;
+        None -> return;
+        KeyDown -> return;
+        KeyUp -> return;
+        TextInput -> return;
+        PointerDown -> return;
+        PointerUp -> return;
+        PointerMoved -> return;
+        PointerEntered -> return;
+        PointerExited -> return;
+        Scroll -> return;
+        TouchesBegan -> return;
+        TouchesMoved -> return;
+        TouchesEnded -> return;
+        TouchesCancelled -> return;
+        Resized -> return;
+        QuitRequested -> return;
+        ClipboardPasted -> return;
+        FilesDropped -> return;
+    }
+    return
+}
+
+// The GPU storage one colour texture occupies. Every format this backend hands
+// out is four bytes a texel; a depth attachment is provisioned by the pass
+// rather than created here, so it never reaches this.
+function textureByteSize(width: Int, height: Int, sampleCount: Int) -> U64 {
+    var samples = sampleCount
+    if samples < 1 {
+        samples = 1
+    }
+    if width <= 0 || height <= 0 {
+        return U64(0)
+    }
+    return U64(width * height * 4 * samples)
+}

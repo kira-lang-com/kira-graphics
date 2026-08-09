@@ -1,3 +1,5 @@
+import Foundation
+
 @Native
 function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
     let desc = sapp_desc {
@@ -11,6 +13,7 @@ function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         sample_count: app.sampleCount
         window_title: app.title
         high_dpi: app.highDpi
+        fullscreen: sokolWindowIsCovering(app.windowMode)
         logger: sapp_logger {
             func: kiraGraphicsSokolLog
         }
@@ -32,11 +35,12 @@ function kiraGraphicsSokolInit(runtimeUserData: RawPtr): Void {
     kiraGraphicsLiveBackendInitialized()
 
     var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    readHarnessKnobs(state)
     let onInit: (Graphics) -> Void = state.app.initHandler
     let graphics = Graphics {
         userData: state.userData
         backend: .Sokol
-        metalContext: metalNullPtr()
+        backendContext: runtimeUserData
     }
     onInit(move graphics)
     return
@@ -45,8 +49,9 @@ function kiraGraphicsSokolInit(runtimeUserData: RawPtr): Void {
 @Native
 function kiraGraphicsSokolEvent(eventPtr: sapp_event_ptr, runtimeUserData: RawPtr): Void {
     var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
-    let onEvent: (borrow GraphicsEvent) -> Void = state.app.eventHandler
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     let event = graphicsEventFromSapp(eventPtr)
+    sokolTrackWindowState(state, event.kind)
     onEvent(event)
     return
 }
@@ -54,19 +59,53 @@ function kiraGraphicsSokolEvent(eventPtr: sapp_event_ptr, runtimeUserData: RawPt
 @Native
 function kiraGraphicsSokolFrame(runtimeUserData: RawPtr): Void {
     var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
-    let onFrame: (borrow mut GraphicsFrame) -> Void = state.app.frameHandler
+    let onFrame: (borrow mut RenderFrame) -> Void = state.app.frameHandler
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     let graphics = Graphics {
         userData: state.userData
         backend: .Sokol
-        metalContext: metalNullPtr()
+        backendContext: runtimeUserData
     }
     var frame = graphics.frame()
 
     state.frameIndex = state.frameIndex + 1
+    state.frameStats = sokolBeginFrameStats(state.frameStats)
+    // Drive UI through the same event callback as a real pointer. This keeps
+    // scripted runs honest: Foundation still updates hover/press state, finds
+    // the hit region, invokes the button callback, and rebuilds before render.
+    let scriptFrame = state.frameIndex - 1
+    var clickIndex = 0
+    while clickIndex + 3 <= state.clickScript.count {
+        if state.clickScript[clickIndex] == scriptFrame {
+            let px = Float(state.clickScript[clickIndex + 1])
+            let py = Float(state.clickScript[clickIndex + 2])
+            let down = AppEvent {
+                kind: .PointerDown
+                pointerButton: .Left
+                pointerX: px
+                pointerY: py
+            }
+            onEvent(down)
+            let up = AppEvent {
+                kind: .PointerUp
+                pointerButton: .Left
+                pointerX: px
+                pointerY: py
+            }
+            onEvent(up)
+        }
+        clickIndex = clickIndex + 3
+    }
     onFrame(frame)
     graphicsSubmitFrame(frame)
-    kgSampleLifetimeFrame()
-    kgMaybeRequestQuitAfterFrame(state.frameIndex)
+    state.frameStats = sokolEndFrameStats(state.frameStats)
+    state.lifetimePeaks = sokolSampleLifetimePeaks(state.lifetimePeaks)
+    if state.frameIndex == state.captureAtFrame {
+        sokolCaptureFrame(state.capturePath)
+    }
+    if state.quitAfterFrames > 0 && state.frameIndex >= state.quitAfterFrames {
+        sapp_request_quit()
+    }
     return
 }
 
@@ -77,12 +116,61 @@ function kiraGraphicsSokolCleanup(runtimeUserData: RawPtr): Void {
     let graphics = Graphics {
         userData: state.userData
         backend: .Sokol
-        metalContext: metalNullPtr()
+        backendContext: runtimeUserData
     }
 
     onCleanup(move graphics)
-    kgDestroyDefaultResources()
-    kgReportLifetime()
+    sokolDestroyPassResources(state)
+    sokolReportLifetime(state.lifetimePeaks)
     sg_shutdown()
+    return
+}
+
+// The harness knobs a run was started with.
+//
+// A windowed example has no way to end on its own, and a run that never ends is
+// a run a CI job kills rather than reports on — so `KIRA_GRAPHICS_QUIT_AFTER_FRAMES`
+// names the frame to stop at. `KIRA_GRAPHICS_CAPTURE_FRAME` names a file the
+// presented frame is written to, and `KIRA_GRAPHICS_CAPTURE_AT` the frame to take
+// (the quit-after limit by default, so a run that ends on its own captures the
+// last thing it drew). That capture is what proves what a frame CONTAINS:
+// everything else a run can report — a submitted pass, a draw count, a
+// first-frame marker — is equally true of a frame that came out blank.
+//
+// Read once, at init: they are launch settings, and asking the environment for
+// one per frame puts a scan and a string allocation in the frame callback.
+@Native
+function readHarnessKnobs(state: borrow mut GraphicsAppRuntimeState) {
+    state.quitAfterFrames = environmentInt("KIRA_GRAPHICS_QUIT_AFTER_FRAMES", 0)
+    let logFps = environmentValue("KIRA_GRAPHICS_LOG_FPS")
+    state.pass.logFps = logFps.count > 0 && logFps != "0"
+    let clickScript = environmentValue("KIRA_UI_CLICK_SCRIPT")
+    if clickScript.count > 0 {
+        state.clickScript = sokolEnvInts(clickScript)
+    }
+    state.capturePath = environmentValue("KIRA_GRAPHICS_CAPTURE_FRAME")
+    if state.capturePath.count == 0 {
+        // No frame is ever numbered 0, so nothing captures.
+        state.captureAtFrame = 0
+        return
+    }
+    var at = environmentInt("KIRA_GRAPHICS_CAPTURE_AT", 0)
+    if at <= 0 {
+        at = state.quitAfterFrames
+    }
+    if at <= 0 {
+        at = 1
+    }
+    state.captureAtFrame = at
+    return
+}
+
+@Native
+function sokolCaptureFrame(path: borrow String) {
+    if kgCaptureSwapchainPpm(path) {
+        graphicsDiagnostic("Kira Graphics wrote the presented frame to " + path)
+    } else {
+        graphicsDiagnostic("Kira Graphics could not read the swapchain back into " + path)
+    }
     return
 }

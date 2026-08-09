@@ -1,0 +1,171 @@
+import Foundation
+// Keeping every sampled texture's rows in one order, whichever way it was
+// filled.
+//
+// A texture uploaded from CPU pixels holds its first row first: that is what
+// `sg_make_image` and `sg_update_image` do with the bytes they are handed, on
+// every backend. A texture a render pass wrote holds its first row first only
+// where the framebuffer origin is the top-left. Under desktop GL the origin is
+// the bottom-left, so the pass writes the image upside down relative to the
+// upload — and a shader sampling `uv.y == 0` gets the top of one and the bottom
+// of the other.
+//
+// A sample site cannot compensate, because it cannot tell which kind of texture
+// it was handed: the same slot takes a loaded photo one frame and a scene
+// capture the next. So the backend restores the order at the point the target
+// is written, and nothing above here ever asks the question.
+//
+// The correction is a row swap over the colour target as the pass ends, and the
+// mirror of it before a pass that LOADS one — a load reads the stored order
+// back into the order the rasterizer is about to write in. Both run through
+// `Shaders/FlipRenderTargetRows.ksl`.
+
+// The state the correction keeps between passes: one compute pipeline, and the
+// slots its shader's reflection numbered its uniform block and image with.
+struct SokolRowFlip {
+    var pipelineId: Int = 0
+    var uniformSlot: Int = 0
+    var imageSlot: Int = 0
+    // Whether creation has been tried. A backend that refuses the kernel refuses
+    // it every time, and retrying once per pass would report it once per pass.
+    var built: Bool = false
+}
+
+// Whether this backend puts a framebuffer's first row at the bottom.
+//
+// Asked of the running context rather than decided by which backend was
+// compiled in: the same binary brings up GL on one machine and Metal on
+// another, and `origin_top_left` is sokol's own answer for the one it got.
+@Native
+function sokolBottomLeftOrigin() -> Bool {
+    return !sg_query_features().origin_top_left
+}
+
+// Whether a texture of this description needs its rows corrected after a pass
+// writes it — a colour target that something will later sample.
+//
+// The pixel format is part of the question: the swap runs through a storage
+// image, and KSL spells a storage image's texels `rgba8`. A target of another
+// format is never given the storage view the swap binds, so it is never bound
+// through a format its texels are not in.
+@Native
+function sokolRowOrderNeedsCorrection(descriptor: borrow TextureDescriptor) -> Bool {
+    return sokolBottomLeftOrigin()
+        && sokolUsageIsColorTarget(descriptor.usage)
+        && sokolUsageIsSampled(descriptor.usage)
+        && sokolSampleCount(descriptor.sampleCount) == 1
+        && sokolPixelFormat(descriptor.format) == sokolPixelFormatRgba8()
+}
+
+// The extent uniform the kernel reads, as the words its `std140` block holds.
+//
+// Four rather than two, for the same reason the blur pair writes four: the
+// block's declared size is 16 bytes and sokol checks the range it is handed
+// against it.
+@Native
+function sokolRowFlipExtentWords(width: Int, height: Int) -> [U32] {
+    return [U32(width), U32(height), U32(0), U32(0)]
+}
+
+// Build the row-swap pipeline, once per run.
+@Native
+function sokolEnsureRowFlipPipeline(state: borrow mut GraphicsAppRuntimeState) -> Bool {
+    if state.rowFlip.built {
+        return state.rowFlip.pipelineId != 0
+    }
+    state.rowFlip.built = true
+    let artifact = ksl!("Shaders/FlipRenderTargetRows.ksl")
+    let reflection = kslParseResourceReflection(artifact.resourceReflection)
+    if reflection.images.count == 0 || reflection.uniforms.count == 0 {
+        graphicsDiagnostic("Kira Graphics could not read the row-flip kernel's bindings, so render targets keep the backend's own row order")
+        return false
+    }
+    let shader = shaderOrReport(sokolCreateComputeShader("kira-graphics-row-flip", artifact), "row-flip kernel")
+    if shader.id == 0 {
+        return false
+    }
+    state.rowFlip.uniformSlot = reflection.uniforms[0].binding
+    state.rowFlip.imageSlot = reflection.images[0].binding
+    state.rowFlip.pipelineId = sokolCreateComputePipelineId("kira-graphics-row-flip", shader)
+    if state.rowFlip.pipelineId == 0 {
+        graphicsDiagnostic("Kira Graphics could not build the row-flip pipeline, so render targets keep the backend's own row order")
+        return false
+    }
+    return true
+}
+
+// Swap `texture`'s rows top for bottom.
+//
+// The dispatch covers half the rows: one invocation owns a row pair and writes
+// both halves of the swap, so nothing in the dispatch depends on anything else
+// in it.
+@Native
+function sokolFlipTextureRows(backendContext: RawPtr, texture: borrow GraphicsTexture) {
+    if pointerIsNull(backendContext) {
+        return
+    }
+    // No storage view means the texture was not created as a sampled colour
+    // target in a format the swap can bind, and nothing samples it as one.
+    if texture.storageViewId == 0 || texture.width <= 0 || texture.height <= 1 {
+        return
+    }
+    if !sokolBottomLeftOrigin() {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(backendContext)
+    if !sokolEnsureRowFlipPipeline(state) {
+        return
+    }
+    sg_begin_pass(move sg_pass {
+        compute: true
+        label: "kira-graphics-row-flip"
+    })
+    sg_apply_pipeline(sg_pipeline { id: U32(state.rowFlip.pipelineId) })
+    var views: [sg_view] = []
+    while views.count < state.rowFlip.imageSlot {
+        views.append(sg_view { id: 0 })
+    }
+    views.append(sg_view { id: texture.storageViewId })
+    sg_apply_bindings(move sg_bindings {
+        views: sg_view_array_32 {
+            elements: views
+        }
+    })
+    let extent = sokolRowFlipExtentWords(texture.width, texture.height)
+    sg_apply_uniforms(I32(state.rowFlip.uniformSlot), move sg_range {
+        ptr: extent
+        size: U64(extent.count * 4)
+    })
+    sg_dispatch(
+        sokolDispatchGroupCount(texture.width),
+        sokolDispatchGroupCount(texture.height / 2),
+        1,
+    )
+    sg_end_pass()
+    return
+}
+
+// Before a pass that loads its target: put the stored rows back into the order
+// the rasterizer is about to write in, so what it loads is what was there.
+@Native
+function sokolRestoreRowsForLoad(frame: borrow RenderFrame) {
+    if !frame.attachments.isOffscreen() {
+        return
+    }
+    if !frame.attachments.loadsColor() {
+        return
+    }
+    sokolFlipTextureRows(frame.backendContext, frame.attachments.color.target.texture)
+    return
+}
+
+// After a pass wrote its target: leave the rows in the order every sampler
+// reads, which is the order an upload arrives in.
+@Native
+function sokolNormalizeRowsAfterPass(frame: borrow RenderFrame) {
+    if !frame.attachments.isOffscreen() {
+        return
+    }
+    sokolFlipTextureRows(frame.backendContext, frame.attachments.sampledTexture())
+    return
+}

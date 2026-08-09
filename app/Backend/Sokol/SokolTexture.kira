@@ -1,33 +1,321 @@
-@Native
-function sokolCreateTextureId(label: borrow String, width: Int, height: Int, format: Int, usage: Int, sampleCount: Int, storageMode: Int) -> U32 {
-    let nativeWidth: I64 = width
-    let nativeHeight: I64 = height
-    let nativeFormat: I64 = format
-    let nativeUsage: I64 = usage
-    let nativeSampleCount: I64 = sampleCount
-    let nativeStorageMode: I64 = storageMode
-    return kgCreateTextureId(label, nativeWidth, nativeHeight, nativeFormat, nativeUsage, nativeSampleCount, nativeStorageMode)
+// Sokol textures, owned in Kira.
+//
+// An image and the views onto it are one resource. sokol mints a separate id
+// per view, and every later use — binding a sampled texture, drawing it,
+// attaching it to a pass — needs a *view*, never the image. So the set travels
+// together in the `GraphicsTexture` the caller already holds, rather than
+// through a lookup table keyed on the image id.
+//
+// These call `sg_*` directly through the generated bindings. There is no C
+// helper between Kira and sokol here: an image descriptor is a Kira value, and
+// the pixel bytes are staged in runtime memory and handed over as an
+// `sg_range`, which is what `sg_make_image` reads.
+
+// sokol's `sg_pixel_format` ordinals. The C enum assigns no explicit values, so
+// these are its declaration order in `sokol_gfx.h`; `_SG_PIXELFORMAT_DEFAULT`
+// owns 0, which is why none of them is zero.
+function sokolPixelFormatNone() -> I32 {
+    return 1
 }
 
+function sokolPixelFormatR32Uint() -> I32 {
+    return 15
+}
+
+function sokolPixelFormatRgba8() -> I32 {
+    return 23
+}
+
+function sokolPixelFormatRgba16Float() -> I32 {
+    return 39
+}
+
+function sokolPixelFormatDepthStencil() -> I32 {
+    return 44
+}
+
+// `SG_IMAGETYPE_2D`, past the reserved default at 0.
+function sokolImageType2d() -> I32 {
+    return 1
+}
+
+// The sokol pixel format a package format code names.
+//
+// The swapchain sentinel resolves to the format the swapchain actually has,
+// read back from the environment rather than assumed: a pipeline created with
+// the sentinel bakes in that same format, and answering a fixed RGBA8 here
+// mismatches the pipeline on a backend whose swapchain is BGRA8.
 @Native
-function sokolDestroyTextureId(textureId: U32): Void {
-    if (textureId != 0) {
-        kgDestroyTextureId(textureId)
+function sokolPixelFormat(format: TextureFormat) -> I32 {
+    if format == .Swapchain {
+        return sglue_environment().defaults.color_format
+    }
+    if format == .Rgba16Float {
+        return sokolPixelFormatRgba16Float()
+    }
+    if format == .Depth24Stencil8 {
+        return sokolPixelFormatDepthStencil()
+    }
+    if format == .R32Uint {
+        return sokolPixelFormatR32Uint()
+    }
+    if format == .None {
+        return sokolPixelFormatNone()
+    }
+    return sokolPixelFormatRgba8()
+}
+
+// What a texture may be used for, as sokol's flag set.
+//
+// `immutable` is the default a texture created with its pixels wants: the
+// contents arrive once, with the image. A texture that will be re-uploaded
+// asks for `streaming` instead, because `sg_update_image` refuses an immutable
+// image — the flag is the permission, not a hint.
+@Native
+function sokolImageUsage(descriptor: borrow TextureDescriptor) -> sg_image_usage {
+    let usage = descriptor.usage
+    return sg_image_usage {
+        immutable: usage != .SampledStreaming
+        stream_update: usage == .SampledStreaming
+        color_attachment: sokolUsageIsColorTarget(usage)
+        depth_stencil_attachment: usage == .DepthStencil
+        storage_image: sokolNeedsStorageImage(descriptor)
+    }
+}
+
+// Whether the image needs a binding a compute kernel writes through: because
+// the caller asked for one, or because the backend writes its rows in the
+// opposite order to an upload and corrects them through one (`SokolRowOrder`).
+@Native
+function sokolNeedsStorageImage(descriptor: borrow TextureDescriptor) -> Bool {
+    return sokolUsageIsStorageImage(descriptor.usage) || sokolRowOrderNeedsCorrection(descriptor)
+}
+
+// Whether a usage asks for a view a shader can sample.
+@Native
+function sokolUsageIsSampled(usage: borrow TextureUsage) -> Bool {
+    return usage == .Sampled
+        || usage == .SampledStreaming
+        || usage == .RenderTargetSampled
+        || usage == .RenderTargetSampledStorage
+}
+
+// Whether a usage asks for a colour-attachment view.
+@Native
+function sokolUsageIsColorTarget(usage: borrow TextureUsage) -> Bool {
+    return usage == .RenderTarget
+        || usage == .RenderTargetSampled
+        || usage == .RenderTargetSampledStorage
+}
+
+// Whether a usage asks for a view a compute kernel writes through.
+@Native
+function sokolUsageIsStorageImage(usage: borrow TextureUsage) -> Bool {
+    return usage == .RenderTargetSampledStorage
+}
+
+// Stage `pixels` as bytes sokol can read, returning the block to free.
+//
+// A Kira array is not C storage, so the bytes are copied into runtime memory
+// once. The caller frees it after the call that reads it returns: sokol copies
+// out of an `sg_range` during `sg_make_image`/`sg_update_image` and holds no
+// reference to it afterwards.
+@Native
+function sokolStagePixels(pixels: borrow [U8]) -> RawPtr {
+    let count = pixels.count
+    let bytes = allocateBytes(U64(count))
+    var i = 0
+    while i < count {
+        writeByte(bytes, U64(i), pixels[i])
+        i = i + 1
+    }
+    return bytes
+}
+
+// The views a texture of this usage needs, made over `image`.
+@Native
+function sokolMakeTextureViews(image: sg_image, descriptor: borrow TextureDescriptor) -> GraphicsTexture {
+    let label = descriptor.label
+    var texture = GraphicsTexture {
+        id: image.id
+        width: descriptor.width
+        height: descriptor.height
+        sampleCount: sokolSampleCount(descriptor.sampleCount)
+    }
+    if sokolUsageIsColorTarget(descriptor.usage) {
+        let colorView = sg_make_view(move sg_view_desc {
+            color_attachment: sg_image_view_desc {
+                image: sg_image { id: image.id }
+            }
+            label: label
+        })
+        texture.colorViewId = colorView.id
+    }
+    if descriptor.usage == .DepthStencil {
+        let depthView = sg_make_view(move sg_view_desc {
+            depth_stencil_attachment: sg_image_view_desc {
+                image: sg_image { id: image.id }
+            }
+            label: label
+        })
+        texture.depthViewId = depthView.id
+    }
+    if sokolUsageIsSampled(descriptor.usage) {
+        let sampledView = sg_make_view(move sg_view_desc {
+            texture: sg_texture_view_desc {
+                image: sg_image { id: image.id }
+            }
+            label: label
+        })
+        texture.viewId = sampledView.id
+    }
+    if sokolNeedsStorageImage(descriptor) {
+        let storageView = sg_make_view(move sg_view_desc {
+            storage_image: sg_image_view_desc {
+                image: sg_image { id: image.id }
+            }
+            label: label
+        })
+        texture.storageViewId = storageView.id
+    }
+    return texture
+}
+
+// Create an empty texture: storage with no contents yet.
+@Native
+function sokolCreateTexture(descriptor: borrow TextureDescriptor) -> TextureResult {
+    let image = sg_make_image(move sg_image_desc {
+        type_value: sokolImageType2d()
+        usage: sokolImageUsage(descriptor)
+        width: I32(descriptor.width)
+        height: I32(descriptor.height)
+        num_slices: 1
+        num_mipmaps: 1
+        pixel_format: sokolPixelFormat(descriptor.format)
+        sample_count: I32(sokolSampleCount(descriptor.sampleCount))
+        label: descriptor.label
+    })
+    if image.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(sokolMakeTextureViews(move image, descriptor))
+}
+
+// Create a texture and give it its pixels in one step.
+//
+// The contents arrive with the image rather than through a later upload, which
+// is what lets the image stay immutable — the layout every sample of it is
+// cheapest against, and the right shape for content loaded once.
+@Native
+function sokolCreateTextureFromPixels(descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
+    let bytes = sokolStagePixels(pixels)
+    let image = sg_make_image(move sg_image_desc {
+        type_value: sokolImageType2d()
+        usage: sokolImageUsage(descriptor)
+        width: I32(descriptor.width)
+        height: I32(descriptor.height)
+        num_slices: 1
+        num_mipmaps: 1
+        pixel_format: sokolPixelFormat(descriptor.format)
+        sample_count: I32(sokolSampleCount(descriptor.sampleCount))
+        data: sg_image_data {
+            mip_levels: sg_range_array_16 {
+                elements: [sg_range { ptr: bytes, size: U64(pixels.count) }]
+            }
+        }
+        label: descriptor.label
+    })
+    freeBytes(bytes)
+    if image.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(sokolMakeTextureViews(move image, descriptor))
+}
+
+// Replace a texture's contents.
+//
+// Whole-image, because that is the only shape sokol has: `sg_update_image`
+// takes the image's full pixel set and there is no sub-region form. A caller
+// that changes one part of an atlas composites into its own pixel array and
+// uploads that, which is portable and costs no CPU shadow copy here.
+@Native
+function sokolUpdateTexture(texture: borrow GraphicsTexture, pixels: borrow [U8]): Void {
+    if texture.id == 0 {
+        return
+    }
+    let bytes = sokolStagePixels(pixels)
+    sg_update_image(sg_image { id: texture.id }, move sg_image_data {
+        mip_levels: sg_range_array_16 {
+            elements: [sg_range { ptr: bytes, size: U64(pixels.count) }]
+        }
+    })
+    freeBytes(bytes)
+    return
+}
+
+// Replace a texture's contents from raw memory the caller already owns.
+//
+// `sg_range` is a pointer and a length, so a block the caller already holds is
+// exactly what sokol wants — nothing is staged and nothing is copied on the way
+// in. sokol copies out of the range during the call and keeps no reference,
+// which is what makes the caller free to keep writing into it afterwards.
+//
+// At most ONCE per image per frame: sokol refuses a second update in the same
+// frame, so a caller compositing into an atlas marks it dirty and uploads once.
+@Native
+function sokolUpdateTextureBytes(texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int): Void {
+    if texture.id == 0 || byteCount <= 0 || pointerIsNull(bytes) {
+        return
+    }
+    sg_update_image(sg_image { id: texture.id }, move sg_image_data {
+        mip_levels: sg_range_array_16 {
+            elements: [sg_range { ptr: bytes, size: U64(byteCount) }]
+        }
+    })
+    return
+}
+
+// A sample count of at least one: sokol reads zero as "unset", and a texture
+// that asked for no samples still has one.
+@Native
+function sokolSampleCount(requested: Int) -> Int {
+    if requested > 0 {
+        return requested
+    }
+    return 1
+}
+
+// Destroy a texture and every view minted over it.
+//
+// The views go first: a view outliving its image is the one ordering sokol
+// reports as an error, and destroying in the reverse of creation order is what
+// keeps that from happening.
+@Native
+function sokolDestroyTexture(texture: borrow GraphicsTexture): Void {
+    if texture.viewId != 0 {
+        sg_destroy_view(sg_view { id: texture.viewId })
+    }
+    if texture.colorViewId != 0 {
+        sg_destroy_view(sg_view { id: texture.colorViewId })
+    }
+    if texture.depthViewId != 0 {
+        sg_destroy_view(sg_view { id: texture.depthViewId })
+    }
+    if texture.storageViewId != 0 {
+        sg_destroy_view(sg_view { id: texture.storageViewId })
+    }
+    if texture.id != 0 {
+        sg_destroy_image(sg_image { id: texture.id })
     }
     return
 }
 
 @Native
-function sokolCreateTextureFromFileId(label: borrow String, path: borrow String) -> U32 {
-    return kgCreateTextureFromFileId(label, path)
-}
-
-@Native
 function sokolCreateSamplerId(label: borrow String, minFilter: Int, magFilter: Int, addressModeU: Int, addressModeV: Int) -> U32 {
-    let nativeMinFilter: I64 = minFilter
-    let nativeMagFilter: I64 = magFilter
-    let nativeAddressModeU: I64 = addressModeU
-    let nativeAddressModeV: I64 = addressModeV
+    let nativeMinFilter: Int = minFilter
+    let nativeMagFilter: Int = magFilter
+    let nativeAddressModeU: Int = addressModeU
+    let nativeAddressModeV: Int = addressModeV
     return kgCreateSamplerId(label, nativeMinFilter, nativeMagFilter, nativeAddressModeU, nativeAddressModeV)
 }
 

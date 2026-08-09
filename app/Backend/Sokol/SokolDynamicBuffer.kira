@@ -1,0 +1,85 @@
+// A buffer the CPU rewrites every frame, on sokol.
+//
+// Metal answers `createDynamicBuffer` with shared memory the CPU writes into
+// directly and the GPU reads out of, so writing IS uploading and the buffer
+// carries a ring of per-frame slots to keep a write from tearing the frame the
+// GPU is still drawing. sokol has neither: a buffer's storage belongs to the
+// driver, and the only way in is `sg_update_buffer`, which copies a range and
+// may be called at most once per buffer per frame.
+//
+// So the two halves are split here in the same shape the public API describes.
+// `contents` is ordinary runtime memory a caller writes into as it emits, and
+// `commitDynamicBuffer` is the one call that hands the written prefix over. The
+// once-per-frame rule is what makes the commit explicit rather than implicit in
+// every write, and the driver's own double-buffering is what makes the ring
+// unnecessary — which is why `dynamicBufferFrameStart` answers 0 here.
+
+@Native
+function sokolCreateDynamicBuffer(label: borrow String, floatCapacity: Int) -> DynamicBufferResult {
+    if floatCapacity <= 0 {
+        return .Error(.DeviceRefused)
+    }
+    let byteCount = U64(floatCapacity * 4)
+    let buffer = sg_make_buffer(move sg_buffer_desc {
+        label: label
+        usage: sg_buffer_usage {
+            // Storage, not vertex: every dynamic buffer this backend hands out
+            // is read by a shader as a `std430` block. A stage that pulls its
+            // vertices by index has no attribute stream to be.
+            storage_buffer: true
+            stream_update: true
+        }
+        size: byteCount
+    })
+    if buffer.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    let contents = allocateBytes(byteCount)
+    if pointerIsNull(contents) {
+        sg_destroy_buffer(move buffer)
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(DynamicBuffer {
+        buffer: GraphicsBuffer {
+            id: buffer.id
+            byteSize: Int(byteCount)
+        }
+        contents: contents
+    })
+}
+
+// Hand the written prefix to the driver. A zero count still costs nothing: the
+// caller's stream may be empty this frame and the buffer keeps what it held.
+@Native
+function sokolCommitDynamicBuffer(buffer: borrow GraphicsBuffer, contents: RawPtr, floatCount: Int): Void {
+    if buffer.id == 0 || pointerIsNull(contents) || floatCount <= 0 {
+        return
+    }
+    sg_update_buffer(sg_buffer { id: buffer.id }, move sg_range {
+        ptr: contents
+        size: U64(floatCount * 4)
+    })
+    return
+}
+
+// A storage-buffer view over `bufferId`, which is what `sg_bindings.views[]`
+// takes — sokol binds a buffer to a shader through a view exactly as it binds
+// an image through one.
+@Native
+function sokolCreateStorageBufferBindGroup(label: borrow String, slot: Int, bufferId: U32) -> BindGroupResult {
+    if bufferId == 0 {
+        return .Error(.DeviceRefused)
+    }
+    let view = sg_make_view(move sg_view_desc {
+        storage_buffer: sg_buffer_view_desc {
+            buffer: sg_buffer { id: bufferId }
+        }
+        label: label
+    })
+    if view.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    let group = sokolCreateBindGroupId(label)
+    sokolBindGroupAddStorageBuffer(group, slot, view.id)
+    return .Ok(group)
+}

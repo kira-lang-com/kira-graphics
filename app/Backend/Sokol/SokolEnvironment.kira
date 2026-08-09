@@ -1,0 +1,64 @@
+// Small, backend-neutral environment parser for the Sokol harness.
+//
+// KIRA_UI_CLICK_SCRIPT uses the same tuple format as the Metal headless path:
+// `frame@x,y;frame@x,y`. Every integer is parsed in order, so separators are
+// deliberately insignificant and negative coordinates remain useful for input
+// tests that verify misses. Sokol frame numbers are zero-based here, matching
+// the Metal offscreen loop: frame 0 is the first frame before it is rendered.
+
+@Native
+function sokolEnvInts(value: borrow String) -> [Int] {
+    var out: [Int] = []
+    var i = 0
+    var going = true
+    while going {
+        if i >= value.count {
+            going = false
+        } else {
+            let b = value.charAt(i)
+            var isDigit = false
+            if b >= 48 {
+                if b <= 57 {
+                    isDigit = true
+                }
+            }
+            var sign = 1
+            if b == 45 && i + 1 < value.count {
+                let nextByte = value.charAt(i + 1)
+                if nextByte >= 48 {
+                    if nextByte <= 57 {
+                        isDigit = true
+                        sign = 0 - 1
+                        i = i + 1
+                    }
+                }
+            }
+            if isDigit {
+                var v = 0
+                var digits = true
+                while digits && i < value.count {
+                    let c = value.charAt(i)
+                    var cDigit = false
+                    if c >= 48 {
+                        if c <= 57 {
+                            cDigit = true
+                        }
+                    }
+                    if cDigit {
+                        v = v * 10 + (c - 48)
+                        i = i + 1
+                    } else {
+                        digits = false
+                    }
+                }
+                out.append(v * sign)
+            } else {
+                i = i + 1
+            }
+        }
+        if i > 65536 {
+            going = false
+        }
+    }
+    return move out
+}

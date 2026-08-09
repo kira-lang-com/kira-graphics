@@ -1,46 +1,63 @@
+// Buffer creation, straight onto `sg_make_buffer`.
+//
+// The array's elements name the descriptor's data pointer directly, so nothing
+// here goes through C: `sg_range { ptr: values, … }` is the whole reason the two
+// shim functions this replaced existed.
+
+// The sokol usage flags a buffer of this kind carries. Every buffer made here is
+// immutable — its contents arrive with it and are never updated.
 @Native
-function sokolBeginFloatBufferUpload(label: borrow String, usage: Int, stride: Int, count: Int) -> U32 {
-    let nativeUsage: I64 = usage
-    let nativeStride: I64 = stride
-    let nativeCount: I64 = count
-    return kgBeginFloatBufferUpload(label, nativeUsage, nativeStride, nativeCount)
+function sokolBufferUsage(usage: borrow BufferUsage) -> sg_buffer_usage {
+    match usage {
+        Vertex -> return sg_buffer_usage { vertex_buffer: true, immutable: true };
+        Index -> return sg_buffer_usage { index_buffer: true, immutable: true };
+        Uniform -> return sg_buffer_usage { vertex_buffer: true, immutable: true };
+        Storage -> return sg_buffer_usage { storage_buffer: true, immutable: true };
+    }
 }
 
 @Native
-function sokolSetFloatBufferUploadValue(uploadId: U32, index: Int, value: Float) {
-    let nativeIndex: I64 = index
-    kgSetFloatBufferUploadValue(uploadId, nativeIndex, value)
-    return
+function sokolMakeFloatBuffer(label: borrow String, usage: BufferUsage, values: borrow [F32]) -> U32 {
+    let byteCount = U64(values.count * 4)
+    let buffer = sg_make_buffer(move sg_buffer_desc {
+        label: label
+        usage: sokolBufferUsage(usage)
+        size: byteCount
+        data: sg_range { ptr: values, size: byteCount }
+    })
+    return buffer.id
 }
 
 @Native
-function sokolFinalizeFloatBufferUpload(uploadId: U32) -> U32 {
-    return kgFinalizeFloatBufferUpload(uploadId)
+function sokolMakeIndexBuffer(label: borrow String, values: borrow [U32]) -> U32 {
+    let byteCount = U64(values.count * 4)
+    let buffer = sg_make_buffer(move sg_buffer_desc {
+        label: label
+        usage: sokolBufferUsage(.Index)
+        size: byteCount
+        data: sg_range { ptr: values, size: byteCount }
+    })
+    return buffer.id
 }
 
+// A storage buffer whose payload is 32-bit WORDS rather than floats — a kernel's
+// parameter block, where a count is a count and reinterpreting it as a float
+// would hand the shader a different number.
 @Native
-function sokolBeginIndexBufferUpload(label: borrow String, usage: Int, count: Int) -> U32 {
-    let nativeUsage: I64 = usage
-    let nativeCount: I64 = count
-    return kgBeginIndexBufferUpload(label, nativeUsage, nativeCount)
-}
-
-@Native
-function sokolSetIndexBufferUploadValue(uploadId: U32, index: Int, value: Int) {
-    let nativeIndex: I64 = index
-    let nativeValue: I64 = value
-    kgSetIndexBufferUploadValue(uploadId, nativeIndex, nativeValue)
-    return
-}
-
-@Native
-function sokolFinalizeIndexBufferUpload(uploadId: U32) -> U32 {
-    return kgFinalizeIndexBufferUpload(uploadId)
+function sokolMakeWordBuffer(label: borrow String, values: borrow [U32]) -> U32 {
+    let byteCount = U64(values.count * 4)
+    let buffer = sg_make_buffer(move sg_buffer_desc {
+        label: label
+        usage: sokolBufferUsage(.Storage)
+        size: byteCount
+        data: sg_range { ptr: values, size: byteCount }
+    })
+    return buffer.id
 }
 
 @Native
 function sokolDestroyBufferId(bufferId: U32): Void {
-    if (bufferId != 0) {
+    if bufferId != 0 {
         kgDestroyBufferId(bufferId)
     }
     return

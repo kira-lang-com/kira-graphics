@@ -1,90 +1,79 @@
+// Builds a `RenderPipeline` from a shader plus a descriptor.
+//
+// `kgMakePipelineDetailed` makes two Sokol pipeline objects — one for a
+// non-indexed draw, one for an indexed draw, since Sokol pipelines are
+// immutable about index type — and reports back the shader reflection it
+// carried through unchanged, so nothing here needs to look the shader back up
+// by id: `descriptor.shader` already has everything.
 @Native
-function sokolCreateRenderPipelineId(shaderId: U32, label: borrow String, stride: I64, attributeCount: I64, attr0Location: I64, attr0Format: I64, attr0Offset: I64, attr1Location: I64, attr1Format: I64, attr1Offset: I64, attr2Location: I64, attr2Format: I64, attr2Offset: I64, attr3Location: I64, attr3Format: I64, attr3Offset: I64, colorTargetCount: I64, colorFormat: I64, blendEnabled: I64, blendPreset: I64, depthEnabled: I64, depthWriteEnabled: I64, depthCompare: I64, depthFormat: I64, cullMode: I64, frontFace: I64, topology: I64) -> U32 {
-    return kgMakePipelineDetailed(
-        shaderId,
-        label,
-        stride,
-        attributeCount,
-        attr0Location,
-        attr0Format,
-        attr0Offset,
-        attr1Location,
-        attr1Format,
-        attr1Offset,
-        attr2Location,
-        attr2Format,
-        attr2Offset,
-        attr3Location,
-        attr3Format,
-        attr3Offset,
-        colorTargetCount,
-        colorFormat,
-        blendEnabled,
-        blendPreset,
-        depthEnabled,
-        depthWriteEnabled,
-        depthCompare,
-        depthFormat,
-        cullMode,
-        frontFace,
-        topology
-    )
+function sokolPipelineFromInfo(info: borrow KgPipelineInfo) -> RenderPipeline {
+    return RenderPipeline {
+        id: info.draw_pipeline_id
+        drawPipelineId: info.draw_pipeline_id
+        indexedPipelineId: info.indexed_pipeline_id
+        hasPositionAttribute: info.has_position_attribute != 0
+        requiredUniformMask: Int(info.required_uniform_mask)
+        availableUniformMask: Int(info.available_uniform_mask)
+        uniformBlocks: sokolUniformBlocksFromSlots(info.blocks, Int(info.uniform_desc_count))
+    }
 }
 
+@Native
 function sokolCreateRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> RenderPipeline {
-    let attributeCount: I64 = descriptor.vertexLayout.attributes.count
-    let colorTargetCount: I64 = descriptor.colorTargets.count
+    let attributeCount: Int = descriptor.vertexLayout.attributes.count
+    let colorTargetCount: Int = descriptor.colorTargets.count
 
-    let stride: I64 = descriptor.vertexLayout.stride
-    var attr0Location: I64 = 0
-    var attr0Format: I64 = vertexFormatFloat2()
-    var attr0Offset: I64 = 0
-    var attr1Location: I64 = 1
-    var attr1Format: I64 = vertexFormatFloat2()
-    var attr1Offset: I64 = 0
-    var attr2Location: I64 = 2
-    var attr2Format: I64 = vertexFormatFloat2()
-    var attr2Offset: I64 = 0
-    var attr3Location: I64 = 3
-    var attr3Format: I64 = vertexFormatFloat2()
-    var attr3Offset: I64 = 0
+    let stride: Int = descriptor.vertexLayout.stride
+    var attr0Location: Int = 0
+    var attr0Format: Int = vertexFormatCode(.Float2)
+    var attr0Offset: Int = 0
+    var attr1Location: Int = 1
+    var attr1Format: Int = vertexFormatCode(.Float2)
+    var attr1Offset: Int = 0
+    var attr2Location: Int = 2
+    var attr2Format: Int = vertexFormatCode(.Float2)
+    var attr2Offset: Int = 0
+    var attr3Location: Int = 3
+    var attr3Format: Int = vertexFormatCode(.Float2)
+    var attr3Offset: Int = 0
 
     if (attributeCount > 0) {
         attr0Location = descriptor.vertexLayout.attributes[0].location
-        attr0Format = descriptor.vertexLayout.attributes[0].format
+        attr0Format = vertexFormatCode(descriptor.vertexLayout.attributes[0].format)
         attr0Offset = descriptor.vertexLayout.attributes[0].offset
     }
 
     if (attributeCount > 1) {
         attr1Location = descriptor.vertexLayout.attributes[1].location
-        attr1Format = descriptor.vertexLayout.attributes[1].format
+        attr1Format = vertexFormatCode(descriptor.vertexLayout.attributes[1].format)
         attr1Offset = descriptor.vertexLayout.attributes[1].offset
     }
 
     if (attributeCount > 2) {
         attr2Location = descriptor.vertexLayout.attributes[2].location
-        attr2Format = descriptor.vertexLayout.attributes[2].format
+        attr2Format = vertexFormatCode(descriptor.vertexLayout.attributes[2].format)
         attr2Offset = descriptor.vertexLayout.attributes[2].offset
     }
 
     if (attributeCount > 3) {
         attr3Location = descriptor.vertexLayout.attributes[3].location
-        attr3Format = descriptor.vertexLayout.attributes[3].format
+        attr3Format = vertexFormatCode(descriptor.vertexLayout.attributes[3].format)
         attr3Offset = descriptor.vertexLayout.attributes[3].offset
     }
-    let colorFormat: I64 = descriptor.colorTargets[0].format
-    let blendEnabled: I64 = descriptor.colorTargets[0].blend.enabled ? 1 : 0
-    let blendPreset: I64 = descriptor.colorTargets[0].blend.preset
-    let depthEnabled: I64 = descriptor.depthStencil.depthEnabled ? 1 : 0
-    let depthWriteEnabled: I64 = descriptor.depthStencil.depthWriteEnabled ? 1 : 0
-    let depthCompare: I64 = descriptor.depthStencil.depthCompare
-    let depthFormat: I64 = descriptor.depthStencil.format
-    let cullMode: I64 = descriptor.rasterization.cullMode
-    let frontFace: I64 = descriptor.rasterization.frontFace
-    let topology: I64 = descriptor.primitive.topology
+    let colorFormat: Int = textureFormatCode(descriptor.colorTargets[0].format)
+    let blendEnabled: Int = descriptor.colorTargets[0].blend.enabled ? 1 : 0
+    let blendPreset: Int = blendPresetCode(descriptor.colorTargets[0].blend.preset)
+    let depthEnabled: Int = descriptor.depthStencil.depthEnabled ? 1 : 0
+    let depthWriteEnabled: Int = descriptor.depthStencil.depthWriteEnabled ? 1 : 0
+    let depthCompare: Int = compareFunctionCode(descriptor.depthStencil.depthCompare)
+    let depthFormat: Int = textureFormatCode(descriptor.depthStencil.format)
+    let cullMode: Int = cullModeCode(descriptor.rasterization.cullMode)
+    let frontFace: Int = frontFaceCode(descriptor.rasterization.frontFace)
+    let topology: Int = primitiveTopologyCode(descriptor.primitive.topology)
 
-    let pipelineId = sokolCreateRenderPipelineId(
-        descriptor.shader.handle.id,
+    let shader = descriptor.shader
+    let info = kgMakePipelineDetailed(
+        shader.id,
         descriptor.label,
         stride,
         attributeCount,
@@ -110,20 +99,24 @@ function sokolCreateRenderPipeline(descriptor: borrow RenderPipelineDescriptor) 
         depthFormat,
         cullMode,
         frontFace,
-        topology
+        topology,
+        shader.hasPositionAttribute ? 1 : 0,
+        shader.hasNormalAttribute ? 1 : 0,
+        U32(shader.requiredUniformMask),
+        U32(shader.availableUniformMask),
+        shader.uniformBlocks.count,
+        sokolUniformBlockBindings(shader.uniformBlocks),
+        sokolUniformBlockSizes(shader.uniformBlocks),
+        sokolUniformBlockVertexSlots(shader.uniformBlocks),
+        sokolUniformBlockFragmentSlots(shader.uniformBlocks)
     )
-    return RenderPipeline {
-        handle: BackendPipelineHandle {
-            id: pipelineId
-        }
-        id: pipelineId
-    }
+    return sokolPipelineFromInfo(info)
 }
 
 @Native
-function sokolDestroyRenderPipelineId(pipelineId: U32): Void {
-    if (pipelineId != 0) {
-        kgDestroyPipelineId(pipelineId)
+function sokolDestroyRenderPipelineId(pipeline: borrow RenderPipeline): Void {
+    if (pipeline.drawPipelineId != 0 || pipeline.indexedPipelineId != 0) {
+        kgDestroyPipelineId(pipeline.drawPipelineId, pipeline.indexedPipelineId)
     }
     return
 }

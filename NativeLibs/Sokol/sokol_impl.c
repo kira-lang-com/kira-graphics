@@ -56,8 +56,6 @@
 #include "sokol_app.h"
 #include "sokol_gfx.h"
 #include "sokol_glue.h"
-#define STB_IMAGE_IMPLEMENTATION
-#include "vendor/stb_image.h"
 
 void kira_live_emit_first_frame(void);
 void kira_live_emit_log_line(const char* line);
@@ -91,9 +89,6 @@ void kg_sapp_log(const char* tag, uint32_t level, uint32_t item_id, const char* 
         message ? message : "Sokol app error");
 }
 
-static sg_buffer kg_triangle_vertex_buffer = {0};
-static sg_buffer kg_ui_demo_vertex_buffer = {0};
-static uint32_t kg_ui_demo_pipeline_id = 0;
 #ifndef KG_PATH_BUFFER_SIZE
 #define KG_PATH_BUFFER_SIZE 4096
 #endif
@@ -126,74 +121,53 @@ typedef struct {
     } members[KG_MAX_UNIFORM_BLOCK_MEMBERS];
 } kg_uniform_block_desc;
 
+// How many of a shader's uniform blocks kg_shader_info/kg_pipeline_info report
+// back to Kira, which now owns this reflection data on the GraphicsShader /
+// RenderPipeline value itself rather than in a table keyed by id. Every KSL
+// shader in this codebase declares at most two; four is double that with no
+// lookup array behind it.
+#ifndef KG_EXPOSED_UNIFORM_BLOCKS
+#define KG_EXPOSED_UNIFORM_BLOCKS 4
+#endif
+
+// One uniform block's Sokol placement: which public bind slot it answers to,
+// its std140 size, and which Sokol uniform_blocks[] slot(s) it landed in per
+// stage (-1 when the block is not used in that stage).
+typedef struct {
+    int32_t binding;
+    uint32_t size;
+    int32_t vertex_block_slot;
+    int32_t fragment_block_slot;
+} kg_uniform_block_slot;
+
+// Everything a shader's reflection produced, returned by value. Kira keeps
+// this on the `GraphicsShader` it already threads through the program in
+// place of the `kg_shader_records` table this replaced, so there is nothing
+// left to look up by id.
 typedef struct {
     uint32_t id;
-    bool has_position_attribute;
-    bool has_normal_attribute;
+    int32_t has_position_attribute;
+    int32_t has_normal_attribute;
     uint32_t required_uniform_mask;
     uint32_t available_uniform_mask;
-    kg_uniform_block_desc uniform_descs[KG_MAX_UNIFORM_BLOCKS];
-    int uniform_desc_count;
-} kg_shader_record;
+    int32_t uniform_desc_count;
+    kg_uniform_block_slot blocks[KG_EXPOSED_UNIFORM_BLOCKS];
+} kg_shader_info;
 
+// Everything a pipeline creation produced: both the "draw" and "indexed"
+// Sokol pipeline objects — Sokol pipelines are immutable about index type, so
+// Kira draws through whichever one a given call needs — plus the shader
+// metadata a draw validates and places its uniform uploads with. Kira keeps
+// this on the `RenderPipeline` value in place of `kg_pipeline_records`.
 typedef struct {
-    uint32_t public_id;
     uint32_t draw_pipeline_id;
     uint32_t indexed_pipeline_id;
-    bool has_position_attribute;
+    int32_t has_position_attribute;
     uint32_t required_uniform_mask;
     uint32_t available_uniform_mask;
-    kg_uniform_block_desc uniform_descs[KG_MAX_UNIFORM_BLOCKS];
-    int uniform_desc_count;
-} kg_pipeline_record;
-
-typedef struct {
-    bool active;
-    bool is_index_buffer;
-    int64_t usage;
-    int64_t stride;
-    int64_t float_count;
-    int64_t int_count;
-    float* float_values;
-    uint32_t* int_values;
-    char* label;
-} kg_buffer_upload_record;
-
-typedef struct {
-    uint32_t image_id;
-    uint32_t color_view_id;
-    uint32_t depth_view_id;
-    uint32_t texture_view_id;
-    int64_t width;
-    int64_t height;
-    int64_t sample_count;
-    int64_t format;
-    int64_t usage;
-} kg_texture_record;
-
-typedef struct {
-    bool active;
-    uint32_t id;
-    int64_t expected_float_count;
-    int64_t float_count;
-    float* values;
-    char* label;
-} kg_uniform_record;
-
-typedef struct {
-    bool active;
-    uint32_t id;
-    uint32_t uniform_ids[4];
-    int uniform_slots[4];
-    int uniform_count;
-    uint32_t texture_ids[4];
-    int texture_slots[4];
-    int texture_count;
-    uint32_t sampler_ids[4];
-    int sampler_slots[4];
-    int sampler_count;
-    char* label;
-} kg_bind_group_record;
+    int32_t uniform_desc_count;
+    kg_uniform_block_slot blocks[KG_EXPOSED_UNIFORM_BLOCKS];
+} kg_pipeline_info;
 
 typedef struct {
     const char* ptr;
@@ -205,6 +179,12 @@ typedef struct {
     size_t size;
 } kg_owned_bytes;
 
+// The peak resource counts Kira has observed this run, sampled once per frame
+// (`kiraGraphicsSokolFrame`) instead of after every create/destroy: a leak or
+// a spike lasts at least one frame, so frame-granularity sampling catches it
+// exactly as reliably as the old per-call `kg_update_lifetime_peaks` did,
+// without a call at 47 separate sites. Kira owns the running max; this is
+// only the shape it hands to `kg_report_lifetime` to print.
 typedef struct {
     uint32_t buffers;
     uint32_t images;
@@ -212,53 +192,7 @@ typedef struct {
     uint32_t views;
     uint32_t shaders;
     uint32_t pipelines;
-    int uniforms;
-    int bind_groups;
-} kg_lifetime_peak_counts;
-
-static kg_shader_record kg_shader_records[64];
-static int kg_shader_record_count = 0;
-static kg_pipeline_record kg_pipeline_records[64];
-static int kg_pipeline_record_count = 0;
-static uint32_t kg_next_public_pipeline_id = 1;
-static kg_buffer_upload_record kg_buffer_upload_records[64];
-static kg_texture_record kg_texture_records[64];
-static int kg_texture_record_count = 0;
-static kg_uniform_record kg_uniform_records[64];
-static kg_bind_group_record kg_bind_group_records[64];
-static uint32_t kg_next_uniform_id = 1;
-static uint32_t kg_next_bind_group_id = 1;
-static int kg_current_pass_width = 0;
-static int kg_current_pass_height = 0;
-// Physical pixels per logical point for the immediate-2D UI pipeline in the
-// current pass. The swapchain pass on a Retina (high_dpi) framebuffer sets this
-// to sapp_dpi_scale() so kg_ui_* draws position content in logical POINTS while
-// the framebuffer stays at native pixel resolution — vector edges and glyph
-// coverage rasterize per physical pixel, so text/UI are crisp instead of
-// upscaled. Offscreen passes render in their own pixel space (scale 1.0).
-static float kg_ui_logical_scale = 1.0f;
-static bool kg_current_pass_active = false;
-static bool kg_live_first_frame_emitted = false;
-static bool kg_live_frame_submitted_emitted = false;
-static bool kg_live_visible_content_submitted_emitted = false;
-static bool kg_ui_draw_commands_submitted_this_frame = false;
-static bool kg_ui_draw_commands_emitted = false;
-static bool kg_ui_visible_content_emitted = false;
-static sg_shader kg_ui_shader = {0};
-static sg_pipeline kg_ui_pipeline = {0};
-static sg_buffer kg_ui_vertex_buffer = {0};
-static int kg_ui_clip_depth = 0;
-static char* kg_shader_source_public_buffer = NULL;
-static kg_lifetime_peak_counts kg_lifetime_peaks = {0};
-
-typedef struct {
-    float x;
-    float y;
-    float w;
-    float h;
-} kg_ui_clip_rect;
-
-static kg_ui_clip_rect kg_ui_clip_stack[32];
+} kg_lifetime_peaks;
 
 static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* message, uint32_t line, const char* filename, void* user_data) {
     (void)user_data;
@@ -282,112 +216,6 @@ static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_
     }
 }
 
-static void kg_record_shader(uint32_t id, bool has_position_attribute, bool has_normal_attribute, uint32_t required_uniform_mask, uint32_t available_uniform_mask) {
-    if (id == 0) {
-        return;
-    }
-    if (kg_shader_record_count >= 64) {
-        return;
-    }
-    kg_shader_records[kg_shader_record_count].id = id;
-    kg_shader_records[kg_shader_record_count].has_position_attribute = has_position_attribute;
-    kg_shader_records[kg_shader_record_count].has_normal_attribute = has_normal_attribute;
-    kg_shader_records[kg_shader_record_count].required_uniform_mask = required_uniform_mask;
-    kg_shader_records[kg_shader_record_count].available_uniform_mask = available_uniform_mask;
-    kg_shader_record_count += 1;
-}
-
-static void kg_remove_shader_record(uint32_t id) {
-    for (int i = 0; i < kg_shader_record_count; i += 1) {
-        if (kg_shader_records[i].id == id) {
-            kg_shader_records[i] = kg_shader_records[kg_shader_record_count - 1];
-            kg_shader_record_count -= 1;
-            return;
-        }
-    }
-}
-
-static bool kg_shader_has_position_attribute(uint32_t id) {
-    for (int i = 0; i < kg_shader_record_count; i += 1) {
-        if (kg_shader_records[i].id == id) {
-            return kg_shader_records[i].has_position_attribute;
-        }
-    }
-    return false;
-}
-
-static bool kg_shader_has_normal_attribute(uint32_t id) {
-    for (int i = 0; i < kg_shader_record_count; i += 1) {
-        if (kg_shader_records[i].id == id) {
-            return kg_shader_records[i].has_normal_attribute;
-        }
-    }
-    return false;
-}
-
-static uint32_t kg_shader_required_uniform_mask(uint32_t id) {
-    for (int i = 0; i < kg_shader_record_count; i += 1) {
-        if (kg_shader_records[i].id == id) {
-            return kg_shader_records[i].required_uniform_mask;
-        }
-    }
-    return 0;
-}
-
-static uint32_t kg_shader_available_uniform_mask(uint32_t id) {
-    for (int i = 0; i < kg_shader_record_count; i += 1) {
-        if (kg_shader_records[i].id == id) {
-            return kg_shader_records[i].available_uniform_mask;
-        }
-    }
-    return 0;
-}
-
-static kg_shader_record* kg_find_shader_record(uint32_t id) {
-    if (id == 0) {
-        return NULL;
-    }
-    for (int i = 0; i < kg_shader_record_count; i += 1) {
-        if (kg_shader_records[i].id == id) {
-            return &kg_shader_records[i];
-        }
-    }
-    return NULL;
-}
-
-static kg_pipeline_record* kg_find_pipeline_record(uint32_t public_id) {
-    for (int i = 0; i < kg_pipeline_record_count; i += 1) {
-        if (kg_pipeline_records[i].public_id == public_id) {
-            return &kg_pipeline_records[i];
-        }
-    }
-    return NULL;
-}
-
-static uint32_t kg_record_pipeline(uint32_t draw_pipeline_id, uint32_t indexed_pipeline_id, bool has_position_attribute, uint32_t required_uniform_mask, uint32_t available_uniform_mask) {
-    if (kg_pipeline_record_count >= 64) {
-        return 0;
-    }
-    uint32_t public_id = kg_next_public_pipeline_id;
-    kg_next_public_pipeline_id += 1;
-    kg_pipeline_records[kg_pipeline_record_count].public_id = public_id;
-    kg_pipeline_records[kg_pipeline_record_count].draw_pipeline_id = draw_pipeline_id;
-    kg_pipeline_records[kg_pipeline_record_count].indexed_pipeline_id = indexed_pipeline_id;
-    kg_pipeline_records[kg_pipeline_record_count].has_position_attribute = has_position_attribute;
-    kg_pipeline_records[kg_pipeline_record_count].required_uniform_mask = required_uniform_mask;
-    kg_pipeline_records[kg_pipeline_record_count].available_uniform_mask = available_uniform_mask;
-    kg_pipeline_record_count += 1;
-    return public_id;
-}
-
-static bool kg_pipeline_has_position_attribute(uint32_t public_id) {
-    kg_pipeline_record* record = kg_find_pipeline_record(public_id);
-    if (record != NULL) {
-        return record->has_position_attribute;
-    }
-    return true;
-}
-
 static bool kg_lifetime_report_enabled(void) {
     const char* value = getenv("KIRA_GRAPHICS_LIFETIME_REPORT");
     return value != NULL && value[0] != '\0' && value[0] != '0';
@@ -398,63 +226,13 @@ static bool kg_lifetime_detail_enabled(void) {
     return value != NULL && value[0] != '\0' && value[0] != '0';
 }
 
-static int kg_active_uniform_count(void) {
-    int count = 0;
-    for (int i = 0; i < 64; i += 1) {
-        if (kg_uniform_records[i].active) {
-            count += 1;
-        }
-    }
-    return count;
-}
-
-static int kg_active_bind_group_count(void) {
-    int count = 0;
-    for (int i = 0; i < 64; i += 1) {
-        if (kg_bind_group_records[i].active) {
-            count += 1;
-        }
-    }
-    return count;
-}
-
-static void kg_update_lifetime_peaks(void) {
-    const int uniform_count = kg_active_uniform_count();
-    const int bind_group_count = kg_active_bind_group_count();
-    if (uniform_count > kg_lifetime_peaks.uniforms) {
-        kg_lifetime_peaks.uniforms = uniform_count;
-    }
-    if (bind_group_count > kg_lifetime_peaks.bind_groups) {
-        kg_lifetime_peaks.bind_groups = bind_group_count;
-    }
-
-    if (!sg_isvalid()) {
-        return;
-    }
-
-    sg_stats stats = sg_query_stats();
-    if (stats.total.buffers.alive > kg_lifetime_peaks.buffers) {
-        kg_lifetime_peaks.buffers = stats.total.buffers.alive;
-    }
-    if (stats.total.images.alive > kg_lifetime_peaks.images) {
-        kg_lifetime_peaks.images = stats.total.images.alive;
-    }
-    if (stats.total.samplers.alive > kg_lifetime_peaks.samplers) {
-        kg_lifetime_peaks.samplers = stats.total.samplers.alive;
-    }
-    if (stats.total.views.alive > kg_lifetime_peaks.views) {
-        kg_lifetime_peaks.views = stats.total.views.alive;
-    }
-    if (stats.total.shaders.alive > kg_lifetime_peaks.shaders) {
-        kg_lifetime_peaks.shaders = stats.total.shaders.alive;
-    }
-    if (stats.total.pipelines.alive > kg_lifetime_peaks.pipelines) {
-        kg_lifetime_peaks.pipelines = stats.total.pipelines.alive;
-    }
-}
-
+// The Sokol-tracked resources still alive, for the lifetime stress self-check.
+// Shaders, pipelines, uniforms and bind groups are no longer C-side records —
+// uniforms and bind groups never were real GPU resources, and shaders/pipelines
+// now live only as fields on the Kira values that hold them — so this counts
+// exactly what `sg_query_stats` itself tracks.
 static int kg_lifetime_outstanding_count(void) {
-    int total = kg_shader_record_count + kg_pipeline_record_count + kg_texture_record_count + kg_active_uniform_count() + kg_active_bind_group_count();
+    int total = 0;
     if (sg_isvalid()) {
         sg_stats stats = sg_query_stats();
         total += (int)stats.total.buffers.alive;
@@ -467,1811 +245,172 @@ static int kg_lifetime_outstanding_count(void) {
     return total;
 }
 
-static uint32_t kg_pipeline_uniform_target_mask(const kg_pipeline_record* record, int public_slot) {
-    if (record == NULL) {
-        return 0;
-    }
-
-    // Reflection-driven shaders: the app's public bind slot equals the uniform's
-    // WGSL binding; return the Sokol block slots that binding was configured into
-    // (a vertex block, a fragment block, or both).
-    if (record->uniform_desc_count > 0) {
-        uint32_t mask = 0;
-        for (int i = 0; i < record->uniform_desc_count; i += 1) {
-            if (record->uniform_descs[i].binding != public_slot) {
-                continue;
-            }
-            if (record->uniform_descs[i].vertex_block_slot >= 0) {
-                mask |= 1u << (uint32_t)record->uniform_descs[i].vertex_block_slot;
-            }
-            if (record->uniform_descs[i].fragment_block_slot >= 0) {
-                mask |= 1u << (uint32_t)record->uniform_descs[i].fragment_block_slot;
-            }
-        }
-        return mask;
-    }
-
-    uint32_t target_mask = 0;
-    if (public_slot == 0) {
-        target_mask = record->available_uniform_mask & ((1u << 0) | (1u << 2));
-    } else if (public_slot == 1) {
-        target_mask = record->available_uniform_mask & ((1u << 1) | (1u << 3));
-    } else if (public_slot >= 0 && public_slot < 32) {
-        target_mask = record->available_uniform_mask & (1u << (uint32_t)public_slot);
-    }
-
-    if (target_mask == 0 && public_slot >= 0 && public_slot < 32) {
-        target_mask = 1u << (uint32_t)public_slot;
-    }
-    return target_mask;
+// Seconds on a monotonic clock. The one thing a CPU-time measurement needs and
+// the one thing Kira has no way to spell: there is no clock in the language or
+// in Foundation, and reading one is a platform call.
+double kg_monotonic_seconds(void) {
+    return (double)kg_monotonic_now_ns() / 1000000000.0;
 }
 
-static kg_uniform_record* kg_find_uniform(uint32_t id) {
-    if (id == 0) {
-        return NULL;
-    }
-    for (int i = 0; i < 64; i += 1) {
-        if (kg_uniform_records[i].active && kg_uniform_records[i].id == id) {
-            return &kg_uniform_records[i];
-        }
-    }
-    return NULL;
-}
+// --- GPU frame time -------------------------------------------------------
+// Two `GL_TIMESTAMP` counters per frame, read a frame late.
+//
+// Not a `GL_TIME_ELAPSED` query bracketing the frame's commands, which is the
+// obvious way to write this and was measured at 13 ms a frame on this driver —
+// 30 FPS down to 22 in the liquid-glass app, for a readout. A query that
+// ENCLOSES a sequence of passes makes the driver keep them together;
+// `glQueryCounter` only asks the GPU to write the clock where the command
+// stream reaches it, and costs nothing measurable.
+//
+// sokol_gfx has no timing API and does not load the query entry points, so they
+// are resolved here; on every platform but Windows they are ordinary linked
+// symbols, because only Windows makes an application load GL past 1.1 itself.
+//
+// Two pairs, used alternately: a counter's value is not available in the frame
+// that issued it without stalling for it, so each frame reads the pair issued in
+// the frame before. That is a frame of latency in a readout, not in the picture.
 
-static kg_uniform_record* kg_alloc_uniform(void) {
-    for (int i = 0; i < 64; i += 1) {
-        if (!kg_uniform_records[i].active) {
-            kg_uniform_records[i] = (kg_uniform_record){0};
-            kg_uniform_records[i].active = true;
-            kg_uniform_records[i].id = kg_next_uniform_id;
-            kg_next_uniform_id += 1;
-            return &kg_uniform_records[i];
-        }
-    }
-    return NULL;
-}
-
-static kg_bind_group_record* kg_find_bind_group(uint32_t id) {
-    if (id == 0) {
-        return NULL;
-    }
-    for (int i = 0; i < 64; i += 1) {
-        if (kg_bind_group_records[i].active && kg_bind_group_records[i].id == id) {
-            return &kg_bind_group_records[i];
-        }
-    }
-    return NULL;
-}
-
-static kg_bind_group_record* kg_alloc_bind_group(void) {
-    for (int i = 0; i < 64; i += 1) {
-        if (!kg_bind_group_records[i].active) {
-            kg_bind_group_records[i] = (kg_bind_group_record){0};
-            kg_bind_group_records[i].active = true;
-            kg_bind_group_records[i].id = kg_next_bind_group_id;
-            kg_next_bind_group_id += 1;
-            return &kg_bind_group_records[i];
-        }
-    }
-    return NULL;
-}
-
-static void kg_remove_pipeline_record(uint32_t public_id) {
-    for (int i = 0; i < kg_pipeline_record_count; i += 1) {
-        if (kg_pipeline_records[i].public_id == public_id) {
-            kg_pipeline_records[i] = kg_pipeline_records[kg_pipeline_record_count - 1];
-            kg_pipeline_record_count -= 1;
-            return;
-        }
-    }
-}
-
-static void kg_ensure_triangle_vertex_buffer(void) {
-    if (kg_triangle_vertex_buffer.id != 0) {
-        return;
-    }
-
-    const float vertices[] = {
-        0.0f, 0.55f,
-        0.55f, -0.55f,
-        -0.55f, -0.55f,
-    };
-    sg_buffer_desc desc = {0};
-    desc.data.ptr = vertices;
-    desc.data.size = sizeof(vertices);
-    desc.label = "kira-graphics-default-triangle-vertices";
-    kg_triangle_vertex_buffer = sg_make_buffer(&desc);
-    kg_update_lifetime_peaks();
-}
-
-typedef struct {
-    float x;
-    float y;
-    float r;
-    float g;
-    float b;
-    float a;
-} kg_ui_vertex;
-
-// UI coordinates arrive in logical POINTS; the framebuffer is kg_current_pass_width
-// PHYSICAL pixels wide = (logical width) * kg_ui_logical_scale. Normalize against
-// the logical width so a point-space quad maps to the full framebuffer and is
-// rendered at native pixel resolution (scale 1.0 => classic pixel-space behavior).
-static float kg_ui_logical_width(void) {
-    return (float)kg_current_pass_width / kg_ui_logical_scale;
-}
-
-static float kg_ui_logical_height(void) {
-    return (float)kg_current_pass_height / kg_ui_logical_scale;
-}
-
-static float kg_ui_ndc_x(double x) {
-    if (kg_current_pass_width <= 0) {
-        return 0.0f;
-    }
-    return ((float)x / kg_ui_logical_width()) * 2.0f - 1.0f;
-}
-
-static float kg_ui_ndc_y(double y) {
-    if (kg_current_pass_height <= 0) {
-        return 0.0f;
-    }
-    return 1.0f - ((float)y / kg_ui_logical_height()) * 2.0f;
-}
-
-// One shared point->pixel snapping rule for the seam where logical points become
-// physical pixels. A logical coordinate becomes a physical pixel edge via
-// round(v * scale); dividing back by scale yields a logical coordinate that lands
-// exactly on the physical grid. Two rects sharing a logical edge therefore always
-// resolve to the SAME physical pixel column/row, and solid quads snap the SAME way
-// the glyph/icon coverage path already does (round(x*scale) in kg_glyph_emit_quad /
-// kg_ui_blit_coverage) — eliminating the 1px seams/steps and sub-pixel widget
-// overflow that arise when adjacent elements snap under different rules. Uses the
-// exact scale kg_ui_ndc_* divides by, so snapping is consistent with NDC mapping.
-// At scale 1.0 this reduces to round-to-nearest-integer-pixel (no fractional seams).
-static double kg_ui_snap_point(double v) {
-    const double s = (double)kg_ui_logical_scale;
-    if (s <= 0.0) {
-        return v;
-    }
-    return round(v * s) / s;
-}
-
-// Logical-point <-> physical-pixel backing scale for the current UI pass. Exposed
-// to the text native lib (kira_text.c) so glyphs rasterize at point-size * scale
-// and stay crisp on Retina.
-double kg_ui_dpi_scale(void) {
-    return (double)kg_ui_logical_scale;
-}
-
-static void kg_ui_draw_vertices(const kg_ui_vertex* vertices, int count);
-static void kg_live_note_visible_ui_content(void);
-
-#define KG_UI_MAX_PATH_POINTS 256
-#define KG_UI_MAX_PATH_VERTICES (KG_UI_MAX_PATH_POINTS * 3)
-
-static int kg_ui_build_rect_points(double x, double y, double w, double h, kg_ui_vertex* points, float r, float g, float b, float a) {
-    points[0] = (kg_ui_vertex){ kg_ui_ndc_x(x), kg_ui_ndc_y(y), r, g, b, a };
-    points[1] = (kg_ui_vertex){ kg_ui_ndc_x(x + w), kg_ui_ndc_y(y), r, g, b, a };
-    points[2] = (kg_ui_vertex){ kg_ui_ndc_x(x + w), kg_ui_ndc_y(y + h), r, g, b, a };
-    points[3] = (kg_ui_vertex){ kg_ui_ndc_x(x), kg_ui_ndc_y(y + h), r, g, b, a };
-    return 4;
-}
-
-static int kg_ui_build_rounded_rect_points(double x, double y, double w, double h, double radius, kg_ui_vertex* points, float r, float g, float b, float a) {
-    double clamped = radius;
-    if (clamped < 0.0) clamped = 0.0;
-    if (clamped > w * 0.5) clamped = w * 0.5;
-    if (clamped > h * 0.5) clamped = h * 0.5;
-    if (clamped < 1.0) {
-        return kg_ui_build_rect_points(x, y, w, h, points, r, g, b, a);
-    }
-
-    int segments = (int)ceil(clamped * 0.35);
-    if (segments < 18) {
-        segments = 18;
-    }
-    if (segments > 63) {
-        segments = 63;
-    }
-
-    const double starts[4] = { -M_PI_2, 0.0, M_PI_2, M_PI };
-    const double centers_x[4] = { x + w - clamped, x + w - clamped, x + clamped, x + clamped };
-    const double centers_y[4] = { y + clamped, y + h - clamped, y + h - clamped, y + clamped };
-    int count = 0;
-    for (int corner = 0; corner < 4; corner += 1) {
-        for (int step = 0; step <= segments; step += 1) {
-            if (count >= KG_UI_MAX_PATH_POINTS) {
-                return count;
-            }
-            if (corner > 0 && step == 0) continue;
-            double angle = starts[corner] + ((double)step / (double)segments) * M_PI_2;
-            double px = centers_x[corner] + cos(angle) * clamped;
-            double py = centers_y[corner] + sin(angle) * clamped;
-            points[count++] = (kg_ui_vertex){ kg_ui_ndc_x(px), kg_ui_ndc_y(py), r, g, b, a };
-        }
-    }
-    return count;
-}
-
-static double kg_eval_cubic_bezier(double p0, double p1, double p2, double p3, double t) {
-    double u = 1.0 - t;
-    return u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3;
-}
-
-static void kg_ui_draw_convex_path(const kg_ui_vertex* points, int count, double cx, double cy, float r, float g, float b, float a) {
-    if (count < 3) {
-        return;
-    }
-    if (count * 3 > KG_UI_MAX_PATH_VERTICES) {
-        return;
-    }
-    kg_ui_vertex vertices[KG_UI_MAX_PATH_VERTICES];
-    kg_ui_vertex center = { kg_ui_ndc_x(cx), kg_ui_ndc_y(cy), r, g, b, a };
-    int out = 0;
-    for (int i = 0; i < count; i += 1) {
-        int next = (i + 1) % count;
-        vertices[out++] = center;
-        vertices[out++] = points[i];
-        vertices[out++] = points[next];
-    }
-    kg_ui_draw_vertices(vertices, out);
-}
-
-static bool kg_ui_glyph_rows(char ch, uint8_t rows[7]) {
-    switch (ch) {
-        case 'A': { uint8_t v[7] = { 0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 }; memcpy(rows, v, 7); return true; }
-        case 'B': { uint8_t v[7] = { 0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E }; memcpy(rows, v, 7); return true; }
-        case 'C': { uint8_t v[7] = { 0x0F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0F }; memcpy(rows, v, 7); return true; }
-        case 'D': { uint8_t v[7] = { 0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E }; memcpy(rows, v, 7); return true; }
-        case 'E': { uint8_t v[7] = { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F }; memcpy(rows, v, 7); return true; }
-        case 'F': { uint8_t v[7] = { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10 }; memcpy(rows, v, 7); return true; }
-        case 'G': { uint8_t v[7] = { 0x0F, 0x10, 0x10, 0x13, 0x11, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
-        case 'H': { uint8_t v[7] = { 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 }; memcpy(rows, v, 7); return true; }
-        case 'I': { uint8_t v[7] = { 0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x1F }; memcpy(rows, v, 7); return true; }
-        case 'J': { uint8_t v[7] = { 0x01, 0x01, 0x01, 0x01, 0x11, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
-        case 'K': { uint8_t v[7] = { 0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11 }; memcpy(rows, v, 7); return true; }
-        case 'L': { uint8_t v[7] = { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F }; memcpy(rows, v, 7); return true; }
-        case 'M': { uint8_t v[7] = { 0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11 }; memcpy(rows, v, 7); return true; }
-        case 'N': { uint8_t v[7] = { 0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11 }; memcpy(rows, v, 7); return true; }
-        case 'O': { uint8_t v[7] = { 0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
-        case 'P': { uint8_t v[7] = { 0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10 }; memcpy(rows, v, 7); return true; }
-        case 'Q': { uint8_t v[7] = { 0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D }; memcpy(rows, v, 7); return true; }
-        case 'R': { uint8_t v[7] = { 0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11 }; memcpy(rows, v, 7); return true; }
-        case 'S': { uint8_t v[7] = { 0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E }; memcpy(rows, v, 7); return true; }
-        case 'T': { uint8_t v[7] = { 0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 }; memcpy(rows, v, 7); return true; }
-        case 'U': { uint8_t v[7] = { 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
-        case 'V': { uint8_t v[7] = { 0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04 }; memcpy(rows, v, 7); return true; }
-        case 'W': { uint8_t v[7] = { 0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A }; memcpy(rows, v, 7); return true; }
-        case 'X': { uint8_t v[7] = { 0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11 }; memcpy(rows, v, 7); return true; }
-        case 'Y': { uint8_t v[7] = { 0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04 }; memcpy(rows, v, 7); return true; }
-        case 'Z': { uint8_t v[7] = { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F }; memcpy(rows, v, 7); return true; }
-        case '-': { uint8_t v[7] = { 0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00 }; memcpy(rows, v, 7); return true; }
-        case '0': { uint8_t v[7] = { 0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
-        case '1': { uint8_t v[7] = { 0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E }; memcpy(rows, v, 7); return true; }
-        case '2': { uint8_t v[7] = { 0x0E, 0x02, 0x02, 0x04, 0x08, 0x10, 0x1F }; memcpy(rows, v, 7); return true; }
-        case '3': { uint8_t v[7] = { 0x0E, 0x02, 0x02, 0x04, 0x02, 0x02, 0x0E }; memcpy(rows, v, 7); return true; }
-        case '4': { uint8_t v[7] = { 0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02 }; memcpy(rows, v, 7); return true; }
-        case '5': { uint8_t v[7] = { 0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
-        case '6': { uint8_t v[7] = { 0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
-        case '7': { uint8_t v[7] = { 0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08 }; memcpy(rows, v, 7); return true; }
-        case '8': { uint8_t v[7] = { 0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E }; memcpy(rows, v, 7); return true; }
-        case '9': { uint8_t v[7] = { 0x0E, 0x11, 0x11, 0x1E, 0x01, 0x02, 0x0C }; memcpy(rows, v, 7); return true; }
-        case '.': { uint8_t v[7] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C }; memcpy(rows, v, 7); return true; }
-        case ',': { uint8_t v[7] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x08 }; memcpy(rows, v, 7); return true; }
-        case '!': { uint8_t v[7] = { 0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04 }; memcpy(rows, v, 7); return true; }
-        case '?': { uint8_t v[7] = { 0x0E, 0x11, 0x01, 0x06, 0x04, 0x00, 0x04 }; memcpy(rows, v, 7); return true; }
-        case ':': { uint8_t v[7] = { 0x00, 0x0C, 0x0C, 0x00, 0x0C, 0x0C, 0x00 }; memcpy(rows, v, 7); return true; }
-        case ';': { uint8_t v[7] = { 0x00, 0x04, 0x04, 0x00, 0x04, 0x04, 0x08 }; memcpy(rows, v, 7); return true; }
-        case '\'': { uint8_t v[7] = { 0x04, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00 }; memcpy(rows, v, 7); return true; }
-        case '"': { uint8_t v[7] = { 0x0A, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00 }; memcpy(rows, v, 7); return true; }
-        case '(': { uint8_t v[7] = { 0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02 }; memcpy(rows, v, 7); return true; }
-        case ')': { uint8_t v[7] = { 0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08 }; memcpy(rows, v, 7); return true; }
-        case '/': { uint8_t v[7] = { 0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10 }; memcpy(rows, v, 7); return true; }
-        case '\\':{ uint8_t v[7] = { 0x10, 0x08, 0x08, 0x04, 0x02, 0x02, 0x01 }; memcpy(rows, v, 7); return true; }
-        case '+': { uint8_t v[7] = { 0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00 }; memcpy(rows, v, 7); return true; }
-        case '=': { uint8_t v[7] = { 0x00, 0x00, 0x1F, 0x00, 0x1F, 0x00, 0x00 }; memcpy(rows, v, 7); return true; }
-        case '_': { uint8_t v[7] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F }; memcpy(rows, v, 7); return true; }
-        case '|': { uint8_t v[7] = { 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 }; memcpy(rows, v, 7); return true; }
-        case '#': { uint8_t v[7] = { 0x0A, 0x0A, 0x1F, 0x0A, 0x1F, 0x0A, 0x0A }; memcpy(rows, v, 7); return true; }
-        case '*': { uint8_t v[7] = { 0x00, 0x04, 0x15, 0x0E, 0x15, 0x04, 0x00 }; memcpy(rows, v, 7); return true; }
-        case '%': { uint8_t v[7] = { 0x11, 0x02, 0x04, 0x08, 0x11, 0x00, 0x00 }; memcpy(rows, v, 7); return true; }
-        case ' ': memset(rows, 0, 7); return true;
-        default: memset(rows, 0, 7); return false;
-    }
-}
-
-static int kg_ui_build_squircle_points(
-    double x, double y, double w, double h,
-    double radius,
-    kg_ui_vertex* points,
-    float r, float g, float b, float a
-) {
-    if (w <= 0.0 || h <= 0.0) {
-        return 0;
-    }
-
-    double clamped = radius;
-    if (clamped < 0.0) clamped = 0.0;
-    if (clamped > w * 0.5) clamped = w * 0.5;
-    if (clamped > h * 0.5) clamped = h * 0.5;
-
-    if (clamped < 1.0) {
-        return kg_ui_build_rect_points(x, y, w, h, points, r, g, b, a);
-    }
-
-    /*
-        Radius-aware continuous squircle corner.
-
-        This preserves the normal rounded-rect contract:
-        - radius controls the corner size
-        - straight edges remain straight
-        - only the corner arc is replaced with a smooth p = 4 squircle curve
-
-        Corner equation:
-
-            |qx / radius|^4 + |qy / radius|^4 = 1
-
-        Parameterization:
-
-            qx = sign(cos(theta)) * radius * sqrt(abs(cos(theta)))
-            qy = sign(sin(theta)) * radius * sqrt(abs(sin(theta)))
-
-        The formula is exact. The returned points are just the tessellated
-        polygon used by this immediate-mode triangle renderer.
-    */
-
-    int segments = (int)ceil(clamped * 0.35);
-    if (segments < 18) {
-        segments = 18;
-    }
-    if (segments > 63) {
-        segments = 63;
-    }
-
-    const double starts[4] = { -M_PI_2, 0.0, M_PI_2, M_PI };
-    const double centers_x[4] = {
-        x + w - clamped,
-        x + w - clamped,
-        x + clamped,
-        x + clamped
-    };
-    const double centers_y[4] = {
-        y + clamped,
-        y + h - clamped,
-        y + h - clamped,
-        y + clamped
-    };
-
-    int count = 0;
-
-    for (int corner = 0; corner < 4; corner += 1) {
-        for (int step = 0; step <= segments; step += 1) {
-            if (count >= KG_UI_MAX_PATH_POINTS) {
-                return count;
-            }
-
-            const double t = (double)step / (double)segments;
-            const double theta = starts[corner] + t * M_PI_2;
-
-            const double c = cos(theta);
-            const double s = sin(theta);
-
-            const double sx = c < 0.0 ? -1.0 : 1.0;
-            const double sy = s < 0.0 ? -1.0 : 1.0;
-
-            const double qx = sx * clamped * sqrt(fabs(c));
-            const double qy = sy * clamped * sqrt(fabs(s));
-
-            const double px = centers_x[corner] + qx;
-            const double py = centers_y[corner] + qy;
-
-            points[count++] = (kg_ui_vertex){
-                kg_ui_ndc_x(px),
-                kg_ui_ndc_y(py),
-                r, g, b, a
-            };
-        }
-    }
-
-    return count;
-}
-
-static void kg_ui_draw_path_surface(
-    bool squircle,
-    double x, double y, double w, double h,
-    double r, double g, double b, double a,
-    double border_r, double border_g, double border_b, double border_a,
-    double border_width, double radius
-) {
-    if (w <= 0.0 || h <= 0.0) {
-        return;
-    }
-
-    // Snap each rect edge (left/top/right/bottom) independently to the physical
-    // pixel grid before building geometry. Snapping the far edges (x+w, y+h)
-    // rather than the width/height preserves shared seams: a widget whose logical
-    // right edge equals its neighbor's logical left edge resolves to the same
-    // physical pixel column. Downstream (border ring + inner fill, rounded/squircle
-    // corners derived from these bounds) inherits the snapped bounds, so a button
-    // can no longer overflow the strip it sits on by a sub-pixel rounding step.
-    {
-        const double sx = kg_ui_snap_point(x);
-        const double sy = kg_ui_snap_point(y);
-        const double sr = kg_ui_snap_point(x + w);
-        const double sb = kg_ui_snap_point(y + h);
-        x = sx;
-        y = sy;
-        w = sr - sx;
-        h = sb - sy;
-        if (w <= 0.0 || h <= 0.0) {
-            return;
-        }
-    }
-
-    if (a > 0.0 || (border_width > 0.0 && border_a > 0.0)) {
-        kg_live_note_visible_ui_content();
-    }
-
-    kg_ui_vertex points[KG_UI_MAX_PATH_POINTS];
-
-    int count = squircle
-        ? kg_ui_build_squircle_points(
-            x, y, w, h,
-            radius,
-            points,
-            (float)border_r, (float)border_g, (float)border_b, (float)border_a
-        )
-        : kg_ui_build_rounded_rect_points(
-            x, y, w, h,
-            radius,
-            points,
-            (float)border_r, (float)border_g, (float)border_b, (float)border_a
-        );
-
-    if (border_width > 0.0 && border_a > 0.0) {
-        kg_ui_draw_convex_path(
-            points,
-            count,
-            x + w * 0.5,
-            y + h * 0.5,
-            (float)border_r,
-            (float)border_g,
-            (float)border_b,
-            (float)border_a
-        );
-    }
-
-    if (a <= 0.0) {
-        return;
-    }
-
-    double inset = border_width > 0.0 ? border_width : 0.0;
-    double inner_x = x + inset;
-    double inner_y = y + inset;
-    double inner_w = w - inset * 2.0;
-    double inner_h = h - inset * 2.0;
-
-    if (inner_w <= 0.0 || inner_h <= 0.0) {
-        return;
-    }
-
-    double inner_radius = radius - inset;
-    if (inner_radius < 0.0) {
-        inner_radius = 0.0;
-    }
-
-    count = squircle
-        ? kg_ui_build_squircle_points(
-            inner_x, inner_y, inner_w, inner_h,
-            inner_radius,
-            points,
-            (float)r, (float)g, (float)b, (float)a
-        )
-        : kg_ui_build_rounded_rect_points(
-            inner_x, inner_y, inner_w, inner_h,
-            inner_radius,
-            points,
-            (float)r, (float)g, (float)b, (float)a
-        );
-
-    kg_ui_draw_convex_path(
-        points,
-        count,
-        inner_x + inner_w * 0.5,
-        inner_y + inner_h * 0.5,
-        (float)r,
-        (float)g,
-        (float)b,
-        (float)a
-    );
-}
-
-static void kg_ui_ensure_pipeline(void) {
-    if (kg_ui_pipeline.id != 0 && kg_ui_vertex_buffer.id != 0) {
-        return;
-    }
-
-    if (kg_ui_shader.id == 0) {
-        sg_shader_desc shader_desc = {0};
-#if defined(SOKOL_METAL)
-        shader_desc.vertex_func.source =
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "struct vs_in {\n"
-            "  float2 position [[attribute(0)]];\n"
-            "  float4 color [[attribute(1)]];\n"
-            "};\n"
-            "struct vs_out {\n"
-            "  float4 position [[position]];\n"
-            "  float4 color;\n"
-            "};\n"
-            "vertex vs_out vs_main(vs_in in [[stage_in]]) {\n"
-            "  vs_out out;\n"
-            "  out.position = float4(in.position, 0.0, 1.0);\n"
-            "  out.color = in.color;\n"
-            "  return out;\n"
-            "}\n";
-        shader_desc.vertex_func.entry = "vs_main";
-        shader_desc.fragment_func.source =
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "struct fs_in {\n"
-            "  float4 position [[position]];\n"
-            "  float4 color;\n"
-            "};\n"
-            "fragment float4 fs_main(fs_in in [[stage_in]]) {\n"
-            "  return in.color;\n"
-            "}\n";
-        shader_desc.fragment_func.entry = "fs_main";
-#elif defined(SOKOL_WGPU)
-        // WebGPU/Dawn only accepts WGSL. Feeding it the GLSL branch below makes the
-        // shader module invalid, which invalidates the immediate-2d pipeline and —
-        // because WebGPU rejects a whole command buffer containing one invalid
-        // command — silently drops EVERY queue submit for the frame, clear included:
-        // the wasm canvas stayed opaque black while all Kira markers still fired.
-        // @location(N) matches the pipeline vertex layout attr indices (0=position
-        // float2, 1=color float4), mirroring the KSL WGSL backend's convention.
-        shader_desc.vertex_func.source =
-            "struct VsIn {\n"
-            "  @location(0) position: vec2<f32>,\n"
-            "  @location(1) color: vec4<f32>,\n"
-            "};\n"
-            "struct VsOut {\n"
-            "  @builtin(position) clip_position: vec4<f32>,\n"
-            "  @location(0) color: vec4<f32>,\n"
-            "};\n"
-            "@vertex\n"
-            "fn vs_main(in: VsIn) -> VsOut {\n"
-            "  var out: VsOut;\n"
-            "  out.clip_position = vec4<f32>(in.position, 0.0, 1.0);\n"
-            "  out.color = in.color;\n"
-            "  return out;\n"
-            "}\n";
-        shader_desc.vertex_func.entry = "vs_main";
-        shader_desc.fragment_func.source =
-            "@fragment\n"
-            "fn fs_main(@location(0) color: vec4<f32>) -> @location(0) vec4<f32> {\n"
-            "  return color;\n"
-            "}\n";
-        shader_desc.fragment_func.entry = "fs_main";
-#else
-        shader_desc.vertex_func.source =
-            "#version 330 core\n"
-            "layout(location=0) in vec2 kira_attr_position;\n"
-            "layout(location=1) in vec4 kira_attr_color;\n"
-            "out vec4 v_color;\n"
-            "void main() {\n"
-            "  gl_Position = vec4(kira_attr_position, 0.0, 1.0);\n"
-            "  v_color = kira_attr_color;\n"
-            "}\n";
-        shader_desc.fragment_func.source =
-            "#version 330 core\n"
-            "in vec4 v_color;\n"
-            "out vec4 frag_color;\n"
-            "void main() {\n"
-            "  frag_color = v_color;\n"
-            "}\n";
+#ifndef GL_TIMESTAMP
+#define GL_TIMESTAMP 0x8E28
 #endif
-        shader_desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
-        shader_desc.attrs[0].glsl_name = "kira_attr_position";
-        shader_desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
-        shader_desc.attrs[1].glsl_name = "kira_attr_color";
-        shader_desc.label = "kira-graphics-immediate-2d-shader";
-        kg_ui_shader = sg_make_shader(&shader_desc);
-        kg_update_lifetime_peaks();
-    }
-
-    if (kg_ui_pipeline.id == 0) {
-        // Read the swapchain color format / sample count for pipeline creation via
-        // sapp_color_format()/sapp_sample_count() rather than sglue_swapchain().
-        // sglue_swapchain() calls sapp_get_swapchain(), which on the WebGPU backend
-        // ACQUIRES the frame's swapchain view and asserts (0 == swapchain_view) that
-        // it had not already been acquired this frame. The swapchain pass already
-        // acquired it (kg_begin_render_pass), so a second acquire here — triggered
-        // the first frame the lazy UI pipeline is built — trips
-        // `SOKOL_ASSERT(0 == _sapp.wgpu.swapchain_view)` and aborts the module.
-        // Metal tolerates the double acquire, which is why this only surfaced on
-        // wasm/WebGPU. sapp_color_format()/sapp_sample_count() report the same
-        // formats without acquiring a view.
-        const sg_pixel_format swapchain_color_format = _sglue_to_sgpixelformat(sapp_color_format());
-        const int swapchain_sample_count = sapp_sample_count();
-        sg_pipeline_desc pipeline_desc = {0};
-        pipeline_desc.shader = kg_ui_shader;
-        pipeline_desc.layout.buffers[0].stride = sizeof(kg_ui_vertex);
-        pipeline_desc.layout.attrs[0].buffer_index = 0;
-        pipeline_desc.layout.attrs[0].offset = offsetof(kg_ui_vertex, x);
-        pipeline_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
-        pipeline_desc.layout.attrs[1].buffer_index = 0;
-        pipeline_desc.layout.attrs[1].offset = offsetof(kg_ui_vertex, r);
-        pipeline_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT4;
-        pipeline_desc.colors[0].pixel_format = swapchain_color_format;
-        pipeline_desc.colors[0].blend.enabled = true;
-        pipeline_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-        pipeline_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-        pipeline_desc.colors[0].blend.op_rgb = SG_BLENDOP_ADD;
-        pipeline_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
-        pipeline_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-        pipeline_desc.colors[0].blend.op_alpha = SG_BLENDOP_ADD;
-        pipeline_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-        pipeline_desc.cull_mode = SG_CULLMODE_NONE;
-        pipeline_desc.face_winding = SG_FACEWINDING_CCW;
-        pipeline_desc.sample_count = swapchain_sample_count;
-        pipeline_desc.label = "kira-graphics-immediate-2d-pipeline";
-        kg_ui_pipeline = sg_make_pipeline(&pipeline_desc);
-        kg_update_lifetime_peaks();
-    }
-
-    if (kg_ui_vertex_buffer.id == 0) {
-        sg_buffer_desc buffer_desc = {0};
-        buffer_desc.usage.vertex_buffer = true;
-        buffer_desc.usage.stream_update = true;
-        buffer_desc.size = sizeof(kg_ui_vertex) * 262144;
-        buffer_desc.label = "kira-graphics-immediate-2d-vertices";
-        kg_ui_vertex_buffer = sg_make_buffer(&buffer_desc);
-        kg_update_lifetime_peaks();
-    }
-}
-
-// Textured UI quads (TextureView compositing): a dedicated textured pipeline the
-// immediate-2D path uses to blit a registered kg texture (e.g. an engine's
-// offscreen viewport render target) into the UI pass. Separate from the solid
-// batch because it needs a texture+sampler bind; draws flush the solid batch
-// first so z-order against surrounding chrome is preserved.
-typedef struct {
-    float x, y;
-    float u, v;
-    float a;
-    // Rounded-rect mask params, in PHYSICAL pixels, constant across the 6 verts.
-    // hx/hy = half-extent of the quad; rad = corner radius. The fragment derives
-    // its local pixel position from uv and applies an analytic rounded-rect
-    // coverage mask so the composited texture (viewport) gets rounded corners.
-    // rad == 0 => full coverage (unchanged square quad).
-    float hx, hy;
-    float rad;
-} kg_ui_tex_vertex;
-
-static sg_shader kg_ui_tex_shader = {0};
-static sg_pipeline kg_ui_tex_pipeline = {0};
-static sg_buffer kg_ui_tex_vertex_buffer = {0};
-static sg_sampler kg_ui_tex_sampler = {0};
-
-static void kg_ui_tex_ensure_pipeline(void) {
-    if (kg_ui_tex_pipeline.id != 0 && kg_ui_tex_vertex_buffer.id != 0 && kg_ui_tex_sampler.id != 0) {
-        return;
-    }
-
-    if (kg_ui_tex_shader.id == 0) {
-        sg_shader_desc shader_desc = {0};
-#if defined(SOKOL_METAL)
-        shader_desc.vertex_func.source =
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "struct vs_in {\n"
-            "  float2 position [[attribute(0)]];\n"
-            "  float2 uv [[attribute(1)]];\n"
-            "  float alpha [[attribute(2)]];\n"
-            "  float2 half_ext [[attribute(3)]];\n"
-            "  float radius [[attribute(4)]];\n"
-            "};\n"
-            "struct vs_out {\n"
-            "  float4 position [[position]];\n"
-            "  float2 uv;\n"
-            "  float alpha;\n"
-            "  float2 half_ext;\n"
-            "  float radius;\n"
-            "};\n"
-            "vertex vs_out vs_main(vs_in in [[stage_in]]) {\n"
-            "  vs_out out;\n"
-            "  out.position = float4(in.position, 0.0, 1.0);\n"
-            "  out.uv = in.uv;\n"
-            "  out.alpha = in.alpha;\n"
-            "  out.half_ext = in.half_ext;\n"
-            "  out.radius = in.radius;\n"
-            "  return out;\n"
-            "}\n";
-        shader_desc.vertex_func.entry = "vs_main";
-        shader_desc.fragment_func.source =
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "struct fs_in {\n"
-            "  float4 position [[position]];\n"
-            "  float2 uv;\n"
-            "  float alpha;\n"
-            "  float2 half_ext;\n"
-            "  float radius;\n"
-            "};\n"
-            // Analytic rounded-rect coverage in physical pixels. p = local pixel
-            // offset from the quad centre (derived from uv); d = signed distance to
-            // the rounded-rect edge; cov = clamp(0.5 - d) is a 1px-wide analytic AA
-            // that keeps straight edges flush (d<=-0.5 => cov=1) and only rounds the
-            // corners. radius==0 => cov==1 everywhere (unchanged square quad).
-            "fragment float4 fs_main(fs_in in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) {\n"
-            "  float4 c = tex.sample(smp, in.uv);\n"
-            "  float2 p = (in.uv - float2(0.5)) * (in.half_ext * 2.0);\n"
-            "  float2 q = abs(p) - in.half_ext + float2(in.radius);\n"
-            "  float d = min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0))) - in.radius;\n"
-            "  float cov = clamp(0.5 - d, 0.0, 1.0);\n"
-            "  return float4(c.rgb, c.a * in.alpha * cov);\n"
-            "}\n";
-        shader_desc.fragment_func.entry = "fs_main";
-#elif defined(SOKOL_WGPU)
-        // WGSL: texture/sampler live in @group(1) per sokol-gfx's WGPU binding
-        // model (uniforms own @group(0)); bindings match wgsl_group1_binding_n
-        // configured below.
-        shader_desc.vertex_func.source =
-            "struct VsIn {\n"
-            "  @location(0) position: vec2<f32>,\n"
-            "  @location(1) uv: vec2<f32>,\n"
-            "  @location(2) alpha: f32,\n"
-            "  @location(3) half_ext: vec2<f32>,\n"
-            "  @location(4) radius: f32,\n"
-            "};\n"
-            "struct VsOut {\n"
-            "  @builtin(position) clip_position: vec4<f32>,\n"
-            "  @location(0) uv: vec2<f32>,\n"
-            "  @location(1) alpha: f32,\n"
-            "  @location(2) half_ext: vec2<f32>,\n"
-            "  @location(3) radius: f32,\n"
-            "};\n"
-            "@vertex\n"
-            "fn vs_main(in: VsIn) -> VsOut {\n"
-            "  var out: VsOut;\n"
-            "  out.clip_position = vec4<f32>(in.position, 0.0, 1.0);\n"
-            "  out.uv = in.uv;\n"
-            "  out.alpha = in.alpha;\n"
-            "  out.half_ext = in.half_ext;\n"
-            "  out.radius = in.radius;\n"
-            "  return out;\n"
-            "}\n";
-        shader_desc.vertex_func.entry = "vs_main";
-        // Analytic rounded-rect coverage in physical pixels — see the Metal variant
-        // for the derivation. radius==0 => cov==1 (unchanged square quad).
-        shader_desc.fragment_func.source =
-            "@group(1) @binding(0) var kira_ui_tex: texture_2d<f32>;\n"
-            "@group(1) @binding(1) var kira_ui_smp: sampler;\n"
-            "@fragment\n"
-            "fn fs_main(@location(0) uv: vec2<f32>, @location(1) alpha: f32, @location(2) half_ext: vec2<f32>, @location(3) radius: f32) -> @location(0) vec4<f32> {\n"
-            "  let c = textureSample(kira_ui_tex, kira_ui_smp, uv);\n"
-            "  let p = (uv - vec2<f32>(0.5)) * (half_ext * 2.0);\n"
-            "  let q = abs(p) - half_ext + vec2<f32>(radius);\n"
-            "  let d = min(max(q.x, q.y), 0.0) + length(max(q, vec2<f32>(0.0))) - radius;\n"
-            "  let cov = clamp(0.5 - d, 0.0, 1.0);\n"
-            "  return vec4<f32>(c.rgb, c.a * alpha * cov);\n"
-            "}\n";
-        shader_desc.fragment_func.entry = "fs_main";
-#else
-        shader_desc.vertex_func.source =
-            "#version 330 core\n"
-            "layout(location=0) in vec2 kira_attr_position;\n"
-            "layout(location=1) in vec2 kira_attr_uv;\n"
-            "layout(location=2) in float kira_attr_alpha;\n"
-            "layout(location=3) in vec2 kira_attr_half;\n"
-            "layout(location=4) in float kira_attr_radius;\n"
-            "out vec2 v_uv;\n"
-            "out float v_alpha;\n"
-            "out vec2 v_half;\n"
-            "out float v_radius;\n"
-            "void main() {\n"
-            "  gl_Position = vec4(kira_attr_position, 0.0, 1.0);\n"
-            "  v_uv = kira_attr_uv;\n"
-            "  v_alpha = kira_attr_alpha;\n"
-            "  v_half = kira_attr_half;\n"
-            "  v_radius = kira_attr_radius;\n"
-            "}\n";
-        // Analytic rounded-rect coverage in physical pixels — see the Metal variant
-        // for the derivation. radius==0 => cov==1 (unchanged square quad).
-        shader_desc.fragment_func.source =
-            "#version 330 core\n"
-            "uniform sampler2D kira_ui_tex_smp;\n"
-            "in vec2 v_uv;\n"
-            "in float v_alpha;\n"
-            "in vec2 v_half;\n"
-            "in float v_radius;\n"
-            "out vec4 frag_color;\n"
-            "void main() {\n"
-            "  vec4 c = texture(kira_ui_tex_smp, v_uv);\n"
-            "  vec2 p = (v_uv - vec2(0.5)) * (v_half * 2.0);\n"
-            "  vec2 q = abs(p) - v_half + vec2(v_radius);\n"
-            "  float d = min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - v_radius;\n"
-            "  float cov = clamp(0.5 - d, 0.0, 1.0);\n"
-            "  frag_color = vec4(c.rgb, c.a * v_alpha * cov);\n"
-            "}\n";
+#ifndef GL_QUERY_RESULT
+#define GL_QUERY_RESULT 0x8866
 #endif
-        shader_desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
-        shader_desc.attrs[0].glsl_name = "kira_attr_position";
-        shader_desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
-        shader_desc.attrs[1].glsl_name = "kira_attr_uv";
-        shader_desc.attrs[2].base_type = SG_SHADERATTRBASETYPE_FLOAT;
-        shader_desc.attrs[2].glsl_name = "kira_attr_alpha";
-        shader_desc.attrs[3].base_type = SG_SHADERATTRBASETYPE_FLOAT;
-        shader_desc.attrs[3].glsl_name = "kira_attr_half";
-        shader_desc.attrs[4].base_type = SG_SHADERATTRBASETYPE_FLOAT;
-        shader_desc.attrs[4].glsl_name = "kira_attr_radius";
-        shader_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
-        shader_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
-        shader_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-        shader_desc.views[0].texture.hlsl_register_t_n = 0;
-        shader_desc.views[0].texture.msl_texture_n = 0;
-        shader_desc.views[0].texture.wgsl_group1_binding_n = 0;
-        shader_desc.views[0].texture.spirv_set1_binding_n = 0;
-        shader_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
-        shader_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
-        shader_desc.samplers[0].hlsl_register_s_n = 0;
-        shader_desc.samplers[0].msl_sampler_n = 0;
-        shader_desc.samplers[0].wgsl_group1_binding_n = 1;
-        shader_desc.samplers[0].spirv_set1_binding_n = 2;
-        shader_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
-        shader_desc.texture_sampler_pairs[0].view_slot = 0;
-        shader_desc.texture_sampler_pairs[0].sampler_slot = 0;
-        shader_desc.texture_sampler_pairs[0].glsl_name = "kira_ui_tex_smp";
-        shader_desc.label = "kira-graphics-immediate-2d-texture-shader";
-        kg_ui_tex_shader = sg_make_shader(&shader_desc);
-        kg_update_lifetime_peaks();
-    }
-
-    if (kg_ui_tex_pipeline.id == 0) {
-        // sapp_color_format()/sapp_sample_count(), not sglue_swapchain(): the
-        // latter re-acquires the WebGPU swapchain view and asserts (see the
-        // solid-color pipeline above).
-        const sg_pixel_format swapchain_color_format = _sglue_to_sgpixelformat(sapp_color_format());
-        const int swapchain_sample_count = sapp_sample_count();
-        sg_pipeline_desc pipeline_desc = {0};
-        pipeline_desc.shader = kg_ui_tex_shader;
-        pipeline_desc.layout.buffers[0].stride = sizeof(kg_ui_tex_vertex);
-        pipeline_desc.layout.attrs[0].buffer_index = 0;
-        pipeline_desc.layout.attrs[0].offset = offsetof(kg_ui_tex_vertex, x);
-        pipeline_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
-        pipeline_desc.layout.attrs[1].buffer_index = 0;
-        pipeline_desc.layout.attrs[1].offset = offsetof(kg_ui_tex_vertex, u);
-        pipeline_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
-        pipeline_desc.layout.attrs[2].buffer_index = 0;
-        pipeline_desc.layout.attrs[2].offset = offsetof(kg_ui_tex_vertex, a);
-        pipeline_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT;
-        pipeline_desc.layout.attrs[3].buffer_index = 0;
-        pipeline_desc.layout.attrs[3].offset = offsetof(kg_ui_tex_vertex, hx);
-        pipeline_desc.layout.attrs[3].format = SG_VERTEXFORMAT_FLOAT2;
-        pipeline_desc.layout.attrs[4].buffer_index = 0;
-        pipeline_desc.layout.attrs[4].offset = offsetof(kg_ui_tex_vertex, rad);
-        pipeline_desc.layout.attrs[4].format = SG_VERTEXFORMAT_FLOAT;
-        pipeline_desc.colors[0].pixel_format = swapchain_color_format;
-        pipeline_desc.colors[0].blend.enabled = true;
-        pipeline_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-        pipeline_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-        pipeline_desc.colors[0].blend.op_rgb = SG_BLENDOP_ADD;
-        pipeline_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
-        pipeline_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-        pipeline_desc.colors[0].blend.op_alpha = SG_BLENDOP_ADD;
-        pipeline_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-        pipeline_desc.cull_mode = SG_CULLMODE_NONE;
-        pipeline_desc.face_winding = SG_FACEWINDING_CCW;
-        pipeline_desc.sample_count = swapchain_sample_count;
-        pipeline_desc.label = "kira-graphics-immediate-2d-texture-pipeline";
-        kg_ui_tex_pipeline = sg_make_pipeline(&pipeline_desc);
-        kg_update_lifetime_peaks();
-    }
-
-    if (kg_ui_tex_vertex_buffer.id == 0) {
-        sg_buffer_desc buffer_desc = {0};
-        buffer_desc.usage.vertex_buffer = true;
-        buffer_desc.usage.stream_update = true;
-        buffer_desc.size = sizeof(kg_ui_tex_vertex) * 6 * 64;
-        buffer_desc.label = "kira-graphics-immediate-2d-texture-vertices";
-        kg_ui_tex_vertex_buffer = sg_make_buffer(&buffer_desc);
-        kg_update_lifetime_peaks();
-    }
-
-    if (kg_ui_tex_sampler.id == 0) {
-        sg_sampler_desc sampler_desc = {0};
-        sampler_desc.min_filter = SG_FILTER_LINEAR;
-        sampler_desc.mag_filter = SG_FILTER_LINEAR;
-        sampler_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
-        sampler_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-        sampler_desc.label = "kira-graphics-immediate-2d-texture-sampler";
-        kg_ui_tex_sampler = sg_make_sampler(&sampler_desc);
-        kg_update_lifetime_peaks();
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Glyph atlas — textured coverage for text + icons on the immediate-2D path.
-//
-// The prior text/icon path (kg_ui_blit_coverage) turned every covered pixel run
-// of a FreeType/SVG coverage bitmap into a solid-color quad EVERY FRAME. At 2x
-// retina that is ~4x the vertex traffic of 1x and re-does the whole per-pixel
-// decomposition each frame — the measured cap (~19 fps idle at 2x on the editor).
-//
-// Instead: pack each glyph's A8 coverage bitmap into a single R8 atlas texture
-// ONCE (keyed by an opaque int64 the caller derives from face/glyph/px or icon
-// hash/px), then draw the glyph as ONE textured quad that samples the atlas and
-// multiplies by a per-vertex tint. Steady state = zero rasterization re-pack,
-// zero texture uploads, 6 vertices per glyph regardless of pixel size.
-//
-// Ordering vs the solid batch is preserved by cross-flushing: emitting a glyph
-// quad flushes the pending solid batch first, and emitting a solid quad flushes
-// the pending glyph batch first, so at any clip/pass boundary at most one batch
-// is non-empty and painter order is exact.
-//
-// Upload timing honors sokol's "one sg_update_image per image per frame"
-// (frame == sg_commit cycle): the whole CPU atlas is uploaded at most once per
-// commit, lazily at the first glyph flush that has newly-packed content. Glyphs
-// packed AFTER that upload window closes this frame fall back to the per-pixel
-// blit for one frame and become resident on the next. Atlas-full falls back for
-// the overflow glyph and schedules a full reset at the next frame boundary (no
-// mid-frame corruption of already-queued UVs).
-#define KG_ATLAS_DIM 2048
-#define KG_ATLAS_PAD 1
-#define KG_GLYPH_SLOT_CAP 8192            // power of two; open-addressing table
-#define KG_GLYPH_BATCH_CAPACITY 12288     // CPU vertices flushed when full (2048 glyphs)
-#define KG_GLYPH_VBUF_VERTS (6 * 24576)   // GPU ring capacity per frame
-
-typedef struct {
-    float x, y;
-    float u, v;
-    float r, g, b, a;
-} kg_glyph_vertex;
-
-typedef struct {
-    int64_t  key;     // 0 == empty slot
-    uint16_t gx, gy;  // atlas origin (texels)
-    uint16_t gw, gh;  // glyph size (texels)
-    uint32_t seq;     // pack sequence number (residency vs uploaded_seq)
-} kg_glyph_slot;
-
-static uint8_t         g_atlas_pixels[KG_ATLAS_DIM * KG_ATLAS_DIM]; // A8 coverage, BSS
-static kg_glyph_slot   g_glyph_slots[KG_GLYPH_SLOT_CAP];
-static int             g_glyph_slot_count = 0;
-static int             g_atlas_shelf_x = 0;   // current shelf cursor (texels)
-static int             g_atlas_shelf_y = 0;   // current shelf top (texels)
-static int             g_atlas_shelf_h = 0;   // current shelf height (texels)
-static uint32_t        g_atlas_seq = 0;          // last packed sequence
-static uint32_t        g_atlas_uploaded_seq = 0; // sequence covered by GPU image
-static bool            g_atlas_uploaded_this_frame = false;
-static bool            g_atlas_reset_pending = false;
-
-static sg_shader   g_glyph_shader = {0};
-static sg_pipeline g_glyph_pipeline = {0};
-static sg_buffer   g_glyph_vbuf = {0};
-static sg_sampler  g_glyph_sampler = {0};
-static sg_image    g_glyph_image = {0};
-static uint32_t    g_glyph_view_id = 0;
-
-static kg_glyph_vertex g_glyph_batch[KG_GLYPH_BATCH_CAPACITY];
-static int             g_glyph_batch_count = 0;
-
-// Forward declarations: the glyph path cross-flushes the solid batch and falls
-// back to the per-pixel blit, both defined further below.
-static void kg_ui_flush_batch(void);
-static void kg_live_note_visible_ui_content(void);
-void kg_ui_blit_coverage(double x, double y, int width, int rows, int pitch,
-                         const unsigned char* coverage,
-                         double r, double g, double b, double a);
-
-static void kg_glyph_ensure_pipeline(void) {
-    if (g_glyph_pipeline.id != 0 && g_glyph_vbuf.id != 0 &&
-        g_glyph_sampler.id != 0 && g_glyph_image.id != 0 && g_glyph_view_id != 0) {
-        return;
-    }
-
-    if (g_glyph_image.id == 0) {
-        sg_image_desc image_desc = {0};
-        image_desc.width = KG_ATLAS_DIM;
-        image_desc.height = KG_ATLAS_DIM;
-        image_desc.num_mipmaps = 1;
-        image_desc.pixel_format = SG_PIXELFORMAT_R8;
-        image_desc.usage.stream_update = true; // uploaded via sg_update_image
-        image_desc.label = "kira-graphics-glyph-atlas-image";
-        g_glyph_image = sg_make_image(&image_desc);
-        kg_update_lifetime_peaks();
-    }
-    if (g_glyph_view_id == 0 && g_glyph_image.id != 0) {
-        sg_view_desc view_desc = {0};
-        view_desc.texture.image = g_glyph_image;
-        view_desc.label = "kira-graphics-glyph-atlas-view";
-        g_glyph_view_id = sg_make_view(&view_desc).id;
-        kg_update_lifetime_peaks();
-    }
-
-    if (g_glyph_shader.id == 0) {
-        sg_shader_desc shader_desc = {0};
-#if defined(SOKOL_METAL)
-        shader_desc.vertex_func.source =
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "struct vs_in {\n"
-            "  float2 position [[attribute(0)]];\n"
-            "  float2 uv [[attribute(1)]];\n"
-            "  float4 color [[attribute(2)]];\n"
-            "};\n"
-            "struct vs_out {\n"
-            "  float4 position [[position]];\n"
-            "  float2 uv;\n"
-            "  float4 color;\n"
-            "};\n"
-            "vertex vs_out vs_main(vs_in in [[stage_in]]) {\n"
-            "  vs_out out;\n"
-            "  out.position = float4(in.position, 0.0, 1.0);\n"
-            "  out.uv = in.uv;\n"
-            "  out.color = in.color;\n"
-            "  return out;\n"
-            "}\n";
-        shader_desc.vertex_func.entry = "vs_main";
-        shader_desc.fragment_func.source =
-            "#include <metal_stdlib>\n"
-            "using namespace metal;\n"
-            "struct fs_in {\n"
-            "  float4 position [[position]];\n"
-            "  float2 uv;\n"
-            "  float4 color;\n"
-            "};\n"
-            "fragment float4 fs_main(fs_in in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) {\n"
-            "  float cov = tex.sample(smp, in.uv).r;\n"
-            "  return float4(in.color.rgb, in.color.a * cov);\n"
-            "}\n";
-        shader_desc.fragment_func.entry = "fs_main";
-#elif defined(SOKOL_WGPU)
-        shader_desc.vertex_func.source =
-            "struct VsIn {\n"
-            "  @location(0) position: vec2<f32>,\n"
-            "  @location(1) uv: vec2<f32>,\n"
-            "  @location(2) color: vec4<f32>,\n"
-            "};\n"
-            "struct VsOut {\n"
-            "  @builtin(position) clip_position: vec4<f32>,\n"
-            "  @location(0) uv: vec2<f32>,\n"
-            "  @location(1) color: vec4<f32>,\n"
-            "};\n"
-            "@vertex\n"
-            "fn vs_main(in: VsIn) -> VsOut {\n"
-            "  var out: VsOut;\n"
-            "  out.clip_position = vec4<f32>(in.position, 0.0, 1.0);\n"
-            "  out.uv = in.uv;\n"
-            "  out.color = in.color;\n"
-            "  return out;\n"
-            "}\n";
-        shader_desc.vertex_func.entry = "vs_main";
-        shader_desc.fragment_func.source =
-            "@group(1) @binding(0) var kira_glyph_tex: texture_2d<f32>;\n"
-            "@group(1) @binding(1) var kira_glyph_smp: sampler;\n"
-            "@fragment\n"
-            "fn fs_main(@location(0) uv: vec2<f32>, @location(1) color: vec4<f32>) -> @location(0) vec4<f32> {\n"
-            "  let cov = textureSample(kira_glyph_tex, kira_glyph_smp, uv).r;\n"
-            "  return vec4<f32>(color.rgb, color.a * cov);\n"
-            "}\n";
-        shader_desc.fragment_func.entry = "fs_main";
-#else
-        shader_desc.vertex_func.source =
-            "#version 330 core\n"
-            "layout(location=0) in vec2 kira_attr_position;\n"
-            "layout(location=1) in vec2 kira_attr_uv;\n"
-            "layout(location=2) in vec4 kira_attr_color;\n"
-            "out vec2 v_uv;\n"
-            "out vec4 v_color;\n"
-            "void main() {\n"
-            "  gl_Position = vec4(kira_attr_position, 0.0, 1.0);\n"
-            "  v_uv = kira_attr_uv;\n"
-            "  v_color = kira_attr_color;\n"
-            "}\n";
-        shader_desc.fragment_func.source =
-            "#version 330 core\n"
-            "uniform sampler2D kira_glyph_tex_smp;\n"
-            "in vec2 v_uv;\n"
-            "in vec4 v_color;\n"
-            "out vec4 frag_color;\n"
-            "void main() {\n"
-            "  float cov = texture(kira_glyph_tex_smp, v_uv).r;\n"
-            "  frag_color = vec4(v_color.rgb, v_color.a * cov);\n"
-            "}\n";
+#ifndef GL_QUERY_RESULT_AVAILABLE
+#define GL_QUERY_RESULT_AVAILABLE 0x8867
 #endif
-        shader_desc.attrs[0].base_type = SG_SHADERATTRBASETYPE_FLOAT;
-        shader_desc.attrs[0].glsl_name = "kira_attr_position";
-        shader_desc.attrs[1].base_type = SG_SHADERATTRBASETYPE_FLOAT;
-        shader_desc.attrs[1].glsl_name = "kira_attr_uv";
-        shader_desc.attrs[2].base_type = SG_SHADERATTRBASETYPE_FLOAT;
-        shader_desc.attrs[2].glsl_name = "kira_attr_color";
-        shader_desc.views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT;
-        shader_desc.views[0].texture.image_type = SG_IMAGETYPE_2D;
-        shader_desc.views[0].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
-        shader_desc.views[0].texture.hlsl_register_t_n = 0;
-        shader_desc.views[0].texture.msl_texture_n = 0;
-        shader_desc.views[0].texture.wgsl_group1_binding_n = 0;
-        shader_desc.views[0].texture.spirv_set1_binding_n = 0;
-        shader_desc.samplers[0].stage = SG_SHADERSTAGE_FRAGMENT;
-        shader_desc.samplers[0].sampler_type = SG_SAMPLERTYPE_FILTERING;
-        shader_desc.samplers[0].hlsl_register_s_n = 0;
-        shader_desc.samplers[0].msl_sampler_n = 0;
-        shader_desc.samplers[0].wgsl_group1_binding_n = 1;
-        shader_desc.samplers[0].spirv_set1_binding_n = 2;
-        shader_desc.texture_sampler_pairs[0].stage = SG_SHADERSTAGE_FRAGMENT;
-        shader_desc.texture_sampler_pairs[0].view_slot = 0;
-        shader_desc.texture_sampler_pairs[0].sampler_slot = 0;
-        shader_desc.texture_sampler_pairs[0].glsl_name = "kira_glyph_tex_smp";
-        shader_desc.label = "kira-graphics-glyph-atlas-shader";
-        g_glyph_shader = sg_make_shader(&shader_desc);
-        kg_update_lifetime_peaks();
-    }
 
-    if (g_glyph_pipeline.id == 0) {
-        const sg_pixel_format swapchain_color_format = _sglue_to_sgpixelformat(sapp_color_format());
-        const int swapchain_sample_count = sapp_sample_count();
-        sg_pipeline_desc pipeline_desc = {0};
-        pipeline_desc.shader = g_glyph_shader;
-        pipeline_desc.layout.buffers[0].stride = sizeof(kg_glyph_vertex);
-        pipeline_desc.layout.attrs[0].buffer_index = 0;
-        pipeline_desc.layout.attrs[0].offset = offsetof(kg_glyph_vertex, x);
-        pipeline_desc.layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2;
-        pipeline_desc.layout.attrs[1].buffer_index = 0;
-        pipeline_desc.layout.attrs[1].offset = offsetof(kg_glyph_vertex, u);
-        pipeline_desc.layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2;
-        pipeline_desc.layout.attrs[2].buffer_index = 0;
-        pipeline_desc.layout.attrs[2].offset = offsetof(kg_glyph_vertex, r);
-        pipeline_desc.layout.attrs[2].format = SG_VERTEXFORMAT_FLOAT4;
-        pipeline_desc.colors[0].pixel_format = swapchain_color_format;
-        pipeline_desc.colors[0].blend.enabled = true;
-        pipeline_desc.colors[0].blend.src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA;
-        pipeline_desc.colors[0].blend.dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-        pipeline_desc.colors[0].blend.op_rgb = SG_BLENDOP_ADD;
-        pipeline_desc.colors[0].blend.src_factor_alpha = SG_BLENDFACTOR_ONE;
-        pipeline_desc.colors[0].blend.dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-        pipeline_desc.colors[0].blend.op_alpha = SG_BLENDOP_ADD;
-        pipeline_desc.primitive_type = SG_PRIMITIVETYPE_TRIANGLES;
-        pipeline_desc.cull_mode = SG_CULLMODE_NONE;
-        pipeline_desc.face_winding = SG_FACEWINDING_CCW;
-        pipeline_desc.sample_count = swapchain_sample_count;
-        pipeline_desc.label = "kira-graphics-glyph-atlas-pipeline";
-        g_glyph_pipeline = sg_make_pipeline(&pipeline_desc);
-        kg_update_lifetime_peaks();
-    }
-
-    if (g_glyph_vbuf.id == 0) {
-        sg_buffer_desc buffer_desc = {0};
-        buffer_desc.usage.vertex_buffer = true;
-        buffer_desc.usage.stream_update = true;
-        buffer_desc.size = sizeof(kg_glyph_vertex) * KG_GLYPH_VBUF_VERTS;
-        buffer_desc.label = "kira-graphics-glyph-atlas-vertices";
-        g_glyph_vbuf = sg_make_buffer(&buffer_desc);
-        kg_update_lifetime_peaks();
-    }
-
-    if (g_glyph_sampler.id == 0) {
-        // Glyphs are packed at physical px and drawn 1:1 to the physical pixel
-        // grid, so NEAREST reproduces the coverage exactly (crisp, no bleed from
-        // the 1px padding gutter between packed glyphs).
-        sg_sampler_desc sampler_desc = {0};
-        sampler_desc.min_filter = SG_FILTER_NEAREST;
-        sampler_desc.mag_filter = SG_FILTER_NEAREST;
-        sampler_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
-        sampler_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-        sampler_desc.label = "kira-graphics-glyph-atlas-sampler";
-        g_glyph_sampler = sg_make_sampler(&sampler_desc);
-        kg_update_lifetime_peaks();
-    }
-}
-
-// Reset the atlas to empty. Deferred to a frame boundary (never mid-frame) so
-// already-queued glyph quads never reference stale/overwritten UVs.
-static void kg_glyph_atlas_reset(void) {
-    memset(g_glyph_slots, 0, sizeof(g_glyph_slots));
-    memset(g_atlas_pixels, 0, sizeof(g_atlas_pixels));
-    g_glyph_slot_count = 0;
-    g_atlas_shelf_x = 0;
-    g_atlas_shelf_y = 0;
-    g_atlas_shelf_h = 0;
-    g_atlas_seq = 0;
-    g_atlas_uploaded_seq = 0;
-    fprintf(stderr, "KiraGraphics: glyph atlas full — reset (v1 eviction)\n");
-}
-
-// Open-addressing lookup; returns slot index or -1. key is never 0 for live keys
-// (callers fold in a non-zero discriminator), matching the empty sentinel.
-static int kg_glyph_find(int64_t key) {
-    uint32_t mask = KG_GLYPH_SLOT_CAP - 1;
-    uint32_t h = (uint32_t)((uint64_t)key * 0x9E3779B97F4A7C15ull >> 40) & mask;
-    for (uint32_t probe = 0; probe < KG_GLYPH_SLOT_CAP; probe += 1) {
-        uint32_t i = (h + probe) & mask;
-        if (g_glyph_slots[i].key == key) {
-            return (int)i;
-        }
-        if (g_glyph_slots[i].key == 0) {
-            return -1;
-        }
-    }
-    return -1;
-}
-
-// Pack a coverage bitmap into the atlas on first use. Returns slot index, or -1
-// when the atlas is full (caller falls back + schedules a reset).
-static int kg_glyph_pack(int64_t key, int width, int rows, int pitch,
-                         const unsigned char* coverage) {
-    if (width <= 0 || rows <= 0 || width > KG_ATLAS_DIM || rows > KG_ATLAS_DIM) {
-        return -1;
-    }
-    // Table nearly full: force an atlas reset rather than probe forever.
-    if (g_glyph_slot_count >= (KG_GLYPH_SLOT_CAP * 3) / 4) {
-        return -1;
-    }
-    int need_w = width + KG_ATLAS_PAD;
-    int need_h = rows + KG_ATLAS_PAD;
-    if (g_atlas_shelf_x + need_w > KG_ATLAS_DIM) {
-        // New shelf.
-        g_atlas_shelf_y += g_atlas_shelf_h;
-        g_atlas_shelf_x = 0;
-        g_atlas_shelf_h = 0;
-    }
-    if (g_atlas_shelf_y + need_h > KG_ATLAS_DIM) {
-        return -1; // atlas full
-    }
-    int gx = g_atlas_shelf_x;
-    int gy = g_atlas_shelf_y;
-    // Blit coverage into the CPU atlas (row-major, one byte per texel).
-    for (int ry = 0; ry < rows; ry += 1) {
-        const unsigned char* src = coverage + (size_t)ry * (size_t)pitch;
-        uint8_t* dst = g_atlas_pixels + (size_t)(gy + ry) * KG_ATLAS_DIM + (size_t)gx;
-        memcpy(dst, src, (size_t)width);
-    }
-    g_atlas_shelf_x += need_w;
-    if (need_h > g_atlas_shelf_h) {
-        g_atlas_shelf_h = need_h;
-    }
-
-    // Insert into the slot table.
-    uint32_t mask = KG_GLYPH_SLOT_CAP - 1;
-    uint32_t h = (uint32_t)((uint64_t)key * 0x9E3779B97F4A7C15ull >> 40) & mask;
-    for (uint32_t probe = 0; probe < KG_GLYPH_SLOT_CAP; probe += 1) {
-        uint32_t i = (h + probe) & mask;
-        if (g_glyph_slots[i].key == 0) {
-            g_atlas_seq += 1;
-            g_glyph_slots[i].key = key;
-            g_glyph_slots[i].gx = (uint16_t)gx;
-            g_glyph_slots[i].gy = (uint16_t)gy;
-            g_glyph_slots[i].gw = (uint16_t)width;
-            g_glyph_slots[i].gh = (uint16_t)rows;
-            g_glyph_slots[i].seq = g_atlas_seq;
-            g_glyph_slot_count += 1;
-            return (int)i;
-        }
-    }
-    return -1;
-}
-
-static void kg_glyph_flush_batch(void) {
-    const int count = g_glyph_batch_count;
-    g_glyph_batch_count = 0;
-    if (count <= 0) {
-        return;
-    }
-    kg_glyph_ensure_pipeline();
-    if (g_glyph_pipeline.id == 0 || g_glyph_vbuf.id == 0 ||
-        g_glyph_sampler.id == 0 || g_glyph_view_id == 0) {
-        return;
-    }
-    // Upload the whole CPU atlas at most once per commit cycle, and only when it
-    // holds glyphs the GPU image does not yet have.
-    if (g_atlas_seq > g_atlas_uploaded_seq && !g_atlas_uploaded_this_frame) {
-        sg_image_data data = {0};
-        data.mip_levels[0].ptr = g_atlas_pixels;
-        data.mip_levels[0].size = (size_t)KG_ATLAS_DIM * (size_t)KG_ATLAS_DIM;
-        sg_update_image(g_glyph_image, &data);
-        g_atlas_uploaded_seq = g_atlas_seq;
-        g_atlas_uploaded_this_frame = true;
-    }
-    sg_range data = { g_glyph_batch, (size_t)count * sizeof(kg_glyph_vertex) };
-    int offset = sg_append_buffer(g_glyph_vbuf, &data);
-    if (offset < 0) {
-        return;
-    }
-    sg_apply_pipeline(g_glyph_pipeline);
-    sg_bindings bindings = {0};
-    bindings.vertex_buffers[0] = g_glyph_vbuf;
-    bindings.vertex_buffer_offsets[0] = offset;
-    bindings.views[0].id = g_glyph_view_id;
-    bindings.samplers[0].id = g_glyph_sampler.id;
-    sg_apply_bindings(&bindings);
-    sg_draw(0, count, 1);
-}
-
-static void kg_glyph_emit_quad(const kg_glyph_slot* slot,
-                               double x, double y, int width, int rows,
-                               float r, float g, float b, float a) {
-    // Cross-flush: any pending solid quads were queued before this glyph, so they
-    // must draw underneath it.
-    kg_ui_flush_batch();
-    if (g_glyph_batch_count + 6 > KG_GLYPH_BATCH_CAPACITY) {
-        kg_glyph_flush_batch();
-    }
-    // Physical-pixel-grid placement, identical to kg_ui_blit_coverage: align the
-    // glyph origin to the physical pixel grid, then map back into logical points
-    // so the quad occupies its intended point size at native pixel resolution.
-    float scale = kg_ui_logical_scale;
-    if (scale < 1.0f) {
-        scale = 1.0f;
-    }
-    const double inv = 1.0 / (double)scale;
-    const double left = round(x * (double)scale);
-    const double top = round(y * (double)scale);
-    const double px0 = left * inv;
-    const double py0 = top * inv;
-    const double px1 = (left + (double)width) * inv;
-    const double py1 = (top + (double)rows) * inv;
-    const float vx0 = kg_ui_ndc_x(px0);
-    const float vy0 = kg_ui_ndc_y(py0);
-    const float vx1 = kg_ui_ndc_x(px1);
-    const float vy1 = kg_ui_ndc_y(py1);
-    const float u0 = (float)slot->gx / (float)KG_ATLAS_DIM;
-    const float v0 = (float)slot->gy / (float)KG_ATLAS_DIM;
-    const float u1 = (float)(slot->gx + slot->gw) / (float)KG_ATLAS_DIM;
-    const float v1 = (float)(slot->gy + slot->gh) / (float)KG_ATLAS_DIM;
-    kg_glyph_vertex* out = g_glyph_batch + g_glyph_batch_count;
-    out[0] = (kg_glyph_vertex){ vx0, vy0, u0, v0, r, g, b, a };
-    out[1] = (kg_glyph_vertex){ vx1, vy0, u1, v0, r, g, b, a };
-    out[2] = (kg_glyph_vertex){ vx1, vy1, u1, v1, r, g, b, a };
-    out[3] = (kg_glyph_vertex){ vx0, vy0, u0, v0, r, g, b, a };
-    out[4] = (kg_glyph_vertex){ vx1, vy1, u1, v1, r, g, b, a };
-    out[5] = (kg_glyph_vertex){ vx0, vy1, u0, v1, r, g, b, a };
-    g_glyph_batch_count += 6;
-}
-
-// Public: draw a coverage bitmap keyed for atlas reuse. Drop-in for
-// kg_ui_blit_coverage, but packs the glyph once and thereafter draws a single
-// textured quad. `key` must uniquely identify (face, glyph, physical px) for
-// text or (icon hash, px) for icons, and be non-zero.
-void kg_ui_draw_glyph_coverage(int64_t key,
-                               double x, double y, int width, int rows, int pitch,
-                               const unsigned char* coverage,
-                               double r, double g, double b, double a) {
-    if (coverage == NULL || width <= 0 || rows <= 0 || a <= 0.0 || pitch < width) {
-        return;
-    }
-    if (key == 0 || !kg_current_pass_active) {
-        // No stable key / no pass: fall back to the immediate per-pixel path.
-        kg_ui_blit_coverage(x, y, width, rows, pitch, coverage, r, g, b, a);
-        return;
-    }
-    kg_live_note_visible_ui_content();
-
-    int idx = kg_glyph_find(key);
-    if (idx < 0) {
-        idx = kg_glyph_pack(key, width, rows, pitch, coverage);
-        if (idx < 0) {
-            // Atlas/table full: draw this glyph the slow way, reset next frame.
-            g_atlas_reset_pending = true;
-            kg_ui_blit_coverage(x, y, width, rows, pitch, coverage, r, g, b, a);
-            return;
-        }
-    }
-    const kg_glyph_slot* slot = &g_glyph_slots[idx];
-    // Resident iff already on the GPU, or packed this cycle with the upload window
-    // still open (the next glyph flush uploads before its draw). Otherwise the
-    // upload window has closed this cycle — draw via the slow path for one frame.
-    bool resident = (slot->seq <= g_atlas_uploaded_seq) || !g_atlas_uploaded_this_frame;
-    if (!resident) {
-        kg_ui_blit_coverage(x, y, width, rows, pitch, coverage, r, g, b, a);
-        return;
-    }
-    kg_glyph_emit_quad(slot, x, y, width, rows, (float)r, (float)g, (float)b, (float)a);
-}
-
-// UI draw batching: kg_ui_draw_* calls queue triangles into a frame-local CPU
-// batch, and the batch is flushed as ONE buffer append + ONE draw call at
-// state-change boundaries (clip rect changes, non-UI pipeline draws, pass
-// end). The previous code issued sg_append_buffer + sg_apply_pipeline +
-// sg_apply_bindings + sg_draw PER PRIMITIVE — hundreds of tiny appends and
-// redundant state changes per UI frame, which capped complex frames far below
-// display refresh.
-#define KG_UI_BATCH_CAPACITY 65536
-static kg_ui_vertex kg_ui_batch[KG_UI_BATCH_CAPACITY];
-static int kg_ui_batch_count = 0;
-
-static void kg_ui_flush_batch(void) {
-    const int count = kg_ui_batch_count;
-    kg_ui_batch_count = 0;
-    if (count <= 0) {
-        return;
-    }
-    kg_ui_ensure_pipeline();
-    sg_range data = { kg_ui_batch, (size_t)count * sizeof(kg_ui_vertex) };
-    int offset = sg_append_buffer(kg_ui_vertex_buffer, &data);
-    if (offset < 0) return;
-    sg_apply_pipeline(kg_ui_pipeline);
-    sg_bindings bindings = {0};
-    bindings.vertex_buffers[0] = kg_ui_vertex_buffer;
-    bindings.vertex_buffer_offsets[0] = offset;
-    sg_apply_bindings(&bindings);
-    sg_draw(0, count, 1);
-}
-
-static void kg_ui_draw_vertices(const kg_ui_vertex* vertices, int count) {
-    if (count <= 0) {
-        return;
-    }
-    // Cross-flush: any pending glyph quads were queued before these solid quads,
-    // so they must draw underneath. Keeps painter order exact across pipelines.
-    if (g_glyph_batch_count > 0) {
-        kg_glyph_flush_batch();
-    }
-    while (count > KG_UI_BATCH_CAPACITY) {
-        kg_ui_draw_vertices(vertices, KG_UI_BATCH_CAPACITY);
-        vertices += KG_UI_BATCH_CAPACITY;
-        count -= KG_UI_BATCH_CAPACITY;
-    }
-    if (kg_ui_batch_count + count > KG_UI_BATCH_CAPACITY) {
-        kg_ui_flush_batch();
-    }
-    memcpy(kg_ui_batch + kg_ui_batch_count, vertices, (size_t)count * sizeof(kg_ui_vertex));
-    kg_ui_batch_count += count;
-}
-
-static kg_ui_clip_rect kg_ui_intersect_clip(kg_ui_clip_rect a, kg_ui_clip_rect b) {
-    float left = a.x > b.x ? a.x : b.x;
-    float top = a.y > b.y ? a.y : b.y;
-    float right_a = a.x + a.w;
-    float right_b = b.x + b.w;
-    float bottom_a = a.y + a.h;
-    float bottom_b = b.y + b.h;
-    float right = right_a < right_b ? right_a : right_b;
-    float bottom = bottom_a < bottom_b ? bottom_a : bottom_b;
-    kg_ui_clip_rect result = { left, top, right > left ? right - left : 0.0f, bottom > top ? bottom - top : 0.0f };
-    return result;
-}
-
-// Clip rects are tracked in logical POINTS (they intersect layout-space quads),
-// but sg_apply_scissor_rect operates in FRAMEBUFFER PIXELS. Scale by the current
-// backing factor so the scissor lands on the right physical pixels on Retina.
-static void kg_ui_apply_scissor_points(const kg_ui_clip_rect clip) {
-    const double s = (double)kg_ui_logical_scale;
-    // Snap each scissor edge (left/top/right/bottom) to the physical grid with the
-    // SAME round rule the quad geometry uses, instead of truncating each component
-    // independently. Truncation of x and w separately could clip a snapped quad
-    // edge by 1px (the classic scissor/quad seam); rounding matched edges keeps the
-    // clip flush with the content it bounds.
-    const int left = (int)lround((double)clip.x * s);
-    const int top = (int)lround((double)clip.y * s);
-    const int right = (int)lround(((double)clip.x + (double)clip.w) * s);
-    const int bottom = (int)lround(((double)clip.y + (double)clip.h) * s);
-    sg_apply_scissor_rect(left, top, right - left, bottom - top, true);
-}
-
-void kg_ui_push_clip(double x, double y, double w, double h, double radius) {
-    (void)radius;
-    if (kg_ui_clip_depth >= 32) {
-        return;
-    }
-    // Queued vertices belong to the previous scissor rect.
-    kg_ui_flush_batch();
-    kg_glyph_flush_batch();
-    kg_ui_clip_rect clip = { x, y, w, h };
-    if (kg_ui_clip_depth > 0) {
-        clip = kg_ui_intersect_clip(kg_ui_clip_stack[kg_ui_clip_depth - 1], clip);
-    }
-    kg_ui_clip_stack[kg_ui_clip_depth] = clip;
-    kg_ui_clip_depth += 1;
-    kg_ui_apply_scissor_points(clip);
-}
-
-void kg_ui_pop_clip(void) {
-    // Queued vertices belong to the previous scissor rect.
-    kg_ui_flush_batch();
-    kg_glyph_flush_batch();
-    if (kg_ui_clip_depth <= 0) {
-        sg_apply_scissor_rect(0, 0, kg_current_pass_width, kg_current_pass_height, true);
-        return;
-    }
-    kg_ui_clip_depth -= 1;
-    if (kg_ui_clip_depth == 0) {
-        sg_apply_scissor_rect(0, 0, kg_current_pass_width, kg_current_pass_height, true);
-    } else {
-        kg_ui_clip_rect clip = kg_ui_clip_stack[kg_ui_clip_depth - 1];
-        kg_ui_apply_scissor_points(clip);
-    }
-}
-
-static void kg_live_note_visible_ui_content(void) {
-    kg_ui_draw_commands_submitted_this_frame = true;
-}
-
-void kg_ui_draw_surface(double x, double y, double w, double h, double r, double g, double b, double a, double border_r, double border_g, double border_b, double border_a, double border_width, double radius) {
-    kg_ui_draw_path_surface(false, x, y, w, h, r, g, b, a, border_r, border_g, border_b, border_a, border_width, radius);
-}
-
-void kg_ui_draw_squircle_surface(double x, double y, double w, double h, double r, double g, double b, double a, double border_r, double border_g, double border_b, double border_a, double border_width, double radius) {
-    static bool printed = false;
-    if (!printed) {
-        fprintf(stderr, "KiraGraphics: SQUIRCLE SURFACE CALLED w=%f h=%f radius=%f\n", w, h, radius);
-        printed = true;
-    }
-
-    kg_ui_draw_path_surface(true, x, y, w, h, r, g, b, a, border_r, border_g, border_b, border_a, border_width, radius);
-}
-
-void kg_ui_draw_glow(double x, double y, double w, double h, double r, double g, double b, double a, double radius, double intensity) {
-    float spread = radius > 1.0f ? radius : 1.0f;
-    float alpha = a * intensity * 0.25f;
-    kg_ui_draw_surface(x - spread, y - spread, w + spread * 2.0f, h + spread * 2.0f, r, g, b, alpha, 0, 0, 0, 0, 0, 0);
-}
-
-static kg_texture_record* kg_find_texture(uint32_t texture_id);
-
-// Composite a registered kg texture (must have a sampleable texture view, i.e.
-// created with a sampled usage) as a UI quad in the current pass — the
-// TextureView widget path on the Sokol backend. Draws immediately with the
-// dedicated textured pipeline; the pending solid batch is flushed first so
-// chrome drawn before the texture stays underneath it.
-void kg_ui_draw_texture(uint32_t texture_id, double x, double y, double w, double h, double opacity, double radius) {
-    if (texture_id == 0 || w <= 0.0 || h <= 0.0 || opacity <= 0.0) {
-        return;
-    }
-    if (!kg_current_pass_active) {
-        return;
-    }
-    kg_texture_record* record = kg_find_texture(texture_id);
-    if (record == NULL || record->texture_view_id == 0) {
-        static bool warned = false;
-        if (!warned) {
-            printf("Kira Graphics: UI texture draw skipped, texture %u has no sampleable view\n", texture_id);
-            warned = true;
-        }
-        return;
-    }
-    kg_ui_flush_batch();
-    kg_glyph_flush_batch();
-    kg_ui_tex_ensure_pipeline();
-    if (kg_ui_tex_pipeline.id == 0 || kg_ui_tex_vertex_buffer.id == 0 || kg_ui_tex_sampler.id == 0) {
-        return;
-    }
-    // Snap each edge to the physical grid so the composited texture (e.g. the
-    // viewport render target) shares its panel seam exactly with the surrounding
-    // chrome quads, which snap the same way.
-    const double sx = kg_ui_snap_point(x);
-    const double sy = kg_ui_snap_point(y);
-    const double sr = kg_ui_snap_point(x + w);
-    const double sb = kg_ui_snap_point(y + h);
-    float x0 = kg_ui_ndc_x(sx);
-    float y0 = kg_ui_ndc_y(sy);
-    float x1 = kg_ui_ndc_x(sr);
-    float y1 = kg_ui_ndc_y(sb);
-    // Rounded-corner mask geometry, in PHYSICAL pixels. The snapped logical size
-    // times the backing scale gives the physical extent the fragment shader's
-    // analytic 1px AA is calibrated against; radius is clamped to half the
-    // shorter side so it never over-rounds a thin viewport. radius<=0 leaves the
-    // shader coverage at 1 everywhere (unchanged square quad).
-    const double scale = (double)kg_ui_logical_scale;
-    const double phys_w = (sr - sx) * scale;
-    const double phys_h = (sb - sy) * scale;
-    double rad_logical = radius;
-    if (rad_logical < 0.0) rad_logical = 0.0;
-    const double max_rad_logical = ((sr - sx) < (sb - sy) ? (sr - sx) : (sb - sy)) * 0.5;
-    if (rad_logical > max_rad_logical) rad_logical = max_rad_logical;
-    const float half_x = (float)(phys_w * 0.5);
-    const float half_y = (float)(phys_h * 0.5);
-    const float rad_px = (float)(rad_logical * scale);
-    // Render targets sample top-down on Metal/WebGPU/D3D; desktop GL stores
-    // render targets bottom-up, so flip V there.
 #if defined(SOKOL_GLCORE)
-    const float v_top = 1.0f;
-    const float v_bottom = 0.0f;
-#else
-    const float v_top = 0.0f;
-    const float v_bottom = 1.0f;
+
+typedef void (GL_APIENTRY *KG_PFN_GEN_QUERIES)(GLsizei, GLuint*);
+typedef void (GL_APIENTRY *KG_PFN_QUERY_COUNTER)(GLuint, GLenum);
+typedef void (GL_APIENTRY *KG_PFN_GET_QUERY_OBJECT_UIV)(GLuint, GLenum, GLuint*);
+typedef void (GL_APIENTRY *KG_PFN_GET_QUERY_OBJECT_UI64V)(GLuint, GLenum, uint64_t*);
+
+static KG_PFN_GEN_QUERIES kg_glGenQueries;
+static KG_PFN_QUERY_COUNTER kg_glQueryCounter;
+static KG_PFN_GET_QUERY_OBJECT_UIV kg_glGetQueryObjectuiv;
+static KG_PFN_GET_QUERY_OBJECT_UI64V kg_glGetQueryObjectui64v;
+
+static int kg_gpu_timer_state = 0; // 0 untried, 1 ready, -1 unavailable
+// [frame slot][0 = frame start, 1 = frame end]
+static GLuint kg_gpu_queries[2][2];
+static int kg_gpu_query_slot = 0;
+static int kg_gpu_query_pending[2];
+static double kg_gpu_frame_seconds_value = 0.0;
+static int kg_gpu_timer_open = 0;
+
+#if defined(_WIN32)
+static void* kg_gl_proc(const char* name) {
+    HMODULE gl = GetModuleHandleA("opengl32.dll");
+    if (gl == NULL) {
+        return NULL;
+    }
+    typedef PROC (WINAPI *KG_PFN_WGL_GET_PROC)(LPCSTR);
+    KG_PFN_WGL_GET_PROC wgl = (KG_PFN_WGL_GET_PROC)GetProcAddress(gl, "wglGetProcAddress");
+    void* addr = wgl != NULL ? (void*)wgl(name) : NULL;
+    if (addr == NULL) {
+        addr = (void*)GetProcAddress(gl, name);
+    }
+    return addr;
+}
 #endif
-    float alpha = (float)opacity;
-    kg_ui_tex_vertex vertices[6] = {
-        { x0, y0, 0.0f, v_top,    alpha, half_x, half_y, rad_px },
-        { x1, y0, 1.0f, v_top,    alpha, half_x, half_y, rad_px },
-        { x1, y1, 1.0f, v_bottom, alpha, half_x, half_y, rad_px },
-        { x0, y0, 0.0f, v_top,    alpha, half_x, half_y, rad_px },
-        { x1, y1, 1.0f, v_bottom, alpha, half_x, half_y, rad_px },
-        { x0, y1, 0.0f, v_bottom, alpha, half_x, half_y, rad_px },
-    };
-    sg_range data = { vertices, sizeof(vertices) };
-    int offset = sg_append_buffer(kg_ui_tex_vertex_buffer, &data);
-    if (offset < 0) {
-        return;
+
+static bool kg_gpu_timer_ready(void) {
+    if (kg_gpu_timer_state != 0) {
+        return kg_gpu_timer_state > 0;
     }
-    sg_apply_pipeline(kg_ui_tex_pipeline);
-    sg_bindings bindings = {0};
-    bindings.vertex_buffers[0] = kg_ui_tex_vertex_buffer;
-    bindings.vertex_buffer_offsets[0] = offset;
-    bindings.views[0].id = record->texture_view_id;
-    bindings.samplers[0].id = kg_ui_tex_sampler.id;
-    sg_apply_bindings(&bindings);
-    sg_draw(0, 6, 1);
-    kg_live_note_visible_ui_content();
+    kg_gpu_timer_state = -1;
+    // On unless a run turns it off. A timer query is a synchronization point,
+    // so it earned a measurement of its own: 400 frames of the liquid-glass app
+    // with and without, twice each, came out 66.3/64.8 s against 68.2/64.7 s —
+    // no difference outside the run-to-run spread. `KIRA_GRAPHICS_GPU_TIME=0`
+    // is for a run that must not issue one regardless; the HUD then says `not
+    // measured` rather than `0.0 ms`.
+    const char* wanted = getenv("KIRA_GRAPHICS_GPU_TIME");
+    if (wanted != NULL && wanted[0] == '0' && wanted[1] == '\0') {
+        return false;
+    }
+#if defined(_WIN32)
+    kg_glGenQueries = (KG_PFN_GEN_QUERIES)kg_gl_proc("glGenQueries");
+    kg_glQueryCounter = (KG_PFN_QUERY_COUNTER)kg_gl_proc("glQueryCounter");
+    kg_glGetQueryObjectuiv = (KG_PFN_GET_QUERY_OBJECT_UIV)kg_gl_proc("glGetQueryObjectuiv");
+    kg_glGetQueryObjectui64v = (KG_PFN_GET_QUERY_OBJECT_UI64V)kg_gl_proc("glGetQueryObjectui64v");
+#else
+    kg_glGenQueries = (KG_PFN_GEN_QUERIES)glGenQueries;
+    kg_glQueryCounter = (KG_PFN_QUERY_COUNTER)glQueryCounter;
+    kg_glGetQueryObjectuiv = (KG_PFN_GET_QUERY_OBJECT_UIV)glGetQueryObjectuiv;
+    kg_glGetQueryObjectui64v = (KG_PFN_GET_QUERY_OBJECT_UI64V)glGetQueryObjectui64v;
+#endif
+    if (kg_glGenQueries == NULL || kg_glQueryCounter == NULL ||
+        kg_glGetQueryObjectuiv == NULL || kg_glGetQueryObjectui64v == NULL) {
+        return false;
+    }
+    kg_glGenQueries(4, &kg_gpu_queries[0][0]);
+    if (kg_gpu_queries[0][0] == 0 || kg_gpu_queries[1][1] == 0) {
+        return false;
+    }
+    kg_gpu_query_pending[0] = 0;
+    kg_gpu_query_pending[1] = 0;
+    kg_gpu_timer_state = 1;
+    return true;
 }
 
-void kg_ui_draw_text(const char* text, double x, double y, double w, double h, double r, double g, double b, double a, double size) {
-    if (text == NULL || text[0] == '\0') {
+void kg_gpu_timer_begin(void) {
+    if (!kg_gpu_timer_ready() || kg_gpu_timer_open) {
         return;
     }
-    if (w > 0.0f && h > 0.0f && a > 0.0f) {
-        kg_live_note_visible_ui_content();
-    }
-    int len = (int)strlen(text);
-    if (len > 256) {
-        len = 256;
-    }
-    double glyph_w = size * 0.48;
-    double glyph_h = size * 0.74;
-    double gap = size * 0.18;
-    double cursor = round(x);
-    double top = round(y + (h - glyph_h) * 0.5);
-    // Per-glyph scratch (max 5x7 pixels x 6 vertices); the batch in
-    // kg_ui_draw_vertices accumulates across glyphs and draw calls.
-    kg_ui_vertex vertices[210];
-    int vertex_count = 0;
-    for (int i = 0; i < len; i += 1) {
-        char ch = (char)toupper((unsigned char)text[i]);
-        if (ch == ' ') {
-            cursor += glyph_w + gap;
-            continue;
-        }
-        if (cursor > x + w) {
-            break;
-        }
-        uint8_t rows[7];
-        if (!kg_ui_glyph_rows(ch, rows)) {
-            cursor += glyph_w + gap;
-            continue;
-        }
-        double pixel_w = glyph_w / 5.0;
-        double pixel_h = glyph_h / 7.0;
-        for (int row = 0; row < 7; row += 1) {
-            for (int col = 0; col < 5; col += 1) {
-                if ((rows[row] & (1 << (4 - col))) == 0) continue;
-                double px = cursor + col * pixel_w;
-                double py = top + row * pixel_h;
-                double pw = pixel_w * 0.94;
-                double ph = pixel_h * 0.94;
-                vertices[vertex_count++] = (kg_ui_vertex){ kg_ui_ndc_x(px), kg_ui_ndc_y(py), (float)r, (float)g, (float)b, (float)a };
-                vertices[vertex_count++] = (kg_ui_vertex){ kg_ui_ndc_x(px + pw), kg_ui_ndc_y(py), (float)r, (float)g, (float)b, (float)a };
-                vertices[vertex_count++] = (kg_ui_vertex){ kg_ui_ndc_x(px + pw), kg_ui_ndc_y(py + ph), (float)r, (float)g, (float)b, (float)a };
-                vertices[vertex_count++] = (kg_ui_vertex){ kg_ui_ndc_x(px), kg_ui_ndc_y(py), (float)r, (float)g, (float)b, (float)a };
-                vertices[vertex_count++] = (kg_ui_vertex){ kg_ui_ndc_x(px + pw), kg_ui_ndc_y(py + ph), (float)r, (float)g, (float)b, (float)a };
-                vertices[vertex_count++] = (kg_ui_vertex){ kg_ui_ndc_x(px), kg_ui_ndc_y(py + ph), (float)r, (float)g, (float)b, (float)a };
-            }
-        }
-        kg_ui_draw_vertices(vertices, vertex_count);
-        vertex_count = 0;
-        cursor += glyph_w + gap;
-    }
+    kg_glQueryCounter(kg_gpu_queries[kg_gpu_query_slot][0], GL_TIMESTAMP);
+    kg_gpu_timer_open = 1;
 }
 
-// Blit an 8-bit coverage bitmap (e.g. a FreeType-rasterized glyph) into the UI
-// batch as anti-aliased alpha-modulated quads. (x, y) is the top-left of the
-// bitmap in pass pixels; `coverage` is width*rows bytes with row stride `pitch`.
-// Each covered pixel becomes a 1px quad whose alpha is the coverage scaled by
-// the requested color alpha, so it composites through the existing immediate-2D
-// alpha blend exactly like the prior bitmap font, but with real glyph shapes.
-// This reuses the solid-color pipeline; a texture atlas is a later optimization.
-void kg_ui_blit_coverage(double x, double y, int width, int rows, int pitch,
-                         const unsigned char* coverage,
-                         double r, double g, double b, double a) {
-    if (coverage == NULL || width <= 0 || rows <= 0 || a <= 0.0) {
+void kg_gpu_timer_end(void) {
+    if (!kg_gpu_timer_ready() || !kg_gpu_timer_open) {
         return;
     }
-    // Row stride must cover the full width; a short or non-positive pitch (or a
-    // negative one cast to size_t) would index out of bounds below.
-    if (pitch < width) {
-        return;
-    }
-    kg_live_note_visible_ui_content();
-
-    const float cr = (float)r;
-    const float cg = (float)g;
-    const float cb = (float)b;
-    // The caller (kira_text.c) rasterizes glyphs at point-size * backing scale, so
-    // the coverage bitmap is `scale`x denser than the point grid. `x`/`y` are the
-    // glyph origin in logical POINTS; align to the physical pixel grid, then map
-    // each physical coverage pixel back into points (multiply by 1/scale) so the
-    // glyph occupies its intended point size while every physical pixel of the
-    // Retina framebuffer carries real coverage — crisp text, no upscale blur.
-    // At scale 1.0 this reduces exactly to the previous 1px-per-unit behavior.
-    float scale = kg_ui_logical_scale;
-    if (scale < 1.0f) {
-        scale = 1.0f;
-    }
-    const double inv = 1.0 / (double)scale;
-    const double left = round(x * (double)scale);
-    const double top = round(y * (double)scale);
-
-    kg_ui_vertex vertices[1536]; // flushed when full
-    int vertex_count = 0;
-    const int capacity = (int)(sizeof(vertices) / sizeof(vertices[0]));
-
-    for (int ry = 0; ry < rows; ry += 1) {
-        const unsigned char* row = coverage + (size_t)ry * (size_t)pitch;
-        int cx = 0;
-        while (cx < width) {
-            unsigned char cov = row[cx];
-            if (cov < 8) {
-                cx += 1; // skip ~transparent pixels
-                continue;
+    kg_glQueryCounter(kg_gpu_queries[kg_gpu_query_slot][1], GL_TIMESTAMP);
+    kg_gpu_timer_open = 0;
+    kg_gpu_query_pending[kg_gpu_query_slot] = 1;
+    // Read the OTHER pair, issued a frame ago and long since retired.
+    const int other = kg_gpu_query_slot ^ 1;
+    if (kg_gpu_query_pending[other]) {
+        GLuint available = 0;
+        kg_glGetQueryObjectuiv(kg_gpu_queries[other][1], GL_QUERY_RESULT_AVAILABLE, &available);
+        if (available != 0) {
+            uint64_t began = 0;
+            uint64_t ended = 0;
+            kg_glGetQueryObjectui64v(kg_gpu_queries[other][0], GL_QUERY_RESULT, &began);
+            kg_glGetQueryObjectui64v(kg_gpu_queries[other][1], GL_QUERY_RESULT, &ended);
+            if (ended > began) {
+                kg_gpu_frame_seconds_value = (double)(ended - began) / 1000000000.0;
             }
-            // Merge the horizontal run of pixels sharing this coverage into a
-            // single quad. Glyph interiors are long runs of full coverage, so
-            // this cuts vertex traffic sharply with identical output.
-            int start = cx;
-            do {
-                cx += 1;
-            } while (cx < width && row[cx] == cov);
-            int run = cx - start;
-
-            float alpha = (float)(a * ((double)cov / 255.0));
-            double px = (left + (double)start) * inv;
-            double py = (top + (double)ry) * inv;
-            float x0 = kg_ui_ndc_x(px);
-            float y0 = kg_ui_ndc_y(py);
-            float x1 = kg_ui_ndc_x(px + (double)run * inv);
-            float y1 = kg_ui_ndc_y(py + inv);
-            vertices[vertex_count++] = (kg_ui_vertex){ x0, y0, cr, cg, cb, alpha };
-            vertices[vertex_count++] = (kg_ui_vertex){ x1, y0, cr, cg, cb, alpha };
-            vertices[vertex_count++] = (kg_ui_vertex){ x1, y1, cr, cg, cb, alpha };
-            vertices[vertex_count++] = (kg_ui_vertex){ x0, y0, cr, cg, cb, alpha };
-            vertices[vertex_count++] = (kg_ui_vertex){ x1, y1, cr, cg, cb, alpha };
-            vertices[vertex_count++] = (kg_ui_vertex){ x0, y1, cr, cg, cb, alpha };
-            if (vertex_count + 6 > capacity) {
-                kg_ui_draw_vertices(vertices, vertex_count);
-                vertex_count = 0;
-            }
+            kg_gpu_query_pending[other] = 0;
         }
     }
-    if (vertex_count > 0) {
-        kg_ui_draw_vertices(vertices, vertex_count);
-    }
+    kg_gpu_query_slot = other;
 }
 
-static void kg_ensure_ui_demo_vertex_buffer(void) {
-    if (kg_ui_demo_vertex_buffer.id != 0) {
-        return;
-    }
+double kg_gpu_frame_seconds(void) {
+    return kg_gpu_frame_seconds_value;
+}
 
-    const float vertices[] = {
-        -0.44f, -0.24f,
-        0.44f, -0.24f,
-        0.44f, 0.24f,
-        -0.44f, -0.24f,
-        0.44f, 0.24f,
-        -0.44f, 0.24f,
+#else
 
-        -0.28f, 0.06f,
-        0.28f, 0.06f,
-        0.28f, 0.12f,
-        -0.28f, 0.06f,
-        0.28f, 0.12f,
-        -0.28f, 0.12f,
+// A non-GL sokol build (D3D11, Metal) has its own timing surface and none of
+// this applies. Answering zero here would be the reading a HUD must not show,
+// so `kg_gpu_timer_supported` is what a caller asks first.
+void kg_gpu_timer_begin(void) {}
+void kg_gpu_timer_end(void) {}
+double kg_gpu_frame_seconds(void) { return 0.0; }
 
-        -0.28f, -0.08f,
-        0.16f, -0.08f,
-        0.16f, -0.02f,
-        -0.28f, -0.08f,
-        0.16f, -0.02f,
-        -0.28f, -0.02f,
-    };
-    sg_buffer_desc desc = {0};
-    desc.data.ptr = vertices;
-    desc.data.size = sizeof(vertices);
-    desc.label = "kira-graphics-ui-demo-vertices";
-    kg_ui_demo_vertex_buffer = sg_make_buffer(&desc);
-    kg_update_lifetime_peaks();
+#endif
+
+bool kg_gpu_timer_supported(void) {
+#if defined(SOKOL_GLCORE)
+    return kg_gpu_timer_ready();
+#else
+    return false;
+#endif
 }
 
 static sg_pixel_format kg_pixel_format(int64_t format) {
@@ -2419,7 +558,8 @@ static sg_blend_state kg_blend_state(bool enabled, int64_t preset) {
 }
 
 static bool kg_validate_pipeline_layout(
-    uint32_t shader_id,
+    bool shader_has_position_attribute,
+    bool shader_has_normal_attribute,
     int64_t vertex_stride,
     int64_t attribute_count,
     int64_t attr0_format,
@@ -2427,12 +567,12 @@ static bool kg_validate_pipeline_layout(
     int64_t attr1_format,
     int64_t attr1_offset
 ) {
-    if (kg_shader_has_position_attribute(shader_id) && attribute_count < 1) {
+    if (shader_has_position_attribute && attribute_count < 1) {
         fprintf(stderr, "KiraGraphics pipeline validation failed: shader requires a position attribute but the descriptor has no vertex attributes.\n");
         return false;
     }
 
-    if (!kg_shader_has_normal_attribute(shader_id)) {
+    if (!shader_has_normal_attribute) {
         return true;
     }
 
@@ -2461,31 +601,6 @@ static bool kg_validate_pipeline_layout(
         return false;
     }
     return true;
-}
-
-static sg_buffer_usage kg_buffer_usage(int64_t usage) {
-    sg_buffer_usage result = {0};
-    result.immutable = true;
-    if (usage == 2) {
-        result.index_buffer = true;
-    } else if (usage == 4) {
-        result.storage_buffer = true;
-    } else {
-        result.vertex_buffer = true;
-    }
-    return result;
-}
-
-static sg_image_usage kg_image_usage(int64_t usage) {
-    sg_image_usage result = {0};
-    result.immutable = true;
-    if (usage == 2 || usage == 3) {
-        result.color_attachment = true;
-    }
-    if (usage == 4) {
-        result.depth_stencil_attachment = true;
-    }
-    return result;
 }
 
 static sg_filter kg_filter(int64_t filter) {
@@ -2679,58 +794,62 @@ static char* kg_project_relative_shader_path(const char* path) {
     return resolved_path;
 }
 
-static kg_buffer_upload_record* kg_alloc_buffer_upload(bool is_index_buffer) {
-    for (int i = 0; i < 64; i += 1) {
-        if (!kg_buffer_upload_records[i].active) {
-            kg_buffer_upload_records[i].active = true;
-            kg_buffer_upload_records[i].is_index_buffer = is_index_buffer;
-            kg_buffer_upload_records[i].usage = 0;
-            kg_buffer_upload_records[i].stride = 0;
-            kg_buffer_upload_records[i].float_count = 0;
-            kg_buffer_upload_records[i].int_count = 0;
-            kg_buffer_upload_records[i].float_values = NULL;
-            kg_buffer_upload_records[i].int_values = NULL;
-            kg_buffer_upload_records[i].label = NULL;
-            return &kg_buffer_upload_records[i];
-        }
-    }
-    return NULL;
+// The colour target the lifetime stress loop renders into.
+//
+// Built here rather than through a texture entry point, because there is no
+// longer a texture entry point in this file: Kira owns image and view creation
+// now, and this loop is C exercising sokol's own allocator churn.
+static sg_image kg_stress_make_color_image(int width, int height) {
+    sg_image_desc desc = {0};
+    desc.type = SG_IMAGETYPE_2D;
+    desc.usage.color_attachment = true;
+    desc.width = width;
+    desc.height = height;
+    desc.num_slices = 1;
+    desc.num_mipmaps = 1;
+    desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    desc.sample_count = 1;
+    desc.label = "lifetime-stress-color";
+    sg_image image = sg_make_image(&desc);
+    return image;
 }
 
-static kg_buffer_upload_record* kg_find_buffer_upload(uint32_t upload_id) {
-    if (upload_id == 0 || upload_id > 64) {
-        return NULL;
-    }
-    kg_buffer_upload_record* record = &kg_buffer_upload_records[upload_id - 1];
-    return record->active ? record : NULL;
+// The vertex and index buffers the lifetime stress loop churns. Here for the
+// same reason the colour target is: buffer creation is Kira's now, and this
+// loop is C exercising sokol's allocator with nothing Kira-side in the way.
+static uint32_t kg_stress_make_buffer(const char* label, bool index_buffer, const void* values, size_t size) {
+    sg_buffer_desc desc = {0};
+    desc.label = label;
+    desc.usage.immutable = true;
+    desc.usage.vertex_buffer = !index_buffer;
+    desc.usage.index_buffer = index_buffer;
+    desc.size = size;
+    desc.data.ptr = values;
+    desc.data.size = size;
+    return sg_make_buffer(&desc).id;
 }
 
-static void kg_release_buffer_upload(kg_buffer_upload_record* record) {
-    if (record == NULL) {
-        return;
+static uint32_t kg_stress_make_color_view(sg_image image) {
+    if (image.id == 0) {
+        return 0;
     }
-    free(record->float_values);
-    free(record->int_values);
-    free(record->label);
-    memset(record, 0, sizeof(*record));
+    sg_view_desc desc = {0};
+    desc.color_attachment.image = image;
+    desc.label = "lifetime-stress-color";
+    uint32_t view_id = sg_make_view(&desc).id;
+    if (view_id == 0) {
+        sg_destroy_image(image);
+    }
+    return view_id;
 }
 
-static kg_texture_record* kg_find_texture(uint32_t texture_id) {
-    for (int i = 0; i < kg_texture_record_count; i += 1) {
-        if (kg_texture_records[i].image_id == texture_id) {
-            return &kg_texture_records[i];
-        }
+static void kg_stress_destroy_color(sg_image image, uint32_t view_id) {
+    if (view_id != 0) {
+        sg_view view = { view_id };
+        sg_destroy_view(view);
     }
-    return NULL;
-}
-
-static void kg_remove_texture(uint32_t texture_id) {
-    for (int i = 0; i < kg_texture_record_count; i += 1) {
-        if (kg_texture_records[i].image_id == texture_id) {
-            kg_texture_records[i] = kg_texture_records[kg_texture_record_count - 1];
-            kg_texture_record_count -= 1;
-            return;
-        }
+    if (image.id != 0) {
+        sg_destroy_image(image);
     }
 }
 
@@ -2789,16 +908,6 @@ static kg_owned_text kg_shader_source_owned(const char* inline_source, const cha
     return (kg_owned_text){ buffer, true };
 }
 
-const char* kg_shader_source(const char* inline_source, const char* path) {
-    free(kg_shader_source_public_buffer);
-    kg_shader_source_public_buffer = NULL;
-    kg_owned_text source = kg_shader_source_owned(inline_source, path);
-    if (source.owned) {
-        kg_shader_source_public_buffer = (char*)source.ptr;
-    }
-    return source.ptr;
-}
-
 #if defined(__EMSCRIPTEN__)
 #include <emscripten/em_js.h>
 // Kira owns the right mouse button (Unreal-style viewport look, context actions).
@@ -2843,467 +952,12 @@ void kg_setup(void) {
 #endif
 }
 
-double kg_math_sqrt(double value) {
-    return sqrt(value);
-}
-
-double kg_math_sin(double value) {
-    return sin(value);
-}
-
-double kg_math_cos(double value) {
-    return cos(value);
-}
-
-double kg_math_tan(double value) {
-    return tan(value);
-}
-
-uint32_t kg_begin_float_buffer_upload(const char* label, int64_t usage, int64_t stride, int64_t count) {
-    if (count < 0) {
-        return 0;
-    }
-    kg_buffer_upload_record* record = kg_alloc_buffer_upload(false);
-    if (record == NULL) {
-        return 0;
-    }
-    record->usage = usage;
-    record->stride = stride;
-    record->float_count = count;
-    record->float_values = (count > 0) ? (float*)calloc((size_t)count, sizeof(float)) : NULL;
-    record->label = kg_copy_string(label);
-    return (uint32_t)((record - kg_buffer_upload_records) + 1);
-}
-
-void kg_set_float_buffer_upload_value(uint32_t upload_id, int64_t index, double value) {
-    kg_buffer_upload_record* record = kg_find_buffer_upload(upload_id);
-    if (record == NULL || record->float_values == NULL) {
-        return;
-    }
-    if (index < 0 || index >= record->float_count) {
-        return;
-    }
-    record->float_values[index] = (float)value;
-}
-
-uint32_t kg_finalize_float_buffer_upload(uint32_t upload_id) {
-    kg_buffer_upload_record* record = kg_find_buffer_upload(upload_id);
-    if (record == NULL) {
-        return 0;
-    }
-
-    sg_buffer_desc desc = {0};
-    desc.label = record->label;
-    desc.usage = kg_buffer_usage(record->usage);
-    desc.size = (uint64_t)(record->float_count * (int64_t)sizeof(float));
-    desc.data.ptr = record->float_values;
-    desc.data.size = (size_t)desc.size;
-
-    sg_buffer buffer = sg_make_buffer(&desc);
-    uint32_t buffer_id = buffer.id;
-    kg_update_lifetime_peaks();
-    kg_release_buffer_upload(record);
-    return buffer_id;
-}
-
-uint32_t kg_begin_index_buffer_upload(const char* label, int64_t usage, int64_t count) {
-    if (count < 0) {
-        return 0;
-    }
-    kg_buffer_upload_record* record = kg_alloc_buffer_upload(true);
-    if (record == NULL) {
-        return 0;
-    }
-    record->usage = usage;
-    record->int_count = count;
-    record->int_values = (count > 0) ? (uint32_t*)calloc((size_t)count, sizeof(uint32_t)) : NULL;
-    record->label = kg_copy_string(label);
-    return (uint32_t)((record - kg_buffer_upload_records) + 1);
-}
-
-void kg_set_index_buffer_upload_value(uint32_t upload_id, int64_t index, int64_t value) {
-    kg_buffer_upload_record* record = kg_find_buffer_upload(upload_id);
-    if (record == NULL || record->int_values == NULL) {
-        return;
-    }
-    if (index < 0 || index >= record->int_count) {
-        return;
-    }
-    record->int_values[index] = (uint32_t)value;
-}
-
-uint32_t kg_finalize_index_buffer_upload(uint32_t upload_id) {
-    kg_buffer_upload_record* record = kg_find_buffer_upload(upload_id);
-    if (record == NULL) {
-        return 0;
-    }
-
-    sg_buffer_desc desc = {0};
-    desc.label = record->label;
-    desc.usage = kg_buffer_usage(record->usage == 0 ? 2 : record->usage);
-    desc.size = (uint64_t)(record->int_count * (int64_t)sizeof(uint32_t));
-    desc.data.ptr = record->int_values;
-    desc.data.size = (size_t)desc.size;
-
-    sg_buffer buffer = sg_make_buffer(&desc);
-    uint32_t buffer_id = buffer.id;
-    kg_update_lifetime_peaks();
-    kg_release_buffer_upload(record);
-    return buffer_id;
-}
-
 void kg_destroy_buffer_id(uint32_t buffer_id) {
     if (buffer_id == 0) {
         return;
     }
     sg_buffer buffer = { buffer_id };
     sg_destroy_buffer(buffer);
-    kg_update_lifetime_peaks();
-}
-
-uint32_t kg_create_uniform_id(const char* label, int64_t expected_float_count) {
-    if (expected_float_count <= 0) {
-        printf("Kira Graphics: uniform buffer '%s' needs a positive expected float count\n", label ? label : "");
-        return 0;
-    }
-    kg_uniform_record* record = kg_alloc_uniform();
-    if (record == NULL) {
-        printf("Kira Graphics: could not allocate uniform buffer '%s'; uniform table is full\n", label ? label : "");
-        return 0;
-    }
-    record->expected_float_count = expected_float_count;
-    record->float_count = expected_float_count;
-    record->values = (float*)calloc((size_t)expected_float_count, sizeof(float));
-    record->label = kg_copy_string(label);
-    if (record->values == NULL) {
-        printf("Kira Graphics: could not allocate uniform buffer '%s' payload\n", label ? label : "");
-        record->active = false;
-        free(record->label);
-        record->label = NULL;
-        return 0;
-    }
-    kg_update_lifetime_peaks();
-    return record->id;
-}
-
-void kg_set_uniform_float(uint32_t uniform_id, int64_t index, double value) {
-    kg_uniform_record* record = kg_find_uniform(uniform_id);
-    if (record == NULL || record->values == NULL) {
-        printf("Kira Graphics: uniform upload target %u is missing\n", uniform_id);
-        return;
-    }
-    if (index < 0 || index >= record->expected_float_count) {
-        printf("Kira Graphics: uniform buffer '%s' upload index %lld is outside expected float count %lld\n",
-            record->label ? record->label : "",
-            (long long)index,
-            (long long)record->expected_float_count);
-        return;
-    }
-    record->values[index] = (float)value;
-}
-
-uint32_t kg_finish_uniform_update(uint32_t uniform_id, int64_t float_count) {
-    kg_uniform_record* record = kg_find_uniform(uniform_id);
-    if (record == NULL) {
-        printf("Kira Graphics: uniform update target %u is missing\n", uniform_id);
-        return 0;
-    }
-    if (float_count != record->expected_float_count) {
-        printf("Kira Graphics: uniform buffer '%s' upload size %lld floats does not match expected size %lld floats\n",
-            record->label ? record->label : "",
-            (long long)float_count,
-            (long long)record->expected_float_count);
-        return 0;
-    }
-    record->float_count = float_count;
-    return 1;
-}
-
-void kg_destroy_uniform_id(uint32_t uniform_id) {
-    kg_uniform_record* record = kg_find_uniform(uniform_id);
-    if (record == NULL) {
-        return;
-    }
-    free(record->values);
-    free(record->label);
-    *record = (kg_uniform_record){0};
-    kg_update_lifetime_peaks();
-}
-
-uint32_t kg_create_bind_group_id(const char* label) {
-    kg_bind_group_record* record = kg_alloc_bind_group();
-    if (record == NULL) {
-        printf("Kira Graphics: could not allocate bind group '%s'; bind-group table is full\n", label ? label : "");
-        return 0;
-    }
-    record->label = kg_copy_string(label);
-    kg_update_lifetime_peaks();
-    return record->id;
-}
-
-uint32_t kg_set_bind_group_uniform(uint32_t bind_group_id, int64_t entry_index, int64_t uniform_slot, uint32_t uniform_id) {
-    kg_bind_group_record* record = kg_find_bind_group(bind_group_id);
-    if (record == NULL) {
-        printf("Kira Graphics: bind group %u is missing while binding uniform %u\n", bind_group_id, uniform_id);
-        return 0;
-    }
-    if (entry_index < 0 || entry_index >= 4) {
-        printf("Kira Graphics: bind group '%s' uniform entry index %lld is outside the supported range 0..3\n",
-            record->label ? record->label : "",
-            (long long)entry_index);
-        return 0;
-    }
-    if (uniform_slot < 0 || uniform_slot >= SG_MAX_UNIFORMBLOCK_BINDSLOTS) {
-        printf("Kira Graphics: bind group '%s' uniform slot %lld is outside Sokol's supported uniform block range\n",
-            record->label ? record->label : "",
-            (long long)uniform_slot);
-        return 0;
-    }
-    if (kg_find_uniform(uniform_id) == NULL) {
-        printf("Kira Graphics: bind group '%s' references missing uniform buffer %u\n",
-            record->label ? record->label : "",
-            uniform_id);
-        return 0;
-    }
-    record->uniform_ids[entry_index] = uniform_id;
-    record->uniform_slots[entry_index] = (int)uniform_slot;
-    if (entry_index + 1 > record->uniform_count) {
-        record->uniform_count = (int)entry_index + 1;
-    }
-    return 1;
-}
-
-uint32_t kg_set_bind_group_texture(uint32_t bind_group_id, int64_t entry_index, int64_t texture_slot, uint32_t texture_id) {
-    kg_bind_group_record* record = kg_find_bind_group(bind_group_id);
-    kg_texture_record* texture = kg_find_texture(texture_id);
-    if (record == NULL || texture == NULL || texture->texture_view_id == 0) {
-        printf("Kira Graphics: bind group %u cannot bind sampled texture %u\n", bind_group_id, texture_id);
-        return 0;
-    }
-    if (entry_index < 0 || entry_index >= 4 || texture_slot < 0 || texture_slot >= SG_MAX_VIEW_BINDSLOTS) {
-        return 0;
-    }
-    record->texture_ids[entry_index] = texture->texture_view_id;
-    record->texture_slots[entry_index] = (int)texture_slot;
-    if (entry_index + 1 > record->texture_count) {
-        record->texture_count = (int)entry_index + 1;
-    }
-    return 1;
-}
-
-uint32_t kg_set_bind_group_sampler(uint32_t bind_group_id, int64_t entry_index, int64_t sampler_slot, uint32_t sampler_id) {
-    kg_bind_group_record* record = kg_find_bind_group(bind_group_id);
-    if (record == NULL || sampler_id == 0) {
-        printf("Kira Graphics: bind group %u cannot bind sampler %u\n", bind_group_id, sampler_id);
-        return 0;
-    }
-    if (entry_index < 0 || entry_index >= 4 || sampler_slot < 0 || sampler_slot >= SG_MAX_SAMPLER_BINDSLOTS) {
-        return 0;
-    }
-    record->sampler_ids[entry_index] = sampler_id;
-    record->sampler_slots[entry_index] = (int)sampler_slot;
-    if (entry_index + 1 > record->sampler_count) {
-        record->sampler_count = (int)entry_index + 1;
-    }
-    return 1;
-}
-
-void kg_destroy_bind_group_id(uint32_t bind_group_id) {
-    kg_bind_group_record* record = kg_find_bind_group(bind_group_id);
-    if (record == NULL) {
-        return;
-    }
-    free(record->label);
-    *record = (kg_bind_group_record){0};
-    kg_update_lifetime_peaks();
-}
-
-uint32_t kg_create_texture_id(const char* label, int64_t width, int64_t height, int64_t format, int64_t usage, int64_t sample_count, int64_t storage_mode) {
-    (void)storage_mode;
-
-    sg_image_desc desc = {0};
-    desc.type = SG_IMAGETYPE_2D;
-    desc.usage = kg_image_usage(usage);
-    desc.width = (int)width;
-    desc.height = (int)height;
-    desc.num_slices = 1;
-    desc.num_mipmaps = 1;
-    // The swapchain-format sentinel (-1, textureFormatSwapchain) must resolve to the
-    // actual swapchain color format so a render-target texture created with it matches
-    // pipelines, which bake in swapchain_color_format for that same sentinel. Mapping it
-    // to a fixed RGBA8 mismatches the pipeline on backends whose swapchain is BGRA8
-    // (WebGPU/wasm), tripping VALIDATE_APIP_COLORATTACHMENTS_FORMAT.
-    desc.pixel_format = (format == -1) ? _sglue_to_sgpixelformat(sapp_color_format()) : kg_pixel_format(format);
-    desc.sample_count = (int)((sample_count > 0) ? sample_count : 1);
-    desc.label = label;
-
-    sg_image image = sg_make_image(&desc);
-    if (image.id == 0) {
-        return 0;
-    }
-    kg_update_lifetime_peaks();
-
-    uint32_t color_view_id = 0;
-    uint32_t depth_view_id = 0;
-    uint32_t texture_view_id = 0;
-    if (usage == 2 || usage == 3) {
-        sg_view_desc color_view_desc = {0};
-        color_view_desc.color_attachment.image = image;
-        color_view_desc.label = label;
-        color_view_id = sg_make_view(&color_view_desc).id;
-        kg_update_lifetime_peaks();
-        if (color_view_id == 0) {
-            sg_destroy_image(image);
-            kg_update_lifetime_peaks();
-            return 0;
-        }
-    }
-    if (usage == 4) {
-        sg_view_desc depth_view_desc = {0};
-        depth_view_desc.depth_stencil_attachment.image = image;
-        depth_view_desc.label = label;
-        depth_view_id = sg_make_view(&depth_view_desc).id;
-        kg_update_lifetime_peaks();
-        if (depth_view_id == 0) {
-            sg_destroy_image(image);
-            kg_update_lifetime_peaks();
-            return 0;
-        }
-    }
-    if (usage == 1 || usage == 3) {
-        sg_view_desc texture_view_desc = {0};
-        texture_view_desc.texture.image = image;
-        texture_view_desc.label = label;
-        texture_view_id = sg_make_view(&texture_view_desc).id;
-        kg_update_lifetime_peaks();
-        if (texture_view_id == 0) {
-            if (color_view_id != 0) {
-                sg_view color_view = { color_view_id };
-                sg_destroy_view(color_view);
-            }
-            sg_destroy_image(image);
-            kg_update_lifetime_peaks();
-            return 0;
-        }
-    }
-
-    if (kg_texture_record_count < 64) {
-        kg_texture_record* record = &kg_texture_records[kg_texture_record_count];
-        record->image_id = image.id;
-        record->color_view_id = color_view_id;
-        record->depth_view_id = depth_view_id;
-        record->texture_view_id = texture_view_id;
-        record->width = width;
-        record->height = height;
-        record->sample_count = sample_count;
-        record->format = format;
-        record->usage = usage;
-        kg_texture_record_count += 1;
-        kg_update_lifetime_peaks();
-        return image.id;
-    }
-
-    if (color_view_id != 0) {
-        sg_view color_view = { color_view_id };
-        sg_destroy_view(color_view);
-    }
-    if (depth_view_id != 0) {
-        sg_view depth_view = { depth_view_id };
-        sg_destroy_view(depth_view);
-    }
-    if (texture_view_id != 0) {
-        sg_view texture_view = { texture_view_id };
-        sg_destroy_view(texture_view);
-    }
-    sg_destroy_image(image);
-    kg_update_lifetime_peaks();
-    return 0;
-}
-
-void kg_destroy_texture_id(uint32_t texture_id) {
-    if (texture_id == 0) {
-        return;
-    }
-    kg_texture_record* record = kg_find_texture(texture_id);
-    if (record != NULL) {
-        if (record->color_view_id != 0) {
-            sg_view color_view = { record->color_view_id };
-            sg_destroy_view(color_view);
-        }
-        if (record->depth_view_id != 0) {
-            sg_view depth_view = { record->depth_view_id };
-            sg_destroy_view(depth_view);
-        }
-        if (record->texture_view_id != 0) {
-            sg_view texture_view = { record->texture_view_id };
-            sg_destroy_view(texture_view);
-        }
-    }
-    sg_image image = { texture_id };
-    sg_destroy_image(image);
-    kg_remove_texture(texture_id);
-    kg_update_lifetime_peaks();
-}
-
-uint32_t kg_create_texture_from_file_id(const char* label, const char* path) {
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    stbi_set_flip_vertically_on_load(1);
-    unsigned char* pixels = stbi_load(path, &width, &height, &channels, 4);
-    if (pixels == NULL) {
-        printf("Kira Graphics: could not load texture file %s\n", path);
-        return 0;
-    }
-
-    sg_image_desc desc = {0};
-    desc.type = SG_IMAGETYPE_2D;
-    desc.width = width;
-    desc.height = height;
-    desc.num_slices = 1;
-    desc.num_mipmaps = 1;
-    desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    desc.sample_count = 1;
-    desc.data.mip_levels[0] = (sg_range){ pixels, (size_t)width * (size_t)height * 4 };
-    desc.label = label;
-
-    sg_image image = sg_make_image(&desc);
-    stbi_image_free(pixels);
-    if (image.id == 0) {
-        return 0;
-    }
-    kg_update_lifetime_peaks();
-
-    sg_view_desc texture_view_desc = {0};
-    texture_view_desc.texture.image = image;
-    texture_view_desc.label = label;
-    uint32_t texture_view_id = sg_make_view(&texture_view_desc).id;
-    kg_update_lifetime_peaks();
-    if (texture_view_id == 0) {
-        sg_destroy_image(image);
-        kg_update_lifetime_peaks();
-        return 0;
-    }
-
-    if (kg_texture_record_count < 64) {
-        kg_texture_record* record = &kg_texture_records[kg_texture_record_count];
-        record->image_id = image.id;
-        record->texture_view_id = texture_view_id;
-        record->width = width;
-        record->height = height;
-        record->sample_count = 1;
-        record->format = 1;
-        record->usage = 1;
-        kg_texture_record_count += 1;
-        kg_update_lifetime_peaks();
-        return image.id;
-    }
-
-    sg_view texture_view = { texture_view_id };
-    sg_destroy_view(texture_view);
-    sg_destroy_image(image);
-    kg_update_lifetime_peaks();
-    return 0;
 }
 
 uint32_t kg_create_sampler_id(const char* label, int64_t min_filter, int64_t mag_filter, int64_t address_mode_u, int64_t address_mode_v) {
@@ -3315,7 +969,6 @@ uint32_t kg_create_sampler_id(const char* label, int64_t min_filter, int64_t mag
     desc.wrap_v = kg_wrap(address_mode_v);
     desc.label = label;
     sg_sampler sampler = sg_make_sampler(&desc);
-    kg_update_lifetime_peaks();
     return sampler.id;
 }
 
@@ -3323,7 +976,6 @@ void kg_destroy_sampler_id(uint32_t sampler_id) {
     if (sampler_id != 0) {
         sg_sampler sampler = { sampler_id };
         sg_destroy_sampler(sampler);
-        kg_update_lifetime_peaks();
     }
 }
 
@@ -3342,13 +994,15 @@ static bool kg_shader_source_uses_resource(const char* source, const char* resou
     return strstr(source, needle) != NULL;
 }
 
-// --- Data-driven uniform blocks (real KSL shader reflection) ----------------
-// The `ksl!` macro emits a compact `uniformReflection` string (see
-// kira-zig .../shader/uniform_reflection.zig). When present it fully describes a
-// shader's uniform blocks, so the Sokol backend no longer greps source for the
-// hardcoded "scene"/"object" names. Shaders without a reflection string (older
-// KG examples, the file-based KSL path, SPIR-V metadata) fall back to the legacy
-// scene/object configuration below, preserving existing behavior.
+// --- Data-driven bindings (real KSL shader reflection) ---------------------
+// The `ksl!` macro emits a compact `resourceReflection` string - one record per
+// resource, records separated by `;`, each opening with a letter naming its
+// kind (see `resource_digest` in kira-shader-ir). When present it fully
+// describes what a shader binds, so the Sokol backend no longer greps source
+// for hardcoded "scene"/"object" names or for the two `kira_texN_smpN` pairs it
+// used to be limited to. Shaders without a reflection string (the file-based
+// KSL path, SPIR-V metadata) fall back to the legacy scene/object configuration
+// below, preserving existing behavior.
 
 static uint32_t kg_parse_reflection_uint(const char** cursor) {
     const char* s = *cursor;
@@ -3361,61 +1015,176 @@ static uint32_t kg_parse_reflection_uint(const char** cursor) {
     return value;
 }
 
-// Parses `name:binding:size:stageMask:memberCount(:member,member,...)` blocks
-// separated by ';'; each member is `name@offset#size`. Returns the block count.
-static int kg_parse_uniform_reflection(const char* text, kg_uniform_block_desc* out, int max_blocks) {
-    if (text == NULL || text[0] == '\0') {
-        return 0;
+// One texture, sampler or storage buffer as the reflection describes it.
+typedef struct {
+    char name[64];
+    char glsl_name[64];
+    int binding;
+    uint32_t stage_mask; // bit0 vertex, bit1 fragment, bit2 compute
+    int paired_binding;  // a texture's sampler slot, 255 when nothing samples it
+    int glsl_binding;    // a storage buffer's std430 `binding = n`
+    int readonly;
+} kg_binding_desc;
+
+// Everything one shader's reflection string described.
+typedef struct {
+    kg_uniform_block_desc uniforms[KG_MAX_UNIFORM_BLOCKS];
+    int uniform_count;
+    kg_binding_desc textures[SG_MAX_VIEW_BINDSLOTS];
+    int texture_count;
+    kg_binding_desc samplers[SG_MAX_SAMPLER_BINDSLOTS];
+    int sampler_count;
+    kg_binding_desc storages[SG_MAX_VIEW_BINDSLOTS];
+    int storage_count;
+} kg_reflected_bindings;
+
+// The Sokol shader stage a record's stage mask names.
+//
+// One stage, not a set: `sg_shader_view` and `sg_shader_sampler` each carry a
+// single stage, so a resource read in two stages would need two bind slots. The
+// vertex stage wins because a resource read there is the one that has to arrive
+// earliest, and on GL - the backend this configuration is for - a texture unit
+// and a storage-buffer binding point are program-wide state, so one declaration
+// already serves both stages.
+static sg_shader_stage kg_stage_from_mask(uint32_t stage_mask) {
+    if ((stage_mask & 4u) != 0u) {
+        return SG_SHADERSTAGE_COMPUTE;
     }
-    int count = 0;
-    const char* s = text;
-    while (*s != '\0' && count < max_blocks) {
-        kg_uniform_block_desc* d = &out[count];
-        memset(d, 0, sizeof(*d));
-        d->vertex_block_slot = -1;
-        d->fragment_block_slot = -1;
+    if ((stage_mask & 1u) != 0u) {
+        return SG_SHADERSTAGE_VERTEX;
+    }
+    if ((stage_mask & 2u) != 0u) {
+        return SG_SHADERSTAGE_FRAGMENT;
+    }
+    // No stage reads it. SG_SHADERSTAGE_NONE is how a shader desc says a bind
+    // slot is not there at all, which is what an unread resource is: the
+    // emitted source does not declare it (see `Emitter::resources` in
+    // kira-glsl-backend), so binding it would ask the GL driver for a uniform
+    // location the linked program has not got.
+    return SG_SHADERSTAGE_NONE;
+}
 
-        int n = 0;
-        while (*s != '\0' && *s != ':' && n < (int)sizeof(d->name) - 1) {
-            d->name[n++] = *s++;
+// Copies the characters up to `stop` (or the record's end) into `out`.
+static void kg_parse_reflection_name(const char** cursor, char stop, char* out, size_t capacity) {
+    const char* s = *cursor;
+    size_t n = 0;
+    while (*s != '\0' && *s != stop && *s != ';' && n + 1 < capacity) {
+        out[n++] = *s++;
+    }
+    out[n] = '\0';
+    while (*s != '\0' && *s != stop && *s != ';') {
+        s++;
+    }
+    *cursor = s;
+}
+
+// Advances past the current record's terminating `;`.
+static const char* kg_skip_reflection_record(const char* s) {
+    while (*s != '\0' && *s != ';') {
+        s++;
+    }
+    if (*s == ';') {
+        s++;
+    }
+    return s;
+}
+
+// Parses one `u|...` record's members: `name@offset#size`, comma separated.
+static void kg_parse_reflection_members(const char** cursor, kg_uniform_block_desc* d, uint32_t member_count) {
+    const char* s = *cursor;
+    for (uint32_t m = 0; m < member_count; m++) {
+        if (d->member_count < KG_MAX_UNIFORM_BLOCK_MEMBERS) {
+            int mn = 0;
+            while (*s != '\0' && *s != '@' && mn < (int)sizeof(d->members[0].name) - 1) {
+                d->members[d->member_count].name[mn++] = *s++;
+            }
+            d->members[d->member_count].name[mn] = '\0';
+            while (*s != '\0' && *s != '@') s++;
+            if (*s == '@') { s++; d->members[d->member_count].offset = kg_parse_reflection_uint(&s); }
+            if (*s == '#') { s++; d->members[d->member_count].size = kg_parse_reflection_uint(&s); }
+            d->member_count++;
+        } else {
+            while (*s != '\0' && *s != ',' && *s != ';') s++;
         }
-        d->name[n] = '\0';
-        while (*s != '\0' && *s != ':') s++;
-        if (*s != ':') break;
-        s++; d->binding = (int)kg_parse_reflection_uint(&s);
-        if (*s != ':') break;
-        s++; d->size = kg_parse_reflection_uint(&s);
-        if (*s != ':') break;
-        s++; d->stage_mask = kg_parse_reflection_uint(&s);
-        if (*s != ':') break;
-        s++; uint32_t member_count = kg_parse_reflection_uint(&s);
+        if (*s == ',') { s++; continue; }
+        break;
+    }
+    *cursor = s;
+}
 
-        if (member_count > 0 && *s == ':') {
-            s++;
-            for (uint32_t m = 0; m < member_count; m++) {
-                if (d->member_count < KG_MAX_UNIFORM_BLOCK_MEMBERS) {
-                    int mn = 0;
-                    while (*s != '\0' && *s != '@' && mn < (int)sizeof(d->members[0].name) - 1) {
-                        d->members[d->member_count].name[mn++] = *s++;
-                    }
-                    d->members[d->member_count].name[mn] = '\0';
-                    while (*s != '\0' && *s != '@') s++;
-                    if (*s == '@') { s++; d->members[d->member_count].offset = kg_parse_reflection_uint(&s); }
-                    if (*s == '#') { s++; d->members[d->member_count].size = kg_parse_reflection_uint(&s); }
-                    d->member_count++;
-                } else {
-                    while (*s != '\0' && *s != ',' && *s != ';') s++;
+// Parses the whole reflection string into `out`. Returns whether anything was
+// described: an empty result is what selects the legacy source-grep path.
+static bool kg_parse_resource_reflection(const char* text, kg_reflected_bindings* out) {
+    memset(out, 0, sizeof(*out));
+    if (text == NULL || text[0] == '\0') {
+        return false;
+    }
+    const char* s = text;
+    while (*s != '\0') {
+        const char kind = s[0];
+        if (s[1] != '|') {
+            // Not a record this format writes; skip it rather than reading its
+            // fields as another kind's.
+            s = kg_skip_reflection_record(s);
+            continue;
+        }
+        s += 2;
+        if (kind == 'u') {
+            if (out->uniform_count >= KG_MAX_UNIFORM_BLOCKS) {
+                s = kg_skip_reflection_record(s);
+                continue;
+            }
+            kg_uniform_block_desc* d = &out->uniforms[out->uniform_count];
+            memset(d, 0, sizeof(*d));
+            d->vertex_block_slot = -1;
+            d->fragment_block_slot = -1;
+            kg_parse_reflection_name(&s, ':', d->name, sizeof(d->name));
+            if (*s != ':') { s = kg_skip_reflection_record(s); continue; }
+            s++; d->binding = (int)kg_parse_reflection_uint(&s);
+            if (*s != ':') { s = kg_skip_reflection_record(s); continue; }
+            s++; d->size = kg_parse_reflection_uint(&s);
+            if (*s != ':') { s = kg_skip_reflection_record(s); continue; }
+            s++; d->stage_mask = kg_parse_reflection_uint(&s);
+            if (*s != ':') { s = kg_skip_reflection_record(s); continue; }
+            s++; uint32_t member_count = kg_parse_reflection_uint(&s);
+            if (member_count > 0 && *s == ':') {
+                s++;
+                kg_parse_reflection_members(&s, d, member_count);
+            }
+            out->uniform_count += 1;
+        } else if (kind == 't' || kind == 'm' || kind == 's') {
+            kg_binding_desc entry;
+            memset(&entry, 0, sizeof(entry));
+            entry.paired_binding = 255;
+            kg_parse_reflection_name(&s, ':', entry.name, sizeof(entry.name));
+            if (*s != ':') { s = kg_skip_reflection_record(s); continue; }
+            s++; entry.binding = (int)kg_parse_reflection_uint(&s);
+            if (*s != ':') { s = kg_skip_reflection_record(s); continue; }
+            s++; entry.stage_mask = kg_parse_reflection_uint(&s);
+            if (kind == 't') {
+                if (*s != ':') { s = kg_skip_reflection_record(s); continue; }
+                s++; entry.paired_binding = (int)kg_parse_reflection_uint(&s);
+                if (*s == ':') { s++; }
+                kg_parse_reflection_name(&s, ';', entry.glsl_name, sizeof(entry.glsl_name));
+                if (out->texture_count < (int)SG_MAX_VIEW_BINDSLOTS) {
+                    out->textures[out->texture_count++] = entry;
                 }
-                if (*s == ',') { s++; continue; }
-                break;
+            } else if (kind == 's') {
+                if (*s != ':') { s = kg_skip_reflection_record(s); continue; }
+                s++; entry.glsl_binding = (int)kg_parse_reflection_uint(&s);
+                if (*s == ':') { s++; entry.readonly = (int)kg_parse_reflection_uint(&s); }
+                if (out->storage_count < (int)SG_MAX_VIEW_BINDSLOTS) {
+                    out->storages[out->storage_count++] = entry;
+                }
+            } else {
+                if (out->sampler_count < (int)SG_MAX_SAMPLER_BINDSLOTS) {
+                    out->samplers[out->sampler_count++] = entry;
+                }
             }
         }
-
-        count++;
-        while (*s != '\0' && *s != ';') s++;
-        if (*s == ';') s++;
+        s = kg_skip_reflection_record(s);
     }
-    return count;
+    return out->uniform_count > 0 || out->texture_count > 0 || out->sampler_count > 0 || out->storage_count > 0;
 }
 
 // Maps a std140 member byte size to a Sokol GL uniform type (KSL uniform members
@@ -3550,7 +1319,12 @@ static uint32_t kg_configure_uniform_blocks(sg_shader_desc* desc, const char* ve
     return available_mask;
 }
 
-static void kg_configure_sampled_textures(sg_shader_desc* desc, const char* fragment_source) {
+// The two fixed texture/sampler pairs a shader with no reflection may use.
+//
+// Only the file-based KSL path and hand-written sources reach this: `kira_texN_smpN`
+// is the name that path emits, and there has never been a third pair. A shader
+// compiled through `ksl!` carries a reflection and is configured from it.
+static void kg_configure_legacy_sampled_textures(sg_shader_desc* desc, const char* fragment_source) {
     const char* names[2] = { "kira_tex0_smp0", "kira_tex1_smp1" };
     const char* hlsl_names[2] = { "tex0.Sample(smp0", "tex1.Sample(smp1" };
     for (int slot = 0; slot < 2; slot += 1) {
@@ -3574,6 +1348,94 @@ static void kg_configure_sampled_textures(sg_shader_desc* desc, const char* frag
     }
 }
 
+// Configures the textures, samplers and storage buffers the reflection
+// described.
+//
+// Every bind slot is the resource's **public** slot — the WGSL binding within
+// its group, which is also the number an application passes to
+// `bindGroupAddTexture` and friends. Nothing here renumbers, so a slot in a
+// `.ksl` group declaration, a slot in a bind-group call and a slot in
+// `sg_bindings` are all the same number, and a mismatch is a shader edit rather
+// than a table drifting out of step.
+//
+// The texture/sampler pair is what GL needs and no other backend has: a
+// `sampler2D` uniform whose name comes from the texture, set to the texture unit
+// the pair's view slot binds. Which sampler belongs to which texture is measured
+// from the shader's own `sample` calls, so declaration adjacency is not assumed.
+static void kg_configure_reflected_bindings(sg_shader_desc* desc, const kg_reflected_bindings* found) {
+    for (int i = 0; i < found->texture_count; i += 1) {
+        const kg_binding_desc* entry = &found->textures[i];
+        const int slot = entry->binding;
+        if (slot < 0 || slot >= (int)SG_MAX_VIEW_BINDSLOTS) {
+            continue;
+        }
+        if (entry->stage_mask == 0u) {
+            continue;
+        }
+        desc->views[slot].texture.stage = kg_stage_from_mask(entry->stage_mask);
+        desc->views[slot].texture.image_type = SG_IMAGETYPE_2D;
+        desc->views[slot].texture.sample_type = SG_IMAGESAMPLETYPE_FLOAT;
+        desc->views[slot].texture.hlsl_register_t_n = (uint8_t)slot;
+        desc->views[slot].texture.spirv_set1_binding_n = (uint8_t)slot;
+        desc->views[slot].texture.wgsl_group1_binding_n = (uint8_t)slot;
+        desc->views[slot].texture.msl_texture_n = (uint8_t)slot;
+    }
+    for (int i = 0; i < found->sampler_count; i += 1) {
+        const kg_binding_desc* entry = &found->samplers[i];
+        const int slot = entry->binding;
+        if (slot < 0 || slot >= (int)SG_MAX_SAMPLER_BINDSLOTS) {
+            continue;
+        }
+        if (entry->stage_mask == 0u) {
+            continue;
+        }
+        desc->samplers[slot].stage = kg_stage_from_mask(entry->stage_mask);
+        desc->samplers[slot].sampler_type = SG_SAMPLERTYPE_FILTERING;
+        desc->samplers[slot].hlsl_register_s_n = (uint8_t)slot;
+        desc->samplers[slot].spirv_set1_binding_n = (uint8_t)slot;
+        desc->samplers[slot].wgsl_group1_binding_n = (uint8_t)slot;
+        desc->samplers[slot].msl_sampler_n = (uint8_t)slot;
+    }
+    int pair = 0;
+    for (int i = 0; i < found->texture_count; i += 1) {
+        const kg_binding_desc* entry = &found->textures[i];
+        if (entry->paired_binding < 0 || entry->paired_binding >= (int)SG_MAX_SAMPLER_BINDSLOTS) {
+            continue;
+        }
+        if (entry->stage_mask == 0u) {
+            continue;
+        }
+        if (entry->binding < 0 || entry->binding >= (int)SG_MAX_VIEW_BINDSLOTS) {
+            continue;
+        }
+        if (pair >= (int)SG_MAX_TEXTURE_SAMPLER_PAIRS) {
+            break;
+        }
+        desc->texture_sampler_pairs[pair].stage = kg_stage_from_mask(entry->stage_mask);
+        desc->texture_sampler_pairs[pair].view_slot = (uint8_t)entry->binding;
+        desc->texture_sampler_pairs[pair].sampler_slot = (uint8_t)entry->paired_binding;
+        desc->texture_sampler_pairs[pair].glsl_name = entry->glsl_name;
+        pair += 1;
+    }
+    for (int i = 0; i < found->storage_count; i += 1) {
+        const kg_binding_desc* entry = &found->storages[i];
+        const int slot = entry->binding;
+        if (slot < 0 || slot >= (int)SG_MAX_VIEW_BINDSLOTS) {
+            continue;
+        }
+        if (entry->stage_mask == 0u) {
+            continue;
+        }
+        desc->views[slot].storage_buffer.stage = kg_stage_from_mask(entry->stage_mask);
+        desc->views[slot].storage_buffer.readonly = entry->readonly != 0;
+        desc->views[slot].storage_buffer.glsl_binding_n = (uint8_t)entry->glsl_binding;
+        desc->views[slot].storage_buffer.hlsl_register_t_n = (uint8_t)slot;
+        desc->views[slot].storage_buffer.msl_buffer_n = (uint8_t)(slot + 1);
+        desc->views[slot].storage_buffer.wgsl_group1_binding_n = (uint8_t)slot;
+        desc->views[slot].storage_buffer.spirv_set1_binding_n = (uint8_t)slot;
+    }
+}
+
 static uint32_t kg_uniform_mask_from_shader_source(const char* vertex_source, const char* fragment_source) {
     uint32_t mask = 0;
     const bool has_scene = kg_shader_source_uses_resource(vertex_source, "scene") || kg_shader_source_uses_resource(fragment_source, "scene");
@@ -3587,7 +1449,40 @@ static uint32_t kg_uniform_mask_from_shader_source(const char* vertex_source, co
     return mask;
 }
 
-static uint32_t kg_make_shader_with_entries_reflected(
+// Assembles the `kg_shader_info` a caller reports back to Kira: the shader
+// id plus the attribute/uniform metadata Kira now keeps on the
+// `GraphicsShader` value it holds, in place of the `kg_shader_records` table
+// this replaced. `uniform_descs` is truncated to `KG_EXPOSED_UNIFORM_BLOCKS`
+// — see its definition for why that is never fewer than a real shader needs.
+static kg_shader_info kg_make_shader_info(
+    uint32_t shader_id,
+    bool has_position_attribute,
+    bool has_normal_attribute,
+    uint32_t required_uniform_mask,
+    uint32_t available_uniform_mask,
+    const kg_uniform_block_desc* uniform_descs,
+    int uniform_desc_count
+) {
+    kg_shader_info info = {0};
+    info.id = shader_id;
+    if (shader_id == 0) {
+        return info;
+    }
+    info.has_position_attribute = has_position_attribute ? 1 : 0;
+    info.has_normal_attribute = has_normal_attribute ? 1 : 0;
+    info.required_uniform_mask = required_uniform_mask;
+    info.available_uniform_mask = available_uniform_mask;
+    info.uniform_desc_count = uniform_desc_count > KG_EXPOSED_UNIFORM_BLOCKS ? KG_EXPOSED_UNIFORM_BLOCKS : uniform_desc_count;
+    for (int i = 0; i < info.uniform_desc_count; i += 1) {
+        info.blocks[i].binding = uniform_descs[i].binding;
+        info.blocks[i].size = uniform_descs[i].size;
+        info.blocks[i].vertex_block_slot = uniform_descs[i].vertex_block_slot;
+        info.blocks[i].fragment_block_slot = uniform_descs[i].fragment_block_slot;
+    }
+    return info;
+}
+
+static kg_shader_info kg_make_shader_with_entries_reflected(
     const char* label,
     const char* vertex_source,
     const char* fragment_source,
@@ -3595,7 +1490,7 @@ static uint32_t kg_make_shader_with_entries_reflected(
     const char* fragment_path,
     const char* vertex_entry,
     const char* fragment_entry,
-    const char* uniform_reflection
+    const char* resource_reflection
 ) {
     sg_shader_desc desc = {0};
     kg_owned_text prepared_vertex_source = kg_prepare_shader_source_for_sokol(kg_shader_source_owned(vertex_source, vertex_path));
@@ -3623,44 +1518,36 @@ static uint32_t kg_make_shader_with_entries_reflected(
         desc.attrs[1].hlsl_sem_index = 1;
     }
 
-    // Reflection-driven uniform blocks when the KSL macro provided a descriptor
+    // Reflection-driven bindings when the KSL macro provided a descriptor
     // string; otherwise fall back to the legacy scene/object source-grep model.
-    // `member_name_storage` and `uniform_descs` must live until sg_make_shader().
-    kg_uniform_block_desc uniform_descs[KG_MAX_UNIFORM_BLOCKS];
+    // `member_name_storage` and `found` must live until sg_make_shader().
+    kg_reflected_bindings found;
     char member_name_storage[KG_MAX_UNIFORM_BLOCKS * 2 * KG_MAX_UNIFORM_BLOCK_MEMBERS][80];
-    int uniform_desc_count = kg_parse_uniform_reflection(uniform_reflection, uniform_descs, KG_MAX_UNIFORM_BLOCKS);
+    const bool reflected = kg_parse_resource_reflection(resource_reflection, &found);
     uint32_t required_uniform_mask;
     uint32_t available_uniform_mask;
-    if (uniform_desc_count > 0) {
+    if (reflected) {
         available_uniform_mask = kg_configure_uniform_blocks_from_descs(
-            &desc, uniform_descs, uniform_desc_count,
+            &desc, found.uniforms, found.uniform_count,
             member_name_storage,
             (int)(sizeof(member_name_storage) / sizeof(member_name_storage[0])));
         // Every declared uniform block must be bound before a draw.
         required_uniform_mask = available_uniform_mask;
+        kg_configure_reflected_bindings(&desc, &found);
     } else {
         required_uniform_mask = kg_uniform_mask_from_shader_source(desc.vertex_func.source, desc.fragment_func.source);
         available_uniform_mask = kg_configure_uniform_blocks(&desc, desc.vertex_func.source, desc.fragment_func.source);
+        kg_configure_legacy_sampled_textures(&desc, desc.fragment_func.source);
     }
 
-    kg_configure_sampled_textures(&desc, desc.fragment_func.source);
     desc.label = label;
     uint32_t shader_id = sg_make_shader(&desc).id;
-    kg_record_shader(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask, available_uniform_mask);
-    kg_shader_record* shader_record = kg_find_shader_record(shader_id);
-    if (shader_record != NULL) {
-        shader_record->uniform_desc_count = uniform_desc_count;
-        for (int i = 0; i < uniform_desc_count; i += 1) {
-            shader_record->uniform_descs[i] = uniform_descs[i];
-        }
-    }
-    kg_update_lifetime_peaks();
     kg_owned_text_deinit(&prepared_vertex_source);
     kg_owned_text_deinit(&prepared_fragment_source);
-    return shader_id;
+    return kg_make_shader_info(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask, available_uniform_mask, found.uniforms, found.uniform_count);
 }
 
-static uint32_t kg_make_shader_with_entries(
+static kg_shader_info kg_make_shader_with_entries(
     const char* label,
     const char* vertex_source,
     const char* fragment_source,
@@ -3713,7 +1600,7 @@ static kg_owned_bytes kg_shader_bytecode_owned(const char* path) {
     return (kg_owned_bytes){ buffer, read_count };
 }
 
-static uint32_t kg_make_spirv_shader(
+static kg_shader_info kg_make_spirv_shader(
     const char* label,
     const char* vertex_path,
     const char* fragment_path,
@@ -3741,41 +1628,53 @@ static uint32_t kg_make_spirv_shader(
     }
     const uint32_t required_uniform_mask = kg_uniform_mask_from_shader_source(vertex_metadata.ptr, fragment_metadata.ptr);
     const uint32_t available_uniform_mask = kg_configure_uniform_blocks(&desc, vertex_metadata.ptr, fragment_metadata.ptr);
-    kg_configure_sampled_textures(&desc, fragment_metadata.ptr);
+    kg_configure_legacy_sampled_textures(&desc, fragment_metadata.ptr);
     desc.label = label;
     const uint32_t shader_id = sg_make_shader(&desc).id;
-    kg_record_shader(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask, available_uniform_mask);
-    kg_update_lifetime_peaks();
     free(vertex_bytecode.ptr);
     free(fragment_bytecode.ptr);
     kg_owned_text_deinit(&vertex_metadata);
     kg_owned_text_deinit(&fragment_metadata);
-    return shader_id;
+    return kg_make_shader_info(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask, available_uniform_mask, NULL, 0);
 }
 
-uint32_t kg_make_shader(const char* label, const char* vertex_source, const char* fragment_source, const char* vertex_path, const char* fragment_path) {
+kg_shader_info kg_make_shader(const char* label, const char* vertex_source, const char* fragment_source, const char* vertex_path, const char* fragment_path) {
     return kg_make_shader_with_entries(label, vertex_source, fragment_source, vertex_path, fragment_path, "main", "main");
 }
 
-uint32_t kg_make_ksl_shader(const char* label, const char* asset, const char* directory) {
+// A KSL shader loaded from the files `kira shader build` wrote.
+//
+// The `.resources` sidecar beside the stage sources is what says which textures,
+// samplers, storage buffers and uniform blocks the shader binds. It is read here
+// rather than inferred from the source text: the inference this replaced grepped
+// for `kira_tex0_smp0`, a name the shader backend has not emitted since it began
+// naming a sampler after the texture it reads, so every textured shader loaded
+// from disk bound nothing at all and drew black.
+kg_shader_info kg_make_ksl_shader(const char* label, const char* asset, const char* directory) {
+    char* resource_path = kg_join_shader_path(directory, asset, ".resources");
+    kg_owned_text resources = kg_shader_source_owned("", resource_path ? resource_path : "");
+    free(resource_path);
+    const char* reflection = resources.ptr;
 #if defined(SOKOL_WGPU)
     char* vertex_path = kg_join_shader_path(directory, asset, ".vert.wgsl");
     char* fragment_path = kg_join_shader_path(directory, asset, ".frag.wgsl");
     char* vertex_entry = kg_join_shader_entry(asset, "vertex");
     char* fragment_entry = kg_join_shader_entry(asset, "fragment");
-    uint32_t shader_id = kg_make_shader_with_entries(
+    kg_shader_info info = kg_make_shader_with_entries_reflected(
         label,
         "",
         "",
         vertex_path ? vertex_path : "",
         fragment_path ? fragment_path : "",
         vertex_entry ? vertex_entry : "main",
-        fragment_entry ? fragment_entry : "main");
+        fragment_entry ? fragment_entry : "main",
+        reflection);
     free(vertex_path);
     free(fragment_path);
     free(vertex_entry);
     free(fragment_entry);
-    return shader_id;
+    kg_owned_text_deinit(&resources);
+    return info;
 #elif defined(SOKOL_VULKAN)
     char* vertex_path = kg_join_shader_path(directory, asset, ".vert.spv");
     char* fragment_path = kg_join_shader_path(directory, asset, ".frag.spv");
@@ -3783,7 +1682,7 @@ uint32_t kg_make_ksl_shader(const char* label, const char* asset, const char* di
     char* metadata_fragment_path = kg_join_shader_path(directory, asset, ".frag.hlsl");
     char* vertex_entry = kg_join_shader_entry(asset, "vertex");
     char* fragment_entry = kg_join_shader_entry(asset, "fragment");
-    uint32_t shader_id = kg_make_spirv_shader(
+    kg_shader_info info = kg_make_spirv_shader(
         label,
         vertex_path ? vertex_path : "",
         fragment_path ? fragment_path : "",
@@ -3797,32 +1696,40 @@ uint32_t kg_make_ksl_shader(const char* label, const char* asset, const char* di
     free(metadata_fragment_path);
     free(vertex_entry);
     free(fragment_entry);
-    return shader_id;
+    kg_owned_text_deinit(&resources);
+    return info;
 #elif defined(SOKOL_D3D11)
     char* vertex_path = kg_join_shader_path(directory, asset, ".vert.hlsl");
     char* fragment_path = kg_join_shader_path(directory, asset, ".frag.hlsl");
     char* vertex_entry = kg_join_shader_entry(asset, "vertex");
     char* fragment_entry = kg_join_shader_entry(asset, "fragment");
-    uint32_t shader_id = kg_make_shader_with_entries(
+    kg_shader_info info = kg_make_shader_with_entries_reflected(
         label,
         "",
         "",
         vertex_path ? vertex_path : "",
         fragment_path ? fragment_path : "",
         vertex_entry ? vertex_entry : "main",
-        fragment_entry ? fragment_entry : "main");
+        fragment_entry ? fragment_entry : "main",
+        reflection);
     free(vertex_path);
     free(fragment_path);
     free(vertex_entry);
     free(fragment_entry);
-    return shader_id;
+    kg_owned_text_deinit(&resources);
+    return info;
 #else
     char* vertex_path = kg_join_shader_path(directory, asset, ".vert.glsl");
     char* fragment_path = kg_join_shader_path(directory, asset, ".frag.glsl");
-    uint32_t shader_id = kg_make_shader(label, "", "", vertex_path ? vertex_path : "", fragment_path ? fragment_path : "");
+    kg_shader_info info = kg_make_shader_with_entries_reflected(
+        label, "", "",
+        vertex_path ? vertex_path : "",
+        fragment_path ? fragment_path : "",
+        "main", "main", reflection);
     free(vertex_path);
     free(fragment_path);
-    return shader_id;
+    kg_owned_text_deinit(&resources);
+    return info;
 #endif
 }
 
@@ -3833,7 +1740,7 @@ uint32_t kg_make_ksl_shader(const char* label, const char* asset, const char* di
 // backend, GLSL (whose stage functions are always `main`) everywhere else.
 // Metal is handled in the Kira Graphics layer (metalCreateShader) and never
 // reaches this path.
-uint32_t kg_make_shader_ksl_inline(
+kg_shader_info kg_make_shader_ksl_inline(
     const char* label,
     const char* vertex_wgsl,
     const char* fragment_wgsl,
@@ -3841,7 +1748,7 @@ uint32_t kg_make_shader_ksl_inline(
     const char* fragment_glsl,
     const char* vertex_entry,
     const char* fragment_entry,
-    const char* uniform_reflection
+    const char* resource_reflection
 ) {
 #if defined(SOKOL_WGPU)
     return kg_make_shader_with_entries_reflected(
@@ -3852,7 +1759,7 @@ uint32_t kg_make_shader_ksl_inline(
         "",
         (vertex_entry != NULL && vertex_entry[0] != '\0') ? vertex_entry : "main",
         (fragment_entry != NULL && fragment_entry[0] != '\0') ? fragment_entry : "main",
-        uniform_reflection);
+        resource_reflection);
 #else
     (void)vertex_wgsl;
     (void)fragment_wgsl;
@@ -3866,11 +1773,17 @@ uint32_t kg_make_shader_ksl_inline(
         "",
         "main",
         "main",
-        uniform_reflection);
+        resource_reflection);
 #endif
 }
 
-uint32_t kg_make_pipeline_detailed(
+// Builds both Sokol pipeline objects (the "draw" one and the "indexed" one —
+// Sokol pipelines are immutable about index type, so a caller draws through
+// whichever one a given call needs) and reports back everything a later draw
+// needs to place its uniform uploads: the shader's reflection, passed in by
+// the caller (Kira already holds it on the `GraphicsShader` it built the
+// pipeline from) rather than looked up from a `kg_shader_records` table.
+kg_pipeline_info kg_make_pipeline_detailed(
     uint32_t shader_id,
     const char* label,
     int64_t vertex_stride,
@@ -3897,8 +1810,22 @@ uint32_t kg_make_pipeline_detailed(
     int64_t depth_format,
     int64_t cull_mode,
     int64_t front_face,
-    int64_t topology
+    int64_t topology,
+    // Everything the shader's own reflection produced, handed back in because
+    // Kira holds it on the `GraphicsShader` value the pipeline is built from —
+    // there is no `kg_shader_records` table to look this up from anymore. The
+    // four block arrays are parallel and `shader_block_count` long.
+    int64_t shader_has_position_attribute,
+    int64_t shader_has_normal_attribute,
+    uint32_t shader_required_uniform_mask,
+    uint32_t shader_available_uniform_mask,
+    int64_t shader_block_count,
+    const int64_t* block_bindings,
+    const uint32_t* block_sizes,
+    const int64_t* block_vertex_slots,
+    const int64_t* block_fragment_slots
 ) {
+    kg_pipeline_info info = {0};
     const sg_pixel_format swapchain_color_format = _sglue_to_sgpixelformat(sapp_color_format());
     const sg_pixel_format swapchain_depth_format = _sglue_to_sgpixelformat(sapp_depth_format());
     const int swapchain_sample_count = sapp_sample_count();
@@ -3908,8 +1835,8 @@ uint32_t kg_make_pipeline_detailed(
     desc.layout.buffers[0].step_func = SG_VERTEXSTEP_PER_VERTEX;
     desc.layout.buffers[0].step_rate = 1;
 
-    if (!kg_validate_pipeline_layout(shader_id, vertex_stride, attribute_count, attr0_format, attr0_offset, attr1_format, attr1_offset)) {
-        return 0;
+    if (!kg_validate_pipeline_layout(shader_has_position_attribute != 0, shader_has_normal_attribute != 0, vertex_stride, attribute_count, attr0_format, attr0_offset, attr1_format, attr1_offset)) {
+        return info;
     }
 
     if (attribute_count > 0) {
@@ -3959,93 +1886,49 @@ uint32_t kg_make_pipeline_detailed(
     sg_pipeline_desc draw_desc = desc;
     draw_desc.index_type = SG_INDEXTYPE_NONE;
     uint32_t draw_pipeline_id = sg_make_pipeline(&draw_desc).id;
-    kg_update_lifetime_peaks();
     if (draw_pipeline_id == 0) {
-        return 0;
+        return info;
     }
 
     sg_pipeline_desc indexed_desc = desc;
     indexed_desc.index_type = SG_INDEXTYPE_UINT32;
     uint32_t indexed_pipeline_id = sg_make_pipeline(&indexed_desc).id;
-    kg_update_lifetime_peaks();
     if (indexed_pipeline_id == 0) {
         sg_pipeline draw_pipeline = { draw_pipeline_id };
         sg_destroy_pipeline(draw_pipeline);
-        kg_update_lifetime_peaks();
-        return 0;
+        return info;
     }
 
-    uint32_t pipeline_id = kg_record_pipeline(draw_pipeline_id, indexed_pipeline_id, attribute_count > 0 || kg_shader_has_position_attribute(shader_id), kg_shader_required_uniform_mask(shader_id), kg_shader_available_uniform_mask(shader_id));
-    // Propagate the shader's reflection-driven uniform descriptors onto the
-    // pipeline so the draw path can size-validate uploads and map public bind
-    // slots to Sokol uniform block slots.
-    {
-        kg_pipeline_record* new_pipeline_record = kg_find_pipeline_record(pipeline_id);
-        kg_shader_record* source_shader_record = kg_find_shader_record(shader_id);
-        if (new_pipeline_record != NULL && source_shader_record != NULL) {
-            new_pipeline_record->uniform_desc_count = source_shader_record->uniform_desc_count;
-            for (int i = 0; i < source_shader_record->uniform_desc_count; i += 1) {
-                new_pipeline_record->uniform_descs[i] = source_shader_record->uniform_descs[i];
-            }
-        }
+    info.draw_pipeline_id = draw_pipeline_id;
+    info.indexed_pipeline_id = indexed_pipeline_id;
+    info.has_position_attribute = (attribute_count > 0 || shader_has_position_attribute != 0) ? 1 : 0;
+    info.required_uniform_mask = shader_required_uniform_mask;
+    info.available_uniform_mask = shader_available_uniform_mask;
+    info.uniform_desc_count = (int32_t)(shader_block_count > KG_EXPOSED_UNIFORM_BLOCKS ? KG_EXPOSED_UNIFORM_BLOCKS : shader_block_count);
+    for (int i = 0; i < info.uniform_desc_count; i += 1) {
+        info.blocks[i].binding = (int32_t)block_bindings[i];
+        info.blocks[i].size = block_sizes[i];
+        info.blocks[i].vertex_block_slot = (int32_t)block_vertex_slots[i];
+        info.blocks[i].fragment_block_slot = (int32_t)block_fragment_slots[i];
     }
-    if (pipeline_id == 0) {
-        sg_pipeline draw_pipeline = { draw_pipeline_id };
-        sg_pipeline indexed_pipeline = { indexed_pipeline_id };
-        sg_destroy_pipeline(draw_pipeline);
-        sg_destroy_pipeline(indexed_pipeline);
-        kg_update_lifetime_peaks();
-        return 0;
-    }
-    kg_update_lifetime_peaks();
-    if (label != NULL && strstr(label, "ui-demo") != NULL) {
-        kg_ui_demo_pipeline_id = pipeline_id;
-    }
-    return pipeline_id;
+    return info;
 }
 
-uint32_t kg_make_pipeline(uint32_t shader_id, const char* label) {
-    return kg_make_pipeline_detailed(shader_id, label, sizeof(float) * 2, 1, 0, 1, 0, 1, 1, 0, 2, 1, 0, 3, 1, 0, 1, 1, 0, 1, 0, 0, 6, 3, 0, 2, 1);
-}
-
-uint32_t kg_begin_render_pass(
-    const char* label,
-    int64_t color_target_kind,
-    uint32_t color_texture_id,
-    int64_t color_mip_level,
-    int64_t color_array_layer,
-    int64_t color_load_action,
-    int64_t color_store_action,
-    double clear_r,
-    double clear_g,
-    double clear_b,
-    double clear_a,
-    int64_t has_resolve_target,
-    uint32_t resolve_texture_id,
-    int64_t resolve_mip_level,
-    int64_t resolve_array_layer,
-    int64_t has_depth_attachment,
-    uint32_t depth_texture_id,
-    int64_t depth_load_action,
-    int64_t depth_store_action,
-    double clear_depth,
-    int64_t depth_read_only,
-    int64_t has_stencil_attachment,
-    uint32_t stencil_texture_id,
-    int64_t stencil_load_action,
-    int64_t stencil_store_action,
-    int64_t clear_stencil,
-    int64_t stencil_read_only
-);
-void kg_end_pass_and_commit(void);
 void kg_destroy_shader_id(uint32_t shader_id);
-void kg_destroy_pipeline_id(uint32_t pipeline_id);
+void kg_destroy_pipeline_id(uint32_t draw_pipeline_id, uint32_t indexed_pipeline_id);
 
 static uint32_t kg_lifetime_stress_fail(const char* step, int64_t iteration) {
     fprintf(stderr, "Kira Graphics lifetime stress failed at %s on iteration %lld\n", step ? step : "unknown", (long long)iteration);
     return 0;
 }
 
+// Creates and destroys every real Sokol resource this file still mints —
+// buffers, a texture, an offscreen pass, a shader, a pipeline — on a tight
+// loop, then checks `sg_query_stats` came back to zero. Uniforms and bind
+// groups are not part of the loop: neither was ever a Sokol resource (see
+// `kg_lifetime_outstanding_count`), so there is nothing of theirs left in C
+// for a leak to hide in — Kira's own memory holds them now, and reclaiming
+// what Kira owns is Kira's job to prove, not this file's.
 uint32_t kg_run_lifetime_stress(int64_t iterations, const char* shader_directory, const char* shader_asset) {
     if (iterations <= 0) {
         iterations = 1;
@@ -4054,115 +1937,83 @@ uint32_t kg_run_lifetime_stress(int64_t iterations, const char* shader_directory
     for (int64_t iteration = 0; iteration < iterations; iteration += 1) {
         uint32_t vertex_buffer = 0;
         uint32_t index_buffer = 0;
+        sg_image texture_image = {0};
         uint32_t texture = 0;
-        uint32_t uniform = 0;
-        uint32_t bind_group = 0;
-        uint32_t shader = 0;
-        uint32_t pipeline = 0;
 
-        uint32_t upload = kg_begin_float_buffer_upload("lifetime-stress-vertices", 1, 24, 18);
-        if (upload == 0) {
-            return kg_lifetime_stress_fail("begin vertex buffer upload", iteration);
-        }
+        float vertices[18];
         for (int64_t index = 0; index < 18; index += 1) {
-            kg_set_float_buffer_upload_value(upload, index, (double)(index % 3));
+            vertices[index] = (float)(index % 3);
         }
-        vertex_buffer = kg_finalize_float_buffer_upload(upload);
+        vertex_buffer = kg_stress_make_buffer("lifetime-stress-vertices", false, vertices, sizeof(vertices));
         if (vertex_buffer == 0) {
             return kg_lifetime_stress_fail("finalize vertex buffer", iteration);
         }
 
-        upload = kg_begin_index_buffer_upload("lifetime-stress-indices", 2, 3);
-        if (upload == 0) {
-            kg_destroy_buffer_id(vertex_buffer);
-            return kg_lifetime_stress_fail("begin index buffer upload", iteration);
-        }
-        kg_set_index_buffer_upload_value(upload, 0, 0);
-        kg_set_index_buffer_upload_value(upload, 1, 1);
-        kg_set_index_buffer_upload_value(upload, 2, 2);
-        index_buffer = kg_finalize_index_buffer_upload(upload);
+        const uint32_t indices[3] = {0, 1, 2};
+        index_buffer = kg_stress_make_buffer("lifetime-stress-indices", true, indices, sizeof(indices));
         if (index_buffer == 0) {
             kg_destroy_buffer_id(vertex_buffer);
             return kg_lifetime_stress_fail("finalize index buffer", iteration);
         }
 
-        texture = kg_create_texture_id("lifetime-stress-color", 16, 16, 1, 2, 1, 1);
+        texture_image = kg_stress_make_color_image(16, 16);
+        texture = kg_stress_make_color_view(texture_image);
         if (texture == 0) {
             kg_destroy_buffer_id(index_buffer);
             kg_destroy_buffer_id(vertex_buffer);
             return kg_lifetime_stress_fail("create texture", iteration);
         }
-        if (kg_begin_render_pass("lifetime-stress-pass", 2, texture, 0, 0, 1, 1, 0.0, 0.0, 0.0, 1.0, 0, 0, 0, 0, 0, 0, 1, 1, 1.0, 0, 0, 0, 1, 1, 0, 0) == 0) {
-            kg_destroy_texture_id(texture);
-            kg_destroy_buffer_id(index_buffer);
-            kg_destroy_buffer_id(vertex_buffer);
-            return kg_lifetime_stress_fail("begin offscreen render pass", iteration);
-        }
-        kg_end_pass_and_commit();
-
-        uniform = kg_create_uniform_id("lifetime-stress-uniform", 4);
-        if (uniform == 0) {
-            kg_destroy_texture_id(texture);
-            kg_destroy_buffer_id(index_buffer);
-            kg_destroy_buffer_id(vertex_buffer);
-            return kg_lifetime_stress_fail("create uniform", iteration);
-        }
-        for (int64_t index = 0; index < 4; index += 1) {
-            kg_set_uniform_float(uniform, index, 1.0);
-        }
-        if (kg_finish_uniform_update(uniform, 4) == 0) {
-            kg_destroy_uniform_id(uniform);
-            kg_destroy_texture_id(texture);
-            kg_destroy_buffer_id(index_buffer);
-            kg_destroy_buffer_id(vertex_buffer);
-            return kg_lifetime_stress_fail("finish uniform", iteration);
-        }
-        bind_group = kg_create_bind_group_id("lifetime-stress-bind-group");
-        if (bind_group == 0) {
-            kg_destroy_uniform_id(uniform);
-            kg_destroy_texture_id(texture);
-            kg_destroy_buffer_id(index_buffer);
-            kg_destroy_buffer_id(vertex_buffer);
-            return kg_lifetime_stress_fail("create bind group", iteration);
-        }
-        if (kg_set_bind_group_uniform(bind_group, 0, 2, uniform) == 0) {
-            kg_destroy_bind_group_id(bind_group);
-            kg_destroy_uniform_id(uniform);
-            kg_destroy_texture_id(texture);
-            kg_destroy_buffer_id(index_buffer);
-            kg_destroy_buffer_id(vertex_buffer);
-            return kg_lifetime_stress_fail("bind uniform", iteration);
+        // An offscreen pass over the texture just created, begun and ended here
+        // rather than through Kira's pass path: this loop exists to prove that
+        // every Sokol resource it mints is reclaimed, and it runs with no
+        // application runtime behind it to record a pass on.
+        {
+            sg_pass pass = {0};
+            pass.label = "lifetime-stress-pass";
+            pass.action.colors[0].load_action = SG_LOADACTION_CLEAR;
+            pass.action.colors[0].store_action = SG_STOREACTION_STORE;
+            pass.attachments.colors[0].id = texture;
+            sg_begin_pass(&pass);
+            sg_end_pass();
+            sg_commit();
         }
 
-        shader = kg_make_ksl_shader("lifetime-stress-ksl-shader", shader_asset ? shader_asset : "LifetimeStress", shader_directory ? shader_directory : "generated/shaders");
-        if (shader == 0) {
-            kg_destroy_bind_group_id(bind_group);
-            kg_destroy_uniform_id(uniform);
-            kg_destroy_texture_id(texture);
+        kg_shader_info shader_info = kg_make_ksl_shader("lifetime-stress-ksl-shader", shader_asset ? shader_asset : "LifetimeStress", shader_directory ? shader_directory : "generated/shaders");
+        if (shader_info.id == 0) {
+            kg_stress_destroy_color(texture_image, texture);
             kg_destroy_buffer_id(index_buffer);
             kg_destroy_buffer_id(vertex_buffer);
             return kg_lifetime_stress_fail("create KSL shader", iteration);
         }
-        pipeline = kg_make_pipeline_detailed(shader, "lifetime-stress-pipeline", 24, 2, 0, 2, 0, 1, 2, 12, 2, 1, 0, 3, 1, 0, 1, 1, 0, 1, 0, 0, 6, 3, 0, 1, 1);
-        if (pipeline == 0) {
-            kg_destroy_shader_id(shader);
-            kg_destroy_bind_group_id(bind_group);
-            kg_destroy_uniform_id(uniform);
-            kg_destroy_texture_id(texture);
+        int64_t block_bindings[KG_EXPOSED_UNIFORM_BLOCKS];
+        uint32_t block_sizes[KG_EXPOSED_UNIFORM_BLOCKS];
+        int64_t block_vertex_slots[KG_EXPOSED_UNIFORM_BLOCKS];
+        int64_t block_fragment_slots[KG_EXPOSED_UNIFORM_BLOCKS];
+        for (int block_index = 0; block_index < KG_EXPOSED_UNIFORM_BLOCKS; block_index += 1) {
+            block_bindings[block_index] = shader_info.blocks[block_index].binding;
+            block_sizes[block_index] = shader_info.blocks[block_index].size;
+            block_vertex_slots[block_index] = shader_info.blocks[block_index].vertex_block_slot;
+            block_fragment_slots[block_index] = shader_info.blocks[block_index].fragment_block_slot;
+        }
+        kg_pipeline_info pipeline_info = kg_make_pipeline_detailed(
+            shader_info.id, "lifetime-stress-pipeline", 24, 2, 0, 2, 0, 1, 2, 12, 2, 1, 0, 3, 1, 0, 1, 1, 0, 1, 0, 0, 6, 3, 0, 1, 1,
+            shader_info.has_position_attribute, shader_info.has_normal_attribute, shader_info.required_uniform_mask, shader_info.available_uniform_mask,
+            shader_info.uniform_desc_count,
+            block_bindings, block_sizes, block_vertex_slots, block_fragment_slots);
+        if (pipeline_info.draw_pipeline_id == 0) {
+            kg_destroy_shader_id(shader_info.id);
+            kg_stress_destroy_color(texture_image, texture);
             kg_destroy_buffer_id(index_buffer);
             kg_destroy_buffer_id(vertex_buffer);
             return kg_lifetime_stress_fail("create pipeline", iteration);
         }
 
-        kg_destroy_pipeline_id(pipeline);
-        kg_destroy_shader_id(shader);
-        kg_destroy_bind_group_id(bind_group);
-        kg_destroy_uniform_id(uniform);
-        kg_destroy_texture_id(texture);
+        kg_destroy_pipeline_id(pipeline_info.draw_pipeline_id, pipeline_info.indexed_pipeline_id);
+        kg_destroy_shader_id(shader_info.id);
+        kg_stress_destroy_color(texture_image, texture);
         kg_destroy_buffer_id(index_buffer);
         kg_destroy_buffer_id(vertex_buffer);
 
-        kg_update_lifetime_peaks();
     }
 
     kg_owned_text missing = kg_prepare_shader_source_for_sokol(kg_shader_source_owned("", "__missing_lifetime_stress_shader__.glsl"));
@@ -4185,7 +2036,6 @@ uint32_t kg_run_lifetime_stress(int64_t iterations, const char* shader_directory
         rewrite_probe = kg_prepare_shader_source_for_sokol(rewrite_probe);
         kg_owned_text_deinit(&rewrite_probe);
     }
-    kg_update_lifetime_peaks();
 
     if (kg_lifetime_outstanding_count() != 0) {
         fprintf(stderr, "Kira Graphics lifetime stress left %d outstanding resources\n", kg_lifetime_outstanding_count());
@@ -4195,719 +2045,111 @@ uint32_t kg_run_lifetime_stress(int64_t iterations, const char* shader_directory
     return 1;
 }
 
-// Shared, lazily-managed offscreen depth-stencil image. Offscreen passes that
-// enable depth but supply no explicit depth texture (the Metal path depth-tests
-// against the implicit context depth buffer; the swapchain path uses the
-// swapchain's own depth buffer) get this managed buffer instead of being skipped.
-// It is sized to the offscreen color target and recreated when the size or sample
-// count changes. Its pixel format matches the swapchain depth format — which is
-// exactly what kg_create_pipeline_id bakes into every depth-enabled pipeline — so
-// pass and pipeline depth formats agree under Sokol validation.
-static sg_image kg_offscreen_depth_image = {0};
-static uint32_t kg_offscreen_depth_view_id = 0;
-static int kg_offscreen_depth_w = 0;
-static int kg_offscreen_depth_h = 0;
-static int kg_offscreen_depth_sample_count = 0;
-
-static uint32_t kg_ensure_offscreen_depth(int w, int h, int sample_count) {
-    if (w <= 0 || h <= 0) {
-        return 0;
-    }
-    if (sample_count <= 0) {
-        sample_count = 1;
-    }
-    if (kg_offscreen_depth_view_id != 0 &&
-        kg_offscreen_depth_w == w &&
-        kg_offscreen_depth_h == h &&
-        kg_offscreen_depth_sample_count == sample_count) {
-        return kg_offscreen_depth_view_id;
-    }
-    if (kg_offscreen_depth_view_id != 0) {
-        sg_view old_view = { kg_offscreen_depth_view_id };
-        sg_destroy_view(old_view);
-        kg_offscreen_depth_view_id = 0;
-    }
-    if (kg_offscreen_depth_image.id != 0) {
-        sg_destroy_image(kg_offscreen_depth_image);
-        kg_offscreen_depth_image = (sg_image){0};
-    }
-    sg_image_desc desc = {0};
-    desc.type = SG_IMAGETYPE_2D;
-    desc.usage = kg_image_usage(4);
-    desc.width = w;
-    desc.height = h;
-    desc.num_slices = 1;
-    desc.num_mipmaps = 1;
-    desc.pixel_format = _sglue_to_sgpixelformat(sapp_depth_format());
-    desc.sample_count = sample_count;
-    desc.label = "kira-offscreen-managed-depth";
-    sg_image image = sg_make_image(&desc);
-    if (image.id == 0) {
-        return 0;
-    }
-    kg_update_lifetime_peaks();
-    sg_view_desc view_desc = {0};
-    view_desc.depth_stencil_attachment.image = image;
-    view_desc.label = "kira-offscreen-managed-depth-view";
-    uint32_t view_id = sg_make_view(&view_desc).id;
-    if (view_id == 0) {
-        sg_destroy_image(image);
-        kg_update_lifetime_peaks();
-        return 0;
-    }
-    kg_offscreen_depth_image = image;
-    kg_offscreen_depth_view_id = view_id;
-    kg_offscreen_depth_w = w;
-    kg_offscreen_depth_h = h;
-    kg_offscreen_depth_sample_count = sample_count;
-    kg_update_lifetime_peaks();
-    return view_id;
-}
-
-uint32_t kg_begin_render_pass(
-    const char* label,
-    int64_t color_target_kind,
-    uint32_t color_texture_id,
-    int64_t color_mip_level,
-    int64_t color_array_layer,
-    int64_t color_load_action,
-    int64_t color_store_action,
-    double clear_r,
-    double clear_g,
-    double clear_b,
-    double clear_a,
-    int64_t has_resolve_target,
-    uint32_t resolve_texture_id,
-    int64_t resolve_mip_level,
-    int64_t resolve_array_layer,
-    int64_t has_depth_attachment,
-    uint32_t depth_texture_id,
-    int64_t depth_load_action,
-    int64_t depth_store_action,
-    double clear_depth,
-    int64_t depth_read_only,
-    int64_t has_stencil_attachment,
-    uint32_t stencil_texture_id,
-    int64_t stencil_load_action,
-    int64_t stencil_store_action,
-    int64_t clear_stencil,
-    int64_t stencil_read_only
-) {
-    (void)color_mip_level;
-    (void)color_array_layer;
-    (void)resolve_mip_level;
-    (void)resolve_array_layer;
-    (void)depth_read_only;
-    (void)stencil_read_only;
-
-    kg_current_pass_active = false;
-    kg_current_pass_width = 0;
-    kg_current_pass_height = 0;
-    // Stale UI vertices from a pass that never flushed must not leak into this pass.
-    kg_ui_batch_count = 0;
-    g_glyph_batch_count = 0;
-
-    sg_pass pass = {0};
-    pass.label = label;
-    pass.action.colors[0].load_action = kg_load_action(color_load_action);
-    pass.action.colors[0].store_action = kg_store_action(color_store_action);
-    pass.action.colors[0].clear_value = (sg_color){ (float)clear_r, (float)clear_g, (float)clear_b, (float)clear_a };
-
-    if (color_target_kind == 1) {
-        if (color_texture_id != 0) {
-            printf("Kira Graphics: swapchain render pass cannot use an explicit color texture\n");
-            return 0;
-        }
-        if (has_resolve_target != 0) {
-            printf("Kira Graphics: swapchain render pass does not support resolve attachments\n");
-            return 0;
-        }
-        if (has_depth_attachment != 0 && depth_texture_id != 0) {
-            printf("Kira Graphics: render pass mixes swapchain color with explicit depth texture; use swapchain/default depth or render to an offscreen color texture\n");
-            return 0;
-        }
-        if (has_stencil_attachment != 0 && stencil_texture_id != 0) {
-            printf("Kira Graphics: swapchain render pass does not support an explicit stencil texture\n");
-            return 0;
-        }
-        sg_swapchain sw = sglue_swapchain();
-        if (has_depth_attachment != 0 && sw.depth_format == SG_PIXELFORMAT_NONE) {
-            printf("Kira Graphics: swapchain render pass requested depth, but the swapchain has no depth buffer\n");
-            return 0;
-        }
-        int w = sw.width;
-        int h = sw.height;
-        pass.swapchain = sw;
-        if (has_depth_attachment != 0) {
-            pass.action.depth.load_action = kg_load_action(depth_load_action);
-            pass.action.depth.store_action = kg_store_action(depth_store_action);
-            pass.action.depth.clear_value = (float)clear_depth;
-        }
-        if (has_stencil_attachment != 0) {
-            pass.action.stencil.load_action = kg_load_action(stencil_load_action);
-            pass.action.stencil.store_action = kg_store_action(stencil_store_action);
-            pass.action.stencil.clear_value = (uint8_t)clear_stencil;
-        }
-        sg_begin_pass(&pass);
-        kg_current_pass_active = _sg.cur_pass.in_pass && _sg.cur_pass.valid;
-        if (!kg_current_pass_active) {
-            printf("Kira Graphics: swapchain render pass could not be activated in Sokol\n");
-            return 0;
-        }
-        kg_current_pass_width = w;
-        kg_current_pass_height = h;
-        // Swapchain (on-screen) pass: w/h are physical framebuffer pixels. On a
-        // Retina/high_dpi surface the UI is authored in logical points, so record
-        // the backing scale for the immediate-2D pipeline. Clamp to >= 1.0.
-        kg_ui_logical_scale = sapp_dpi_scale();
-        if (kg_ui_logical_scale < 1.0f) {
-            kg_ui_logical_scale = 1.0f;
-        }
-        return 1;
-    } else if (color_target_kind == 2) {
-        if (color_texture_id == 0) {
-            printf("Kira Graphics: offscreen render pass needs an explicit color texture\n");
-            return 0;
-        }
-        kg_texture_record* color_record = kg_find_texture(color_texture_id);
-        if (color_record == NULL || color_record->color_view_id == 0) {
-            printf("Kira Graphics: offscreen render pass color texture %u is not available as a color attachment\n", color_texture_id);
-            return 0;
-        }
-        pass.attachments.colors[0].id = color_record->color_view_id;
-        if (has_resolve_target != 0) {
-            if (resolve_texture_id == 0) {
-                printf("Kira Graphics: offscreen render pass requested a resolve target, but no resolve texture was provided\n");
-                return 0;
-            }
-            kg_texture_record* resolve_record = kg_find_texture(resolve_texture_id);
-            if (resolve_record == NULL || resolve_record->color_view_id == 0) {
-                printf("Kira Graphics: offscreen render pass resolve texture %u is not available as a color attachment\n", resolve_texture_id);
-                return 0;
-            }
-            pass.attachments.resolves[0].id = resolve_record->color_view_id;
-        }
-        if (has_depth_attachment != 0) {
-            uint32_t depth_view = 0;
-            if (depth_texture_id == 0) {
-                // No explicit depth texture: provide a managed offscreen depth
-                // buffer sized to the color target (parity with the Metal context
-                // depth buffer and the swapchain's implicit depth attachment).
-                depth_view = kg_ensure_offscreen_depth((int)color_record->width, (int)color_record->height, (int)color_record->sample_count);
-                if (depth_view == 0) {
-                    printf("Kira Graphics: offscreen render pass could not provision a managed depth buffer\n");
-                    return 0;
-                }
-            } else {
-                kg_texture_record* depth_record = kg_find_texture(depth_texture_id);
-                if (depth_record == NULL || depth_record->depth_view_id == 0) {
-                    printf("Kira Graphics: offscreen render pass depth texture %u is not available as a depth attachment\n", depth_texture_id);
-                    return 0;
-                }
-                depth_view = depth_record->depth_view_id;
-            }
-            pass.attachments.depth_stencil.id = depth_view;
-            pass.action.depth.load_action = kg_load_action(depth_load_action);
-            pass.action.depth.store_action = kg_store_action(depth_store_action);
-            pass.action.depth.clear_value = (float)clear_depth;
-        }
-        if (has_stencil_attachment != 0) {
-            if (stencil_texture_id == 0) {
-                printf("Kira Graphics: offscreen render pass has stencil enabled, but no stencil texture was provided\n");
-                return 0;
-            }
-            kg_texture_record* stencil_record = kg_find_texture(stencil_texture_id);
-            if (stencil_record == NULL || stencil_record->depth_view_id == 0) {
-                printf("Kira Graphics: offscreen render pass stencil texture %u is not available as a stencil attachment\n", stencil_texture_id);
-                return 0;
-            }
-            pass.attachments.depth_stencil.id = stencil_record->depth_view_id;
-            pass.action.stencil.load_action = kg_load_action(stencil_load_action);
-            pass.action.stencil.store_action = kg_store_action(stencil_store_action);
-            pass.action.stencil.clear_value = (uint8_t)clear_stencil;
-        }
-        kg_current_pass_width = (int)color_record->width;
-        kg_current_pass_height = (int)color_record->height;
-        // Offscreen targets are authored directly in their own pixel space, so the
-        // immediate-2D pipeline maps points 1:1 to target pixels here.
-        kg_ui_logical_scale = 1.0f;
-        sg_begin_pass(&pass);
-        kg_current_pass_active = _sg.cur_pass.in_pass && _sg.cur_pass.valid;
-        if (!kg_current_pass_active) {
-            printf("Kira Graphics: offscreen render pass could not be activated in Sokol\n");
-            return 0;
-        }
-        return 1;
-    }
-
-    printf("Kira Graphics: render pass has unsupported color target kind %lld\n", (long long)color_target_kind);
-    return 0;
-}
-
-static int kg_draw_base_element = 0;
-
-void kg_set_draw_base_element(int64_t base_element) {
-    kg_draw_base_element = base_element > 0 ? (int)base_element : 0;
-}
-
-uint32_t kg_apply_pipeline_bindings_and_draw(
-    uint32_t pipeline_id,
-    uint32_t vertex_buffer_id,
-    int64_t has_vertex_buffer,
-    uint32_t index_buffer_id,
-    int64_t has_index_buffer,
-    uint32_t bind_group0_id,
-    int64_t has_bind_group0,
-    uint32_t bind_group1_id,
-    int64_t has_bind_group1,
-    uint32_t bind_group2_id,
-    int64_t has_bind_group2,
-    uint32_t bind_group3_id,
-    int64_t has_bind_group3,
-    int64_t vertex_count,
-    int64_t index_count,
-    int64_t instance_count
-) {
-    // UI batch vertices must hit the GPU before a foreign pipeline draws.
-    kg_ui_flush_batch();
-    if (!kg_current_pass_active || !_sg.cur_pass.in_pass || !_sg.cur_pass.valid) {
-        printf("Kira Graphics: draw skipped because no render pass is currently active\n");
-        return 0;
-    }
-
-    kg_pipeline_record* pipeline_record = kg_find_pipeline_record(pipeline_id);
-    if (pipeline_record == NULL) {
-        printf("Kira Graphics: draw skipped because pipeline public id %u was not registered\n", pipeline_id);
-        return 0;
-    }
-
-    const bool wants_indexed = (index_count > 0) && (has_index_buffer != 0);
-    uint32_t active_pipeline_id = wants_indexed ? pipeline_record->indexed_pipeline_id : pipeline_record->draw_pipeline_id;
-    if (active_pipeline_id == 0) {
-        printf("Kira Graphics: draw skipped because active pipeline id resolved to 0 (public=%u indexed=%d)\n", pipeline_id, wants_indexed ? 1 : 0);
-        return 0;
-    }
-
-    if (kg_current_pass_width > 0 && kg_current_pass_height > 0) {
-        sg_apply_viewport(0, 0, kg_current_pass_width, kg_current_pass_height, false);
-        sg_apply_scissor_rect(0, 0, kg_current_pass_width, kg_current_pass_height, false);
-    }
-
-    sg_pipeline pipeline = { active_pipeline_id };
-    sg_apply_pipeline(pipeline);
-
-    sg_bindings bindings = {0};
-    bool has_bindings = false;
-    if (has_vertex_buffer != 0) {
-        bindings.vertex_buffers[0].id = vertex_buffer_id;
-        bindings.vertex_buffer_offsets[0] = 0;
-        has_bindings = true;
-    } else if (kg_pipeline_has_position_attribute(pipeline_id)) {
-        if (pipeline_id == kg_ui_demo_pipeline_id) {
-            kg_ensure_ui_demo_vertex_buffer();
-            bindings.vertex_buffers[0] = kg_ui_demo_vertex_buffer;
-        } else {
-            kg_ensure_triangle_vertex_buffer();
-            bindings.vertex_buffers[0] = kg_triangle_vertex_buffer;
-        }
-        bindings.vertex_buffer_offsets[0] = 0;
-        has_bindings = true;
-    }
-    if (has_index_buffer != 0) {
-        bindings.index_buffer.id = index_buffer_id;
-        bindings.index_buffer_offset = 0;
-        has_bindings = true;
-    }
-    uint32_t bind_group_ids[4] = { bind_group0_id, bind_group1_id, bind_group2_id, bind_group3_id };
-    int64_t has_bind_groups[4] = { has_bind_group0, has_bind_group1, has_bind_group2, has_bind_group3 };
-    for (int group_index = 0; group_index < 4; group_index += 1) {
-        if (has_bind_groups[group_index] == 0) {
-            continue;
-        }
-        kg_bind_group_record* group = kg_find_bind_group(bind_group_ids[group_index]);
-        if (group == NULL) {
-            printf("Kira Graphics: bind group slot %d references missing bind group %u\n", group_index, bind_group_ids[group_index]);
-            return 0;
-        }
-        for (int entry_index = 0; entry_index < group->texture_count; entry_index += 1) {
-            bindings.views[group->texture_slots[entry_index]].id = group->texture_ids[entry_index];
-            has_bindings = true;
-        }
-        for (int entry_index = 0; entry_index < group->sampler_count; entry_index += 1) {
-            bindings.samplers[group->sampler_slots[entry_index]].id = group->sampler_ids[entry_index];
-            has_bindings = true;
-        }
-    }
-    if (has_bindings) {
-        sg_apply_bindings(&bindings);
-    }
-
-    uint32_t applied_uniform_mask = 0;
-    for (int group_index = 0; group_index < 4; group_index += 1) {
-        if (has_bind_groups[group_index] == 0) {
-            continue;
-        }
-        kg_bind_group_record* group = kg_find_bind_group(bind_group_ids[group_index]);
-        if (group == NULL) {
-            printf("Kira Graphics: bind group slot %d references missing bind group %u\n", group_index, bind_group_ids[group_index]);
-            return 0;
-        }
-        for (int entry_index = 0; entry_index < group->uniform_count; entry_index += 1) {
-            uint32_t uniform_id = group->uniform_ids[entry_index];
-            if (uniform_id == 0) {
-                continue;
-            }
-            kg_uniform_record* uniform = kg_find_uniform(uniform_id);
-            if (uniform == NULL || uniform->values == NULL) {
-                printf("Kira Graphics: bind group '%s' references missing uniform buffer %u\n",
-                    group->label ? group->label : "",
-                    uniform_id);
-                return 0;
-            }
-            const size_t byte_size = (size_t)(uniform->float_count * (int64_t)sizeof(float));
-            if (uniform->float_count != uniform->expected_float_count || byte_size == 0) {
-                printf("Kira Graphics: uniform buffer '%s' has invalid upload size %lld floats; expected %lld floats\n",
-                    uniform->label ? uniform->label : "",
-                    (long long)uniform->float_count,
-                    (long long)uniform->expected_float_count);
-                return 0;
-            }
-            size_t expected_slot_size;
-            if (pipeline_record->uniform_desc_count > 0) {
-                // Reflection-driven: the expected size is the descriptor's std140
-                // block size for the uniform whose binding matches this bind slot.
-                expected_slot_size = byte_size;
-                for (int desc_index = 0; desc_index < pipeline_record->uniform_desc_count; desc_index += 1) {
-                    if (pipeline_record->uniform_descs[desc_index].binding == group->uniform_slots[entry_index]) {
-                        expected_slot_size = pipeline_record->uniform_descs[desc_index].size;
-                        break;
-                    }
-                }
-            } else {
-                expected_slot_size =
-                    (group->uniform_slots[entry_index] == 0) ? 96u :
-                    (group->uniform_slots[entry_index] == 1) ? 80u :
-                    byte_size;
-            }
-            if (byte_size != expected_slot_size) {
-                printf("Kira Graphics: uniform buffer '%s' upload size %zu bytes does not match expected size %zu bytes for uniform slot %d\n",
-                    uniform->label ? uniform->label : "",
-                    byte_size,
-                    expected_slot_size,
-                    group->uniform_slots[entry_index]);
-                return 0;
-            }
-            sg_range uniform_range = { uniform->values, byte_size };
-            uint32_t target_mask = kg_pipeline_uniform_target_mask(pipeline_record, group->uniform_slots[entry_index]);
-            for (int target_slot = 0; target_slot < 32; target_slot += 1) {
-                if ((target_mask & (1u << (uint32_t)target_slot)) == 0) {
-                    continue;
-                }
-                sg_apply_uniforms(target_slot, &uniform_range);
-            }
-            applied_uniform_mask |= 1u << group->uniform_slots[entry_index];
-        }
-    }
-
-    if ((pipeline_record->required_uniform_mask & applied_uniform_mask) != pipeline_record->required_uniform_mask) {
-        printf("Kira Graphics: pipeline %u expects uniform slots mask 0x%x but only mask 0x%x was bound\n",
-            pipeline_id,
-            pipeline_record->required_uniform_mask,
-            applied_uniform_mask);
-        return 0;
-    }
-
-    if (index_count > 0) {
-        sg_draw(kg_draw_base_element, (int)index_count, (int)instance_count);
-    } else if (vertex_count > 0) {
-        sg_draw(0, (int)vertex_count, (int)instance_count);
-    }
-    kg_draw_base_element = 0;
-    return 1;
-}
-
-void kg_apply_pipeline_and_draw(uint32_t pipeline_id, int vertex_count, int instance_count) {
-    kg_apply_pipeline_bindings_and_draw(pipeline_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, vertex_count, 0, instance_count);
-}
-
-void kg_log_submit_state(
-    uint32_t pipeline_id,
-    uint32_t vertex_buffer_id,
-    int64_t has_vertex_buffer,
-    uint32_t index_buffer_id,
-    int64_t has_index_buffer,
-    int64_t vertex_count,
-    int64_t index_count,
-    int64_t instance_count
-) {
-    (void)pipeline_id;
-    (void)vertex_buffer_id;
-    (void)has_vertex_buffer;
-    (void)index_buffer_id;
-    (void)has_index_buffer;
-    (void)vertex_count;
-    (void)index_count;
-    (void)instance_count;
-}
-
-// Frame-rate telemetry (KIRA_GRAPHICS_LOG_FPS=1): reports committed frames per
-// wall second so frame pacing regressions are measurable instead of eyeballed.
-static void kg_maybe_log_fps(void) {
-    static int enabled = -1;
-    if (enabled < 0) {
-        const char* flag = getenv("KIRA_GRAPHICS_LOG_FPS");
-        enabled = (flag != NULL && flag[0] != '\0' && flag[0] != '0') ? 1 : 0;
-    }
-    if (!enabled) {
-        return;
-    }
-    static uint64_t window_start_ns = 0;
-    static int frames = 0;
-    const uint64_t now_ns = kg_monotonic_now_ns();
-    if (window_start_ns == 0) {
-        window_start_ns = now_ns;
-    }
-    frames += 1;
-    const uint64_t elapsed_ns = now_ns - window_start_ns;
-    if (elapsed_ns >= 1000000000ull) {
-        const double fps = (double)frames * 1e9 / (double)elapsed_ns;
-        fprintf(stderr, "KiraGraphics: fps=%.1f frames=%d\n", fps, frames);
-        window_start_ns = now_ns;
-        frames = 0;
-    }
-}
-
-void kg_end_pass_and_commit(void) {
-    if (!_sg.cur_pass.in_pass) {
-        printf("Kira Graphics: end pass skipped because no render pass is currently active\n");
-        kg_ui_batch_count = 0;
-        g_glyph_batch_count = 0;
-        kg_current_pass_active = false;
-        kg_current_pass_width = 0;
-        kg_current_pass_height = 0;
-        return;
-    }
-    kg_ui_flush_batch();
-    kg_glyph_flush_batch();
-    sg_end_pass();
-    sg_commit();
-    // sg_commit closes the frame (sokol's frame_index advances), so a fresh
-    // sg_update_image is allowed again. Reset the once-per-frame upload gate and
-    // service any deferred atlas reset now that no glyph quads are queued.
-    g_atlas_uploaded_this_frame = false;
-    if (g_atlas_reset_pending) {
-        g_atlas_reset_pending = false;
-        kg_glyph_atlas_reset();
-    }
-    if (!kg_live_frame_submitted_emitted) {
-        kg_live_frame_submitted_emitted = true;
-        kira_live_emit_log_line("live.kira_graphics.frame.submitted");
-    }
-    if (!kg_live_first_frame_emitted) {
-        kg_live_first_frame_emitted = true;
-        kira_live_emit_first_frame();
-    }
-    if (kg_ui_draw_commands_submitted_this_frame) {
-        if (!kg_live_visible_content_submitted_emitted) {
-            kg_live_visible_content_submitted_emitted = true;
-            kira_live_emit_log_line("live.kira_graphics.visible_content.submitted");
-        }
-        if (!kg_ui_draw_commands_emitted) {
-            kg_ui_draw_commands_emitted = true;
-            kira_live_emit_log_line("KIRA_UI_DRAW_COMMANDS_SUBMITTED");
-        }
-        if (!kg_ui_visible_content_emitted) {
-            kg_ui_visible_content_emitted = true;
-            kira_live_emit_log_line("KIRA_APP_RENDERED_VISIBLE_CONTENT");
-        }
-    }
-    kg_ui_draw_commands_submitted_this_frame = false;
-    kg_maybe_log_fps();
-    kg_current_pass_active = false;
-    kg_current_pass_width = 0;
-    kg_current_pass_height = 0;
-}
-
-void kg_begin_swapchain_pass(float r, float g, float b, float a) {
-    kg_begin_render_pass("compat-swapchain-pass", 1, 0, 0, 0, 1, 1, r, g, b, a, 0, 0, 0, 0, 0, 0, 1, 1, 1.0, 0, 0, 0, 1, 1, 0, 0);
-}
-
 void kg_destroy_shader_id(uint32_t shader_id) {
     sg_shader shader = { shader_id };
     sg_destroy_shader(shader);
-    kg_remove_shader_record(shader_id);
-    kg_update_lifetime_peaks();
 }
 
-void kg_destroy_pipeline_id(uint32_t pipeline_id) {
-    kg_pipeline_record* record = kg_find_pipeline_record(pipeline_id);
-    if (record == NULL) {
-        return;
-    }
-    if (record->draw_pipeline_id != 0) {
-        sg_pipeline draw_pipeline = { record->draw_pipeline_id };
+// Takes both Sokol pipeline objects a `RenderPipeline` built (see
+// `kg_make_pipeline_detailed`) directly, since Kira holds both ids on the
+// value it is destroying — there is no `kg_pipeline_records` table left to
+// resolve one public id into the pair.
+void kg_destroy_pipeline_id(uint32_t draw_pipeline_id, uint32_t indexed_pipeline_id) {
+    if (draw_pipeline_id != 0) {
+        sg_pipeline draw_pipeline = { draw_pipeline_id };
         sg_destroy_pipeline(draw_pipeline);
     }
-    if (record->indexed_pipeline_id != 0) {
-        sg_pipeline indexed_pipeline = { record->indexed_pipeline_id };
+    if (indexed_pipeline_id != 0) {
+        sg_pipeline indexed_pipeline = { indexed_pipeline_id };
         sg_destroy_pipeline(indexed_pipeline);
     }
-    kg_remove_pipeline_record(pipeline_id);
-    kg_update_lifetime_peaks();
 }
 
-void kg_destroy_default_resources(void) {
-    free(kg_shader_source_public_buffer);
-    kg_shader_source_public_buffer = NULL;
-    if (kg_triangle_vertex_buffer.id != 0) {
-        sg_destroy_buffer(kg_triangle_vertex_buffer);
-        kg_triangle_vertex_buffer.id = 0;
-    }
-    if (kg_ui_demo_vertex_buffer.id != 0) {
-        sg_destroy_buffer(kg_ui_demo_vertex_buffer);
-        kg_ui_demo_vertex_buffer.id = 0;
-    }
-    if (kg_ui_vertex_buffer.id != 0) {
-        sg_destroy_buffer(kg_ui_vertex_buffer);
-        kg_ui_vertex_buffer.id = 0;
-    }
-    if (kg_ui_pipeline.id != 0) {
-        sg_destroy_pipeline(kg_ui_pipeline);
-        kg_ui_pipeline.id = 0;
-    }
-    if (kg_ui_shader.id != 0) {
-        sg_destroy_shader(kg_ui_shader);
-        kg_ui_shader.id = 0;
-    }
-    kg_update_lifetime_peaks();
-}
+// --- Swapchain readback ----------------------------------------------------
+//
+// Reads the presented framebuffer back and writes it as a binary PPM. It is
+// what makes a frame on this backend PROVABLE: sokol_gfx exposes no readback of
+// any kind, so without this a run here can only report that it submitted a
+// frame — which says nothing about what the frame contains. The Metal backend
+// has had `metalContextReadPixel` and its image digest since it was written;
+// this is the same capability wherever sokol runs.
+//
+// Called after the frame's last pass has ended and before the window is
+// presented, where the default framebuffer holds exactly what a viewer sees.
+// GL's origin is bottom-left and an image file's is top-left, so the rows are
+// written back to front.
+#if defined(SOKOL_GLCORE)
+#if defined(_WIN32)
+// opengl32.dll exports GL 1.1 directly, so this needs no loader — but sokol
+// declares no GL prototypes of its own on Windows, only the enums. (Its own
+// X-macro table already carries `glPixelStorei`, so that one is in scope.)
+extern void __stdcall glReadPixels(int x, int y, int width, int height, unsigned int format, unsigned int type, void* pixels);
+#endif
 
-void kg_report_lifetime(void) {
+bool kg_capture_swapchain_ppm(const char* path) {
+    if (path == NULL || path[0] == '\0') {
+        return false;
+    }
+    const int width = sapp_width();
+    const int height = sapp_height();
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+    const size_t row_bytes = (size_t)width * 3u;
+    const size_t total = row_bytes * (size_t)height;
+    unsigned char* pixels = (unsigned char*)malloc(total);
+    if (pixels == NULL) {
+        return false;
+    }
+    glPixelStorei(0x0D05 /* GL_PACK_ALIGNMENT */, 1);
+    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+    FILE* file = fopen(path, "wb");
+    if (file == NULL) {
+        free(pixels);
+        return false;
+    }
+    fprintf(file, "P6\n%d %d\n255\n", width, height);
+    for (int row = height - 1; row >= 0; row -= 1) {
+        fwrite(pixels + (size_t)row * row_bytes, 1, row_bytes, file);
+    }
+    fclose(file);
+    free(pixels);
+    return true;
+}
+#else
+bool kg_capture_swapchain_ppm(const char* path) {
+    (void)path;
+    return false;
+}
+#endif
+
+// Prints the lifetime report Kira asks for, gated behind the same two env
+// vars the old table-reading version was. Kira is the one sampling now — it
+// owns the running peaks (see `kiraGraphicsSokolFrame`) and reads the current
+// `sg_stats` itself through the generated bindings — so this is pure output
+// formatting over the two values it hands over, no state of its own.
+void kg_report_lifetime(sg_stats stats, kg_lifetime_peaks peaks) {
     if (!kg_lifetime_report_enabled()) {
         return;
     }
-    kg_update_lifetime_peaks();
     fprintf(stderr,
-        "Kira Graphics lifetime report: shaders=%d pipelines=%d textures=%d uniforms=%d bindGroups=%d\n",
-        kg_shader_record_count,
-        kg_pipeline_record_count,
-        kg_texture_record_count,
-        kg_active_uniform_count(),
-        kg_active_bind_group_count());
-    if (kg_lifetime_detail_enabled() && sg_isvalid()) {
-        sg_stats stats = sg_query_stats();
+        "Kira Graphics lifetime report: buffers=%u images=%u samplers=%u views=%u shaders=%u pipelines=%u\n",
+        stats.total.buffers.alive,
+        stats.total.images.alive,
+        stats.total.samplers.alive,
+        stats.total.views.alive,
+        stats.total.shaders.alive,
+        stats.total.pipelines.alive);
+    if (kg_lifetime_detail_enabled()) {
         fprintf(stderr,
-            "Kira Graphics lifetime detail: buffers current=%u peak=%u allocated=%u deallocated=%u images current=%u peak=%u allocated=%u deallocated=%u samplers current=%u peak=%u allocated=%u deallocated=%u views current=%u peak=%u allocated=%u deallocated=%u shaders current=%u peak=%u allocated=%u deallocated=%u pipelines current=%u peak=%u allocated=%u deallocated=%u uniforms current=%d peak=%d bindGroups current=%d peak=%d\n",
-            stats.total.buffers.alive, kg_lifetime_peaks.buffers, stats.total.buffers.allocated, stats.total.buffers.deallocated,
-            stats.total.images.alive, kg_lifetime_peaks.images, stats.total.images.allocated, stats.total.images.deallocated,
-            stats.total.samplers.alive, kg_lifetime_peaks.samplers, stats.total.samplers.allocated, stats.total.samplers.deallocated,
-            stats.total.views.alive, kg_lifetime_peaks.views, stats.total.views.allocated, stats.total.views.deallocated,
-            stats.total.shaders.alive, kg_lifetime_peaks.shaders, stats.total.shaders.allocated, stats.total.shaders.deallocated,
-            stats.total.pipelines.alive, kg_lifetime_peaks.pipelines, stats.total.pipelines.allocated, stats.total.pipelines.deallocated,
-            kg_active_uniform_count(), kg_lifetime_peaks.uniforms,
-            kg_active_bind_group_count(), kg_lifetime_peaks.bind_groups);
+            "Kira Graphics lifetime detail: buffers current=%u peak=%u allocated=%u deallocated=%u images current=%u peak=%u allocated=%u deallocated=%u samplers current=%u peak=%u allocated=%u deallocated=%u views current=%u peak=%u allocated=%u deallocated=%u shaders current=%u peak=%u allocated=%u deallocated=%u pipelines current=%u peak=%u allocated=%u deallocated=%u\n",
+            stats.total.buffers.alive, peaks.buffers, stats.total.buffers.allocated, stats.total.buffers.deallocated,
+            stats.total.images.alive, peaks.images, stats.total.images.allocated, stats.total.images.deallocated,
+            stats.total.samplers.alive, peaks.samplers, stats.total.samplers.allocated, stats.total.samplers.deallocated,
+            stats.total.views.alive, peaks.views, stats.total.views.allocated, stats.total.views.deallocated,
+            stats.total.shaders.alive, peaks.shaders, stats.total.shaders.allocated, stats.total.shaders.deallocated,
+            stats.total.pipelines.alive, peaks.pipelines, stats.total.pipelines.allocated, stats.total.pipelines.deallocated);
     }
-}
-
-void kg_sample_lifetime_frame(void) {
-    kg_update_lifetime_peaks();
-}
-
-void kg_maybe_request_quit_after_frame(int64_t frame_index) {
-    const char* value = getenv("KIRA_GRAPHICS_QUIT_AFTER_FRAMES");
-    if (value == NULL || value[0] == '\0' || value[0] == '0') {
-        return;
-    }
-    const long long limit = atoll(value);
-    if (limit > 0 && frame_index >= limit) {
-        sapp_request_quit();
-    }
-}
-
-int64_t kg_event_frame_count(const sapp_event* event) {
-    return event ? (int64_t)event->frame_count : 0;
-}
-
-int64_t kg_event_type(const sapp_event* event) {
-    return event ? (int64_t)event->type : 0;
-}
-
-int64_t kg_event_key_code(const sapp_event* event) {
-    return event ? (int64_t)event->key_code : 0;
-}
-
-int64_t kg_event_char_code(const sapp_event* event) {
-    return event ? (int64_t)event->char_code : 0;
-}
-
-int64_t kg_event_key_repeat(const sapp_event* event) {
-    return event ? (int64_t)(event->key_repeat ? 1 : 0) : 0;
-}
-
-int64_t kg_event_modifiers(const sapp_event* event) {
-    return event ? (int64_t)event->modifiers : 0;
-}
-
-int64_t kg_event_mouse_button(const sapp_event* event) {
-    return event ? (int64_t)event->mouse_button : 256;
-}
-
-double kg_event_mouse_x(const sapp_event* event) {
-    return event ? (double)event->mouse_x : 0.0;
-}
-
-double kg_event_mouse_y(const sapp_event* event) {
-    return event ? (double)event->mouse_y : 0.0;
-}
-
-double kg_event_mouse_dx(const sapp_event* event) {
-    return event ? (double)event->mouse_dx : 0.0;
-}
-
-double kg_event_mouse_dy(const sapp_event* event) {
-    return event ? (double)event->mouse_dy : 0.0;
-}
-
-int64_t kg_event_touch_count(const sapp_event* event) {
-    return event ? (int64_t)event->num_touches : 0;
-}
-
-double kg_event_touch_x(const sapp_event* event, int64_t index) {
-    if (event == NULL || index < 0 || index >= (int64_t)event->num_touches) {
-        return 0.0;
-    }
-    return (double)event->touches[index].pos_x;
-}
-
-double kg_event_touch_y(const sapp_event* event, int64_t index) {
-    if (event == NULL || index < 0 || index >= (int64_t)event->num_touches) {
-        return 0.0;
-    }
-    return (double)event->touches[index].pos_y;
-}
-
-double kg_event_scroll_x(const sapp_event* event) {
-    return event ? (double)event->scroll_x : 0.0;
-}
-
-double kg_event_scroll_y(const sapp_event* event) {
-    return event ? (double)event->scroll_y : 0.0;
-}
-
-int64_t kg_event_window_width(const sapp_event* event) {
-    return event ? (int64_t)event->window_width : 0;
-}
-
-int64_t kg_event_window_height(const sapp_event* event) {
-    return event ? (int64_t)event->window_height : 0;
-}
-
-int64_t kg_event_framebuffer_width(const sapp_event* event) {
-    return event ? (int64_t)event->framebuffer_width : 0;
-}
-
-int64_t kg_event_framebuffer_height(const sapp_event* event) {
-    return event ? (int64_t)event->framebuffer_height : 0;
 }
 
 static void kg_encode_utf8_from_codepoint(int64_t codepoint, char out[8]) {
@@ -4942,77 +2184,3 @@ static void kg_encode_utf8_from_codepoint(int64_t codepoint, char out[8]) {
     }
 }
 
-const char* kg_codepoint_utf8(int64_t codepoint) {
-    static char buffer[8];
-    kg_encode_utf8_from_codepoint(codepoint, buffer);
-    return buffer;
-}
-
-const char* kg_string_append_codepoint(const char* base, int64_t codepoint) {
-    static char buffer[4096];
-    char encoded[8];
-    kg_encode_utf8_from_codepoint(codepoint, encoded);
-    size_t base_len = base ? strlen(base) : 0;
-    size_t encoded_len = strlen(encoded);
-    if (base_len >= sizeof(buffer)) {
-        base_len = sizeof(buffer) - 1;
-    }
-    if (encoded_len > sizeof(buffer) - 1 - base_len) {
-        encoded_len = sizeof(buffer) - 1 - base_len;
-    }
-    if (base_len > 0 && base) {
-        memcpy(buffer, base, base_len);
-    }
-    if (encoded_len > 0) {
-        memcpy(buffer + base_len, encoded, encoded_len);
-    }
-    buffer[base_len + encoded_len] = '\0';
-    return buffer;
-}
-
-const char* kg_string_concat(const char* a, const char* b) {
-    static char buffer[4096];
-    size_t a_len = a ? strlen(a) : 0;
-    size_t b_len = b ? strlen(b) : 0;
-    if (a_len >= sizeof(buffer)) {
-        a_len = sizeof(buffer) - 1;
-    }
-    if (b_len > sizeof(buffer) - 1 - a_len) {
-        b_len = sizeof(buffer) - 1 - a_len;
-    }
-    if (a_len > 0 && a) {
-        memcpy(buffer, a, a_len);
-    }
-    if (b_len > 0 && b) {
-        memcpy(buffer + a_len, b, b_len);
-    }
-    buffer[a_len + b_len] = '\0';
-    return buffer;
-}
-
-const char* kg_string_drop_last_scalar(const char* base) {
-    static char buffer[4096];
-    if (base == NULL) {
-        buffer[0] = '\0';
-        return buffer;
-    }
-    size_t len = strlen(base);
-    if (len >= sizeof(buffer)) {
-        len = sizeof(buffer) - 1;
-    }
-    memcpy(buffer, base, len);
-    buffer[len] = '\0';
-    if (len == 0) {
-        return buffer;
-    }
-    size_t index = len;
-    while (index > 0) {
-        index -= 1;
-        if ((buffer[index] & 0xC0) != 0x80) {
-            buffer[index] = '\0';
-            return buffer;
-        }
-    }
-    buffer[0] = '\0';
-    return buffer;
-}
