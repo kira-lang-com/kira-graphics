@@ -31,7 +31,7 @@ function metalRegistryKindFree() -> U8 { return 0 }
 @Native
 function metalStashCommandBuffer(ctx: RawPtr, commandBuffer: RawPtr) {
     let previous = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
-    if !metalPtrIsNull(previous) {
+    if !pointerIsNull(previous) {
         metalMsgSendVoid(previous, metalSel("release"))
     }
     metalMsgSendVoid(commandBuffer, metalSel("retain"))
@@ -46,7 +46,7 @@ function metalStashCommandBuffer(ctx: RawPtr, commandBuffer: RawPtr) {
 @Native
 function metalContextActiveCommandBuffer(ctx: RawPtr) -> RawPtr {
     var commandBuffer = metalMemReadPtr(ctx, metalOffsetActiveCommandBuffer())
-    if !metalPtrIsNull(commandBuffer) {
+    if !pointerIsNull(commandBuffer) {
         return commandBuffer
     }
     metalPacingBeginPass(ctx)
@@ -184,7 +184,7 @@ function metalUnregister(ctx: RawPtr, id: Int) {
     }
     let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
     let entry = metalMemReadPtr(registry, slot * 8)
-    if !metalPtrIsNull(entry) {
+    if !pointerIsNull(entry) {
         if kind == metalRegistryKindRawBlock() {
             metalMemFree(entry)
         } else {

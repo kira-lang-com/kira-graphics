@@ -1,0 +1,321 @@
+import Foundation
+// Metal's answers to `RenderBackend`.
+//
+// One member per operation the public surface dispatches, each a call into the
+// `metal*` functions beside this file. `context` is the Metal context object the
+// run loop built; it is null only inside `runApplication`, which is what creates
+// it.
+//
+// Nothing here inherits a body. Every member below was written for Metal, which
+// is the guarantee the family exists to give: an operation this backend has not
+// implemented does not compile, so it can never be discovered as a missing
+// draw.
+RenderBackend MetalRenderBackend(context: RawPtr) {
+    // --- shaders ---------------------------------------------------------
+    function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult {
+        return shaderResult(metalCreateGraphicsShader(context, descriptor.vertexSource))
+    }
+
+    // `kira shader build` writes one combined `.metal` library per KSL shader —
+    // both stages in one source, which is what `newLibraryWithSource:` takes and
+    // what the inline-artifact path already hands over as `combinedMsl`. So the
+    // asset on disk is read here rather than routed through the sokol compiler,
+    // which is what this used to do: it handed back a `sg_shader` id the Metal
+    // context has no way to use.
+    function createShaderFromKsl(descriptor: borrow KslShaderDescriptor) -> ShaderResult {
+        let source = readFile(descriptor.directory + "/" + descriptor.asset + ".metal")
+        if !source.ok {
+            graphicsDiagnostic("Kira Graphics: no Metal library for '" + descriptor.asset + "' in " + descriptor.directory + " — run `kira shader build`")
+            return .Error(.AssetUnreadable)
+        }
+        return shaderResult(metalCreateGraphicsShader(context, source.text))
+    }
+
+    function createShaderFromKslArtifact(label: borrow String, artifact: borrow KslArtifact) -> ShaderResult {
+        return shaderResult(metalCreateGraphicsShader(context, artifact.combinedMsl))
+    }
+
+    function destroyShader(shader: borrow GraphicsShader) -> Void {
+        metalUnregister(context, shader.id)
+        return
+    }
+
+    // --- pipelines -------------------------------------------------------
+    function createRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> PipelineResult {
+        return pipelineResult(metalCreateGraphicsRenderPipeline(context, descriptor))
+    }
+
+    function destroyPipeline(pipeline: borrow RenderPipeline) -> Void {
+        metalUnregister(context, pipeline.id)
+        return
+    }
+
+    // --- buffers ---------------------------------------------------------
+    function createDynamicBuffer(label: borrow String, floatCapacity: Int) -> DynamicBufferResult {
+        return metalCreateGraphicsDynamicBuffer(context, floatCapacity)
+    }
+
+    function dynamicBufferFrameStart(buffer: borrow GraphicsBuffer) -> Int {
+        return metalDynamicBufferFrameStart(context, buffer.id)
+    }
+
+    // Nothing to do: the write already landed in the buffer the GPU reads, which
+    // is what `createDynamicBuffer` handed back as `contents`.
+    function commitDynamicBuffer(buffer: borrow GraphicsBuffer, contents: RawPtr, floatCount: Int) -> Void {
+        return
+    }
+
+    function createBuffer(descriptor: borrow BufferDescriptor) -> BufferResult {
+        return bufferResult(metalCreateGraphicsBuffer(context, descriptor.data))
+    }
+
+    function createIndexBuffer(descriptor: borrow IndexBufferDescriptor) -> BufferResult {
+        return bufferResult(metalCreateGraphicsIndexBuffer(context, descriptor.data))
+    }
+
+    function destroyBuffer(buffer: borrow GraphicsBuffer) -> Void {
+        metalUnregister(context, buffer.id)
+        return
+    }
+
+    // --- uniforms --------------------------------------------------------
+    function createUniform(descriptor: borrow UniformDescriptor) -> UniformResult {
+        return uniformResult(metalMakeUniform(context, descriptor))
+    }
+
+    function updateUniform(uniform: borrow Uniform, data: borrow [F32]) -> Void {
+        metalUpdateUniform(context, uniform.id, data)
+        return
+    }
+
+    function destroyUniform(uniform: borrow Uniform) -> Void {
+        metalUnregister(context, uniform.id)
+        return
+    }
+
+    // --- bind groups -----------------------------------------------------
+    function createBindGroup(descriptor: borrow BindGroupDescriptor) -> BindGroupResult {
+        return bindGroupResult(metalCreateGraphicsBindGroup(context, descriptor))
+    }
+
+    function createUniformBindGroup(label: borrow String, uniformSlot: Int, uniform: borrow Uniform) -> BindGroupResult {
+        return bindGroupResult(metalCreateUniformBindGroup(context, uniformSlot, uniform))
+    }
+
+    function createStorageBufferBindGroup(label: borrow String, slot: Int, bufferId: U32) -> BindGroupResult {
+        return bindGroupResult(metalCreateGraphicsBufferBindGroup(context, slot, Int(bufferId)))
+    }
+
+    function beginBindGroup(label: borrow String) -> BindGroupResult {
+        return bindGroupResult(metalBeginGraphicsBindGroup(context))
+    }
+
+    function bindGroupAddTexture(group: borrow BindGroup, slot: Int, texture: borrow GraphicsTexture) -> Void {
+        metalBindGroupAddEntry(context, group.id, metalBindEntryKindTexture(), slot, texture.id)
+        return
+    }
+
+    function bindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: borrow GraphicsSampler) -> Void {
+        metalBindGroupAddEntry(context, group.id, metalBindEntryKindSampler(), slot, sampler.id)
+        return
+    }
+
+    function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroupResult {
+        return bindGroupResult(metalCreateGraphicsTextureSamplerBindGroup(context, textureSlot, texture, samplerSlot, sampler))
+    }
+
+    function destroyBindGroup(bindGroup: borrow BindGroup) -> Void {
+        metalUnregister(context, bindGroup.id)
+        return
+    }
+
+    // --- textures and samplers -------------------------------------------
+    function createTexture(descriptor: borrow TextureDescriptor) -> TextureResult {
+        return metalCreateGraphicsTexture(context, descriptor)
+    }
+
+    function createTextureFromPixels(descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
+        return metalCreateGraphicsTextureFromPixels(context, descriptor, pixels)
+    }
+
+    function updateTexture(texture: borrow GraphicsTexture, width: Int, height: Int, pixels: borrow [U8]) -> Void {
+        metalUpdateGraphicsTexture(context, texture, width, height, pixels)
+        return
+    }
+
+    function updateTextureBytes(texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) -> Void {
+        metalUpdateTextureBytes(context, texture.id, texture.width, texture.height, bytes, byteCount)
+        return
+    }
+
+    function destroyTexture(texture: borrow GraphicsTexture) -> Void {
+        metalUnregister(context, texture.id)
+        return
+    }
+
+    function createSampler(descriptor: borrow SamplerDescriptor) -> SamplerResult {
+        return samplerResult(metalCreateGraphicsSampler(context, descriptor))
+    }
+
+    function destroySampler(sampler: borrow GraphicsSampler) -> Void {
+        metalUnregister(context, sampler.id)
+        return
+    }
+
+    // --- the drawable ----------------------------------------------------
+    function backingScale() -> Float {
+        return metalContextScale(context)
+    }
+
+    // Recorded on the context by the run loop, because sokol's `sapp_*` are not
+    // valid here.
+    function contextWidth() -> Int {
+        return metalContextWidth(context)
+    }
+
+    function contextHeight() -> Int {
+        return metalContextHeight(context)
+    }
+
+    // The run loop keeps the context's width/height tracking the host view's
+    // bounds, which Metal reports in points, so reading them reflows the UI to
+    // the current window size during an interactive resize.
+    function viewportWidth() -> Float {
+        return Float(metalContextWidth(context))
+    }
+
+    function viewportHeight() -> Float {
+        return Float(metalContextHeight(context))
+    }
+
+    // --- compute ---------------------------------------------------------
+    function supportsCompute() -> Bool {
+        return true
+    }
+
+    // `entryName` is what Metal looks the kernel up by inside the one library
+    // its whole artifact compiled to.
+    function createComputePipeline(label: borrow String, shader: borrow GraphicsShader, entryName: borrow String) -> Int {
+        return metalCreateComputePipeline(context, shader.id, entryName)
+    }
+
+    function dispatchTextureComputePair(
+        horizontalPipeline: Int,
+        verticalPipeline: Int,
+        source: borrow GraphicsTexture,
+        tempNear: borrow GraphicsTexture,
+        tempFar: borrow GraphicsTexture,
+        outputNear: borrow GraphicsTexture,
+        outputFar: borrow GraphicsTexture,
+        sampler: borrow GraphicsSampler,
+        width: Int,
+        height: Int,
+    ) -> Void {
+        metalDispatchTextureComputePair(
+            context,
+            horizontalPipeline,
+            verticalPipeline,
+            Int(source.id),
+            Int(tempNear.id),
+            Int(tempFar.id),
+            Int(outputNear.id),
+            Int(outputFar.id),
+            Int(sampler.id),
+            width,
+            height,
+        )
+        return
+    }
+
+    function dispatchComputeBuffers(
+        pipeline: Int,
+        bufferIds: borrow [U32],
+        threadCount: Int,
+        threadsPerGroup: Int,
+    ) {
+        metalDispatchComputeBuffers(context, pipeline, bufferIds, threadCount, threadsPerGroup)
+        return
+    }
+
+    function dispatchDepthComputeBuffers(
+        pipeline: Int,
+        depth: borrow GraphicsTexture,
+        bufferIds: borrow [U32],
+        threadCount: Int,
+        threadsPerGroup: Int,
+    ) {
+        metalDispatchTextureBufferCompute(context, pipeline, Int(depth.id), bufferIds, threadCount, threadsPerGroup)
+        return
+    }
+
+    function readBufferU32(buffer: borrow GraphicsBuffer, index: Int) -> U32 {
+        return metalReadBufferU32(context, Int(buffer.id), index)
+    }
+
+    // Metal bakes no usage into a buffer, so words and indices are the same
+    // upload — one MTLBuffer holding the caller's 32-bit values.
+    function createStorageBufferWords(label: borrow String, data: borrow [U32]) -> BufferResult {
+        return bufferResult(metalCreateGraphicsIndexBuffer(context, data))
+    }
+
+    // A compute pass writes through the shader-write usage, which forfeits the
+    // compressed layout render passes get, and every later sample of that
+    // texture pays uncompressed-fetch latency for it. One blit on the frame's
+    // own command buffer restores the fast layout.
+    function optimizeTexture(textureId: Int) -> Void {
+        metalContextOptimizeTextureInFrame(context, textureId)
+        return
+    }
+
+    // --- frames and passes -----------------------------------------------
+    function monotonicNanoseconds() -> U64 {
+        return metalClockNs(metalClockUptimeRaw())
+    }
+
+    function framesInFlight() -> Int {
+        return Int(metalFramesInFlight())
+    }
+
+    function statistics() -> FrameStatistics {
+        return metalFrameStatistics(context, Int(metalFramesInFlight()))
+    }
+
+    function beginRenderPass(frame: borrow RenderFrame) -> Bool {
+        return metalBeginRenderPassFromFrame(frame, context)
+    }
+
+    function endPassAndCommit(frame: borrow RenderFrame) -> Void {
+        metalEndPassAndCommit(context)
+        return
+    }
+
+    // The Metal context goes in the first slot; the second is the sokol run
+    // loop's state, and handing the context through it would route every Metal
+    // draw into the sokol path.
+    function makeEncoder(passActive: Bool) -> RenderEncoder {
+        return makeRenderEncoderForBackend(passActive, context, nullPointer())
+    }
+
+    function submitFrame(frame: borrow RenderFrame) -> Void {
+        metalSubmitFrame(frame)
+        return
+    }
+
+    // The window the layer is attached to. Offscreen runs have no host view, so
+    // `metalViewWindowMode` answers for a null view rather than this reading the
+    // context twice.
+    function windowMode() -> WindowMode {
+        return metalViewWindowMode(metalMemReadPtr(context, metalOffsetHostView()))
+    }
+
+    function setWindowMode(mode: borrow WindowMode) -> Void {
+        metalViewSetWindowMode(metalMemReadPtr(context, metalOffsetHostView()), mode)
+        return
+    }
+
+    // --- the run loop ----------------------------------------------------
+    function runApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Void {
+        metalRunApplication(app, runtimeUserData)
+        return
+    }
+}

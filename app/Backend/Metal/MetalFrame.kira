@@ -1,4 +1,4 @@
-// Metal frame bridge: the seam the public GraphicsFrame dispatches to when its
+// Metal frame bridge: the seam the public RenderFrame dispatches to when its
 // backend is Metal. Mirrors the Sokol begin/end/submit contract but submits work
 // through the Metal context built from Objective-C messages.
 
@@ -25,14 +25,15 @@ function metalMapLoadAction(publicLoadAction: Int) -> U64 {
 // Begin the frame's render pass on the Metal context. Today this drives the
 // color clear; pipeline/buffer/draw encoding lands in later phases.
 @Native
-function metalBeginRenderPassFromFrame(frame: borrow GraphicsFrame, ctxPtr: RawPtr) -> Bool {
-    let load = metalMapLoadAction(frame.colorLoadAction)
+function metalBeginRenderPassFromFrame(frame: borrow RenderFrame, ctxPtr: RawPtr) -> Bool {
+    let color = frame.attachments.color
+    let load = metalMapLoadAction(loadActionCode(color.loadAction))
     // A custom texture target (multi-pass rendering) begins a targeted pass; the
     // default swapchain/offscreen target uses the context color texture.
-    if frame.colorTargetKind == renderTargetKindTexture() {
-        metalContextBeginClearTarget(ctxPtr, Int(frame.colorTextureId), load, frame.clearR, frame.clearG, frame.clearB, frame.clearA, frame.hasDepthAttachment)
+    if frame.attachments.isOffscreen() {
+        metalContextBeginClearTarget(ctxPtr, Int(frame.attachments.colorViewId()), load, color.clearColor.r, color.clearColor.g, color.clearColor.b, color.clearColor.a, frame.attachments.hasDepth)
     } else {
-        metalContextBeginClear(ctxPtr, load, frame.clearR, frame.clearG, frame.clearB, frame.clearA, frame.hasDepthAttachment)
+        metalContextBeginClear(ctxPtr, load, color.clearColor.r, color.clearColor.g, color.clearColor.b, color.clearColor.a, frame.attachments.hasDepth)
     }
     return true
 }
@@ -46,8 +47,8 @@ function metalEndPassAndCommit(ctxPtr: RawPtr) {
 
 // Submit the complete logical frame as one Metal command buffer.
 @Native
-function metalSubmitFrame(frame: borrow GraphicsFrame) {
-    metalContextSubmitActiveFrame(frame.metalContext)
+function metalSubmitFrame(frame: borrow RenderFrame) {
+    metalContextSubmitActiveFrame(frame.backendContext)
     return
 }
 

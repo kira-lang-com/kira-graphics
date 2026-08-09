@@ -20,9 +20,86 @@ function metalCreateTexture(ctx: RawPtr, width: Int, height: Int) -> Int {
     return metalRegister(ctx, texture)
 }
 
+// The `GraphicsTexture` the public API hands back, so a caller never learns
+// which backend minted the id. Metal has one object where sokol has an image
+// and separate views onto it, so the view fields repeat the texture rather than
+// sit at zero: code that reads `viewId` gets something that works on both.
+@Native
+function metalGraphicsTexture(textureId: Int) -> GraphicsTexture {
+    let id = U32(textureId)
+    return GraphicsTexture {
+        id: id
+        viewId: id
+        colorViewId: id
+        depthViewId: id
+        storageViewId: id
+    }
+}
+
+// Render-target-capable and sampled, in the requested format — what a
+// multi-pass renderer needs, e.g. the deferred-resolve visibility texture.
+@Native
+function metalCreateGraphicsTexture(ctx: RawPtr, descriptor: borrow TextureDescriptor) -> TextureResult {
+    return metalTextureResult(metalCreateColorTargetTexture(
+        ctx,
+        descriptor.width,
+        descriptor.height,
+        metalPixelFormatForTexture(textureFormatCode(descriptor.format)),
+        attachmentStorageCode(descriptor.storage)
+    ), descriptor.width, descriptor.height)
+}
+
+// A Metal id as an outcome: zero is the device declining, which is the only way
+// this path fails — the format and extent were already checked by the caller.
+//
+// The extent travels with the texture, as it does on the other backend: a pass
+// sized to this target, a managed depth buffer matched to it and a whole-image
+// upload into it all need the numbers, and asking Metal for them later means an
+// Objective-C round trip for something the caller just said.
+@Native
+function metalTextureResult(textureId: Int, width: Int, height: Int) -> TextureResult {
+    if textureId == 0 {
+        return .Error(.DeviceRefused)
+    }
+    var texture = metalGraphicsTexture(textureId)
+    texture.width = width
+    texture.height = height
+    return .Ok(move texture)
+}
+
+// Create a sampled texture and give it its pixels.
+//
+// The upload needs the CPU-writable linear rows a shared-storage texture has,
+// and every later sample would keep paying for that layout — so one blit
+// re-tiles it afterwards, which is the right trade for contents loaded once.
+@Native
+function metalCreateGraphicsTextureFromPixels(ctx: RawPtr, descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
+    let textureId = metalCreateTexture(ctx, descriptor.width, descriptor.height)
+    if textureId == 0 {
+        return .Error(.DeviceRefused)
+    }
+    metalUpdateTexture(ctx, textureId, descriptor.width, descriptor.height, pixels)
+    metalOptimizeTextureForGpu(ctx, textureId)
+    var texture = metalGraphicsTexture(textureId)
+    texture.width = descriptor.width
+    texture.height = descriptor.height
+    return .Ok(move texture)
+}
+
+// Replace a texture's pixels, leaving it CPU-writable for the next write.
+//
+// No re-tiling here, unlike the create path: a texture being updated is one
+// that will be updated again — a glyph atlas — and optimizing it would undo the
+// linear layout the next upload needs.
+@Native
+function metalUpdateGraphicsTexture(ctx: RawPtr, texture: borrow GraphicsTexture, width: Int, height: Int, pixels: borrow [U8]) {
+    metalUpdateTexture(ctx, Int(texture.id), width, height, pixels)
+    return
+}
+
 // Upload RGBA8 pixel bytes (row-major, 4 bytes/pixel) into a texture region.
 @Native
-function metalUpdateTexture(ctx: RawPtr, textureId: Int, width: Int, height: Int, data: borrow [Int]) {
+function metalUpdateTexture(ctx: RawPtr, textureId: Int, width: Int, height: Int, data: borrow [U8]) {
     let texture = metalLookup(ctx, textureId)
     let count = data.count
     let bytes = metalMemAlloc(count)
@@ -44,28 +121,28 @@ function metalUpdateTexture(ctx: RawPtr, textureId: Int, width: Int, height: Int
     return
 }
 
-// Upload RGBA8 pixel bytes into a sub-region (origin x,y, size w×h) of a texture.
-// Used by the UI glyph atlas, which rasterizes one glyph at a time and blits it to
-// its packed slot without re-uploading the whole atlas.
+// Replace a texture's contents from raw memory the caller already owns.
+//
+// The bytes go straight to `replaceRegion:` — nothing is staged, because the
+// caller's block is already C storage. That is the whole reason the API takes a
+// pointer rather than a Kira array: the one texture written this way is a glyph
+// atlas, whose CPU side has to exist anyway so a new glyph can be packed beside
+// the old ones, and copying it into an array to hand it back would cost a
+// megabyte-scale loop on every frame that adds a glyph.
 @Native
-function metalUpdateTextureRegion(ctx: RawPtr, textureId: Int, x: Int, y: Int, width: Int, height: Int, data: borrow [Int]) {
-    let texture = metalLookup(ctx, textureId)
-    let count = data.count
-    let bytes = metalMemAlloc(count)
-    var i = 0
-    while i < count {
-        metalMemWriteU8(bytes, i, data[i])
-        i = i + 1
+function metalUpdateTextureBytes(ctx: RawPtr, textureId: Int, width: Int, height: Int, bytes: RawPtr, byteCount: Int) {
+    if textureId == 0 || byteCount <= 0 || width <= 0 || height <= 0 {
+        return
     }
+    let texture = metalLookup(ctx, textureId)
     let region = metalMemAlloc(48)
-    metalMemWriteU64(region, 0, x)
-    metalMemWriteU64(region, 8, y)
+    metalMemWriteU64(region, 0, 0)
+    metalMemWriteU64(region, 8, 0)
     metalMemWriteU64(region, 16, 0)
     metalMemWriteU64(region, 24, width)
     metalMemWriteU64(region, 32, height)
     metalMemWriteU64(region, 40, 1)
     metalMsgSendReplaceRegion(texture, metalSel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), region, 0, bytes, width * 4)
-    metalMemFree(bytes)
     metalMemFree(region)
     return
 }

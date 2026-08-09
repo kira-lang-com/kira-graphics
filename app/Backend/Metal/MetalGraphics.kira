@@ -1,0 +1,166 @@
+// The Metal backend's answers to the public `Graphics` surface.
+//
+// `Graphics` is dispatch and nothing else: one `match` over the backend, one
+// call per arm. The work each arm names lives here for Metal and in
+// `SokolGraphics.kira` for sokol, so a reader following a method reaches the
+// backend that implements it in one step instead of scrolling past the other
+// backend's body.
+
+@Native
+function metalCreateGraphicsShader(ctx: RawPtr, source: borrow String) -> GraphicsShader {
+    let id = metalCreateShader(ctx, source)
+    return GraphicsShader {
+        id: id
+    }
+}
+
+@Native
+function metalCreateGraphicsRenderPipeline(ctx: RawPtr, descriptor: borrow RenderPipelineDescriptor) -> RenderPipeline {
+    var blendEnabled = false
+    if descriptor.colorTargets.count > 0 {
+        blendEnabled = descriptor.colorTargets[0].blend.enabled
+    }
+    var attrFormats: [Int] = []
+    var attrOffsets: [Int] = []
+    var ai = 0
+    while ai < descriptor.vertexLayout.attributes.count {
+        attrFormats.append(vertexFormatCode(descriptor.vertexLayout.attributes[ai].format))
+        attrOffsets.append(descriptor.vertexLayout.attributes[ai].offset)
+        ai = ai + 1
+    }
+    var colorFmt = metalPixelFormatBGRA8Unorm()
+    if descriptor.colorTargets.count > 0 {
+        colorFmt = metalPixelFormatForTexture(textureFormatCode(descriptor.colorTargets[0].format))
+    }
+    let id = metalCreateRenderPipelineWithEntries(ctx, descriptor.shader.id, colorFmt, descriptor.depthStencil.depthEnabled, blendEnabled, descriptor.vertexEntry, descriptor.fragmentEntry, descriptor.vertexLayout.stride, attrFormats, attrOffsets)
+    return RenderPipeline {
+        id: id
+    }
+}
+
+// The buffer and the memory a caller writes into, which on Metal are the same
+// storage: `contents` is the base of the ring the GPU reads, so a write lands in
+// the buffer itself and `commitDynamicBuffer` has nothing left to do.
+@Native
+function metalCreateGraphicsDynamicBuffer(ctx: RawPtr, floatCapacity: Int) -> DynamicBufferResult {
+    let id = metalCreateDynamicBuffer(ctx, floatCapacity)
+    if id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(DynamicBuffer {
+        buffer: metalGraphicsBuffer(id)
+        contents: metalDynamicBufferContents(ctx, id)
+    })
+}
+
+@Native
+function metalCreateGraphicsBuffer(ctx: RawPtr, data: borrow [F32]) -> GraphicsBuffer {
+    return metalGraphicsBuffer(metalCreateVertexBuffer(ctx, data))
+}
+
+@Native
+function metalCreateGraphicsIndexBuffer(ctx: RawPtr, data: borrow [U32]) -> GraphicsBuffer {
+    return metalGraphicsBuffer(metalCreateIndexBuffer(ctx, data))
+}
+
+@Native
+function metalGraphicsBuffer(id: Int) -> GraphicsBuffer {
+    return GraphicsBuffer {
+        id: id
+    }
+}
+
+// Metal keeps a uniform's values in its own ObjC-side ring buffer, tracked by
+// `id` through `ctx` — the `storage` every `Uniform` carries is the
+// Sokol draw path's own live payload (see `Uniform.kira`) and Metal never
+// reads it, so this is an inert placeholder.
+@Native
+function metalMakeUniform(ctx: RawPtr, descriptor: borrow UniformDescriptor) -> Uniform {
+    let id = metalCreateUniform(ctx, descriptor.expectedFloatCount)
+    metalUpdateUniform(ctx, id, descriptor.data)
+    return Uniform {
+        storage: nativeUserData(nativeState(UniformState {}))
+        id: id
+    }
+}
+
+// As with `Uniform.storage` above: Metal's bind groups live in their
+// own ObjC-side registry through `ctx`, and this `storage` is only ever read
+// by the Sokol draw path.
+@Native
+function metalGraphicsBindGroup(id: Int) -> BindGroup {
+    return BindGroup {
+        storage: nativeUserData(nativeState(BindGroupState {}))
+        id: id
+    }
+}
+
+@Native
+function metalCreateGraphicsBindGroup(ctx: RawPtr, descriptor: borrow BindGroupDescriptor) -> BindGroup {
+    let id = metalCreateBindGroup(ctx)
+    var index = 0
+    while index < descriptor.uniformEntries.count {
+        let entry = descriptor.uniformEntries[index]
+        metalBindGroupAddEntry(ctx, id, metalBindEntryKindUniform(), entry.uniformSlot, entry.uniform.id)
+        index = index + 1
+    }
+    index = 0
+    while index < descriptor.textureEntries.count {
+        let entry = descriptor.textureEntries[index]
+        metalBindGroupAddEntry(ctx, id, metalBindEntryKindTexture(), entry.textureSlot, entry.texture.id)
+        index = index + 1
+    }
+    index = 0
+    while index < descriptor.samplerEntries.count {
+        let entry = descriptor.samplerEntries[index]
+        metalBindGroupAddEntry(ctx, id, metalBindEntryKindSampler(), entry.samplerSlot, entry.sampler.id)
+        index = index + 1
+    }
+    return metalGraphicsBindGroup(id)
+}
+
+@Native
+function metalCreateUniformBindGroup(ctx: RawPtr, uniformSlot: Int, uniform: borrow Uniform) -> BindGroup {
+    let id = metalCreateBindGroup(ctx)
+    metalBindGroupAddEntry(ctx, id, metalBindEntryKindUniform(), uniformSlot, uniform.id)
+    return metalGraphicsBindGroup(id)
+}
+
+// A raw registered buffer at a uniform-style slot: the vertex stage reads it at
+// [[buffer(slot+1)]] because vertex buffer 0 holds the attribute stream, and the
+// fragment stage at [[buffer(slot)]].
+@Native
+function metalCreateGraphicsBufferBindGroup(ctx: RawPtr, slot: Int, bufferId: Int) -> BindGroup {
+    let id = metalCreateBindGroup(ctx)
+    metalBindGroupAddEntry(ctx, id, metalBindEntryKindUniform(), slot, bufferId)
+    return metalGraphicsBindGroup(id)
+}
+
+@Native
+function metalBeginGraphicsBindGroup(ctx: RawPtr) -> BindGroup {
+    return metalGraphicsBindGroup(metalCreateBindGroup(ctx))
+}
+
+@Native
+function metalCreateGraphicsTextureSamplerBindGroup(ctx: RawPtr, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroup {
+    let id = metalCreateBindGroup(ctx)
+    metalBindGroupAddEntry(ctx, id, metalBindEntryKindTexture(), textureSlot, texture.id)
+    metalBindGroupAddEntry(ctx, id, metalBindEntryKindSampler(), samplerSlot, sampler.id)
+    return metalGraphicsBindGroup(id)
+}
+
+@Native
+function metalCreateGraphicsSampler(ctx: RawPtr, descriptor: borrow SamplerDescriptor) -> GraphicsSampler {
+    var minFilter = metalSamplerFilterNearest()
+    if descriptor.minFilter == .Linear {
+        minFilter = metalSamplerFilterLinear()
+    }
+    var magFilter = metalSamplerFilterNearest()
+    if descriptor.magFilter == .Linear {
+        magFilter = metalSamplerFilterLinear()
+    }
+    let id = metalCreateSampler(ctx, minFilter, magFilter, metalSamplerAddressClampToEdge())
+    return GraphicsSampler {
+        id: id
+    }
+}

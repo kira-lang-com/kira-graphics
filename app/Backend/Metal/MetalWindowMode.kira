@@ -1,0 +1,102 @@
+import Foundation
+
+// Window presentation on the Metal backend's own NSWindow.
+//
+// This backend opens its window itself, so all three `WindowMode` states are
+// real here: `Windowed` is the decorated window, `WindowedBorderless` is the
+// same window with every decoration bit cleared, and `Fullscreen` is an AppKit
+// fullscreen space.
+//
+// The state is always READ off the window rather than remembered. A user can
+// leave a fullscreen space with the green button or a Mission Control gesture
+// and the program is never asked, so a stored copy would be wrong exactly when
+// something wanted to act on it.
+
+// NSWindowStyleMask. Borderless is the ABSENCE of every decoration bit, which is
+// why it is zero and not a flag of its own. FullScreen is a bit AppKit sets on
+// the window when it enters the space — read, never written; `toggleFullScreen:`
+// is what moves the window.
+function metalWindowStyleBorderless() -> U64 { return 0 }
+function metalWindowStyleTitledBit() -> U64 { return 1 }
+function metalWindowStyleFullScreenBit() -> U64 { return 16384 }
+
+function metalWindowStyleMaskFor(mode: borrow WindowMode) -> U64 {
+    match mode {
+        Windowed -> return metalWindowStyleMask();
+        WindowedBorderless -> return metalWindowStyleBorderless();
+        // A fullscreen window is opened decorated and then toggled: AppKit will
+        // not move an untitled window into a fullscreen space at all.
+        Fullscreen -> return metalWindowStyleMask();
+    }
+}
+
+function metalWindowWantsFullScreen(mode: borrow WindowMode) -> Bool {
+    match mode {
+        Windowed -> return false;
+        WindowedBorderless -> return false;
+        Fullscreen -> return true;
+    }
+}
+
+// One bit of a style mask. Higher bits are set on real windows
+// (FullSizeContentView, HUDWindow), so a bit test has to divide down and take
+// the remainder rather than compare the whole mask.
+function metalWindowStyleBitSet(mask: U64, bit: U64) -> Bool {
+    return (mask / bit) - ((mask / bit) / U64(2)) * U64(2) == U64(1)
+}
+
+@Native
+function metalWindowIsFullScreen(window: RawPtr) -> Bool {
+    return metalWindowStyleBitSet(metalMsgSendU64(window, metalSel("styleMask")), metalWindowStyleFullScreenBit())
+}
+
+// Put a freshly created window into the mode the application asked for. The
+// window is already decorated and on screen; only a fullscreen request has
+// anything left to do.
+@Native
+function metalWindowApplyStartMode(window: RawPtr, mode: borrow WindowMode): Void {
+    if metalWindowWantsFullScreen(mode) {
+        metalMsgSendVoidP(window, metalSel("toggleFullScreen:"), nullPointer())
+        return
+    }
+    metalMsgSendVoidU(window, metalSel("setStyleMask:"), metalWindowStyleMaskFor(mode))
+    return
+}
+
+@Native
+function metalViewWindowMode(view: RawPtr) -> WindowMode {
+    let window = metalMsgSend(view, metalSel("window"))
+    if pointerIsNull(window) {
+        return .Windowed
+    }
+    let mask = metalMsgSendU64(window, metalSel("styleMask"))
+    if metalWindowStyleBitSet(mask, metalWindowStyleFullScreenBit()) {
+        return .Fullscreen
+    }
+    if metalWindowStyleBitSet(mask, metalWindowStyleTitledBit()) {
+        return .Windowed
+    }
+    return .WindowedBorderless
+}
+
+@Native
+function metalViewSetWindowMode(view: RawPtr, mode: borrow WindowMode): Void {
+    let window = metalMsgSend(view, metalSel("window"))
+    if pointerIsNull(window) {
+        return
+    }
+    let wantsFullScreen = metalWindowWantsFullScreen(mode)
+    if metalWindowIsFullScreen(window) != wantsFullScreen {
+        // Restore the decoration before the toggle in either direction: AppKit
+        // refuses to enter a fullscreen space from an untitled window, and a
+        // window that left one untitled has no titlebar to come back to.
+        metalMsgSendVoidU(window, metalSel("setStyleMask:"), metalWindowStyleMask())
+        metalMsgSendVoidP(window, metalSel("toggleFullScreen:"), nullPointer())
+    }
+    if wantsFullScreen {
+        return
+    }
+    metalMsgSendVoidU(window, metalSel("setStyleMask:"), metalWindowStyleMaskFor(mode))
+    metalMsgSendVoidP(window, metalSel("makeKeyAndOrderFront:"), nullPointer())
+    return
+}

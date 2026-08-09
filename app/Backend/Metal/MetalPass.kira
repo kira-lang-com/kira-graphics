@@ -10,7 +10,7 @@
 // the MTLRenderPassDescriptor, attachments, command buffer and render-command
 // encoder, leaving the encoder recorded on the context.
 @Native
-function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b: F64, a: F64, depthEnabled: Bool) {
+function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: Float, g: Float, b: Float, a: Float, depthEnabled: Bool) {
     metalContextCountPass(ctx)
     // In layer mode, acquire the next CAMetalLayer drawable and render into its
     // texture; in offscreen mode, render into the fixed offscreen texture. Either
@@ -18,16 +18,16 @@ function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b:
     // (verification) targets exactly what was rendered.
     let layer = metalMemReadPtr(ctx, metalOffsetLayer())
     var texture = metalMemReadPtr(ctx, metalOffsetColorTexture())
-    if !metalPtrIsNull(layer) {
+    if !pointerIsNull(layer) {
         if metalMemReadU64(ctx, metalOffsetWindowState()) == U64(3) {
-            metalMemWritePtr(ctx, metalOffsetDrawable(), metalNullPtr())
+            metalMemWritePtr(ctx, metalOffsetDrawable(), nullPointer())
             texture = metalContextHiddenTarget(ctx)
         } else {
             metalContextReleaseHiddenTarget(ctx)
             let drawable = metalMsgSend(layer, metalSel("nextDrawable"))
-            if metalPtrIsNull(drawable) {
+            if pointerIsNull(drawable) {
                 texture = metalContextHiddenTarget(ctx)
-                metalMemWritePtr(ctx, metalOffsetDrawable(), metalNullPtr())
+                metalMemWritePtr(ctx, metalOffsetDrawable(), nullPointer())
             } else {
                 metalMemWritePtr(ctx, metalOffsetDrawable(), drawable)
                 texture = metalMsgSend(drawable, metalSel("texture"))
@@ -72,9 +72,9 @@ function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: F64, g: F64, b:
 @Native
 function metalContextEndPass(ctx: RawPtr) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
-    if !metalPtrIsNull(encoder) {
+    if !pointerIsNull(encoder) {
         metalMsgSendVoid(encoder, metalSel("endEncoding"))
-        metalMemWritePtr(ctx, metalOffsetEncoder(), metalNullPtr())
+        metalMemWritePtr(ctx, metalOffsetEncoder(), nullPointer())
     }
     return
 }
@@ -83,14 +83,14 @@ function metalContextEndPass(ctx: RawPtr) {
 @Native
 function metalContextSubmitActiveFrame(ctx: RawPtr) {
     let commandBuffer = metalMemReadPtr(ctx, metalOffsetActiveCommandBuffer())
-    if metalPtrIsNull(commandBuffer) {
+    if pointerIsNull(commandBuffer) {
         return
     }
     // Present the drawable in layer mode before committing.
     let drawable = metalMemReadPtr(ctx, metalOffsetDrawable())
-    if !metalPtrIsNull(drawable) {
+    if !pointerIsNull(drawable) {
         metalMsgSendVoidP(commandBuffer, metalSel("presentDrawable:"), drawable)
-        metalMemWritePtr(ctx, metalOffsetDrawable(), metalNullPtr())
+        metalMemWritePtr(ctx, metalOffsetDrawable(), nullPointer())
     }
     metalMsgSendVoid(commandBuffer, metalSel("commit"))
     metalStashCommandBuffer(ctx, commandBuffer)
@@ -102,7 +102,7 @@ function metalContextSubmitActiveFrame(ctx: RawPtr) {
     // an artefact that survives it is not the CPU writing memory a running frame is
     // reading — which is what the uniform ring in MetalPacing.kira now prevents by
     // construction, and what this variable proved was happening before it existed.
-    if !metalPtrIsNull(metalGetEnv("KIRA_METAL_SYNC_FRAME")) {
+    if !pointerIsNull(metalGetEnv("KIRA_METAL_SYNC_FRAME")) {
         metalMsgSendVoid(commandBuffer, metalSel("waitUntilCompleted"))
     }
     // Frame tally for KIRA_METAL_RACE_PROBE: sentinel, overlapping uniform writes,
@@ -116,7 +116,7 @@ function metalContextSubmitActiveFrame(ctx: RawPtr) {
         metalMemWriteU64(ctx, metalOffsetRaceOverlaps(), 0)
         metalMemWriteU64(ctx, metalOffsetRaceWrites(), 0)
     }
-    metalMemWritePtr(ctx, metalOffsetActiveCommandBuffer(), metalNullPtr())
+    metalMemWritePtr(ctx, metalOffsetActiveCommandBuffer(), nullPointer())
     // No waitUntilCompleted otherwise: the on-screen path presents the drawable (which
     // sequences its own work and never blocks), and the offscreen path only needs
     // GPU completion when a pixel is read back — so the wait lives in
@@ -137,7 +137,7 @@ function metalContextEndAndCommit(ctx: RawPtr) {
 @Native
 function metalContextWaitForGpu(ctx: RawPtr) {
     let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
-    if !metalPtrIsNull(pending) {
+    if !pointerIsNull(pending) {
         metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
     }
     return
@@ -153,7 +153,7 @@ function metalContextReadPixel(ctx: RawPtr, x: Int, y: Int) -> U32 {
     // per-frame wait was removed from metalContextEndAndCommit so offscreen frames
     // pipeline; correctness for the readback path is restored here).
     let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
-    if !metalPtrIsNull(pending) {
+    if !pointerIsNull(pending) {
         metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
     }
     let texture = metalMemReadPtr(ctx, metalOffsetColorTexture())
@@ -189,12 +189,12 @@ function metalContextReadPixel(ctx: RawPtr, x: Int, y: Int) -> U32 {
 // queue, which waiting on the pending command buffer alone does not.
 function metalContextReadableColorTexture(ctx: RawPtr) -> RawPtr {
     let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
-    if !metalPtrIsNull(pending) {
+    if !pointerIsNull(pending) {
         metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
     }
     let texture = metalMemReadPtr(ctx, metalOffsetColorTexture())
     let queue = metalMemReadPtr(ctx, metalOffsetQueue())
-    if metalPtrIsNull(texture) || metalPtrIsNull(queue) {
+    if pointerIsNull(texture) || pointerIsNull(queue) {
         return texture
     }
     let cmd = metalMsgSend(queue, metalSel("commandBuffer"))
@@ -209,7 +209,7 @@ function metalContextReadableColorTexture(ctx: RawPtr) -> RawPtr {
 @Native
 function metalContextImageDigest(ctx: RawPtr, width: Int, height: Int) -> U32 {
     let texture = metalContextReadableColorTexture(ctx)
-    if metalPtrIsNull(texture) {
+    if pointerIsNull(texture) {
         return 0
     }
     let bytesPerRow = width * 4
@@ -244,7 +244,7 @@ function metalContextImageDigest(ctx: RawPtr, width: Int, height: Int) -> U32 {
 @Native
 function metalContextImageDump(ctx: RawPtr, width: Int, height: Int, path: RawPtr) {
     let texture = metalContextReadableColorTexture(ctx)
-    if metalPtrIsNull(texture) {
+    if pointerIsNull(texture) {
         return
     }
     let bytesPerRow = width * 4
@@ -259,7 +259,7 @@ function metalContextImageDump(ctx: RawPtr, width: Int, height: Int, path: RawPt
     metalMemWriteU64(region, 40, 1)
     metalMsgSendGetBytes(texture, metalSel("getBytes:bytesPerRow:fromRegion:mipmapLevel:"), buf, U64(bytesPerRow), region, 0)
     let stream = metalFOpen(path, "wb")
-    if !metalPtrIsNull(stream) {
+    if !pointerIsNull(stream) {
         let written = metalFWrite(buf, 1, U64(total), stream)
         let ignored = written + 0
         metalFClose(stream)
