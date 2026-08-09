@@ -26,7 +26,15 @@ shader LiquidGlassBackground {
         function entry(input: VertexIn) -> VertexOut {
             let result: VertexOut
             result.clip_position = Float4(input.position, 0.0, 1.0)
-            result.uv = input.position * 0.5 + Float2(0.5, 0.5)
+            // Clip space runs upwards and an image's rows run downwards, so the
+            // vertical coordinate is turned over here. The backdrop is the one
+            // texture in this example that comes from a file rather than from a
+            // pass this program rendered, and a decoder hands back its first row
+            // first; every other sample in the chain reads a render target and
+            // keeps the untouched mapping.
+            let uv = input.position * 0.5 + Float2(0.5, 0.5)
+            uv.y = 1.0 - uv.y
+            result.uv = uv
             return result
         }
     }

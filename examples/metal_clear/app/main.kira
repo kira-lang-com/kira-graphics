@@ -13,7 +13,7 @@ function main() {
         width: 64
         height: 64
         sampleCount: 1
-        backend: GraphicsBackend.Metal
+        backend: RenderBackendKind.Metal
     }
 
     app.onFrame { frame in
@@ -28,6 +28,6 @@ function main() {
         return
     }
 
-    app.run(metalNullPtr())
+    app.run(nullPointer())
     return
 }

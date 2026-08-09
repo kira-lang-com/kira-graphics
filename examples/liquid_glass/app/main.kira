@@ -22,7 +22,7 @@ struct LiquidGlassState {
     var compositeBindings: BindGroup
 }
 
-function fullScreenVertices() -> [Float] {
+function fullScreenVertices() -> [F32] {
     return [
         -1.0, -1.0,
         3.0, -1.0,
@@ -37,15 +37,15 @@ function fullScreenLayout() -> VertexLayout {
             VertexAttribute {
                 name: "position"
                 location: 0
-                format: vertexFormatFloat2()
+                format: VertexFormat.Float2
                 offset: 0
             }
         ]
     }
 }
 
-function makePipeline(graphics: borrow Graphics, label: String, shader: GraphicsShader, colorFormat: Int, depthFormat: Int) -> RenderPipeline {
-    return graphics.createRenderPipeline(RenderPipelineDescriptor {
+function makePipeline(graphics: borrow Graphics, label: String, shader: GraphicsShader, colorFormat: TextureFormat, depthFormat: TextureFormat) -> RenderPipeline {
+    return pipelineOrReport(graphics.createRenderPipeline(RenderPipelineDescriptor {
         label: label
         shader: shader
         vertexLayout: fullScreenLayout()
@@ -54,24 +54,24 @@ function makePipeline(graphics: borrow Graphics, label: String, shader: Graphics
                 format: colorFormat
                 blend: BlendState {
                     enabled: false
-                    preset: blendPresetReplace()
+                    preset: BlendPreset.Replace
                 }
             }
         ]
         depthStencil: DepthStencilDescriptor {
             depthEnabled: false
             depthWriteEnabled: false
-            depthCompare: compareFunctionAlways()
+            depthCompare: CompareFunction.Always
             format: depthFormat
         }
         rasterization: RasterizationDescriptor {
-            cullMode: cullModeNone()
-            frontFace: frontFaceCounterClockwise()
+            cullMode: CullMode.None
+            frontFace: FrontFace.CounterClockwise
         }
         primitive: PrimitiveDescriptor {
-            topology: primitiveTopologyTriangleList()
+            topology: PrimitiveTopology.TriangleList
         }
-    })
+    }), "create render pipeline")
 }
 
 function texturePass(label: String, texture: GraphicsTexture) -> RenderPassDescriptor {
@@ -80,13 +80,13 @@ function texturePass(label: String, texture: GraphicsTexture) -> RenderPassDescr
         colorAttachments: [
             ColorAttachment {
                 target: RenderTarget {
-                    kind: renderTargetKindTexture()
+                    kind: RenderTargetKind.Texture
                     texture: texture
                     mipLevel: 0
                     arrayLayer: 0
                 }
-                loadAction: loadActionClear()
-                storeAction: storeActionStore()
+                loadAction: LoadAction.Clear
+                storeAction: StoreAction.Store
                 clearColor: Color {
                     r: 0.0
                     g: 0.0
@@ -99,13 +99,13 @@ function texturePass(label: String, texture: GraphicsTexture) -> RenderPassDescr
         ]
         primaryColorAttachment: ColorAttachment {
             target: RenderTarget {
-                kind: renderTargetKindTexture()
+                kind: RenderTargetKind.Texture
                 texture: texture
                 mipLevel: 0
                 arrayLayer: 0
             }
-            loadAction: loadActionClear()
-            storeAction: storeActionStore()
+            loadAction: LoadAction.Clear
+            storeAction: StoreAction.Store
             clearColor: Color {
                 r: 0.0
                 g: 0.0
@@ -123,7 +123,7 @@ function texturePass(label: String, texture: GraphicsTexture) -> RenderPassDescr
     }
 }
 
-function renderLiquidPass(frame: borrow mut GraphicsFrame, pass: RenderPassDescriptor, pipeline: RenderPipeline, vertices: GraphicsBuffer) {
+function renderLiquidPass(frame: borrow mut RenderFrame, pass: RenderPassDescriptor, pipeline: RenderPipeline, vertices: GraphicsBuffer) {
     let encoder = frame.beginRenderPass(pass)
     encoder.setPipeline(pipeline)
     encoder.setVertexBuffer(vertices)
@@ -132,7 +132,7 @@ function renderLiquidPass(frame: borrow mut GraphicsFrame, pass: RenderPassDescr
     return
 }
 
-function renderBoundPass(frame: borrow mut GraphicsFrame, pass: RenderPassDescriptor, pipeline: RenderPipeline, vertices: GraphicsBuffer, bindings: BindGroup) {
+function renderBoundPass(frame: borrow mut RenderFrame, pass: RenderPassDescriptor, pipeline: RenderPipeline, vertices: GraphicsBuffer, bindings: BindGroup) {
     let encoder = frame.beginRenderPass(pass)
     encoder.setPipeline(pipeline)
     encoder.setVertexBuffer(vertices)
@@ -174,71 +174,75 @@ function main() {
 
     app.onInit { graphics in
         var liquid = nativeRecover<LiquidGlassState>(graphics.userData)
-        liquid.vertices = graphics.createBuffer(BufferDescriptor {
+        liquid.vertices = bufferOrReport(graphics.createBuffer(BufferDescriptor {
             label: "liquid-glass-fullscreen-triangle"
-            usage: bufferUsageVertex()
-            stride: 8
+            usage: BufferUsage.Vertex
             data: fullScreenVertices()
-        })
-        liquid.backgroundTexture = graphics.createTextureFromFile("liquid-glass-cubes", "assets/background-cubes.jpg")
-        liquid.sceneTarget = graphics.createTexture(TextureDescriptor {
+        }), "vertices")
+        liquid.backgroundTexture = textureOrReport(graphics.createTextureFromFile("liquid-glass-cubes", "assets/background-cubes.jpg"), "liquid-glass backdrop")
+        liquid.sceneTarget = textureOrReport(graphics.createTexture(TextureDescriptor {
             label: "liquid-glass-scene"
             width: 1600
             height: 900
-            format: textureFormatRgba8Unorm()
-            usage: textureUsageRenderTargetSampled()
+            format: TextureFormat.Rgba8Unorm
+            usage: TextureUsage.RenderTargetSampled
             sampleCount: 1
-            storageMode: attachmentStoragePersistent()
-        })
-        liquid.blurIntermediate = graphics.createTexture(TextureDescriptor {
+            storage: AttachmentStorage.Persistent
+        }), "liquid-glass scene target")
+        liquid.blurIntermediate = textureOrReport(graphics.createTexture(TextureDescriptor {
             label: "liquid-glass-blur-intermediate"
             width: 800
             height: 450
-            format: textureFormatRgba8Unorm()
-            usage: textureUsageRenderTargetSampled()
+            format: TextureFormat.Rgba8Unorm
+            usage: TextureUsage.RenderTargetSampled
             sampleCount: 1
-            storageMode: attachmentStoragePersistent()
-        })
-        liquid.blurFinal = graphics.createTexture(TextureDescriptor {
+            storage: AttachmentStorage.Persistent
+        }), "liquid-glass blur intermediate")
+        liquid.blurFinal = textureOrReport(graphics.createTexture(TextureDescriptor {
             label: "liquid-glass-blur-final"
             width: 800
             height: 450
-            format: textureFormatRgba8Unorm()
-            usage: textureUsageRenderTargetSampled()
+            format: TextureFormat.Rgba8Unorm
+            usage: TextureUsage.RenderTargetSampled
             sampleCount: 1
-            storageMode: attachmentStoragePersistent()
-        })
-        liquid.sampler = graphics.createSampler(SamplerDescriptor {
+            storage: AttachmentStorage.Persistent
+        }), "liquid-glass blur target")
+        liquid.sampler = samplerOrReport(graphics.createSampler(SamplerDescriptor {
             label: "liquid-glass-linear-sampler"
-            minFilter: textureFilterLinear()
-            magFilter: textureFilterLinear()
-            addressModeU: textureAddressModeClampToEdge()
-            addressModeV: textureAddressModeClampToEdge()
-        })
-        liquid.backgroundShader = graphics.createShaderFromKsl(KslShaderDescriptor {
+            minFilter: TextureFilter.Linear
+            magFilter: TextureFilter.Linear
+            addressModeU: AddressMode.ClampToEdge
+            addressModeV: AddressMode.ClampToEdge
+        }), "sampler")
+        liquid.backgroundShader = shaderOrReport(graphics.createShaderFromKsl(KslShaderDescriptor {
             label: "liquid-glass-background-shader"
             asset: "LiquidGlassBackground"
-        })
-        liquid.blurHorizontalShader = graphics.createShaderFromKsl(KslShaderDescriptor {
+        }), "background shader")
+        liquid.blurHorizontalShader = shaderOrReport(graphics.createShaderFromKsl(KslShaderDescriptor {
             label: "liquid-glass-blur-horizontal-shader"
             asset: "LiquidGlassBlurHorizontal"
-        })
-        liquid.blurVerticalShader = graphics.createShaderFromKsl(KslShaderDescriptor {
+        }), "blur horizontal shader")
+        liquid.blurVerticalShader = shaderOrReport(graphics.createShaderFromKsl(KslShaderDescriptor {
             label: "liquid-glass-blur-vertical-shader"
             asset: "LiquidGlassBlurVertical"
-        })
-        liquid.compositeShader = graphics.createShaderFromKsl(KslShaderDescriptor {
+        }), "blur vertical shader")
+        liquid.compositeShader = shaderOrReport(graphics.createShaderFromKsl(KslShaderDescriptor {
             label: "liquid-glass-composite-shader"
             asset: "LiquidGlassComposite"
-        })
-        liquid.backgroundPipeline = makePipeline(graphics, "liquid-glass-background", liquid.backgroundShader, textureFormatRgba8Unorm(), textureFormatNone())
-        liquid.blurHorizontalPipeline = makePipeline(graphics, "liquid-glass-blur-horizontal", liquid.blurHorizontalShader, textureFormatRgba8Unorm(), textureFormatNone())
-        liquid.blurVerticalPipeline = makePipeline(graphics, "liquid-glass-blur-vertical", liquid.blurVerticalShader, textureFormatRgba8Unorm(), textureFormatNone())
-        liquid.compositePipeline = makePipeline(graphics, "liquid-glass-composite", liquid.compositeShader, textureFormatSwapchain(), textureFormatDepth24Stencil8())
-        liquid.backgroundBindings = graphics.createTextureSamplerBindGroup("liquid-glass-background-bindings", 0, liquid.backgroundTexture, 0, liquid.sampler)
-        liquid.sceneBindings = graphics.createTextureSamplerBindGroup("liquid-glass-scene-bindings", 0, liquid.sceneTarget, 0, liquid.sampler)
-        liquid.blurIntermediateBindings = graphics.createTextureSamplerBindGroup("liquid-glass-blur-intermediate-bindings", 0, liquid.blurIntermediate, 0, liquid.sampler)
-        liquid.compositeBindings = graphics.createBindGroup(BindGroupDescriptor {
+        }), "composite shader")
+        liquid.backgroundPipeline = makePipeline(graphics, "liquid-glass-background", liquid.backgroundShader, TextureFormat.Rgba8Unorm, TextureFormat.None)
+        liquid.blurHorizontalPipeline = makePipeline(graphics, "liquid-glass-blur-horizontal", liquid.blurHorizontalShader, TextureFormat.Rgba8Unorm, TextureFormat.None)
+        liquid.blurVerticalPipeline = makePipeline(graphics, "liquid-glass-blur-vertical", liquid.blurVerticalShader, TextureFormat.Rgba8Unorm, TextureFormat.None)
+        liquid.compositePipeline = makePipeline(graphics, "liquid-glass-composite", liquid.compositeShader, TextureFormat.Swapchain, TextureFormat.None)
+        // Every slot is the resource's position in its `.ksl` group, which is
+        // what a shader's reflection reports and what a backend binds against.
+        // `Shaders/LiquidGlassBackground.ksl` and the two blur shaders declare
+        // `texture tex0` then `sampler smp0`, so the sampler is slot 1, not a
+        // second slot 0 in a space of its own.
+        liquid.backgroundBindings = bindGroupOrReport(graphics.createTextureSamplerBindGroup("liquid-glass-background-bindings", 0, liquid.backgroundTexture, 1, liquid.sampler), "background bindings")
+        liquid.sceneBindings = bindGroupOrReport(graphics.createTextureSamplerBindGroup("liquid-glass-scene-bindings", 0, liquid.sceneTarget, 1, liquid.sampler), "scene bindings")
+        liquid.blurIntermediateBindings = bindGroupOrReport(graphics.createTextureSamplerBindGroup("liquid-glass-blur-intermediate-bindings", 0, liquid.blurIntermediate, 1, liquid.sampler), "blur intermediate bindings")
+        liquid.compositeBindings = bindGroupOrReport(graphics.createBindGroup(BindGroupDescriptor {
             label: "liquid-glass-composite-bindings"
             uniformEntries: []
             textureEntries: [
@@ -252,16 +256,18 @@ function main() {
                 }
             ]
             samplerEntries: [
+                // `Shaders/LiquidGlassComposite.ksl` declares tex0, tex1, smp0,
+                // smp1 in that order, so the samplers are slots 2 and 3.
                 SamplerBindEntry {
-                    samplerSlot: 0
+                    samplerSlot: 2
                     sampler: liquid.sampler
                 },
                 SamplerBindEntry {
-                    samplerSlot: 1
+                    samplerSlot: 3
                     sampler: liquid.sampler
                 }
             ]
-        })
+        }), "composite bindings")
         return
     }
 
