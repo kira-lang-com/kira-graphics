@@ -1,0 +1,229 @@
+// Why a graphics resource could not be made.
+//
+// Every creation method used to answer failure with a zero handle: an id of 0,
+// an `emptyGraphicsTexture()`, a null pointer. A caller could see that
+// something went wrong and never why — a driver that refused the allocation and
+// an asset that could not be read both arrived as the same 0. That is what made
+// the liquid-glass backdrop bug take so long to attribute: `createTexture`
+// handed back a zero and the caller had nothing to distinguish "the device said
+// no" from "the file is missing".
+//
+// So the surface answers with a `Result` and names the reason. A caller writes
+// the failure it cares about and the compiler checks it handled every one:
+//
+//     attempt {
+//         let backdrop = try graphics.textureFromPixels(descriptor, pixels)
+//         demo.backdrop = backdrop
+//     } handle {
+//         DeviceRefused          { … }
+//         AssetUnreadable        { … }
+//         ShaderRejected         { … }
+//     }
+//
+// There is no "this backend cannot" reason. There was one, and it was the thing
+// that let a capability gap compile: every operation the surface offers is a
+// `@Required` member of `RenderBackend`, so a backend that has not implemented
+// one is `KSEM234` at build time rather than a `Result` a caller branches on at
+// run time. A reason here is something the *device* or the *asset* did.
+enum ResourceFailure {
+    // The backend was asked correctly and said no: an allocation it would not
+    // make, a view it would not mint. Out of memory, past a device limit, or a
+    // descriptor the driver rejected.
+    DeviceRefused
+    // The bytes could not be had: a file that is not there, one too short for
+    // the extent it was said to cover, or a container format the decoder does
+    // not read.
+    AssetUnreadable
+    // A shader did not compile, or compiled to nothing for this backend.
+    ShaderRejected
+}
+
+// What a caller reads when it wants the reason in a message rather than a
+// branch. The ONE place a reason is turned into words: every `*OrReport` below
+// routes its failure through here rather than naming the reasons itself, so a
+// fourth reason is one arm added in one function.
+@Native
+function resourceFailureReason(failure: ResourceFailure) -> String {
+    match failure {
+        DeviceRefused -> return "the device refused it";
+        AssetUnreadable -> return "the bytes could not be read";
+        ShaderRejected -> return "the shader did not compile";
+    }
+}
+
+// The outcomes the surface answers with. Named rather than written out at every
+// signature, so a reader sees one vocabulary instead of a generic instantiation
+// spelled six ways.
+type TextureResult = Result<GraphicsTexture, ResourceFailure>
+type BufferResult = Result<GraphicsBuffer, ResourceFailure>
+type DynamicBufferResult = Result<DynamicBuffer, ResourceFailure>
+type ShaderResult = Result<GraphicsShader, ResourceFailure>
+type PipelineResult = Result<RenderPipeline, ResourceFailure>
+type SamplerResult = Result<GraphicsSampler, ResourceFailure>
+type BindGroupResult = Result<BindGroup, ResourceFailure>
+type UniformResult = Result<Uniform, ResourceFailure>
+
+// Lifting a backend's id into an outcome.
+//
+// The backends answer with a resource whose id is 0 when the device declined —
+// that is the protocol they already speak, and it stays theirs. These are the
+// one place it becomes a reason.
+@Native
+function shaderResult(shader: GraphicsShader) -> ShaderResult {
+    if shader.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(shader)
+}
+
+@Native
+function pipelineResult(pipeline: RenderPipeline) -> PipelineResult {
+    if pipeline.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(pipeline)
+}
+
+@Native
+function bufferResult(buffer: GraphicsBuffer) -> BufferResult {
+    if buffer.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(buffer)
+}
+
+@Native
+function uniformResult(uniform: Uniform) -> UniformResult {
+    if uniform.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(uniform)
+}
+
+@Native
+function bindGroupResult(group: BindGroup) -> BindGroupResult {
+    if group.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(group)
+}
+
+@Native
+function samplerResult(sampler: GraphicsSampler) -> SamplerResult {
+    if sampler.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(sampler)
+}
+
+// The resource, or an empty one and a line saying why there is none.
+//
+// For a caller that already copes with a missing resource — it checks the id
+// and skips the work — but had no way to say what went wrong. The zero it gets
+// back is the same zero it got before; what is new is that the reason reaches
+// the log instead of being discarded at the call site.
+//
+// A caller that cannot proceed without the resource should `try` the outcome
+// instead and let the failure travel.
+//
+// Each of these matches the outcome rather than running an `attempt`/`handle`
+// ladder with one arm per reason. The ladder named all three reasons at all
+// eight of these sites and did the same thing in every arm — 24 arms whose only
+// content was which reason to hand to `resourceFailureReason`. `Error(failure)`
+// binds the reason instead, so the eight sites carry none of them.
+@Native
+function textureOrReport(outcome: TextureResult, what: borrow String) -> GraphicsTexture {
+    match outcome {
+        Ok(texture) -> return texture;
+        Error(failure) -> {
+            reportMissingResource(what, move failure)
+            return emptyGraphicsTexture()
+        }
+    }
+}
+
+@Native
+function shaderOrReport(outcome: ShaderResult, what: borrow String) -> GraphicsShader {
+    match outcome {
+        Ok(shader) -> return shader;
+        Error(failure) -> {
+            reportMissingResource(what, move failure)
+            return emptyGraphicsShader()
+        }
+    }
+}
+
+@Native
+function pipelineOrReport(outcome: PipelineResult, what: borrow String) -> RenderPipeline {
+    match outcome {
+        Ok(pipeline) -> return pipeline;
+        Error(failure) -> {
+            reportMissingResource(what, move failure)
+            return emptyRenderPipeline()
+        }
+    }
+}
+
+@Native
+function bufferOrReport(outcome: BufferResult, what: borrow String) -> GraphicsBuffer {
+    match outcome {
+        Ok(buffer) -> return buffer;
+        Error(failure) -> {
+            reportMissingResource(what, move failure)
+            return emptyGraphicsBuffer()
+        }
+    }
+}
+
+@Native
+function dynamicBufferOrReport(outcome: DynamicBufferResult, what: borrow String) -> DynamicBuffer {
+    match outcome {
+        Ok(buffer) -> return buffer;
+        Error(failure) -> {
+            reportMissingResource(what, move failure)
+            return DynamicBuffer {
+                buffer: emptyGraphicsBuffer()
+                contents: nullPointer()
+            }
+        }
+    }
+}
+
+@Native
+function uniformOrReport(outcome: UniformResult, what: borrow String) -> Uniform {
+    match outcome {
+        Ok(uniform) -> return uniform;
+        Error(failure) -> {
+            reportMissingResource(what, move failure)
+            return emptyUniform()
+        }
+    }
+}
+
+@Native
+function bindGroupOrReport(outcome: BindGroupResult, what: borrow String) -> BindGroup {
+    match outcome {
+        Ok(group) -> return group;
+        Error(failure) -> {
+            reportMissingResource(what, move failure)
+            return emptyBindGroup()
+        }
+    }
+}
+
+@Native
+function samplerOrReport(outcome: SamplerResult, what: borrow String) -> GraphicsSampler {
+    match outcome {
+        Ok(sampler) -> return sampler;
+        Error(failure) -> {
+            reportMissingResource(what, move failure)
+            return emptyGraphicsSampler()
+        }
+    }
+}
+
+@Native
+function reportMissingResource(what: borrow String, failure: ResourceFailure) {
+    graphicsDiagnostic("Kira Graphics: no " + what + " — " + resourceFailureReason(move failure))
+    return
+}

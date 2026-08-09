@@ -1,0 +1,33 @@
+// What one presented frame cost, as any backend can report it.
+//
+// The counters an application's HUD is built from. They used to be Metal's
+// alone — a caller asked `!pointerIsNull(frame.metalContext)` and, if that came
+// back false, showed zero for every row — so on any other backend the panel
+// said `CPU 0.0 ms  GPU 0.0 ms  Resources 0  0 passes 0 draws 0 tris`, which is
+// not a measurement of anything. This is the shape both backends answer in.
+//
+// Seconds and bytes, not milliseconds and MiB: a unit a reader picks for a
+// display belongs to the display.
+//
+// Two `has*` flags rather than a zero. A counter a backend cannot measure is
+// not a counter that measured zero, and a HUD that cannot tell the two apart
+// reports a fast frame where there is no timer at all.
+struct FrameStatistics {
+    var frameSeconds: Float = 0.0
+    var cpuSeconds: Float = 0.0
+    var gpuSeconds: Float = 0.0
+    var hasGpuSeconds: Bool = false
+    var drawableWidth: Int = 0
+    var drawableHeight: Int = 0
+    var allocatedBytes: U64 = 0
+    var hasAllocatedBytes: Bool = false
+    var resourceCount: Int = 0
+    var passCount: Int = 0
+    var drawCount: Int = 0
+    var triangleCount: Int = 0
+    var framesInFlight: Int = 1
+    var frameSerial: Int = 0
+    // 1 focused/visible, 2 unfocused/visible, 3 hidden. 0 is a backend that
+    // does not track it.
+    var windowState: Int = 0
+}

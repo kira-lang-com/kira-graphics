@@ -48,7 +48,7 @@ function objectUniforms(model: borrow Float4x4, baseColor: borrow Float4) -> Obj
     }
 }
 
-function sceneUniformData(uniforms: borrow SceneUniforms) -> [Float] {
+function sceneUniformData(uniforms: borrow SceneUniforms) -> [F32] {
     let m = uniforms.viewProjection
     let lightDirection = uniforms.lightDirection
     let lightColor = uniforms.lightColor
@@ -56,26 +56,26 @@ function sceneUniformData(uniforms: borrow SceneUniforms) -> [Float] {
     // Kira Graphics stores matrices as row/column fields for column-vector math.
     // GLSL receives mat4 values in column-major float order through sg_apply_uniforms.
     return [
-        m.m00, m.m10, m.m20, m.m30,
-        m.m01, m.m11, m.m21, m.m31,
-        m.m02, m.m12, m.m22, m.m32,
-        m.m03, m.m13, m.m23, m.m33,
-        lightDirection.x, lightDirection.y, lightDirection.z, lightDirection.w,
-        lightColor.x, lightColor.y, lightColor.z, lightColor.w
+        F32(m.m00), F32(m.m10), F32(m.m20), F32(m.m30),
+        F32(m.m01), F32(m.m11), F32(m.m21), F32(m.m31),
+        F32(m.m02), F32(m.m12), F32(m.m22), F32(m.m32),
+        F32(m.m03), F32(m.m13), F32(m.m23), F32(m.m33),
+        F32(lightDirection.x), F32(lightDirection.y), F32(lightDirection.z), F32(lightDirection.w),
+        F32(lightColor.x), F32(lightColor.y), F32(lightColor.z), F32(lightColor.w)
     ]
 }
 
-function objectUniformData(uniforms: borrow ObjectUniforms) -> [Float] {
+function objectUniformData(uniforms: borrow ObjectUniforms) -> [F32] {
     let m = uniforms.model
     let baseColor = uniforms.baseColor
 
     // Kira Graphics stores matrices as row/column fields for column-vector math.
     // GLSL receives mat4 values in column-major float order through sg_apply_uniforms.
     return [
-        m.m00, m.m10, m.m20, m.m30,
-        m.m01, m.m11, m.m21, m.m31,
-        m.m02, m.m12, m.m22, m.m32,
-        m.m03, m.m13, m.m23, m.m33,
-        baseColor.x, baseColor.y, baseColor.z, baseColor.w
+        F32(m.m00), F32(m.m10), F32(m.m20), F32(m.m30),
+        F32(m.m01), F32(m.m11), F32(m.m21), F32(m.m31),
+        F32(m.m02), F32(m.m12), F32(m.m22), F32(m.m32),
+        F32(m.m03), F32(m.m13), F32(m.m23), F32(m.m33),
+        F32(baseColor.x), F32(baseColor.y), F32(baseColor.z), F32(baseColor.w)
     ]
 }

@@ -1,14 +1,142 @@
-struct BindGroup {
-    var handle: BackendBindGroupHandle
+// A set of resources bound together at one or more encoder slots.
+//
+// The entries live behind `storage`, recovered through `nativeState` exactly
+// as `RenderEncoder`'s and `UiBatch`'s own state is: a caller almost always
+// holds a `BindGroup` through a `let` (`bindGroupOrReport` answers one), and
+// `nativeRecover` mutates what `storage` points to regardless of whether the
+// binding that read it was a `let` or a `var` — the same property that makes
+// `RenderEncoder.setPipeline` work without demanding `var encoder`.
+//
+// `kg_bind_group_record` used to cap each entry kind at four and store them in
+// fixed slots, because the C table had to reserve its shape up front. The
+// state here reserves nothing — it grows exactly as far as the entries a
+// caller adds — and a uniform entry holds a reference to the very
+// `Uniform` its caller passed in (see `Uniform.kira`), not a copy of
+// whatever it held when the entry was added.
+struct BindGroupState {
+    var label: String = ""
+    var uniformEntries: [UniformBindEntry] = []
+    var textureEntries: [TextureBindEntry] = []
+    var samplerEntries: [SamplerBindEntry] = []
+    var storageEntries: [StorageBindEntry] = []
+}
+
+class BindGroup {
+    var storage: RawPtr
     var id: U32 = 0
 }
 
 @Native
 function emptyBindGroup() -> BindGroup {
     return BindGroup {
-        handle: BackendBindGroupHandle {
-            id: 0
-        }
+        storage: nativeUserData(nativeState(BindGroupState {}))
         id: 0
     }
+}
+
+// sokol_gfx.h's `SG_MAX_UNIFORMBLOCK_BINDSLOTS` / `SG_MAX_VIEW_BINDSLOTS` /
+// `SG_MAX_SAMPLER_BINDSLOTS`. An entry's *slot* is checked against these
+// before it is kept — Sokol itself would only catch an out-of-range slot at
+// the draw that finally applies it, past the point a caller could tell why.
+function sokolMaxUniformBlockBindSlots() -> Int { return 8 }
+function sokolMaxViewBindSlots() -> Int { return 32 }
+function sokolMaxSamplerBindSlots() -> Int { return 12 }
+
+// Sokol's half of `Graphics.beginBindGroup` / `createBindGroup` /
+// `createUniformBindGroup` / `createTextureSamplerBindGroup`: an empty group
+// ready for entries. Never a resource sokol tracks — there is no
+// `sg_bind_group` — so there is nothing to allocate beyond this value.
+// 1 rather than a counter: sokol keys nothing on this id, so every live
+// group answers the same "not empty" sentinel `bindGroupResult` reads.
+@Native
+function sokolCreateBindGroupId(label: borrow String) -> BindGroup {
+    return BindGroup {
+        storage: nativeUserData(nativeState(BindGroupState {
+            label: label
+        }))
+        id: 1
+    }
+}
+
+@Native
+function sokolBindGroupAddUniform(group: borrow BindGroup, uniformSlot: Int, uniform: borrow Uniform) {
+    var state = nativeRecover<BindGroupState>(group.storage)
+    if uniformSlot < 0 || uniformSlot >= sokolMaxUniformBlockBindSlots() {
+        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' uniform slot is outside Sokol's supported uniform block range")
+        return
+    }
+    state.uniformEntries.append(UniformBindEntry {
+        uniformSlot: uniformSlot
+        uniform: uniform
+    })
+    return
+}
+
+@Native
+function sokolBindGroupAddTexture(group: borrow BindGroup, textureSlot: Int, texture: borrow GraphicsTexture) {
+    var state = nativeRecover<BindGroupState>(group.storage)
+    if texture.viewId == 0 {
+        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' cannot bind a texture with no sampled view")
+        return
+    }
+    if textureSlot < 0 || textureSlot >= sokolMaxViewBindSlots() {
+        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' texture slot is outside Sokol's supported view range")
+        return
+    }
+    state.textureEntries.append(TextureBindEntry {
+        textureSlot: textureSlot
+        texture: texture
+    })
+    return
+}
+
+@Native
+function sokolBindGroupAddSampler(group: borrow BindGroup, samplerSlot: Int, sampler: borrow GraphicsSampler) {
+    var state = nativeRecover<BindGroupState>(group.storage)
+    if sampler.id == 0 {
+        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' cannot bind sampler 0")
+        return
+    }
+    if samplerSlot < 0 || samplerSlot >= sokolMaxSamplerBindSlots() {
+        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' sampler slot is outside Sokol's supported sampler range")
+        return
+    }
+    state.samplerEntries.append(SamplerBindEntry {
+        samplerSlot: samplerSlot
+        sampler: sampler
+    })
+    return
+}
+
+@Native
+function sokolBindGroupAddStorageBuffer(group: borrow BindGroup, storageSlot: Int, viewId: U32) {
+    var state = nativeRecover<BindGroupState>(group.storage)
+    if viewId == 0 {
+        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' cannot bind a storage buffer with no view")
+        return
+    }
+    if storageSlot < 0 || storageSlot >= sokolMaxViewBindSlots() {
+        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' storage slot is outside Sokol's supported view range")
+        return
+    }
+    state.storageEntries.append(StorageBindEntry {
+        storageSlot: storageSlot
+        viewId: viewId
+    })
+    return
+}
+
+// A no-op on Sokol: a `BindGroup` is an ordinary Kira value with no device
+// resource behind it — it never was one, even in the C-side table this
+// replaced, which only ever held CPU-side bookkeeping.
+@Native
+function sokolDestroyBindGroupId(bindGroupId: U32) {
+    return
+}
+
+// The entries a `BindGroup` currently holds, for the draw path (see
+// `SokolDraw.kira`) to read.
+@Native
+function sokolBindGroupState(group: borrow BindGroup) -> BindGroupState {
+    return nativeRecover<BindGroupState>(group.storage)
 }

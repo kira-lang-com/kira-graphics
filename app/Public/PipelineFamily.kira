@@ -1,0 +1,156 @@
+import Foundation
+// A render pipeline as a **declaration** rather than a sequence of setter calls.
+//
+// A pipeline is configuration: a shader, a vertex layout, how it blends, whether
+// it depth-tests. None of that is a decision made per frame, so none of it wants
+// to be assembled imperatively at the point of use. Written as a declaration it
+// reads as what it is, and it sits in the file next to the shader it names:
+//
+//     Pipeline GlassComposite {
+//         shader { return kslArtifact("UiGlassFull") }
+//         vertices { return VertexStream(stride: 216, attributes: [...]) }
+//         blending { return .PremultipliedAlpha }
+//     }
+//
+// Nothing in the compiler knows the name `Pipeline`. It is an ordinary construct
+// family, the same surface `Test` and `Printable` are written in, so a package
+// that wants its own family of declarations declares one and gets the same
+// treatment.
+//
+// Only `shader` and `vertices` are required. A pipeline that says nothing about
+// blending, depth, culling or topology gets the defaults every one of those
+// members returns, which is what keeps a simple pipeline three lines long.
+
+// One attribute in the vertex stream a pipeline reads.
+@Derive(Equatable, Clone)
+struct VertexAttributeSpec {
+    var location: Int = 0
+    var format: VertexFormat = .Float4
+    var offset: Int = 0
+}
+
+// The vertex stream's shape: how wide one vertex is, and what it holds.
+struct VertexStream {
+    var stride: Int = 0
+    var attributes: [VertexAttributeSpec]
+}
+
+// How a pipeline's colour output combines with what is already there.
+@Derive(Equatable, Clone)
+struct Blending {
+    var enabled: Bool = true
+    var preset: BlendPreset = .PremultipliedAlpha
+}
+
+// Whether and how a pipeline depth-tests.
+@Derive(Equatable, Clone)
+struct DepthTest {
+    var enabled: Bool = false
+    var writes: Bool = false
+    var compare: CompareFunction = .Less
+    var format: TextureFormat = .None
+}
+
+// Which faces survive rasterization, and which winding is front.
+@Derive(Equatable, Clone)
+struct Rasterization {
+    var cull: CullMode = .None
+    var front: FrontFace = .CounterClockwise
+    var topology: PrimitiveTopology = .TriangleList
+}
+
+// What a declared pipeline amounts to, once its members have answered.
+//
+// The runtime reads this rather than the declaration, so building a pipeline
+// and declaring one stay separate: a declaration says what it is, and the
+// engine decides when to realize it.
+struct PipelinePlan {
+    var label: String = ""
+    // The shader it runs, as `ksl!` handed it back: every backend's compiled
+    // text at build time, so nothing reads a file to realize the pipeline.
+    // Foundation's artifact rather than a second one declared here, because
+    // structs are nominal and a shader compiled by one package has to be
+    // nameable by another.
+    var shader: KslArtifact
+    var vertices: VertexStream
+    var blending: Blending
+    var depth: DepthTest
+    var raster: Rasterization
+    var colorFormat: TextureFormat = .Swapchain
+}
+
+construct Pipeline {
+    // What it runs, and what it reads. A pipeline without these is not one.
+    @Required function shader() -> KslArtifact
+    @Required function vertices() -> VertexStream
+
+    // Everything a pipeline may leave unsaid, each carrying the answer a
+    // declaration gets for not mentioning it. This is what keeps a plain
+    // textured pipeline two members long: it states its shader and its
+    // vertices, and inherits the rest.
+    function blending() -> Blending { return Blending() }
+    function depth() -> DepthTest { return DepthTest() }
+    function raster() -> Rasterization { return Rasterization() }
+    function colorFormat() -> TextureFormat { return .Swapchain }
+}
+
+// Turn a declared pipeline into one the backend has built.
+//
+// The seam between the declaration and the engine: a plan says what the
+// pipeline is, and this hands it to the descriptor the backends build from.
+// Both speak the same typed vocabulary now, so nothing is translated here —
+// the integer wire form appears only at the backend call itself.
+extend Graphics {
+    function buildDeclaredPipeline(plan: borrow PipelinePlan) -> PipelineResult {
+        var attributes: [VertexAttribute] = []
+        var index = 0
+        while index < plan.vertices.attributes.count {
+            let attribute = plan.vertices.attributes[index]
+            attributes.append(VertexAttribute {
+                location: attribute.location
+                format: attribute.format
+                offset: attribute.offset
+            })
+            index = index + 1
+        }
+        attempt {
+        let shader = try self.createShaderFromKslArtifact(plan.label, plan.shader)
+        return self.createRenderPipeline(RenderPipelineDescriptor {
+            label: plan.label
+            shader: shader
+            vertexLayout: VertexLayout {
+                stride: plan.vertices.stride
+                attributes: move attributes
+            }
+            colorTargets: [ColorTargetDescriptor {
+                format: plan.colorFormat
+                blend: BlendState {
+                    enabled: plan.blending.enabled
+                    preset: plan.blending.preset
+                }
+            }]
+            depthStencil: DepthStencilDescriptor {
+                depthEnabled: plan.depth.enabled
+                depthWriteEnabled: plan.depth.writes
+                depthCompare: plan.depth.compare
+                format: plan.depth.format
+            }
+            rasterization: RasterizationDescriptor {
+                cullMode: plan.raster.cull
+                frontFace: plan.raster.front
+            }
+            primitive: PrimitiveDescriptor {
+                topology: plan.raster.topology
+            }
+            vertexEntry: plan.shader.vertexEntry
+            fragmentEntry: plan.shader.fragmentEntry
+        })
+        } handle {
+            // A pipeline is its shader: without one there is nothing to build,
+            // so the shader's reason is the pipeline's reason.
+            ShaderRejected { return .Error(.ShaderRejected) }
+            DeviceRefused { return .Error(.DeviceRefused) }
+            AssetUnreadable { return .Error(.AssetUnreadable) }
+        }
+    }
+}

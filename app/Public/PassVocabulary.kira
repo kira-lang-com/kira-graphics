@@ -1,0 +1,135 @@
+// The closed sets a texture, a buffer and a render pass are described with.
+//
+// The companion of `Formats.kira`, which holds the sets a *pipeline* is
+// described with. Same rule: every `match` names every variant with no `_` arm,
+// and each carries the wire code the backends already speak, so the typed
+// surface lands without a backend changing.
+
+@Derive(Equatable, Clone)
+enum TextureUsage {
+    // Read by a shader, written once when it is created.
+    Sampled
+    // Read by a shader and re-uploadable afterwards. Separate from `Sampled`
+    // because the difference is a permission a backend enforces: sokol refuses
+    // `sg_update_image` against an immutable image, so a texture that will be
+    // written again has to say so up front.
+    SampledStreaming
+    RenderTarget
+    RenderTargetSampled
+    DepthStencil
+    // Written by a compute kernel through an image binding, drawn into by a
+    // render pass, and sampled by both.
+    //
+    // All three, because the effect that needs it is one texture wearing all
+    // three hats: a blur level is produced by a compute dispatch on a backend
+    // that has compute and by a render pass on one that does not, the choice is
+    // made per frame, and every composite samples the result either way. A
+    // texture created without the image bit would be refused by the dispatch;
+    // one created without the attachment bit would be refused by the fallback.
+    RenderTargetSampledStorage
+}
+
+function textureUsageCode(usage: TextureUsage) -> Int {
+    match usage {
+        Sampled -> return 1;
+        RenderTarget -> return 2;
+        RenderTargetSampled -> return 3;
+        DepthStencil -> return 4;
+        SampledStreaming -> return 5;
+        RenderTargetSampledStorage -> return 6;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum BufferUsage {
+    Vertex
+    Index
+    Uniform
+    Storage
+}
+
+@Derive(Equatable, Clone)
+enum LoadAction {
+    Clear
+    Load
+    DontCare
+}
+
+function loadActionCode(action: LoadAction) -> Int {
+    match action {
+        Clear -> return 1;
+        Load -> return 2;
+        DontCare -> return 3;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum StoreAction {
+    Store
+    DontCare
+}
+
+function storeActionCode(action: StoreAction) -> Int {
+    match action {
+        Store -> return 1;
+        DontCare -> return 2;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum RenderTargetKind {
+    Swapchain
+    Texture
+}
+
+function renderTargetKindCode(kind: RenderTargetKind) -> Int {
+    match kind {
+        Swapchain -> return 1;
+        Texture -> return 2;
+    }
+}
+
+// What an attachment costs between passes.
+//
+// `Memoryless` is the one worth knowing: a tile-based GPU never writes it back,
+// so an attachment the next pass does not read costs no bandwidth at all.
+@Derive(Equatable, Clone)
+enum AttachmentStorage {
+    Persistent
+    Transient
+    Memoryless
+}
+
+function attachmentStorageCode(storage: AttachmentStorage) -> Int {
+    match storage {
+        Persistent -> return 1;
+        Transient -> return 2;
+        Memoryless -> return 3;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum TextureFilter {
+    Nearest
+    Linear
+}
+
+function textureFilterCode(filter: TextureFilter) -> Int {
+    match filter {
+        Nearest -> return 1;
+        Linear -> return 2;
+    }
+}
+
+@Derive(Equatable, Clone)
+enum AddressMode {
+    ClampToEdge
+    Repeat
+}
+
+function addressModeCode(mode: AddressMode) -> Int {
+    match mode {
+        ClampToEdge -> return 1;
+        Repeat -> return 2;
+    }
+}

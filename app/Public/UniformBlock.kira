@@ -1,0 +1,20 @@
+// A shader's own uniform-block reflection, held on the value that created it.
+//
+// Both `GraphicsShader` and `RenderPipeline` carry a list of these — the
+// pipeline's is a copy of its shader's, taken at creation — in place of the
+// `kg_shader_records` / `kg_pipeline_records` tables the backend used to keep
+// keyed by id. There is nothing left to look up: a caller already holds the
+// shader or pipeline value a block belongs to.
+struct UniformBlockDescriptor {
+    // The public bind slot this block answers to (a KSL `@group(0)` binding,
+    // or — for a shader with no reflection string — the legacy scene/object
+    // slot 0/1).
+    var binding: Int = 0
+    // The block's std140 byte size, what a bound uniform's payload must match.
+    var size: Int = 0
+    // Which Sokol `uniform_blocks[]` slot the vertex stage configured this
+    // block into, or -1 when the block is not visible to the vertex stage.
+    var vertexBlockSlot: Int = -1
+    // The fragment-stage counterpart of `vertexBlockSlot`.
+    var fragmentBlockSlot: Int = -1
+}

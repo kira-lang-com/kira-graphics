@@ -1,14 +1,22 @@
+// A compiled shader, and the reflection its creation produced.
+//
+// `hasPositionAttribute` / `hasNormalAttribute` / `requiredUniformMask` /
+// `availableUniformMask` / `uniformBlocks` used to live in the Sokol backend's
+// own `kg_shader_records` table, keyed by id. They live here now, on the value
+// every caller already threads through pipeline creation — so a pipeline built
+// from this shader copies them rather than looking them up.
 struct GraphicsShader {
-    var handle: BackendShaderHandle
     var id: U32 = 0
+    var hasPositionAttribute: Bool = false
+    var hasNormalAttribute: Bool = false
+    var requiredUniformMask: Int = 0
+    var availableUniformMask: Int = 0
+    var uniformBlocks: [UniformBlockDescriptor] = []
 }
 
 @Native
 function emptyGraphicsShader() -> GraphicsShader {
     return GraphicsShader {
-        handle: BackendShaderHandle {
-            id: 0
-        }
         id: 0
     }
 }

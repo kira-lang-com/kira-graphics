@@ -1,12 +1,16 @@
+// The widths are the GPU's, not Kira's default ones. Vertex data is 32-bit
+// floats and an index is a 32-bit unsigned integer on every backend here, so
+// saying `[Float]` would claim a precision that is narrowed away before the
+// data reaches a buffer — silently, and in C.
 struct BufferDescriptor {
     var label: String = ""
-    var usage: Int
-    var stride: Int = 0
-    var data: [Float]
+    var usage: BufferUsage = .Vertex
+    var data: [F32]
 }
 
+// An index buffer's usage is its name, so it carries none: `sg_buffer_desc`
+// takes the flag from the call that makes it, and Metal has no usage at all.
 struct IndexBufferDescriptor {
     var label: String = ""
-    var usage: Int
-    var data: [Int]
+    var data: [U32]
 }
