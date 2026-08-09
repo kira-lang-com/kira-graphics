@@ -13,7 +13,7 @@
 // True when a context handle is present (the Metal backend is active for a pass).
 @Native
 function metalContextActive(ctx: RawPtr) -> Bool {
-    return !metalPtrIsNull(ctx)
+    return !pointerIsNull(ctx)
 }
 
 @Native
@@ -272,12 +272,12 @@ function metalDoubleBitsToInt(bits: U64) -> Int {
 @Native
 function metalContextSyncViewportFromView(ctx: RawPtr) {
     let view = metalMemReadPtr(ctx, metalOffsetHostView())
-    if metalPtrIsNull(view) {
+    if pointerIsNull(view) {
         return
     }
     let boundsKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "bounds")
     let value = metalMsgSendP(view, metalSel("valueForKey:"), boundsKey)
-    if metalPtrIsNull(value) {
+    if pointerIsNull(value) {
         return
     }
     let buf = metalMemAlloc(32)
@@ -291,10 +291,10 @@ function metalContextSyncViewportFromView(ctx: RawPtr) {
 
     var scale = 1
     let window = metalMsgSend(view, metalSel("window"))
-    if !metalPtrIsNull(window) {
+    if !pointerIsNull(window) {
         let scaleKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "backingScaleFactor")
         let scaleNum = metalMsgSendP(window, metalSel("valueForKey:"), scaleKey)
-        if !metalPtrIsNull(scaleNum) {
+        if !pointerIsNull(scaleNum) {
             let s = metalU64ToInt(metalMsgSendU64(scaleNum, metalSel("integerValue")))
             if s >= 1 && s <= 4 {
                 scale = s
@@ -314,7 +314,7 @@ function metalContextSyncViewportFromView(ctx: RawPtr) {
     // This only ever ADDS work; it is a way to render the stated resolution, not
     // a way to make a number look better.
     let renderScaleEnv = metalGetEnv("KIRA_METAL_RENDER_SCALE")
-    if !metalPtrIsNull(renderScaleEnv) {
+    if !pointerIsNull(renderScaleEnv) {
         let renderScale = metalEnvInt(renderScaleEnv)
         if renderScale > 1 && renderScale <= 4 {
             pw = pw * renderScale
@@ -343,7 +343,7 @@ function metalContextSyncViewportFromView(ctx: RawPtr) {
         return
     }
     let layer = metalMemReadPtr(ctx, metalOffsetLayer())
-    if !metalPtrIsNull(layer) {
+    if !pointerIsNull(layer) {
         // Layer frame in points (so the content tracks the window), drawable in physical
         // pixels and contentsScale the backing factor (so it is crisp at native res).
         metalMsgSendVoid4F(layer, metalSel("setFrame:"), 0.0, 0.0, Float(w), Float(h))
@@ -377,4 +377,31 @@ function metalContextWidth(ctx: RawPtr) -> Int {
 @Native
 function metalContextHeight(ctx: RawPtr) -> Int {
     return metalMemReadU64(ctx, metalOffsetHeight())
+}
+
+// The Metal backend's answer to `RenderFrame.statistics()`: the same context
+// fields the HUD used to read one accessor at a time, gathered into the shape
+// both backends report in.
+@Native
+function metalFrameStatistics(ctx: RawPtr, framesInFlight: Int) -> FrameStatistics {
+    if pointerIsNull(ctx) {
+        return FrameStatistics {}
+    }
+    return FrameStatistics {
+        frameSeconds: metalContextFrameDuration(ctx)
+        cpuSeconds: metalContextCpuDuration(ctx)
+        gpuSeconds: metalContextGpuDuration(ctx)
+        hasGpuSeconds: true
+        drawableWidth: metalContextPhysicalWidth(ctx)
+        drawableHeight: metalContextPhysicalHeight(ctx)
+        allocatedBytes: metalContextAllocatedBytes(ctx)
+        hasAllocatedBytes: true
+        resourceCount: metalContextResourceCount(ctx)
+        passCount: metalContextPassCount(ctx)
+        drawCount: metalContextDrawCount(ctx)
+        triangleCount: metalContextTriangleCount(ctx)
+        framesInFlight: framesInFlight
+        frameSerial: metalContextFrameSerial(ctx)
+        windowState: metalContextWindowState(ctx)
+    }
 }

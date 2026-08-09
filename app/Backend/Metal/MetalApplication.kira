@@ -33,32 +33,32 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     let userData = state.userData
 
     let offscreenEnv = metalGetEnv("KIRA_METAL_OFFSCREEN")
-    if !metalPtrIsNull(offscreenEnv) {
-        metalContextAttachOffscreenFormat(ctxPtr, app.width, app.height, metalPixelFormatForTexture(app.colorFormat))
+    if !pointerIsNull(offscreenEnv) {
+        metalContextAttachOffscreenFormat(ctxPtr, app.width, app.height, metalPixelFormatForTexture(textureFormatCode(app.colorFormat)))
         kiraGraphicsLiveBackendInitialized()
 
         let onInitOffscreen: (Graphics) -> Void = app.initHandler
         let initGraphicsOffscreen = Graphics {
             userData: userData
             backend: .Metal
-            metalContext: ctxPtr
+            backendContext: ctxPtr
         }
         onInitOffscreen(move initGraphicsOffscreen)
 
-        let onFrameOffscreen: (borrow mut GraphicsFrame) -> Void = app.frameHandler
+        let onFrameOffscreen: (borrow mut RenderFrame) -> Void = app.frameHandler
 
         // Deterministic frame-time benchmark: KIRA_METAL_BENCH runs the frame handler
         // many times offscreen and reports average ms + implied FPS, so VM hot-path
         // optimisation can be measured without the on-screen present/vsync loop.
         let benchEnv = metalGetEnv("KIRA_METAL_BENCH")
-        if !metalPtrIsNull(benchEnv) {
+        if !pointerIsNull(benchEnv) {
             // 180 frames is a throughput sample. A run that has to expose a periodic
             // cost — anything on a cadence of its own, like a HUD that refreshes a
             // few times a second — needs to be long enough to contain several of its
             // periods, so KIRA_METAL_BENCH_FRAMES sets the count.
             var benchFrames = 180
             let benchFramesEnv = metalGetEnv("KIRA_METAL_BENCH_FRAMES")
-            if !metalPtrIsNull(benchFramesEnv) {
+            if !pointerIsNull(benchFramesEnv) {
                 let parsedBenchFrames = metalEnvInt(benchFramesEnv)
                 if parsedBenchFrames > 0 {
                     benchFrames = parsedBenchFrames
@@ -70,16 +70,16 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             // offscreen target only allocates a native MTLTexture, so the Kira struct
             // allocation count still reflects the per-frame rebuild work.
             let resizeEnv = metalGetEnv("KIRA_METAL_RESIZE_BENCH")
-            let resizeBench = !metalPtrIsNull(resizeEnv)
+            let resizeBench = !pointerIsNull(resizeEnv)
             let detailEnv = metalGetEnv("KIRA_METAL_BENCH_DETAIL")
-            let detailBench = !metalPtrIsNull(detailEnv)
+            let detailBench = !pointerIsNull(detailEnv)
             let lockedBench = app.targetFrameDurationNs > 0
             // Warm up one frame (first-touch caches, retained tree mount) before timing.
             let warmPool = metalAutoreleasePoolPush()
             let warmGraphics = Graphics {
                 userData: userData
                 backend: .Metal
-                metalContext: ctxPtr
+                backendContext: ctxPtr
             }
             var warmFrame = warmGraphics.frame()
             metalContextBeginFrameTiming(ctxPtr)
@@ -101,7 +101,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                 let benchGraphics = Graphics {
                     userData: userData
                     backend: .Metal
-                    metalContext: ctxPtr
+                    backendContext: ctxPtr
                 }
                 var benchFrame = benchGraphics.frame()
                 metalContextBeginFrameTiming(ctxPtr)
@@ -143,7 +143,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         // end-to-end click verification (hit test, dispatch, state, render).
         let framesEnv = metalGetEnv("KIRA_METAL_OFFSCREEN_FRAMES")
         var totalFrames = 1
-        if !metalPtrIsNull(framesEnv) {
+        if !pointerIsNull(framesEnv) {
             let parsedFrames = metalEnvInt(framesEnv)
             if parsedFrames > 0 {
                 totalFrames = parsedFrames
@@ -151,7 +151,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         }
         var clicks: [Int] = []
         let clickEnv = metalGetEnv("KIRA_UI_CLICK_SCRIPT")
-        if !metalPtrIsNull(clickEnv) {
+        if !pointerIsNull(clickEnv) {
             clicks = metalEnvInts(clickEnv)
         }
         // Drag script: 7-int tuples (startFrame, x, y, dx, dy, buttonRaw, steps).
@@ -159,35 +159,35 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         // delta over `steps` frames; PointerUp after. buttonRaw: 0 L, 1 R, 2 M.
         var drags: [Int] = []
         let dragEnv = metalGetEnv("KIRA_UI_DRAG_SCRIPT")
-        if !metalPtrIsNull(dragEnv) {
+        if !pointerIsNull(dragEnv) {
             drags = metalEnvInts(dragEnv)
         }
         // Key script: 3-int tuples (frame, keyCode, downFlag 1/0).
         var keyScript: [Int] = []
         let keyEnv = metalGetEnv("KIRA_UI_KEY_SCRIPT")
-        if !metalPtrIsNull(keyEnv) {
+        if !pointerIsNull(keyEnv) {
             keyScript = metalEnvInts(keyEnv)
         }
         // Scroll script: 4-int tuples (frame, x, y, deltaYTenths).
         var scrolls: [Int] = []
         let scrollEnv = metalGetEnv("KIRA_UI_SCROLL_SCRIPT")
-        if !metalPtrIsNull(scrollEnv) {
+        if !pointerIsNull(scrollEnv) {
             scrolls = metalEnvInts(scrollEnv)
         }
         // Text script: 2-int tuples (frame, codepoint) — synthesizes a TextInput
         // event so headless runs can type into a focused field (inline rename).
         var textScript: [Int] = []
         let textEnv = metalGetEnv("KIRA_UI_TEXT_SCRIPT")
-        if !metalPtrIsNull(textEnv) {
+        if !pointerIsNull(textEnv) {
             textScript = metalEnvInts(textEnv)
         }
-        let onEventOffscreen: (borrow GraphicsEvent) -> Void = app.eventHandler
+        let onEventOffscreen: (borrow AppEvent) -> Void = app.eventHandler
         // Offscreen resize script (frame, w, h triples): re-attaches the offscreen
         // target at the new size mid-run — the headless equivalent of a live
         // window resize (drawable size change + layout + engine target follow-up).
         var offResizes: [Int] = []
         let offResizeEnv = metalGetEnv("KIRA_UI_RESIZE_SCRIPT")
-        if !metalPtrIsNull(offResizeEnv) {
+        if !pointerIsNull(offResizeEnv) {
             offResizes = metalEnvInts(offResizeEnv)
         }
         var fi = 0
@@ -196,7 +196,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             var ri = 0
             while ri + 3 <= offResizes.count {
                 if offResizes[ri] == fi {
-                    metalContextAttachOffscreenFormat(ctxPtr, offResizes[ri + 1], offResizes[ri + 2], metalPixelFormatForTexture(app.colorFormat))
+                    metalContextAttachOffscreenFormat(ctxPtr, offResizes[ri + 1], offResizes[ri + 2], metalPixelFormatForTexture(textureFormatCode(app.colorFormat)))
                 }
                 ri = ri + 3
             }
@@ -205,13 +205,13 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                 if clicks[ci] == fi {
                     let px = Float(clicks[ci + 1])
                     let py = Float(clicks[ci + 2])
-                    let down = GraphicsEvent {
+                    let down = AppEvent {
                         kind: .PointerDown
                         pointerX: px
                         pointerY: py
                     }
                     onEventOffscreen(down)
-                    let up = GraphicsEvent {
+                    let up = AppEvent {
                         kind: .PointerUp
                         pointerX: px
                         pointerY: py
@@ -229,7 +229,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                     let by = Float(drags[di + 2])
                     let button = graphicsPointerButtonFromRaw(drags[di + 5])
                     if fi == start {
-                        let down = GraphicsEvent {
+                        let down = AppEvent {
                             kind: .PointerDown
                             pointerButton: button
                             pointerX: bx
@@ -245,7 +245,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                         let mx = bx + Float(drags[di + 3]) * t
                         let my = by + Float(drags[di + 4]) * t
                         if fi <= start + steps {
-                            let moved = GraphicsEvent {
+                            let moved = AppEvent {
                                 kind: .PointerMoved
                                 pointerButton: button
                                 pointerX: mx
@@ -253,7 +253,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                             }
                             onEventOffscreen(moved)
                         } else {
-                            let up = GraphicsEvent {
+                            let up = AppEvent {
                                 kind: .PointerUp
                                 pointerButton: button
                                 pointerX: mx
@@ -268,11 +268,11 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             var ki = 0
             while ki + 3 <= keyScript.count {
                 if keyScript[ki] == fi {
-                    var keyKind = GraphicsEventKind.KeyUp
+                    var keyKind: AppEventKind = .KeyUp
                     if keyScript[ki + 2] == 1 {
-                        keyKind = GraphicsEventKind.KeyDown
+                        keyKind = .KeyDown
                     }
-                    let keyEvent = GraphicsEvent {
+                    let keyEvent = AppEvent {
                         kind: keyKind
                         keyCode: keyScript[ki + 1]
                     }
@@ -283,7 +283,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             var txi = 0
             while txi + 2 <= textScript.count {
                 if textScript[txi] == fi {
-                    let textEvent = GraphicsEvent {
+                    let textEvent = AppEvent {
                         kind: .TextInput
                         textCodepoint: textScript[txi + 1]
                     }
@@ -294,7 +294,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             var si = 0
             while si + 4 <= scrolls.count {
                 if scrolls[si] == fi {
-                    let scrollEvent = GraphicsEvent {
+                    let scrollEvent = AppEvent {
                         kind: .Scroll
                         pointerX: Float(scrolls[si + 1])
                         pointerY: Float(scrolls[si + 2])
@@ -307,7 +307,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             let frameGraphicsOffscreen = Graphics {
                 userData: userData
                 backend: .Metal
-                metalContext: ctxPtr
+                backendContext: ctxPtr
             }
             var frameOffscreen = frameGraphicsOffscreen.frame()
             metalContextBeginFrameTiming(ctxPtr)
@@ -319,11 +319,11 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         }
         metalReportCenterPixel(ctxPtr, app.width, app.height)
         let probeEnv = metalGetEnv("KIRA_METAL_READBACK_POINTS")
-        if !metalPtrIsNull(probeEnv) {
+        if !pointerIsNull(probeEnv) {
             metalReportProbePixels(ctxPtr, app.width, app.height)
         }
         let digestEnv = metalGetEnv("KIRA_METAL_IMAGE_DIGEST")
-        if !metalPtrIsNull(digestEnv) {
+        if !pointerIsNull(digestEnv) {
             metalReportImageDigest(ctxPtr, app.width, app.height)
         }
         // Full-frame visual dump: the env VALUE is the destination path for the raw
@@ -331,7 +331,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         // CURRENT size in PHYSICAL pixels (a resize script may have re-attached the
         // target mid-run; an offscreen-scale run has a points-x-scale target).
         let dumpEnv = metalGetEnv("KIRA_METAL_IMAGE_DUMP")
-        if !metalPtrIsNull(dumpEnv) {
+        if !pointerIsNull(dumpEnv) {
             let dumpScale = metalContextScale(ctxPtr)
             let dumpW = Int(Float(metalContextWidth(ctxPtr)) * dumpScale)
             let dumpH = Int(Float(metalContextHeight(ctxPtr)) * dumpScale)
@@ -344,7 +344,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
 
     // On-screen: create a window + CAMetalLayer, run the frame loop until the app
     // requests quit or the window is closed.
-    let view = metalCreateWindow(app.width, app.height, app.title)
+    let view = metalCreateWindow(app.width, app.height, app.title, app.windowMode)
     metalContextSetHighDpi(ctxPtr, app.highDpi)
     metalContextAttachLayerToView(ctxPtr, view, app.width, app.height)
     let nsApp = metalSharedApp()
@@ -354,7 +354,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     let initGraphics = Graphics {
         userData: userData
         backend: .Metal
-        metalContext: ctxPtr
+        backendContext: ctxPtr
     }
     onInit(move initGraphics)
 
@@ -369,22 +369,22 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     })
     let liveHandle = nativeUserData(liveStorage)
     let hostWindow = metalMsgSend(view, metalSel("window"))
-    var resizeDelegate = metalNullPtr()
-    if !metalPtrIsNull(hostWindow) {
+    var resizeDelegate = nullPointer()
+    if !pointerIsNull(hostWindow) {
         resizeDelegate = metalInstallResizeDelegate(hostWindow, liveHandle)
     }
 
-    let onFrame: (borrow mut GraphicsFrame) -> Void = app.frameHandler
+    let onFrame: (borrow mut RenderFrame) -> Void = app.frameHandler
 
     // Bound ONCE for the whole loop (like onFrame): calling a closure does not
     // consume it, but re-taking it from the app each frame would move its
     // captured environment out and leave later fetches dangling.
-    let onWindowEvent: (borrow GraphicsEvent) -> Void = app.eventHandler
+    let onWindowEvent: (borrow AppEvent) -> Void = app.eventHandler
     // Same synthetic-event scripts the offscreen harness honors, so on-screen
     // crashes reproduce deterministically under a debugger.
     var onClicks: [Int] = []
     let onClickEnv = metalGetEnv("KIRA_UI_CLICK_SCRIPT")
-    if !metalPtrIsNull(onClickEnv) {
+    if !pointerIsNull(onClickEnv) {
         onClicks = metalEnvInts(onClickEnv)
     }
     // Drag script (startFrame, x, y, dx, dy, buttonRaw, steps), the same tuples
@@ -395,14 +395,14 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     // actually runs.
     var onDrags: [Int] = []
     let onDragEnv = metalGetEnv("KIRA_UI_DRAG_SCRIPT")
-    if !metalPtrIsNull(onDragEnv) {
+    if !pointerIsNull(onDragEnv) {
         onDrags = metalEnvInts(onDragEnv)
     }
     // Programmatic window resize (frame, w, h triples) — drives the REAL AppKit
     // resize path (windowDidResize, drawable sync) for deterministic testing.
     var onResizes: [Int] = []
     let onResizeEnv = metalGetEnv("KIRA_UI_RESIZE_SCRIPT")
-    if !metalPtrIsNull(onResizeEnv) {
+    if !pointerIsNull(onResizeEnv) {
         onResizes = metalEnvInts(onResizeEnv)
     }
     var onFrameIndex = 0
@@ -411,7 +411,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     // `main` process rendering forever after its launching shell exits.
     var onScreenFrameLimit = 0
     let onScreenFramesEnv = metalGetEnv("KIRA_METAL_ONSCREEN_FRAMES")
-    if !metalPtrIsNull(onScreenFramesEnv) {
+    if !pointerIsNull(onScreenFramesEnv) {
         let parsedOnScreenFrames = metalEnvInt(onScreenFramesEnv)
         if parsedOnScreenFrames > 0 {
             onScreenFrameLimit = parsedOnScreenFrames
@@ -449,7 +449,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     // limit so a bench run is bounded by construction.
     var benchFrames = 0
     let onScreenBenchEnv = metalGetEnv("KIRA_METAL_ONSCREEN_BENCH")
-    if !metalPtrIsNull(onScreenBenchEnv) {
+    if !pointerIsNull(onScreenBenchEnv) {
         let parsedBench = metalEnvInt(onScreenBenchEnv)
         if parsedBench > 0 {
             benchFrames = parsedBench
@@ -466,7 +466,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     // AppKit visibility/occlusion; tests can force 1/2/3 without automating Finder.
     var windowStateOverride = 0
     let windowStateEnv = metalGetEnv("KIRA_METAL_WINDOW_STATE")
-    if !metalPtrIsNull(windowStateEnv) {
+    if !pointerIsNull(windowStateEnv) {
         let parsedWindowState = metalEnvInt(windowStateEnv)
         if parsedWindowState >= 1 && parsedWindowState <= 3 {
             windowStateOverride = parsedWindowState
@@ -480,13 +480,13 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             if onClicks[oci] == onFrameIndex {
                 let opx = Float(onClicks[oci + 1])
                 let opy = Float(onClicks[oci + 2])
-                let odown = GraphicsEvent {
+                let odown = AppEvent {
                     kind: .PointerDown
                     pointerX: opx
                     pointerY: opy
                 }
                 onWindowEvent(odown)
-                let oup = GraphicsEvent {
+                let oup = AppEvent {
                     kind: .PointerUp
                     pointerX: opx
                     pointerY: opy
@@ -507,7 +507,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                 let oby = Float(onDrags[odi + 2])
                 let obutton = graphicsPointerButtonFromRaw(onDrags[odi + 5])
                 if onFrameIndex == dragStart {
-                    onWindowEvent(GraphicsEvent {
+                    onWindowEvent(AppEvent {
                         kind: .PointerDown
                         pointerButton: obutton
                         pointerX: obx
@@ -522,14 +522,14 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                     let omx = obx + Float(onDrags[odi + 3]) * ot
                     let omy = oby + Float(onDrags[odi + 4]) * ot
                     if onFrameIndex <= dragStart + dragSteps {
-                        onWindowEvent(GraphicsEvent {
+                        onWindowEvent(AppEvent {
                             kind: .PointerMoved
                             pointerButton: obutton
                             pointerX: omx
                             pointerY: omy
                         })
                     } else {
-                        onWindowEvent(GraphicsEvent {
+                        onWindowEvent(AppEvent {
                             kind: .PointerUp
                             pointerButton: obutton
                             pointerX: omx
@@ -543,7 +543,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         var ori = 0
         while ori + 3 <= onResizes.count {
             if onResizes[ori] == onFrameIndex {
-                if !metalPtrIsNull(hostWindow) {
+                if !pointerIsNull(hostWindow) {
                     metalMsgSendVoidRectB(hostWindow, metalSel("setFrame:display:"), 60.0, 60.0, Float(onResizes[ori + 1]), Float(onResizes[ori + 2]), true)
                 }
             }
@@ -551,7 +551,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         }
         onFrameIndex = onFrameIndex + 1
         // Dispatch queued window/input events first (activation, title-bar buttons,
-        // live resize); translated GraphicsEvents come back for the app handler.
+        // live resize); translated AppEvents come back for the app handler.
         let windowEvents = metalPumpEvents(nsApp, view, ctxPtr)
         var wei = 0
         while wei < windowEvents.count {
@@ -568,13 +568,13 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         let frameGraphics = Graphics {
             userData: userData
             backend: .Metal
-            metalContext: ctxPtr
+            backendContext: ctxPtr
         }
         var frame = frameGraphics.frame()
         onFrame(frame)
         graphicsSubmitFrame(frame)
         metalContextEndFrameTiming(ctxPtr)
-        if !metalPtrIsNull(onScreenTraceEnv) {
+        if !pointerIsNull(onScreenTraceEnv) {
             metalReportBenchFrame(ctxPtr, onFrameIndex)
         }
         if benchFrames > 0 && onFrameIndex > benchWarmup && benchFrameNs.count < benchFrames {
@@ -589,7 +589,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             liveFramePresented = true
             kiraGraphicsLiveFramePresented()
         }
-        if !metalPtrIsNull(onScreenDumpEnv) {
+        if !pointerIsNull(onScreenDumpEnv) {
             let onScreenScale = metalContextScale(ctxPtr)
             let onScreenW = Int(Float(metalContextWidth(ctxPtr)) * onScreenScale)
             let onScreenH = Int(Float(metalContextHeight(ctxPtr)) * onScreenScale)
@@ -635,7 +635,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     if benchFrames > 0 {
         metalBenchReport(ctxPtr, benchFrameNs, benchCpuNs, benchGpuNs)
     }
-    if !metalPtrIsNull(hostWindow) {
+    if !pointerIsNull(hostWindow) {
         metalRemoveResizeDelegate(hostWindow, resizeDelegate)
     }
     nativeStateFree(liveStorage)
@@ -643,7 +643,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     let cleanupGraphics = Graphics {
         userData: userData
         backend: .Metal
-        metalContext: ctxPtr
+        backendContext: ctxPtr
     }
     onCleanup(move cleanupGraphics)
     metalContextFree(ctxPtr)

@@ -15,7 +15,7 @@ function metalSelfTestTriangleSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main() { return float4(1.0, 0.4, 0.1, 1.0); }\n"
 }
 
-function metalSelfTestTriangleVertices() -> [Float] {
+function metalSelfTestTriangleVertices() -> [F32] {
     return [
         0.0, 0.7,
         0.7, -0.7,
@@ -53,7 +53,7 @@ function metalSelfTestTrianglePixel() -> U32 {
     return packed
 }
 
-function metalSelfTestQuadVertices() -> [Float] {
+function metalSelfTestQuadVertices() -> [F32] {
     return [
         -0.7, -0.7,
         0.7, -0.7,
@@ -62,7 +62,7 @@ function metalSelfTestQuadVertices() -> [Float] {
     ]
 }
 
-function metalSelfTestQuadIndices() -> [Int] {
+function metalSelfTestQuadIndices() -> [U32] {
     return [0, 1, 2, 0, 2, 3]
 }
 
@@ -93,7 +93,7 @@ function metalSelfTestUniformSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main(constant float4& color [[buffer(0)]]) { return color; }\n"
 }
 
-function metalSelfTestUniformData() -> [Float] {
+function metalSelfTestUniformData() -> [F32] {
     return [0.2, 0.6, 0.9, 1.0]
 }
 
@@ -129,7 +129,7 @@ function metalSelfTestDepthSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant packed_float3* verts [[buffer(0)]]) { VOut o; o.pos = float4(float3(verts[vid]), 1.0); return o; }\nfragment float4 f_main(constant float4& color [[buffer(0)]]) { return color; }\n"
 }
 
-function metalSelfTestNearVertices() -> [Float] {
+function metalSelfTestNearVertices() -> [F32] {
     return [
         0.0, 0.7, 0.2,
         0.7, -0.7, 0.2,
@@ -137,7 +137,7 @@ function metalSelfTestNearVertices() -> [Float] {
     ]
 }
 
-function metalSelfTestFarVertices() -> [Float] {
+function metalSelfTestFarVertices() -> [F32] {
     return [
         0.0, 0.7, 0.8,
         0.7, -0.7, 0.8,
@@ -179,7 +179,7 @@ function metalSelfTestTextureSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main(texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) { return tex.sample(smp, float2(0.5, 0.5)); }\n"
 }
 
-function metalSelfTestTexturePixels() -> [Int] {
+function metalSelfTestTexturePixels() -> [U8] {
     return [50, 150, 250, 255]
 }
 
@@ -240,7 +240,7 @@ function metalSelfTestVertexUniformSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]], constant float4x4& mvp [[buffer(1)]]) { VOut o; o.pos = mvp * float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main() { return float4(1.0, 0.4, 0.1, 1.0); }\n"
 }
 
-function metalSelfTestTranslateMatrix() -> [Float] {
+function metalSelfTestTranslateMatrix() -> [F32] {
     return [
         1.0, 0.0, 0.0, 0.0,
         0.0, 1.0, 0.0, 0.0,

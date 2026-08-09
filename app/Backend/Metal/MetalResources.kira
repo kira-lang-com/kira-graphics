@@ -26,14 +26,14 @@ function metalCreateShader(ctx: RawPtr, source: borrow String) -> Int {
     // A shader that does not compile leaves a nil library and an NSError nobody
     // was reading. The next thing to fail is the pipeline, reporting only that
     // its vertex function is nil — which says nothing about why. Say why.
-    if metalPtrIsNull(library) {
+    if pointerIsNull(library) {
         graphicsDiagnostic("kira-graphics: Metal rejected a shader library")
         let err = metalMemReadPtr(errSlot, 0)
-        if !metalPtrIsNull(err) {
+        if !pointerIsNull(err) {
             let described = metalMsgSend(err, metalSel("localizedDescription"))
-            if !metalPtrIsNull(described) {
+            if !pointerIsNull(described) {
                 let utf8 = metalMsgSend(described, metalSel("UTF8String"))
-                if !metalPtrIsNull(utf8) {
+                if !pointerIsNull(utf8) {
                     metalPutsRaw(utf8)
                 }
             }
@@ -44,11 +44,9 @@ function metalCreateShader(ctx: RawPtr, source: borrow String) -> Int {
     return id
 }
 
-// Upload float vertex data into a new MTLBuffer and register it. Kira `Float` is a
-// double; the values are narrowed to 32-bit floats (the GPU vertex format) by the
-// F32 store at the FFI boundary.
+// Upload float vertex data into a new MTLBuffer and register it.
 @Native
-function metalCreateVertexBuffer(ctx: RawPtr, data: borrow [Float]) -> Int {
+function metalCreateVertexBuffer(ctx: RawPtr, data: borrow [F32]) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let count = data.count
     let bytes = metalMemAlloc(count * 4)
@@ -63,9 +61,9 @@ function metalCreateVertexBuffer(ctx: RawPtr, data: borrow [Float]) -> Int {
     return id
 }
 
-// Upload integer index data into a new MTLBuffer as uint32 indices and register it.
+// Upload index data into a new MTLBuffer and register it.
 @Native
-function metalCreateIndexBuffer(ctx: RawPtr, data: borrow [Int]) -> Int {
+function metalCreateIndexBuffer(ctx: RawPtr, data: borrow [U32]) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let count = data.count
     let bytes = metalMemAlloc(count * 4)
@@ -210,19 +208,6 @@ function metalDynamicBufferFrameStart(ctx: RawPtr, bufferId: Int) -> Int {
     return Int(metalRingAdvance(ctx, U64(bufferId)))
 }
 
-// Overwrite the first `data.count` f32 slots of a dynamic buffer, in this frame's
-// ring slot.
-@Native
-function metalUpdateDynamicBuffer(ctx: RawPtr, bufferId: Int, data: borrow [Float]) {
-    let buffer = metalLookup(ctx, bufferId)
-    let contents = metalMsgSend(buffer, metalSel("contents"))
-    let base = Int(metalRingAdvance(ctx, U64(bufferId)))
-        for i in 0..data.count {
-        metalMemWriteF32(contents, base + i * 4, data[i])
-            }
-    return
-}
-
 // Create a CPU-writable uniform MTLBuffer for `floatCount` floats and register it.
 // The buffer holds a whole RING of the uniform (see MetalPacing.kira): the CPU
 // writes the next frame's values while the GPU is still reading the last frame's,
@@ -242,7 +227,7 @@ function metalCreateUniform(ctx: RawPtr, floatCount: Int) -> Int {
 // bound is left untouched, so a frame still on the GPU keeps the values it was
 // drawn with.
 @Native
-function metalUpdateUniform(ctx: RawPtr, uniformId: Int, data: borrow [Float]) {
+function metalUpdateUniform(ctx: RawPtr, uniformId: Int, data: borrow [F32]) {
     metalRaceProbeUniformWrite(ctx)
     let buffer = metalLookup(ctx, uniformId)
     let contents = metalMsgSend(buffer, metalSel("contents"))
@@ -330,7 +315,7 @@ function metalEncoderDrawIndexedRange(ctx: RawPtr, pipelineId: Int, vertexBuffer
 @Native
 function metalEncoderSetScissorRect(ctx: RawPtr, x: Int, y: Int, width: Int, height: Int) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
-    if metalPtrIsNull(encoder) || width <= 0 || height <= 0 {
+    if pointerIsNull(encoder) || width <= 0 || height <= 0 {
         return
     }
     let rect = metalMemAlloc(32)

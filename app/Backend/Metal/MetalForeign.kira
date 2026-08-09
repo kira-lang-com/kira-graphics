@@ -79,23 +79,23 @@ function metalMsgSendTexDesc(cls: RawPtr, op: RawPtr, pixelFormat: U64, width: U
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendVoidB(obj: RawPtr, op: RawPtr, a: Bool): Void;
 
-// setDrawableSize: — CGSize is a two-double HFA, passed as two F64 scalars.
+// setDrawableSize: — CGSize is a two-double HFA, passed as two Float scalars.
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoid2F(obj: RawPtr, op: RawPtr, w: F64, h: F64): Void;
+function metalMsgSendVoid2F(obj: RawPtr, op: RawPtr, w: Float, h: Float): Void;
 
 // (double) -> void  (e.g. MTLRenderPassDepthAttachmentDescriptor setClearDepth:)
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoidF(obj: RawPtr, op: RawPtr, value: F64): Void;
+function metalMsgSendVoidF(obj: RawPtr, op: RawPtr, value: Float): Void;
 
-// setClearColor: — MTLClearColor is an HFA of four doubles, passed as four F64
+// setClearColor: — MTLClearColor is an HFA of four doubles, passed as four Float
 // scalars (same v0-v3 registers on arm64), so no by-value struct is needed.
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoid4F(obj: RawPtr, op: RawPtr, r: F64, g: F64, b: F64, a: F64): Void;
+function metalMsgSendVoid4F(obj: RawPtr, op: RawPtr, r: Float, g: Float, b: Float, a: Float): Void;
 
 // (NSRect, BOOL) -> void — e.g. -[NSWindow setFrame:display:]. The rect is an
 // HFA of four doubles in v0-v3, the BOOL rides in w2.
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoidRectB(obj: RawPtr, op: RawPtr, x: F64, y: F64, w: F64, h: F64, display: Bool): Void;
+function metalMsgSendVoidRectB(obj: RawPtr, op: RawPtr, x: Float, y: Float, w: Float, h: Float, display: Bool): Void;
 
 // getBytes:bytesPerRow:fromRegion:mipmapLevel: — MTLRegion (>16 bytes, not an HFA)
 // is passed by reference per AAPCS64, so `region` is a pointer to a 48-byte buffer.
@@ -108,13 +108,13 @@ function metalMsgSendStr(obj: RawPtr, op: RawPtr, s: CString): RawPtr;
 
 // () -> CGRect  — e.g. -[NSView bounds]. CGRect is an HFA of four doubles (origin.x,
 // origin.y, size.width, size.height), returned in v0-v3 per AAPCS64, so it maps to a
-// four-F64 struct return (no objc_msgSend_stret on arm64 for HFAs).
+// four-Float struct return (no objc_msgSend_stret on arm64 for HFAs).
 @FFI.Struct { layout: c; }
 struct MetalCGRect {
-    var x: F64
-    var y: F64
-    var width: F64
-    var height: F64
+    var x: Float
+    var y: Float
+    var width: Float
+    var height: Float
 }
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendCGRect(obj: RawPtr, op: RawPtr): MetalCGRect;
@@ -125,8 +125,8 @@ function metalMsgSendCGRect(obj: RawPtr, op: RawPtr): MetalCGRect;
 // value and `.y` is register garbage — the FFI has no scalar-double return.
 @FFI.Struct { layout: c; }
 struct MetalNSPoint {
-    var x: F64
-    var y: F64
+    var x: Float
+    var y: Float
 }
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendPoint(obj: RawPtr, op: RawPtr): MetalNSPoint;
@@ -134,16 +134,16 @@ function metalMsgSendPoint(obj: RawPtr, op: RawPtr): MetalNSPoint;
 // (NSPoint, NSInteger) -> NSInteger — +[NSWindow windowNumberAtPoint:
 // belowWindowWithWindowNumber:], which answers which window (of ANY application) the
 // window server has at a screen point. The NSPoint argument is an HFA of two doubles
-// passed as two F64 scalars, exactly like the CGRect argument below.
+// passed as two Float scalars, exactly like the CGRect argument below.
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendWindowNumberAtPoint(cls: RawPtr, op: RawPtr, x: F64, y: F64, below: U64): U64;
+function metalMsgSendWindowNumberAtPoint(cls: RawPtr, op: RawPtr, x: Float, y: Float, below: U64): U64;
 
 // (CGRect) -> CGRect  — e.g. -[NSView convertRectToBacking:]. The argument CGRect is
-// an HFA-of-4-doubles passed as four F64 scalars (v0-v3, like setClearColor:), and the
-// result is the same four-F64 struct. Used to get physical (backing) pixel sizes
+// an HFA-of-4-doubles passed as four Float scalars (v0-v3, like setClearColor:), and the
+// result is the same four-Float struct. Used to get physical (backing) pixel sizes
 // without a scalar-double return (which the FFI does not marshal).
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendRectToBacking(obj: RawPtr, op: RawPtr, x: F64, y: F64, w: F64, h: F64): MetalCGRect;
+function metalMsgSendRectToBacking(obj: RawPtr, op: RawPtr, x: Float, y: Float, w: Float, h: Float): MetalCGRect;
 
 // (id, id) -> id  — e.g. newRenderPipelineStateWithDescriptor:error:
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
@@ -209,14 +209,14 @@ function metalMsgSendDrawPrimitivesIndirect(obj: RawPtr, op: RawPtr, primitiveTy
 function metalMsgSendDrawIndexed(obj: RawPtr, op: RawPtr, primitiveType: U64, indexCount: U64, indexType: U64, indexBuffer: RawPtr, indexBufferOffset: U64): Void;
 
 // NSWindow initWithContentRect:styleMask:backing:defer: — the content rect is a
-// CGRect (HFA of four doubles -> four F64 scalars), then NSUInteger style/backing
+// CGRect (HFA of four doubles -> four Float scalars), then NSUInteger style/backing
 // and a BOOL defer flag.
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendInitWindow(obj: RawPtr, op: RawPtr, x: F64, y: F64, w: F64, h: F64, style: U64, backing: U64, deferCreation: Bool): RawPtr;
+function metalMsgSendInitWindow(obj: RawPtr, op: RawPtr, x: Float, y: Float, w: Float, h: Float, style: U64, backing: U64, deferCreation: Bool): RawPtr;
 
 // (double) -> id  (e.g. +[NSDate dateWithTimeIntervalSinceNow:])
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendDateInterval(obj: RawPtr, op: RawPtr, seconds: F64): RawPtr;
+function metalMsgSendDateInterval(obj: RawPtr, op: RawPtr, seconds: Float): RawPtr;
 
 // -[NSApplication nextEventMatchingMask:untilDate:inMode:dequeue:] -> NSEvent*
 // (NSEventMask is unsigned long long; the mode is an NSRunLoopMode NSString).
@@ -318,7 +318,7 @@ function metalMemWriteF32(ptr: RawPtr, offset: U64, value: F32): Void;
 function metalMemWriteU32(ptr: RawPtr, offset: U64, value: U32): Void;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u8_at; abi: c; }
 function metalMemWriteU8(ptr: RawPtr, offset: U64, value: U8): Void;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_null_ptr; abi: c; }
-function metalNullPtr(): RawPtr;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_ptr_is_null; abi: c; }
-function metalPtrIsNull(ptr: RawPtr): Bool;
+// `nullPointer` and `pointerIsNull` used to sit here under `metal*` names, which
+// they never earned: both bind `kira_runtime`, both are used by the sokol path,
+// and ui-foundation re-declared its own pair of wrappers around them. They are in
+// `Core/RuntimeMemory.kira` with the rest of the runtime memory primitives now.

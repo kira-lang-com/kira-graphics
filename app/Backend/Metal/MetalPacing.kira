@@ -147,18 +147,18 @@ function metalPacingCollectGpuTime(ctx: RawPtr, commandBuffer: RawPtr, serial: U
 @Native
 function metalPacingBeginPass(ctx: RawPtr) {
     let ring = metalMemReadPtr(ctx, metalOffsetFrameRing())
-    if metalPtrIsNull(ring) {
+    if pointerIsNull(ring) {
         return
     }
     let slot = metalMemReadU64(ctx, metalOffsetFrameIndex()) % metalFramesInFlight()
     let pending = metalMemReadPtr(ring, slot * 16)
-    if metalPtrIsNull(pending) {
+    if pointerIsNull(pending) {
         return
     }
     metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
     metalPacingCollectGpuTime(ctx, pending, metalMemReadU64(ring, slot * 16 + 8))
     metalMsgSendVoid(pending, metalSel("release"))
-    metalMemWritePtr(ring, slot * 16, metalNullPtr())
+    metalMemWritePtr(ring, slot * 16, nullPointer())
     metalMemWriteU64(ring, slot * 16 + 8, 0)
     return
 }
@@ -169,7 +169,7 @@ function metalPacingBeginPass(ctx: RawPtr) {
 @Native
 function metalPacingEndPass(ctx: RawPtr, commandBuffer: RawPtr) {
     let ring = metalMemReadPtr(ctx, metalOffsetFrameRing())
-    if metalPtrIsNull(ring) {
+    if pointerIsNull(ring) {
         return
     }
     let index = metalMemReadU64(ctx, metalOffsetFrameIndex())
@@ -187,11 +187,11 @@ function metalPacingEndPass(ctx: RawPtr, commandBuffer: RawPtr) {
 @Native
 function metalPacingFree(ctx: RawPtr) {
     let ring = metalMemReadPtr(ctx, metalOffsetFrameRing())
-    if !metalPtrIsNull(ring) {
+    if !pointerIsNull(ring) {
         var slot: U64 = 0
         while slot < metalFramesInFlight() {
             let pending = metalMemReadPtr(ring, slot * 16)
-            if !metalPtrIsNull(pending) {
+            if !pointerIsNull(pending) {
                 metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
                 metalPacingCollectGpuTime(ctx, pending, metalMemReadU64(ring, slot * 16 + 8))
                 metalMsgSendVoid(pending, metalSel("release"))
@@ -199,12 +199,12 @@ function metalPacingFree(ctx: RawPtr) {
             slot = slot + U64(1)
         }
         metalMemFree(ring)
-        metalMemWritePtr(ctx, metalOffsetFrameRing(), metalNullPtr())
+        metalMemWritePtr(ctx, metalOffsetFrameRing(), nullPointer())
     }
     let table = metalMemReadPtr(ctx, metalOffsetSlotRing())
-    if !metalPtrIsNull(table) {
+    if !pointerIsNull(table) {
         metalMemFree(table)
-        metalMemWritePtr(ctx, metalOffsetSlotRing(), metalNullPtr())
+        metalMemWritePtr(ctx, metalOffsetSlotRing(), nullPointer())
     }
     return
 }
@@ -223,7 +223,7 @@ function metalRaceProbeUniformWrite(ctx: RawPtr) {
     }
     metalMemWriteU64(ctx, metalOffsetRaceWrites(), metalMemReadU64(ctx, metalOffsetRaceWrites()) + U64(1))
     let commandBuffer = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
-    if metalPtrIsNull(commandBuffer) {
+    if pointerIsNull(commandBuffer) {
         return
     }
     // The stash holds the last COMMITTED buffer — the frame before this one — and

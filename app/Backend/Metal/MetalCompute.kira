@@ -1,10 +1,8 @@
 // Kira Graphics Metal backend — compute pipelines + dispatch.
 //
-// GPU compute for bounded per-frame jobs (e.g. cluster culling, Law 2). KSL compute
-// shaders lower to an MSL `kernel`; this compiles the kernel into an
-// MTLComputePipelineState, binds shared-storage buffers, and dispatches threadgroups.
-// Storage buffers use MTLResourceStorageModeShared (options = 0), so results are read
-// back from `contents` on the CPU with no blit — matching the offscreen readback path.
+// A KSL compute shader lowers to an MSL `kernel`; this compiles one into an
+// MTLComputePipelineState and encodes the one dispatch shape the engine has —
+// the separable texture blur behind Liquid Glass.
 
 // Build an MTLComputePipelineState from a compiled shader library + kernel entry name.
 @Native
@@ -21,198 +19,6 @@ function metalCreateComputePipeline(ctx: RawPtr, shaderId: Int, entryName: borro
     metalMsgSendVoid(fn, metalSel("release"))
     metalMemFree(errSlot)
     return metalRegister(ctx, pipeline)
-}
-
-// New shared-storage buffer from float data (e.g. cluster bounding spheres).
-@Native
-function metalCreateStorageBufferF32(ctx: RawPtr, data: borrow [Float]) -> Int {
-    let device = metalMemReadPtr(ctx, metalOffsetDevice())
-    let count = data.count
-    let bytes = metalMemAlloc(count * 4)
-    var i = 0
-    while i < count {
-        metalMemWriteF32(bytes, i * 4, data[i])
-        i = i + 1
-    }
-    let buffer = metalMsgSendNewBuffer(device, metalSel("newBufferWithBytes:length:options:"), bytes, count * 4, 0)
-    metalMemFree(bytes)
-    return metalRegister(ctx, buffer)
-}
-
-// New empty shared-storage buffer of `wordCount` 32-bit words (compute output).
-@Native
-function metalCreateEmptyStorageBuffer(ctx: RawPtr, wordCount: Int) -> Int {
-    let device = metalMemReadPtr(ctx, metalOffsetDevice())
-    let buffer = metalMsgSendNewBufferLength(device, metalSel("newBufferWithLength:options:"), wordCount * 4, 0)
-    return metalRegister(ctx, buffer)
-}
-
-// Cull params UBO: { uint count; float planeX; float planeD; float pad } = 16 bytes.
-@Native
-function metalCreateCullParamsBuffer(ctx: RawPtr, count: Int, planeX: Float, planeD: Float) -> Int {
-    let device = metalMemReadPtr(ctx, metalOffsetDevice())
-    let bytes = metalMemAlloc(16)
-    metalMemWriteU32(bytes, 0, count)
-    metalMemWriteF32(bytes, 4, planeX)
-    metalMemWriteF32(bytes, 8, planeD)
-    metalMemWriteF32(bytes, 12, 0.0)
-    let buffer = metalMsgSendNewBuffer(device, metalSel("newBufferWithBytes:length:options:"), bytes, 16, 0)
-    metalMemFree(bytes)
-    return metalRegister(ctx, buffer)
-}
-
-// Dispatch a compute kernel with three buffers bound at slots 0/1/2, over `count`
-// items in groups of `threadsPerGroup`. Blocks on completion so results read back
-// immediately. threadgroups = ceil(count / threadsPerGroup).
-@Native
-function metalDispatchCompute3(ctx: RawPtr, pipelineId: Int, buf0: Int, buf1: Int, buf2: Int, count: Int, threadsPerGroup: Int) {
-    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
-    let pipeline = metalLookup(ctx, pipelineId)
-    let b0 = metalLookup(ctx, buf0)
-    let b1 = metalLookup(ctx, buf1)
-    let b2 = metalLookup(ctx, buf2)
-    let cmd = metalMsgSend(queue, metalSel("commandBuffer"))
-    let enc = metalMsgSend(cmd, metalSel("computeCommandEncoder"))
-    metalMsgSendVoidP(enc, metalSel("setComputePipelineState:"), pipeline)
-    metalMsgSendSetVertexBuffer(enc, metalSel("setBuffer:offset:atIndex:"), b0, 0, 0)
-    metalMsgSendSetVertexBuffer(enc, metalSel("setBuffer:offset:atIndex:"), b1, 0, 1)
-    metalMsgSendSetVertexBuffer(enc, metalSel("setBuffer:offset:atIndex:"), b2, 0, 2)
-    let groups = (count + threadsPerGroup - 1) / threadsPerGroup
-    let gridSize = metalMemAlloc(24)
-    metalMemWriteU64(gridSize, 0, groups)
-    metalMemWriteU64(gridSize, 8, 1)
-    metalMemWriteU64(gridSize, 16, 1)
-    let tgSize = metalMemAlloc(24)
-    metalMemWriteU64(tgSize, 0, threadsPerGroup)
-    metalMemWriteU64(tgSize, 8, 1)
-    metalMemWriteU64(tgSize, 16, 1)
-    metalMsgSendVoidPP(enc, metalSel("dispatchThreadgroups:threadsPerThreadgroup:"), gridSize, tgSize)
-    metalMsgSendVoid(enc, metalSel("endEncoding"))
-    metalMsgSendVoid(cmd, metalSel("commit"))
-    metalMsgSendVoid(cmd, metalSel("waitUntilCompleted"))
-    metalMemFree(gridSize)
-    metalMemFree(tgSize)
-    return
-}
-
-// As metalDispatchCompute3 but with four buffers at slots 0..3 (e.g. Hi-Z occlusion:
-// spheres, pyramid level, visibility flags, params).
-@Native
-function metalDispatchCompute4(ctx: RawPtr, pipelineId: Int, buf0: Int, buf1: Int, buf2: Int, buf3: Int, count: Int, threadsPerGroup: Int) {
-    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
-    let pipeline = metalLookup(ctx, pipelineId)
-    let b0 = metalLookup(ctx, buf0)
-    let b1 = metalLookup(ctx, buf1)
-    let b2 = metalLookup(ctx, buf2)
-    let b3 = metalLookup(ctx, buf3)
-    let cmd = metalMsgSend(queue, metalSel("commandBuffer"))
-    let enc = metalMsgSend(cmd, metalSel("computeCommandEncoder"))
-    metalMsgSendVoidP(enc, metalSel("setComputePipelineState:"), pipeline)
-    metalMsgSendSetVertexBuffer(enc, metalSel("setBuffer:offset:atIndex:"), b0, 0, 0)
-    metalMsgSendSetVertexBuffer(enc, metalSel("setBuffer:offset:atIndex:"), b1, 0, 1)
-    metalMsgSendSetVertexBuffer(enc, metalSel("setBuffer:offset:atIndex:"), b2, 0, 2)
-    metalMsgSendSetVertexBuffer(enc, metalSel("setBuffer:offset:atIndex:"), b3, 0, 3)
-    let groups = (count + threadsPerGroup - 1) / threadsPerGroup
-    let gridSize = metalMemAlloc(24)
-    metalMemWriteU64(gridSize, 0, groups)
-    metalMemWriteU64(gridSize, 8, 1)
-    metalMemWriteU64(gridSize, 16, 1)
-    let tgSize = metalMemAlloc(24)
-    metalMemWriteU64(tgSize, 0, threadsPerGroup)
-    metalMemWriteU64(tgSize, 8, 1)
-    metalMemWriteU64(tgSize, 16, 1)
-    metalMsgSendVoidPP(enc, metalSel("dispatchThreadgroups:threadsPerThreadgroup:"), gridSize, tgSize)
-    metalMsgSendVoid(enc, metalSel("endEncoding"))
-    metalMsgSendVoid(cmd, metalSel("commit"))
-    metalMsgSendVoid(cmd, metalSel("waitUntilCompleted"))
-    metalMemFree(gridSize)
-    metalMemFree(tgSize)
-    return
-}
-
-// Generic 16-byte params UBO of four 32-bit words: (uint, uint, uint, uint).
-@Native
-function metalCreateParams4U32(ctx: RawPtr, a: Int, b: Int, c: Int, d: Int) -> Int {
-    let device = metalMemReadPtr(ctx, metalOffsetDevice())
-    let bytes = metalMemAlloc(16)
-    metalMemWriteU32(bytes, 0, a)
-    metalMemWriteU32(bytes, 4, b)
-    metalMemWriteU32(bytes, 8, c)
-    metalMemWriteU32(bytes, 12, d)
-    let buffer = metalMsgSendNewBuffer(device, metalSel("newBufferWithBytes:length:options:"), bytes, 16, 0)
-    metalMemFree(bytes)
-    return metalRegister(ctx, buffer)
-}
-
-// Generic dispatch: bind an arbitrary list of buffers at slots 0..n-1 (the long-term
-// shape; the fixed-arity 3/4 variants remain for existing callers). Blocks on
-// completion so results read back immediately.
-@Native
-function metalDispatchComputeN(ctx: RawPtr, pipelineId: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
-    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
-    let pipeline = metalLookup(ctx, pipelineId)
-    let cmd = metalMsgSend(queue, metalSel("commandBuffer"))
-    let enc = metalMsgSend(cmd, metalSel("computeCommandEncoder"))
-    metalMsgSendVoidP(enc, metalSel("setComputePipelineState:"), pipeline)
-    var i = 0
-    while i < buffers.count {
-        let b = metalLookup(ctx, buffers[i])
-        metalMsgSendSetVertexBuffer(enc, metalSel("setBuffer:offset:atIndex:"), b, 0, i)
-        i = i + 1
-    }
-    let groups = (count + threadsPerGroup - 1) / threadsPerGroup
-    let gridSize = metalMemAlloc(24)
-    metalMemWriteU64(gridSize, 0, groups)
-    metalMemWriteU64(gridSize, 8, 1)
-    metalMemWriteU64(gridSize, 16, 1)
-    let tgSize = metalMemAlloc(24)
-    metalMemWriteU64(tgSize, 0, threadsPerGroup)
-    metalMemWriteU64(tgSize, 8, 1)
-    metalMemWriteU64(tgSize, 16, 1)
-    metalMsgSendVoidPP(enc, metalSel("dispatchThreadgroups:threadsPerThreadgroup:"), gridSize, tgSize)
-    metalMsgSendVoid(enc, metalSel("endEncoding"))
-    metalMsgSendVoid(cmd, metalSel("commit"))
-    metalMsgSendVoid(cmd, metalSel("waitUntilCompleted"))
-    metalMemFree(gridSize)
-    metalMemFree(tgSize)
-    return
-}
-
-// Dispatch with the context's raster depth attachment bound as texture(0), plus
-// arbitrary storage/uniform buffers at buffer slots 0..n-1. This is the render ->
-// compute seam used by Hi-Z: the depth prepass remains GPU-resident and is sampled
-// directly by the pyramid seed kernel.
-@Native
-function metalDispatchDepthComputeN(ctx: RawPtr, pipelineId: Int, buffers: borrow [Int], count: Int, threadsPerGroup: Int) {
-    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
-    let pipeline = metalLookup(ctx, pipelineId)
-    let depthTexture = metalMemReadPtr(ctx, metalOffsetDepthTexture())
-    let cmd = metalMsgSend(queue, metalSel("commandBuffer"))
-    let enc = metalMsgSend(cmd, metalSel("computeCommandEncoder"))
-    metalMsgSendVoidP(enc, metalSel("setComputePipelineState:"), pipeline)
-    metalMsgSendVoidPU(enc, metalSel("setTexture:atIndex:"), depthTexture, 0)
-    var i = 0
-    while i < buffers.count {
-        let b = metalLookup(ctx, buffers[i])
-        metalMsgSendSetVertexBuffer(enc, metalSel("setBuffer:offset:atIndex:"), b, 0, i)
-        i = i + 1
-    }
-    let groups = (count + threadsPerGroup - 1) / threadsPerGroup
-    let gridSize = metalMemAlloc(24)
-    metalMemWriteU64(gridSize, 0, groups)
-    metalMemWriteU64(gridSize, 8, 1)
-    metalMemWriteU64(gridSize, 16, 1)
-    let tgSize = metalMemAlloc(24)
-    metalMemWriteU64(tgSize, 0, threadsPerGroup)
-    metalMemWriteU64(tgSize, 8, 1)
-    metalMemWriteU64(tgSize, 16, 1)
-    metalMsgSendVoidPP(enc, metalSel("dispatchThreadgroups:threadsPerThreadgroup:"), gridSize, tgSize)
-    metalMsgSendVoid(enc, metalSel("endEncoding"))
-    metalMsgSendVoid(cmd, metalSel("commit"))
-    metalMsgSendVoid(cmd, metalSel("waitUntilCompleted"))
-    metalMemFree(gridSize)
-    metalMemFree(tgSize)
-    return
 }
 
 // Two-stage texture compute inside the active logical frame command buffer.
@@ -292,26 +98,111 @@ function metalDispatchTextureComputePair(
     return
 }
 
-// Shared-storage buffer of raw 32-bit words from Ints (uint table entries etc.).
+// One 32-bit word out of a buffer a kernel has written.
+//
+// Metal's storage is shared, so what a dispatch wrote is readable as soon as the
+// command buffer it rode on has completed — which is what a headless gate waits
+// on before it asks. There is no staging copy to make and no fence to take.
 @Native
-function metalCreateStorageBufferU32(ctx: RawPtr, data: borrow [Int]) -> Int {
-    let device = metalMemReadPtr(ctx, metalOffsetDevice())
-    let count = data.count
-    let bytes = metalMemAlloc(count * 4)
-    var i = 0
-    while i < count {
-        metalMemWriteU32(bytes, i * 4, data[i])
-        i = i + 1
+function metalReadBufferU32(ctx: RawPtr, bufferId: Int, index: Int) -> U32 {
+    if bufferId == 0 || index < 0 {
+        return U32(0)
     }
-    let buffer = metalMsgSendNewBuffer(device, metalSel("newBufferWithBytes:length:options:"), bytes, count * 4, 0)
-    metalMemFree(bytes)
-    return metalRegister(ctx, buffer)
+    let buffer = metalLookup(ctx, bufferId)
+    if pointerIsNull(buffer) {
+        return U32(0)
+    }
+    let contents = metalMsgSend(buffer, metalSel("contents"))
+    if pointerIsNull(contents) {
+        return U32(0)
+    }
+    return metalMemReadU32(contents, U64(index) * U64(4))
 }
 
-// Read one 32-bit word from a shared-storage buffer (compute output readback).
+// The buffer dispatch with a texture bound first, at `texture(0)`.
+//
+// A kernel that reads the depth a pass just wrote declares the texture ahead of
+// its buffers, so the texture takes the texture table's slot 0 and the buffers
+// keep buffer slots 0, 1, … — two tables, each numbered from zero, which is how
+// MSL binds them.
 @Native
-function metalReadStorageBufferU32(ctx: RawPtr, bufferId: Int, index: Int) -> U32 {
-    let buffer = metalLookup(ctx, bufferId)
-    let contents = metalMsgSend(buffer, metalSel("contents"))
-    return metalMemReadU32(contents, index * 4)
+function metalDispatchTextureBufferCompute(
+    ctx: RawPtr,
+    pipelineId: Int,
+    textureId: Int,
+    bufferIds: borrow [U32],
+    threadCount: Int,
+    threadsPerGroup: Int,
+) {
+    if pipelineId == 0 || threadCount <= 0 || threadsPerGroup <= 0 {
+        return
+    }
+    let commandBuffer = metalContextActiveCommandBuffer(ctx)
+    let encoder = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
+    metalMsgSendVoidP(encoder, metalSel("setComputePipelineState:"), metalLookup(ctx, pipelineId))
+    metalMsgSendVoidPU(encoder, metalSel("setTexture:atIndex:"), metalLookup(ctx, textureId), 0)
+    var slot = 0
+    while slot < bufferIds.count {
+        let buffer = metalLookup(ctx, Int(bufferIds[slot]))
+        metalMsgSendSetVertexBuffer(encoder, metalSel("setBuffer:offset:atIndex:"), buffer, 0, U64(slot))
+        slot = slot + 1
+    }
+    let gridSize = metalMemAlloc(24)
+    metalMemWriteU64(gridSize, 0, threadCount)
+    metalMemWriteU64(gridSize, 8, 1)
+    metalMemWriteU64(gridSize, 16, 1)
+    let tgSize = metalMemAlloc(24)
+    metalMemWriteU64(tgSize, 0, threadsPerGroup)
+    metalMemWriteU64(tgSize, 8, 1)
+    metalMemWriteU64(tgSize, 16, 1)
+    metalMsgSendVoidPP(encoder, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
+    metalMsgSendVoid(encoder, metalSel("endEncoding"))
+    metalMemFree(gridSize)
+    metalMemFree(tgSize)
+    return
+}
+
+// One dispatch over BUFFERS: the shape a simulation kernel has, next to the
+// texture pair above that an image filter has.
+//
+// `bufferIds` are bound in order at `buffer(0)`, `buffer(1)`, … which is how a
+// KSL kernel numbers its own storage arguments, so a particle step reading its
+// state at 0 and its parameters at 1 passes them in that order and writes no
+// slot numbers down anywhere else.
+//
+// Encoded on the frame's command buffer like the pair above, so a step that
+// runs before a draw is ordered before it without a commit or a CPU wait.
+@Native
+function metalDispatchComputeBuffers(
+    ctx: RawPtr,
+    pipelineId: Int,
+    bufferIds: borrow [U32],
+    threadCount: Int,
+    threadsPerGroup: Int,
+) {
+    if pipelineId == 0 || threadCount <= 0 || threadsPerGroup <= 0 {
+        return
+    }
+    let commandBuffer = metalContextActiveCommandBuffer(ctx)
+    let encoder = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
+    metalMsgSendVoidP(encoder, metalSel("setComputePipelineState:"), metalLookup(ctx, pipelineId))
+    var slot = 0
+    while slot < bufferIds.count {
+        let buffer = metalLookup(ctx, Int(bufferIds[slot]))
+        metalMsgSendSetVertexBuffer(encoder, metalSel("setBuffer:offset:atIndex:"), buffer, 0, U64(slot))
+        slot = slot + 1
+    }
+    let gridSize = metalMemAlloc(24)
+    metalMemWriteU64(gridSize, 0, threadCount)
+    metalMemWriteU64(gridSize, 8, 1)
+    metalMemWriteU64(gridSize, 16, 1)
+    let tgSize = metalMemAlloc(24)
+    metalMemWriteU64(tgSize, 0, threadsPerGroup)
+    metalMemWriteU64(tgSize, 8, 1)
+    metalMemWriteU64(tgSize, 16, 1)
+    metalMsgSendVoidPP(encoder, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
+    metalMsgSendVoid(encoder, metalSel("endEncoding"))
+    metalMemFree(gridSize)
+    metalMemFree(tgSize)
+    return
 }
