@@ -23,9 +23,10 @@ function sokolCreateDynamicBuffer(label: borrow String, floatCapacity: Int) -> D
     let buffer = sg_make_buffer(move sg_buffer_desc {
         label: label
         usage: sg_buffer_usage {
-            // Storage, not vertex: every dynamic buffer this backend hands out
-            // is read by a shader as a `std430` block. A stage that pulls its
-            // vertices by index has no attribute stream to be.
+            // Dynamic streams are shared by the UI's storage-buffer vertex
+            // pull path and editor overlays that use the same bytes as a
+            // conventional vertex stream.
+            vertex_buffer: true
             storage_buffer: true
             stream_update: true
         }
