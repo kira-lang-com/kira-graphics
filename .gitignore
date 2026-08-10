@@ -7,6 +7,10 @@ zig-out/
 **/generated/
 kira.lock
 
+# An unpacked Dawn release, fetched per platform rather than vendored:
+#   gh release download <tag> --repo kira-lang-com/dawn
+NativeLibs/Dawn/
+
 *.ke
 *.key
 

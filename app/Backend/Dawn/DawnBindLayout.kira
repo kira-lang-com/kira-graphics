@@ -1,0 +1,317 @@
+import Foundation
+// One WGSL `@group(0)`, assembled from the four slots an encoder carries.
+//
+// # Why anything has to be assembled
+//
+// A KSL shader puts every resource it binds in `@group(0)` and numbers the
+// bindings globally: `UiBatch.vert.wgsl` declares `@group(0) @binding(0)`
+// through `@binding(8)`. A Kira renderer does not hand those over in one
+// `BindGroup` — it partitions them across the encoder's four slots, each slot
+// carrying the global binding index inside it, because that is the shape Sokol
+// and Metal apply. WebGPU will not: it wants one bind group per `@group(n)`
+// whose entries match the pipeline's layout for that group exactly, and a slot-0
+// group holding one entry validated against a seven-entry layout is refused with
+// `entries (1) != expected (7)`.
+//
+// So the four slots are merged here into the one group they always described,
+// and bound at index 0. The entries need no renumbering: they already carry the
+// global binding.
+//
+// # Which bindings belong in it
+//
+// Not every resource a shader *declares* is in its layout. A pipeline built with
+// a derived layout gets exactly the bindings some stage statically uses, and a
+// resource the body never reads is absent — `UiGlassBand` declares nine and uses
+// seven. Meanwhile a caller binds all four slots regardless of which pipeline is
+// about to run, so `UiRect`, which reads one resource, is handed nine.
+//
+// The `resourceReflection` digest answers both: a resource's `stageMask` is zero
+// exactly when no stage uses it, so the bindings with a non-zero mask are the
+// derived layout's own set. Entries outside it are dropped, and a binding inside
+// it that no slot supplied is a draw that would be refused, so it is reported
+// and skipped rather than encoded.
+//
+// A shader with no reflection — raw WGSL a caller wrote and compiled through
+// `createShader` — keeps the slot-per-group reading, which is the right one
+// there: an author who wrote `@group(1)` meant group 1.
+
+// The bindings one pipeline's layout declares, by the pipeline's own id.
+//
+// Kept beside the pipeline rather than on it because `RenderPipeline` is the
+// public handle every backend shares and carries no shader id to look one up
+// with.
+struct DawnPipelineBindings {
+    var pipelineId: U32 = 0
+    var bindings: [Int] = []
+}
+
+// A merged `WGPUBindGroup` and the combination it was built for.
+//
+// The key is the pipeline plus each slot's identity and revision, because that
+// is everything the group's contents depend on: a WebGPU bind group is immutable
+// and is created against one pipeline's layout, and an entry list changes only
+// when one of the four groups is rebound.
+struct DawnMergedBindGroup {
+    var pipelineId: U32 = 0
+    var identity0: Int = 0
+    var identity1: Int = 0
+    var identity2: Int = 0
+    var identity3: Int = 0
+    var revision0: Int = 0
+    var revision1: Int = 0
+    var revision2: Int = 0
+    var revision3: Int = 0
+    var groupId: U32 = 0
+}
+
+// How many merged groups are kept before the table is emptied and refilled.
+//
+// A cap rather than unbounded growth: the combinations a program reaches are its
+// own and are normally few, but nothing in the API stops a caller from minting a
+// group per frame, and a table that only grows would be a leak. Emptying it is
+// safe at any moment — Dawn holds its own reference to a bind group a recorded
+// command names, which is why a dispatch can release one immediately after
+// binding it.
+function dawnMaxMergedBindGroups() -> Int { return 256 }
+
+// The bindings `digest` says some stage uses, in ascending order.
+//
+// Empty for a shader whose resources are all unused, which is also the answer
+// for a shader that has none — the two want the same thing from a draw, which is
+// no bind group at all.
+@Native
+function dawnUsedBindings(digest: borrow String) -> [Int] {
+    let reflection = kslParseResourceReflection(digest)
+    var used: [Int] = []
+    for block in reflection.uniforms {
+        if block.stageMask != 0 {
+            used.append(block.binding)
+        }
+    }
+    for buffer in reflection.storageBuffers {
+        if buffer.stageMask != 0 {
+            used.append(buffer.binding)
+        }
+    }
+    for texture in reflection.textures {
+        if texture.stageMask != 0 {
+            used.append(texture.binding)
+        }
+    }
+    for sampler in reflection.samplers {
+        if sampler.stageMask != 0 {
+            used.append(sampler.binding)
+        }
+    }
+    for image in reflection.images {
+        if image.stageMask != 0 {
+            used.append(image.binding)
+        }
+    }
+    return used
+}
+
+@Native
+function dawnBindingsContain(bindings: borrow [Int], binding: Int) -> Bool {
+    for candidate in bindings {
+        if candidate == binding {
+            return true
+        }
+    }
+    return false
+}
+
+// Remembers what a pipeline's layout declares, so a draw can filter to it.
+@Native
+function dawnRecordPipelineBindings(state: borrow mut GraphicsAppRuntimeState, pipelineId: U32, bindings: borrow [Int]) {
+    dawnForgetPipelineBindings(state, pipelineId)
+    state.dawn.pipelineBindings.append(DawnPipelineBindings {
+        pipelineId: pipelineId
+        bindings: bindings
+    })
+    return
+}
+
+@Native
+function dawnForgetPipelineBindings(state: borrow mut GraphicsAppRuntimeState, pipelineId: U32) {
+    var kept: [DawnPipelineBindings] = []
+    for held in state.dawn.pipelineBindings {
+        if held.pipelineId != pipelineId {
+            kept.append(held)
+        }
+    }
+    state.dawn.pipelineBindings = kept
+    return
+}
+
+// Where `pipelineId`'s bindings sit in the table, or -1 when it has none — which
+// is the answer for every pipeline built from a shader with no reflection.
+@Native
+function dawnPipelineBindingSlot(state: borrow GraphicsAppRuntimeState, pipelineId: U32) -> Int {
+    for index in 0..state.dawn.pipelineBindings.count {
+        if state.dawn.pipelineBindings[index].pipelineId == pipelineId {
+            return index
+        }
+    }
+    return 0 - 1
+}
+
+// What tells one bind group apart from another, minted on first use.
+@Native
+function dawnGroupIdentity(state: borrow mut GraphicsAppRuntimeState, group: borrow BindGroup, present: Bool) -> Int {
+    if !present {
+        return 0
+    }
+    var groupState = nativeRecover<BindGroupState>(group.storage)
+    if groupState.identity == 0 {
+        state.dawn.nextGroupIdentity = state.dawn.nextGroupIdentity + 1
+        groupState.identity = state.dawn.nextGroupIdentity
+    }
+    return groupState.identity
+}
+
+@Native
+function dawnGroupRevision(group: borrow BindGroup, present: Bool) -> Int {
+    if !present {
+        return 0
+    }
+    return nativeRecover<BindGroupState>(group.storage).revision
+}
+
+// The cached merged group for this combination, or 0 when none is held.
+@Native
+function dawnCachedMergedGroup(state: borrow GraphicsAppRuntimeState, key: borrow DawnMergedBindGroup) -> U32 {
+    for index in 0..state.dawn.mergedGroups.count {
+        let held = state.dawn.mergedGroups[index]
+        if held.pipelineId == key.pipelineId
+            && held.identity0 == key.identity0
+            && held.identity1 == key.identity1
+            && held.identity2 == key.identity2
+            && held.identity3 == key.identity3
+            && held.revision0 == key.revision0
+            && held.revision1 == key.revision1
+            && held.revision2 == key.revision2
+            && held.revision3 == key.revision3 {
+            return held.groupId
+        }
+    }
+    return U32(0)
+}
+
+@Native
+function dawnReleaseMergedGroups(state: borrow mut GraphicsAppRuntimeState) {
+    for held in state.dawn.mergedGroups {
+        let handle = dawnObject(state, held.groupId)
+        if !pointerIsNull(handle) {
+            wgpuBindGroupRelease(handle)
+            dawnForgetObject(state, held.groupId)
+        }
+    }
+    state.dawn.mergedGroups = []
+    return
+}
+
+// Merges the encoder's four slots, filters to what the pipeline reads, and binds
+// the result at group 0. Answers whether the draw may proceed.
+@Native
+function dawnBindMergedGroup(
+    state: borrow mut GraphicsAppRuntimeState,
+    pipelineHandle: RawPtr,
+    pipelineId: U32,
+    slot: Int,
+    group0: borrow BindGroup,
+    has0: Bool,
+    group1: borrow BindGroup,
+    has1: Bool,
+    group2: borrow BindGroup,
+    has2: Bool,
+    group3: borrow BindGroup,
+    has3: Bool,
+) -> Bool {
+    let wanted = state.dawn.pipelineBindings[slot].bindings
+    if wanted.count == 0 {
+        return true
+    }
+    var key = DawnMergedBindGroup {
+        pipelineId: pipelineId
+        identity0: dawnGroupIdentity(state, group0, has0)
+        identity1: dawnGroupIdentity(state, group1, has1)
+        identity2: dawnGroupIdentity(state, group2, has2)
+        identity3: dawnGroupIdentity(state, group3, has3)
+        revision0: dawnGroupRevision(group0, has0)
+        revision1: dawnGroupRevision(group1, has1)
+        revision2: dawnGroupRevision(group2, has2)
+        revision3: dawnGroupRevision(group3, has3)
+    }
+    let cached = dawnCachedMergedGroup(state, key)
+    if cached != 0 {
+        wgpuRenderPassEncoderSetBindGroup(state.dawn.passEncoder, U32(0), dawnObject(state, cached), U64(0), nullPointer())
+        return true
+    }
+    var collected: [WGPUBindGroupEntry] = []
+    dawnCollectSlot(state, collected, wanted, group0, has0)
+    dawnCollectSlot(state, collected, wanted, group1, has1)
+    dawnCollectSlot(state, collected, wanted, group2, has2)
+    dawnCollectSlot(state, collected, wanted, group3, has3)
+    if collected.count != wanted.count {
+        graphicsDiagnostic("Kira Graphics: a draw bound " + String(collected.count) + " of the " + String(wanted.count) + " resources its shader reads, so it was skipped rather than refused by the device")
+        return false
+    }
+    let layout = wgpuRenderPipelineGetBindGroupLayout(pipelineHandle, U32(0))
+    if pointerIsNull(layout) {
+        return false
+    }
+    let handle = wgpuDeviceCreateBindGroup(state.dawn.device, WGPUBindGroupDescriptor {
+        label: dawnText("kira-merged-bindings")
+        layout: layout
+        entryCount: U64(collected.count)
+        entries: WGPUBindGroupEntryArray16 { elements: collected }
+    })
+    wgpuBindGroupLayoutRelease(layout)
+    if pointerIsNull(handle) {
+        return false
+    }
+    if state.dawn.mergedGroups.count >= dawnMaxMergedBindGroups() {
+        dawnReleaseMergedGroups(state)
+    }
+    key.groupId = dawnRegisterObject(state, handle, dawnFormatUndefined())
+    state.dawn.mergedGroups.append(key)
+    wgpuRenderPassEncoderSetBindGroup(state.dawn.passEncoder, U32(0), handle, U64(0), nullPointer())
+    return true
+}
+
+// Adds one slot's entries, keeping only the bindings the pipeline reads and only
+// the first entry offered for any binding.
+//
+// First rather than last because the slots are disjoint by construction — a
+// caller assigns each resource one slot — so a second entry for a binding is a
+// caller's mistake, and taking the first keeps the answer the same whichever
+// order the slots are walked in.
+@Native
+function dawnCollectSlot(
+    state: borrow GraphicsAppRuntimeState,
+    collected: borrow mut [WGPUBindGroupEntry],
+    wanted: borrow [Int],
+    group: borrow BindGroup,
+    present: Bool,
+) {
+    if !present {
+        return
+    }
+    for entry in dawnBindGroupEntries(state, nativeRecover<BindGroupState>(group.storage)) {
+        let binding = Int(entry.binding)
+        if !dawnBindingsContain(wanted, binding) {
+            continue
+        }
+        var already = false
+        for held in collected {
+            if held.binding == entry.binding {
+                already = true
+            }
+        }
+        if !already {
+            collected.append(entry)
+        }
+    }
+    return
+}

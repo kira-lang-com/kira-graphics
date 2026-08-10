@@ -22,16 +22,19 @@ function metalCreateComputePipeline(ctx: RawPtr, shaderId: Int, entryName: borro
 }
 
 // Two-stage texture compute inside the active logical frame command buffer.
-// Stage H reads one capture and writes two horizontal blur radii; stage V reads
-// those intermediates and writes the corresponding final textures. Keeping both
-// stages on the frame command buffer preserves render -> compute -> render order
-// without a commit or CPU wait. Non-Metal callers never enter this helper.
+// Stage H reads the two crossfade sources, blends them as it filters, and writes
+// two horizontal blur radii; stage V reads those intermediates and writes the
+// corresponding final textures. Keeping both stages on the frame command buffer
+// preserves render -> compute -> render order without a commit or CPU wait.
+// Non-Metal callers never enter this helper.
 @Native
 function metalDispatchTextureComputePair(
     ctx: RawPtr,
     horizontalPipelineId: Int,
     verticalPipelineId: Int,
     sourceTextureId: Int,
+    secondSourceTextureId: Int,
+    blend: Float,
     tempNearTextureId: Int,
     tempFarTextureId: Int,
     outputNearTextureId: Int,
@@ -45,20 +48,25 @@ function metalDispatchTextureComputePair(
     }
     let commandBuffer = metalContextActiveCommandBuffer(ctx)
     let source = metalLookup(ctx, sourceTextureId)
+    let secondSource = metalLookup(ctx, secondSourceTextureId)
     let tempNear = metalLookup(ctx, tempNearTextureId)
     let tempFar = metalLookup(ctx, tempFarTextureId)
     let outputNear = metalLookup(ctx, outputNearTextureId)
     let outputFar = metalLookup(ctx, outputFarTextureId)
     let sampler = metalLookup(ctx, samplerId)
 
-    // Both kernels take their target extent in a uniform and their filtering
-    // from a bound sampler: a compute stage written in KSL can neither query a
-    // texture's size nor declare a sampler inline, and the caller knows the size
-    // it allocated. They declare uniform, sampler, reads, writes in that order,
-    // so one slot layout serves the pair.
-    let extent = metalMemAlloc(8)
-    metalMemWriteU32(extent, 0, width)
-    metalMemWriteU32(extent, 4, height)
+    // Both kernels take their target extent and the crossfade weight in a
+    // uniform and their filtering from a bound sampler: a compute stage written
+    // in KSL can neither query a texture's size nor declare a sampler inline,
+    // and the caller knows the size it allocated. They declare uniform, sampler,
+    // reads, writes in that order, so one slot layout serves the pair. The block
+    // is 16 bytes because `std140` rounds a struct up to that, and the padding
+    // word is written rather than left holding whatever the allocation had.
+    let extent = metalMemAlloc(16)
+    metalMemWriteF32(extent, 0, F32(Float(width)))
+    metalMemWriteF32(extent, 4, F32(Float(height)))
+    metalMemWriteF32(extent, 8, F32(blend))
+    metalMemWriteF32(extent, 12, F32(0.0))
 
     let gridSize = metalMemAlloc(24)
     metalMemWriteU64(gridSize, 0, width)
@@ -71,17 +79,18 @@ function metalDispatchTextureComputePair(
 
     let horizontal = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
     metalMsgSendVoidP(horizontal, metalSel("setComputePipelineState:"), metalLookup(ctx, horizontalPipelineId))
-    metalMsgSendSetBytes(horizontal, metalSel("setBytes:length:atIndex:"), extent, 8, 0)
+    metalMsgSendSetBytes(horizontal, metalSel("setBytes:length:atIndex:"), extent, 16, 0)
     metalMsgSendVoidPU(horizontal, metalSel("setSamplerState:atIndex:"), sampler, 1)
     metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), source, 2)
-    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempNear, 3)
-    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempFar, 4)
+    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), secondSource, 3)
+    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempNear, 4)
+    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempFar, 5)
     metalMsgSendVoidPP(horizontal, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
     metalMsgSendVoid(horizontal, metalSel("endEncoding"))
 
     let vertical = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
     metalMsgSendVoidP(vertical, metalSel("setComputePipelineState:"), metalLookup(ctx, verticalPipelineId))
-    metalMsgSendSetBytes(vertical, metalSel("setBytes:length:atIndex:"), extent, 8, 0)
+    metalMsgSendSetBytes(vertical, metalSel("setBytes:length:atIndex:"), extent, 16, 0)
     metalMsgSendVoidPU(vertical, metalSel("setSamplerState:atIndex:"), sampler, 1)
     metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), tempNear, 2)
     metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), tempFar, 3)
@@ -141,11 +150,9 @@ function metalDispatchTextureBufferCompute(
     let encoder = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
     metalMsgSendVoidP(encoder, metalSel("setComputePipelineState:"), metalLookup(ctx, pipelineId))
     metalMsgSendVoidPU(encoder, metalSel("setTexture:atIndex:"), metalLookup(ctx, textureId), 0)
-    var slot = 0
-    while slot < bufferIds.count {
+    for slot in 0..bufferIds.count {
         let buffer = metalLookup(ctx, Int(bufferIds[slot]))
         metalMsgSendSetVertexBuffer(encoder, metalSel("setBuffer:offset:atIndex:"), buffer, 0, U64(slot))
-        slot = slot + 1
     }
     let gridSize = metalMemAlloc(24)
     metalMemWriteU64(gridSize, 0, threadCount)
@@ -186,11 +193,9 @@ function metalDispatchComputeBuffers(
     let commandBuffer = metalContextActiveCommandBuffer(ctx)
     let encoder = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
     metalMsgSendVoidP(encoder, metalSel("setComputePipelineState:"), metalLookup(ctx, pipelineId))
-    var slot = 0
-    while slot < bufferIds.count {
+    for slot in 0..bufferIds.count {
         let buffer = metalLookup(ctx, Int(bufferIds[slot]))
         metalMsgSendSetVertexBuffer(encoder, metalSel("setBuffer:offset:atIndex:"), buffer, 0, U64(slot))
-        slot = slot + 1
     }
     let gridSize = metalMemAlloc(24)
     metalMemWriteU64(gridSize, 0, threadCount)

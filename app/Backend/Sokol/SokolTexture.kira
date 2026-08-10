@@ -97,7 +97,7 @@ function sokolUsageIsSampled(usage: borrow TextureUsage) -> Bool {
     return usage == .Sampled
         || usage == .SampledStreaming
         || usage == .RenderTargetSampled
-        || usage == .RenderTargetSampledStorage
+        || usage == .SampledStorage
 }
 
 // Whether a usage asks for a colour-attachment view.
@@ -105,13 +105,12 @@ function sokolUsageIsSampled(usage: borrow TextureUsage) -> Bool {
 function sokolUsageIsColorTarget(usage: borrow TextureUsage) -> Bool {
     return usage == .RenderTarget
         || usage == .RenderTargetSampled
-        || usage == .RenderTargetSampledStorage
 }
 
 // Whether a usage asks for a view a compute kernel writes through.
 @Native
 function sokolUsageIsStorageImage(usage: borrow TextureUsage) -> Bool {
-    return usage == .RenderTargetSampledStorage
+    return usage == .SampledStorage
 }
 
 // Stage `pixels` as bytes sokol can read, returning the block to free.

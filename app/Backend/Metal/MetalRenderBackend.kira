@@ -115,6 +115,11 @@ RenderBackend MetalRenderBackend(context: RawPtr) {
         return
     }
 
+    function bindGroupAddUniform(group: borrow BindGroup, slot: Int, uniform: borrow Uniform) -> Void {
+        metalBindGroupAddEntry(context, group.id, metalBindEntryKindUniform(), slot, Int(uniform.id))
+        return
+    }
+
     function bindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: borrow GraphicsSampler) -> Void {
         metalBindGroupAddEntry(context, group.id, metalBindEntryKindSampler(), slot, sampler.id)
         return
@@ -203,6 +208,8 @@ RenderBackend MetalRenderBackend(context: RawPtr) {
         horizontalPipeline: Int,
         verticalPipeline: Int,
         source: borrow GraphicsTexture,
+        secondSource: borrow GraphicsTexture,
+        blend: Float,
         tempNear: borrow GraphicsTexture,
         tempFar: borrow GraphicsTexture,
         outputNear: borrow GraphicsTexture,
@@ -216,6 +223,8 @@ RenderBackend MetalRenderBackend(context: RawPtr) {
             horizontalPipeline,
             verticalPipeline,
             Int(source.id),
+            Int(secondSource.id),
+            blend,
             Int(tempNear.id),
             Int(tempFar.id),
             Int(outputNear.id),
@@ -290,10 +299,10 @@ RenderBackend MetalRenderBackend(context: RawPtr) {
     }
 
     // The Metal context goes in the first slot; the second is the sokol run
-    // loop's state, and handing the context through it would route every Metal
-    // draw into the sokol path.
+    // loop's state and the third is Dawn's, and handing the context through
+    // either would route every Metal draw into that backend's path.
     function makeEncoder(passActive: Bool) -> RenderEncoder {
-        return makeRenderEncoderForBackend(passActive, context, nullPointer())
+        return makeRenderEncoderForBackend(passActive, context, nullPointer(), nullPointer())
     }
 
     function submitFrame(frame: borrow RenderFrame) -> Void {

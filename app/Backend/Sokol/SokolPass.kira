@@ -50,8 +50,9 @@ struct SokolPassState {
     // reach the screen exactly once rather than every frame.
     var announcedFrameSubmitted: Bool = false
     // Frame-rate telemetry (KIRA_GRAPHICS_LOG_FPS): committed frames per wall
-    // second, so a pacing regression is measurable instead of eyeballed.
-    var logFps: Bool = false
+    // second, so a pacing regression is measurable instead of eyeballed. Whether
+    // the run asked for it is a harness knob and lives on the runtime state; the
+    // window being counted is this backend's own.
     var fpsWindowStartSeconds: Float = 0.0
     var fpsFrames: Int = 0
 }
@@ -349,7 +350,7 @@ function sokolTenths(value: Float) -> String {
 // Committed frames per wall second, when the run asked for them.
 @Native
 function sokolLogFrameRate(state: borrow mut GraphicsAppRuntimeState) {
-    if !state.pass.logFps {
+    if !state.logFps {
         return
     }
     let now = kgMonotonicSeconds()

@@ -156,6 +156,13 @@ class Graphics {
         return
     }
 
+    // Add a uniform block at `slot`, so a group can carry the resources a shader
+    // reads together rather than spending a second encoder slot on one number.
+    function bindGroupAddUniform(group: borrow BindGroup, slot: Int, uniform: borrow Uniform) {
+        self.renderBackend().bindGroupAddUniform(group, slot, uniform)
+        return
+    }
+
     function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroupResult {
         return self.renderBackend().createTextureSamplerBindGroup(label, textureSlot, texture, samplerSlot, sampler)
     }

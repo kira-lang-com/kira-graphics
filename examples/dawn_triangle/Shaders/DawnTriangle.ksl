@@ -1,0 +1,40 @@
+type VertexIn {
+    let position: Float2
+    let color: Float3
+}
+
+type VertexOut {
+    @builtin(position)
+    let clip_position: Float4
+
+    let color: Float4
+}
+
+type FragmentOut {
+    let color: Float4
+}
+
+shader DawnTriangle {
+    vertex {
+        input VertexIn
+        output VertexOut
+
+        function entry(vertexInput: VertexIn) -> VertexOut {
+            let result: VertexOut
+            result.clip_position = Float4(vertexInput.position, 0.0, 1.0)
+            result.color = Float4(vertexInput.color, 1.0)
+            return result
+        }
+    }
+
+    fragment {
+        input VertexOut
+        output FragmentOut
+
+        function entry(fragmentInput: VertexOut) -> FragmentOut {
+            let result: FragmentOut
+            result.color = fragmentInput.color
+            return result
+        }
+    }
+}

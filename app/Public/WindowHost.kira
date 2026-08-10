@@ -1,0 +1,14 @@
+// Small host-window accessors for embedders that need to attach a native child
+// control to the Sokol window without depending on KiraGraphics' private
+// generated bindings.
+function kiraGraphicsWin32WindowHandle() -> RawPtr {
+    return sapp_win32_get_hwnd()
+}
+
+function kiraGraphicsViewportWidth() -> I32 {
+    return sapp_width()
+}
+
+function kiraGraphicsViewportHeight() -> I32 {
+    return sapp_height()
+}

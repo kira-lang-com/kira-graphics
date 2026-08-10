@@ -1,0 +1,485 @@
+import Foundation
+// The window the Dawn backend renders into, opened from Kira against Win32.
+//
+// Dawn draws; it does not own a window. WebGPU takes a surface, and on Windows a
+// surface is an `HWND` — so the backend that has no window system of its own
+// needs one, and the choice is between borrowing another backend's or opening
+// the platform's. This opens the platform's: `user32` and `kernel32` are declared
+// here as an ordinary `LinkMode.Dynamic` library resolved through `systemLibs`,
+// and every entry point is the ANSI one so a Kira `String` reaches it as the
+// `CString` it already crosses as.
+//
+// A window procedure is four scalars in and one out, so an ordinary Kira
+// function fills it — there is no C anywhere in this file, and none anywhere in
+// the backend. What the procedure cannot do is carry state: a `WNDPROC` receives
+// no user pointer, so it answers only the two messages that need answering
+// before the pump sees them (close the window, then post the quit) and hands
+// everything else to `DefWindowProcA`. Everything the application reacts to is
+// read out of the message queue in `dawnPumpMessages`, where the runtime state
+// is in hand.
+//
+// `MSG`, `RECT` and `MONITORINFO` are out-parameters, and a C-layout struct
+// written at an argument is copied *out* only. So each one is a block from
+// `kira_dynamic_alloc` addressed through a hand-declared `@FFI.Pointer`, which
+// is how the members C wrote are read back.
+
+@FFI.Callback { abi: c; params: [RawPtr, U32, U64, Int]; result: Int; }
+struct WindowProcedure {}
+
+// `WNDCLASSEXA`. The trailing `smallIcon` matters as much as the rest: the size
+// in `byteSize` is checked by `RegisterClassExA`, and a struct one field short
+// is refused with no diagnostic beyond a zero atom.
+@FFI.Struct { layout: c; }
+struct WindowClass {
+    var byteSize: U32 = 0
+    var style: U32 = 0
+    var procedure: WindowProcedure
+    var classExtraBytes: I32 = 0
+    var windowExtraBytes: I32 = 0
+    var instance: RawPtr
+    var icon: RawPtr
+    var cursor: RawPtr
+    var background: RawPtr
+    var menuName: CString
+    var className: CString
+    var smallIcon: RawPtr
+}
+
+@FFI.Pointer { target: WindowClass; ownership: borrowed; }
+struct WindowClassPointer {}
+
+@FFI.Struct { layout: c; }
+struct WindowPoint {
+    var x: I32 = 0
+    var y: I32 = 0
+}
+
+@FFI.Struct { layout: c; }
+struct WindowMessage {
+    var window: RawPtr
+    var message: U32 = 0
+    var wparam: U64 = 0
+    var lparam: Int = 0
+    var time: U32 = 0
+    var point: WindowPoint
+}
+
+@FFI.Pointer { target: WindowMessage; ownership: borrowed; }
+struct WindowMessagePointer {}
+
+@FFI.Struct { layout: c; }
+struct WindowRect {
+    var left: I32 = 0
+    var top: I32 = 0
+    var right: I32 = 0
+    var bottom: I32 = 0
+}
+
+@FFI.Pointer { target: WindowRect; ownership: borrowed; }
+struct WindowRectPointer {}
+
+// `MONITORINFO`: its own size, the monitor's rectangle, its work area, and a
+// flag saying whether it is the primary display.
+@FFI.Struct { layout: c; }
+struct MonitorInfo {
+    var byteSize: U32 = 0
+    var monitor: WindowRect
+    var work: WindowRect
+    var flags: U32 = 0
+}
+
+@FFI.Pointer { target: MonitorInfo; ownership: borrowed; }
+struct MonitorInfoPointer {}
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
+function allocateWindowMessage(size: U64) -> WindowMessagePointer;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
+function allocateWindowRect(size: U64) -> WindowRectPointer;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
+function allocateMonitorInfo(size: U64) -> MonitorInfoPointer;
+
+@FFI.Extern { library: win32; symbol: GetModuleHandleA; abi: c; }
+function moduleHandle(name: CString) -> RawPtr;
+
+// `LoadCursorA(NULL, IDC_ARROW)`. The second parameter is `LPCSTR`, and a stock
+// cursor is named by an integer cast to one — `MAKEINTRESOURCE`. There is no
+// integer-to-pointer cast in Kira, and none is needed: the parameter is a
+// pointer-sized word either way, so it is declared as the integer it carries.
+@FFI.Extern { library: win32; symbol: LoadCursorA; abi: c; }
+function loadCursor(instance: RawPtr, name: U64) -> RawPtr;
+
+@FFI.Extern { library: win32; symbol: RegisterClassExA; abi: c; }
+function registerWindowClass(windowClass: WindowClassPointer) -> U16;
+
+@FFI.Extern { library: win32; symbol: CreateWindowExA; abi: c; }
+function createWindowHandle(exStyle: U32, className: CString, title: CString, style: U32, x: I32, y: I32, width: I32, height: I32, parent: RawPtr, menu: RawPtr, instance: RawPtr, param: RawPtr) -> RawPtr;
+
+@FFI.Extern { library: win32; symbol: DestroyWindow; abi: c; }
+function destroyWindowHandle(window: RawPtr) -> I32;
+
+@FFI.Extern { library: win32; symbol: ShowWindow; abi: c; }
+function showWindow(window: RawPtr, command: I32) -> I32;
+
+@FFI.Extern { library: win32; symbol: SetForegroundWindow; abi: c; }
+function setForegroundWindow(window: RawPtr) -> I32;
+
+@FFI.Extern { library: win32; symbol: PeekMessageA; abi: c; }
+function peekMessage(message: WindowMessagePointer, window: RawPtr, first: U32, last: U32, remove: U32) -> I32;
+
+@FFI.Extern { library: win32; symbol: TranslateMessage; abi: c; }
+function translateMessage(message: WindowMessagePointer) -> I32;
+
+@FFI.Extern { library: win32; symbol: DispatchMessageA; abi: c; }
+function dispatchMessage(message: WindowMessagePointer) -> Int;
+
+@FFI.Extern { library: win32; symbol: DefWindowProcA; abi: c; }
+function defaultWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: Int) -> Int;
+
+@FFI.Extern { library: win32; symbol: PostQuitMessage; abi: c; }
+function postQuitMessage(code: I32) -> Void;
+
+@FFI.Extern { library: win32; symbol: GetClientRect; abi: c; }
+function windowClientRect(window: RawPtr, rect: WindowRectPointer) -> I32;
+
+@FFI.Extern { library: win32; symbol: AdjustWindowRect; abi: c; }
+function adjustWindowRect(rect: WindowRectPointer, style: U32, hasMenu: I32) -> I32;
+
+@FFI.Extern { library: win32; symbol: SetProcessDPIAware; abi: c; }
+function markProcessDpiAware() -> I32;
+
+@FFI.Extern { library: win32; symbol: GetDpiForWindow; abi: c; }
+function windowDpi(window: RawPtr) -> U32;
+
+@FFI.Extern { library: win32; symbol: GetDpiForSystem; abi: c; }
+function systemDpi() -> U32;
+
+@FFI.Extern { library: win32; symbol: GetWindowLongPtrA; abi: c; }
+function windowLong(window: RawPtr, index: I32) -> Int;
+
+@FFI.Extern { library: win32; symbol: SetWindowLongPtrA; abi: c; }
+function setWindowLong(window: RawPtr, index: I32, value: Int) -> Int;
+
+@FFI.Extern { library: win32; symbol: SetWindowPos; abi: c; }
+function setWindowPosition(window: RawPtr, after: RawPtr, x: I32, y: I32, width: I32, height: I32, flags: U32) -> I32;
+
+@FFI.Extern { library: win32; symbol: MonitorFromWindow; abi: c; }
+function monitorForWindow(window: RawPtr, fallback: U32) -> RawPtr;
+
+@FFI.Extern { library: win32; symbol: GetMonitorInfoA; abi: c; }
+function readMonitorInfo(monitor: RawPtr, info: MonitorInfoPointer) -> I32;
+
+@FFI.Extern { library: win32; symbol: GetKeyState; abi: c; }
+function keyState(virtualKey: I32) -> I16;
+
+@FFI.Extern { library: win32; symbol: ShowCursor; abi: c; }
+function showCursor(show: Bool) -> I32;
+
+@FFI.Extern { library: win32; symbol: ClipCursor; abi: c; }
+function clipCursor(bounds: WindowRectPointer) -> I32;
+
+// The window styles the three window modes are made of.
+function dawnWindowedStyle() -> U32 { return U32(13565952) }
+function dawnBorderlessStyle() -> U32 { return U32(2147483648) }
+function dawnVisibleStyle() -> U32 { return U32(268435456) }
+
+// The messages the pump and the procedure name.
+function dawnMessageDestroy() -> U32 { return U32(2) }
+function dawnMessageSize() -> U32 { return U32(5) }
+function dawnMessageSetFocus() -> U32 { return U32(7) }
+function dawnMessageKillFocus() -> U32 { return U32(8) }
+function dawnMessageClose() -> U32 { return U32(16) }
+function dawnMessageQuit() -> U32 { return U32(18) }
+function dawnMessageKeyDown() -> U32 { return U32(256) }
+function dawnMessageKeyUp() -> U32 { return U32(257) }
+function dawnMessageChar() -> U32 { return U32(258) }
+function dawnMessageSystemKeyDown() -> U32 { return U32(260) }
+function dawnMessageSystemKeyUp() -> U32 { return U32(261) }
+function dawnMessagePointerMove() -> U32 { return U32(512) }
+function dawnMessageLeftDown() -> U32 { return U32(513) }
+function dawnMessageLeftUp() -> U32 { return U32(514) }
+function dawnMessageRightDown() -> U32 { return U32(516) }
+function dawnMessageRightUp() -> U32 { return U32(517) }
+function dawnMessageMiddleDown() -> U32 { return U32(519) }
+function dawnMessageMiddleUp() -> U32 { return U32(520) }
+function dawnMessageWheel() -> U32 { return U32(522) }
+
+// Closing the window and quitting are the two things a window procedure has to
+// answer before the pump could see them: `WM_CLOSE` is *sent* to the procedure
+// rather than posted to the queue, so a program that only reads the queue never
+// hears the title bar's close button at all. Destroying the window in answer to
+// it posts `WM_QUIT`, which the queue does carry, and that is what the pump
+// turns into `AppEventKind.QuitRequested`.
+function dawnWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: Int) -> Int {
+    if message == dawnMessageClose() {
+        destroyWindowHandle(window)
+        return 0
+    }
+    if message == dawnMessageDestroy() {
+        postQuitMessage(0)
+        return 0
+    }
+    return defaultWindowProcedure(window, message, wparam, lparam)
+}
+
+// Registers the window class once per process and answers whether it is there.
+//
+// `RegisterClassExA` answers 0 for a class that already exists, which is the
+// normal case on a second call and not a failure — so a zero atom is only
+// reported when nothing of that name has ever been registered, and the caller
+// finds out by trying to create the window.
+@Native
+function dawnRegisterWindowClass(instance: RawPtr, className: borrow String) -> Bool {
+    return registerWindowClass(WindowClass {
+        // `CS_HREDRAW | CS_VREDRAW`: redraw the whole client area when either
+        // dimension changes, so a resize repaints rather than smearing.
+        byteSize: U32(80)
+        style: U32(3)
+        procedure: dawnWindowProcedure
+        instance: instance
+        cursor: loadCursor(nullPointer(), U64(32512))
+        className: className
+    }) != U16(0)
+}
+
+// Physical pixels per point for a window that does not exist yet.
+//
+// A window's own DPI is the right source once there is a window, but the size
+// `CreateWindowExA` is given has to be in pixels before that. The system DPI is
+// what a system-DPI-aware process is scaled by, and it is what
+// `GetDpiForWindow` will answer for the window this opens. A process that never
+// declared awareness is told 96 here and 96 there, so the unscaled path falls
+// out of the same arithmetic rather than needing a branch.
+@Native
+function dawnSystemScale() -> Float {
+    let dpi = Int(systemDpi())
+    if dpi <= 0 {
+        return 1.0
+    }
+    return Float(dpi) / 96.0
+}
+
+// A size in points as the physical pixels it covers.
+function dawnPixelsFromPoints(points: Int, scale: Float) -> Int {
+    return Int(Float(points) * scale)
+}
+
+// Opens the window, sized so its CLIENT area is the size the application asked
+// for. `CreateWindowExA` takes the outer rectangle, and handing it the client
+// size gives a drawable smaller than requested by exactly the frame.
+//
+// `width` and `height` are POINTS, which is what `GraphicsApplication` carries
+// and what every other backend is handed. Win32 sizes windows in physical
+// pixels, so the backing scale multiplies in here: a 1920-point window on a
+// 125% display asks for a 2400-pixel client area, exactly as sokol-app does,
+// and the two backends then agree on the drawable Windows gives back.
+@Native
+function dawnOpenWindow(instance: RawPtr, className: borrow String, title: borrow String, width: Int, height: Int, mode: borrow WindowMode) -> RawPtr {
+    let style = dawnStyleForMode(mode)
+    let scale = dawnSystemScale()
+    let clientWidth = dawnPixelsFromPoints(width, scale)
+    let clientHeight = dawnPixelsFromPoints(height, scale)
+    var outerWidth = clientWidth
+    var outerHeight = clientHeight
+    if mode == .Windowed {
+        let frame = allocateWindowRect(U64(16))
+        writeWord(frame, U64(8), U32(clientWidth))
+        writeWord(frame, U64(12), U32(clientHeight))
+        if adjustWindowRect(frame, style, 0) != 0 {
+            outerWidth = Int(frame.right) - Int(frame.left)
+            outerHeight = Int(frame.bottom) - Int(frame.top)
+        }
+        freeBytes(frame)
+    }
+    let window = createWindowHandle(
+        U32(0),
+        className,
+        title,
+        style,
+        I32(120),
+        I32(120),
+        I32(outerWidth),
+        I32(outerHeight),
+        nullPointer(),
+        nullPointer(),
+        instance,
+        nullPointer(),
+    )
+    if pointerIsNull(window) {
+        return window
+    }
+    showWindow(window, I32(5))
+    setForegroundWindow(window)
+    if mode == .Fullscreen {
+        dawnCoverDisplay(window)
+    }
+    return window
+}
+
+function dawnStyleForMode(mode: borrow WindowMode) -> U32 {
+    match mode {
+        Windowed -> return dawnWindowedStyle() + dawnVisibleStyle();
+        WindowedBorderless -> return dawnBorderlessStyle() + dawnVisibleStyle();
+        Fullscreen -> return dawnBorderlessStyle() + dawnVisibleStyle();
+    }
+}
+
+// Moves an undecorated window over the whole display it is on.
+@Native
+function dawnCoverDisplay(window: RawPtr) {
+    let monitor = monitorForWindow(window, U32(2))
+    if pointerIsNull(monitor) {
+        return
+    }
+    let info = allocateMonitorInfo(U64(40))
+    writeWord(info, U64(0), U32(40))
+    if readMonitorInfo(monitor, info) != 0 {
+        setWindowPosition(
+            window,
+            nullPointer(),
+            info.monitor.left,
+            info.monitor.top,
+            info.monitor.right - info.monitor.left,
+            info.monitor.bottom - info.monitor.top,
+            // SWP_NOZORDER | SWP_FRAMECHANGED
+            U32(36),
+        )
+    }
+    freeBytes(info)
+    return
+}
+
+// The client area in physical pixels, which is what the surface is configured
+// with and what a drawable measures.
+@Native
+function dawnClientWidth(window: RawPtr) -> Int {
+    if pointerIsNull(window) {
+        return 0
+    }
+    let rect = allocateWindowRect(U64(16))
+    var width = 0
+    if windowClientRect(window, rect) != 0 {
+        width = Int(rect.right) - Int(rect.left)
+    }
+    freeBytes(rect)
+    return width
+}
+
+@Native
+function dawnClientHeight(window: RawPtr) -> Int {
+    if pointerIsNull(window) {
+        return 0
+    }
+    let rect = allocateWindowRect(U64(16))
+    var height = 0
+    if windowClientRect(window, rect) != 0 {
+        height = Int(rect.bottom) - Int(rect.top)
+    }
+    freeBytes(rect)
+    return height
+}
+
+// Physical pixels per point, from the window's own DPI rather than the
+// display's: a window dragged between two monitors of different scales reports
+// the one it is on.
+@Native
+function dawnWindowScale(window: RawPtr) -> Float {
+    if pointerIsNull(window) {
+        return 1.0
+    }
+    let dpi = Int(windowDpi(window))
+    if dpi <= 0 {
+        return 1.0
+    }
+    return Float(dpi) / 96.0
+}
+
+// How the window is presented right now, read off the window rather than
+// remembered: a user can leave a mode through the window manager, and a stored
+// copy would go stale exactly when it mattered.
+@Native
+function dawnReadWindowMode(window: RawPtr) -> WindowMode {
+    if pointerIsNull(window) {
+        return .Windowed
+    }
+    // GWL_STYLE. A decorated window carries `WS_CAPTION`, which is what
+    // separates the windowed mode from the two undecorated ones.
+    let style = windowLong(window, I32(0 - 16))
+    if (style & 12582912) != 0 {
+        return .Windowed
+    }
+    let monitor = monitorForWindow(window, U32(2))
+    if pointerIsNull(monitor) {
+        return .WindowedBorderless
+    }
+    let info = allocateMonitorInfo(U64(40))
+    writeWord(info, U64(0), U32(40))
+    var covering = false
+    if readMonitorInfo(monitor, info) != 0 {
+        covering = dawnClientWidth(window) >= Int(info.monitor.right) - Int(info.monitor.left)
+            && dawnClientHeight(window) >= Int(info.monitor.bottom) - Int(info.monitor.top)
+    }
+    freeBytes(info)
+    if covering {
+        return .Fullscreen
+    }
+    return .WindowedBorderless
+}
+
+// Moves the window to `mode`, sized in POINTS as `dawnOpenWindow` is. The style
+// is rewritten and the frame recalculated before the size is applied, because
+// Windows caches the non-client metrics until it is told they changed.
+@Native
+function dawnApplyWindowMode(window: RawPtr, mode: borrow WindowMode, width: Int, height: Int) {
+    if pointerIsNull(window) {
+        return
+    }
+    // The window exists, so its own DPI answers rather than the system's: a
+    // window on the second of two differently scaled displays is resized by the
+    // scale it is being shown at.
+    let scale = dawnWindowScale(window)
+    let clientWidth = dawnPixelsFromPoints(width, scale)
+    let clientHeight = dawnPixelsFromPoints(height, scale)
+    setWindowLong(window, I32(0 - 16), Int(dawnStyleForMode(mode)))
+    match mode {
+        Fullscreen -> {
+            dawnCoverDisplay(window)
+            return
+        }
+        Windowed -> {
+            var outerWidth = clientWidth
+            var outerHeight = clientHeight
+            let frame = allocateWindowRect(U64(16))
+            writeWord(frame, U64(8), U32(clientWidth))
+            writeWord(frame, U64(12), U32(clientHeight))
+            if adjustWindowRect(frame, dawnStyleForMode(mode), 0) != 0 {
+                outerWidth = Int(frame.right) - Int(frame.left)
+                outerHeight = Int(frame.bottom) - Int(frame.top)
+            }
+            freeBytes(frame)
+            // SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED
+            setWindowPosition(window, nullPointer(), I32(0), I32(0), I32(outerWidth), I32(outerHeight), U32(38))
+            return
+        }
+        WindowedBorderless -> {
+            setWindowPosition(window, nullPointer(), I32(0), I32(0), I32(clientWidth), I32(clientHeight), U32(38))
+            return
+        }
+    }
+}
+
+// The modifier keys held right now. `GetKeyState`'s high bit is "down", and the
+// value is signed, so a negative answer is a held key.
+@Native
+function dawnModifierState() -> ModifierState {
+    return ModifierState {
+        shift: keyState(I32(16)) < I16(0)
+        control: keyState(I32(17)) < I16(0)
+        alt: keyState(I32(18)) < I16(0)
+        superKey: keyState(I32(91)) < I16(0) || keyState(I32(92)) < I16(0)
+        leftPointerButton: keyState(I32(1)) < I16(0)
+        rightPointerButton: keyState(I32(2)) < I16(0)
+        middlePointerButton: keyState(I32(4)) < I16(0)
+    }
+}

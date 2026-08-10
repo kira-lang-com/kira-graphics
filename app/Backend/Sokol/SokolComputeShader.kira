@@ -267,7 +267,7 @@ function sokolCreateComputeShader(label: borrow String, artifact: borrow KslArti
     // buffer that fills it, and no dispatch here takes one. Refused rather than
     // left undeclared: an undeclared block reaches the driver, binds nothing,
     // and reads zero.
-    if reflection.storageBufferCount > 0 {
+    if reflection.storageBuffers.count > 0 {
         graphicsDiagnostic("Kira Graphics: '" + label + "' declares a storage buffer, which the compute dispatch cannot bind")
         return .Error(.ShaderRejected)
     }

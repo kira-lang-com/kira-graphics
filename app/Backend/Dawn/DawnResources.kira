@@ -1,0 +1,526 @@
+import Foundation
+// Buffers, textures and samplers on WebGPU.
+//
+// Every one of them is created against the device and recorded in the object
+// table (see `DawnContext.kira`), so the `U32` id Kira carries is a slot and the
+// WebGPU handle stays on this side of the seam.
+//
+// # Uploads go through the queue
+//
+// WebGPU has one way to put CPU bytes into a resource: `wgpuQueueWriteBuffer`
+// and `wgpuQueueWriteTexture`. Both copy immediately into staging the queue
+// owns, so a write is ordered against the submissions around it and the caller's
+// array is free the moment the call returns. That is what makes
+// `dynamicBufferFrameStart` answer 0 on this backend — there is no ring to claim
+// a slot from, because nothing the CPU wrote is still being read when it writes
+// again.
+
+// A buffer's size in bytes, rounded up to the 4-byte multiple WebGPU requires of
+// both a buffer's size and a queue write's length.
+function dawnAlignedSize(byteCount: Int) -> Int {
+    if byteCount <= 0 {
+        return 4
+    }
+    return (byteCount + 3) / 4 * 4
+}
+
+// Creates a device buffer of `byteCount` bytes with `usage`, and answers the id
+// it was recorded under.
+@Native
+function dawnMakeBuffer(state: borrow mut GraphicsAppRuntimeState, label: borrow String, usage: U64, byteCount: Int) -> U32 {
+    let size = dawnAlignedSize(byteCount)
+    let buffer = wgpuDeviceCreateBuffer(state.dawn.device, WGPUBufferDescriptor {
+        label: dawnText(label)
+        usage: usage
+        size: U64(size)
+    })
+    if pointerIsNull(buffer) {
+        return U32(0)
+    }
+    state.dawn.allocatedBytes = state.dawn.allocatedBytes + U64(size)
+    return dawnRegisterObject(state, buffer, dawnFormatUndefined())
+}
+
+@Native
+function dawnCreateBuffer(context: RawPtr, descriptor: borrow BufferDescriptor) -> BufferResult {
+    if !dawnHasDevice(context) {
+        return .Error(.DeviceRefused)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let byteCount = descriptor.data.count * 4
+    let id = dawnMakeBuffer(state, descriptor.label, dawnBufferUsage(descriptor.usage), byteCount)
+    if id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    if descriptor.data.count > 0 {
+        wgpuQueueWriteBuffer(state.dawn.queue, dawnObject(state, id), U64(0), descriptor.data, U64(byteCount))
+    }
+    return .Ok(GraphicsBuffer {
+        id: id
+        byteSize: dawnAlignedSize(byteCount)
+    })
+}
+
+@Native
+function dawnCreateIndexBuffer(context: RawPtr, descriptor: borrow IndexBufferDescriptor) -> BufferResult {
+    if !dawnHasDevice(context) {
+        return .Error(.DeviceRefused)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let byteCount = descriptor.data.count * 4
+    let id = dawnMakeBuffer(state, descriptor.label, dawnBufferUsage(.Index), byteCount)
+    if id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    if descriptor.data.count > 0 {
+        wgpuQueueWriteBuffer(state.dawn.queue, dawnObject(state, id), U64(0), descriptor.data, U64(byteCount))
+    }
+    return .Ok(GraphicsBuffer {
+        id: id
+        byteSize: dawnAlignedSize(byteCount)
+    })
+}
+
+// A buffer whose payload is 32-bit WORDS rather than floats — a kernel's
+// parameter block is counts and flags, and handing those over as floats would
+// give the shader different numbers than the caller wrote.
+@Native
+function dawnCreateStorageBufferWords(context: RawPtr, label: borrow String, data: borrow [U32]) -> BufferResult {
+    if !dawnHasDevice(context) {
+        return .Error(.DeviceRefused)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let byteCount = data.count * 4
+    let id = dawnMakeBuffer(state, label, dawnBufferUsage(.Storage), byteCount)
+    if id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    if data.count > 0 {
+        wgpuQueueWriteBuffer(state.dawn.queue, dawnObject(state, id), U64(0), data, U64(byteCount))
+    }
+    return .Ok(GraphicsBuffer {
+        id: id
+        byteSize: dawnAlignedSize(byteCount)
+    })
+}
+
+// A buffer the CPU rewrites every frame, and the block it writes into.
+//
+// Every usage a compositor might bind it at, because the caller does not say:
+// the same stream is a vertex buffer in one pipeline and a storage array indexed
+// by vertex id in the next, and a buffer created without the bit the shader
+// wants is refused at the draw with nothing in the descriptor to say why.
+@Native
+function dawnCreateDynamicBuffer(context: RawPtr, label: borrow String, floatCapacity: Int) -> DynamicBufferResult {
+    if !dawnHasDevice(context) || floatCapacity <= 0 {
+        return .Error(.DeviceRefused)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let byteCount = dawnAlignedSize(floatCapacity * 4)
+    let usage = dawnBufferUsageCopyDestination()
+        | dawnBufferUsageCopySource()
+        | dawnBufferUsageVertex()
+        | dawnBufferUsageIndex()
+        | dawnBufferUsageStorage()
+        | dawnBufferUsageUniform()
+    let id = dawnMakeBuffer(state, label, usage, byteCount)
+    if id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    let contents = allocateBytes(U64(byteCount))
+    if pointerIsNull(contents) {
+        dawnDestroyBufferId(state, id)
+        return .Error(.DeviceRefused)
+    }
+    dawnAttachExtra(state, id, contents)
+    return .Ok(DynamicBuffer {
+        buffer: GraphicsBuffer {
+            id: id
+            byteSize: byteCount
+        }
+        contents: contents
+    })
+}
+
+@Native
+function dawnCommitDynamicBuffer(context: RawPtr, buffer: borrow GraphicsBuffer, contents: RawPtr, floatCount: Int) {
+    if !dawnHasDevice(context) || buffer.id == 0 || pointerIsNull(contents) || floatCount <= 0 {
+        return
+    }
+    let state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let target = dawnObject(state, buffer.id)
+    if pointerIsNull(target) {
+        return
+    }
+    wgpuQueueWriteBuffer(state.dawn.queue, target, U64(0), contents, U64(dawnAlignedSize(floatCount * 4)))
+    return
+}
+
+@Native
+function dawnDestroyBufferId(state: borrow mut GraphicsAppRuntimeState, id: U32) {
+    let buffer = dawnObject(state, id)
+    if pointerIsNull(buffer) {
+        return
+    }
+    dawnFreeExtra(state, id)
+    wgpuBufferDestroy(buffer)
+    wgpuBufferRelease(buffer)
+    dawnForgetObject(state, id)
+    return
+}
+
+// One 32-bit word out of a buffer a kernel has written.
+//
+// WebGPU cannot map a storage buffer for reading, so the word travels through a
+// staging buffer that can: copy on a command encoder of its own, submit, map,
+// pump the instance until the map completes, read, unmap. The pump is bounded —
+// a map that never completes is a device that has stopped, and spinning on it
+// forever would hang a gate whose whole job is to report.
+@Native
+function dawnReadBufferWord(context: RawPtr, buffer: borrow GraphicsBuffer, index: Int) -> U32 {
+    if !dawnHasDevice(context) || buffer.id == 0 || index < 0 {
+        return U32(0)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let source = dawnObject(state, buffer.id)
+    if pointerIsNull(source) {
+        return U32(0)
+    }
+    // Everything the frame has recorded so far has to have RUN before its result
+    // can be copied back: the queue orders submissions, but nothing that is still
+    // sitting on the frame's encoder has been submitted at all.
+    dawnSubmitEncoder(state)
+    let staging = wgpuDeviceCreateBuffer(state.dawn.device, WGPUBufferDescriptor {
+        label: dawnText("kira-buffer-readback")
+        usage: dawnBufferUsageMapRead() | dawnBufferUsageCopyDestination()
+        size: U64(4)
+    })
+    if pointerIsNull(staging) {
+        graphicsDiagnostic("Kira Graphics: Dawn could not allocate a readback buffer")
+        return U32(0)
+    }
+    let encoder = wgpuDeviceCreateCommandEncoder(state.dawn.device, WGPUCommandEncoderDescriptor {
+        label: dawnText("kira-buffer-readback-encoder")
+    })
+    wgpuCommandEncoderCopyBufferToBuffer(encoder, source, U64(index * 4), staging, U64(0), U64(4))
+    let commands = wgpuCommandEncoderFinish(encoder, WGPUCommandBufferDescriptor {})
+    let submission: [RawPtr] = [commands]
+    wgpuQueueSubmit(state.dawn.queue, U64(1), submission)
+    wgpuCommandBufferRelease(commands)
+    wgpuCommandEncoderRelease(encoder)
+
+    state.dawn.mapResolved = false
+    state.dawn.mapSucceeded = false
+    wgpuBufferMapAsync(staging, dawnMapModeRead(), U64(0), U64(4), WGPUBufferMapCallbackInfo {
+        mode: dawnCallbackOnProcessEvents()
+        callback: dawnBufferMapped
+        userdata1: context
+    })
+    var spins = 0
+    while !state.dawn.mapResolved && spins < 100000 {
+        wgpuDeviceTick(state.dawn.device)
+        wgpuInstanceProcessEvents(state.dawn.instance)
+        spins = spins + 1
+    }
+    var word = U32(0)
+    if state.dawn.mapSucceeded {
+        let mapped = wgpuBufferGetConstMappedRange(staging, U64(0), U64(4))
+        word = wordAt(mapped, U64(0))
+        wgpuBufferUnmap(staging)
+    } else {
+        graphicsDiagnostic("Kira Graphics: Dawn never completed the buffer readback map")
+    }
+    wgpuBufferDestroy(staging)
+    wgpuBufferRelease(staging)
+    return word
+}
+
+// The answer to `wgpuBufferMapAsync`, recorded on the runtime state the readback
+// spin is watching.
+function dawnBufferMapped(status: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
+    var state = nativeRecover<GraphicsAppRuntimeState>(userdata1)
+    state.dawn.mapResolved = true
+    state.dawn.mapSucceeded = status == dawnMapSucceeded()
+    if !state.dawn.mapSucceeded {
+        graphicsDiagnostic("Kira Graphics: Dawn refused a buffer map — " + dawnViewText(message))
+    }
+    return
+}
+
+// --- textures ------------------------------------------------------------
+
+// The WebGPU format a descriptor names, with the `Swapchain` sentinel resolved
+// against the surface this run configured. A pipeline drawing into such a
+// texture bakes the same answer in, so pass and pipeline agree.
+@Native
+function dawnResolvedFormat(state: borrow GraphicsAppRuntimeState, format: borrow TextureFormat) -> I32 {
+    if format == .Swapchain {
+        return state.dawn.surfaceFormat
+    }
+    return dawnTextureFormat(format)
+}
+
+// A texture and the views a bind group, a pass attachment and a compute write
+// each reach it through.
+//
+// WebGPU separates the two the way sokol does, so the views a `GraphicsTexture`
+// carries are real objects here rather than the texture id repeated. Which views
+// are minted follows the usage: an attachment view for anything a pass writes,
+// a sampled view for anything a shader reads, a storage view for anything a
+// kernel writes.
+@Native
+function dawnCreateTexture(context: RawPtr, descriptor: borrow TextureDescriptor) -> TextureResult {
+    if !dawnHasDevice(context) || descriptor.width <= 0 || descriptor.height <= 0 {
+        return .Error(.DeviceRefused)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let format = dawnResolvedFormat(state, descriptor.format)
+    if format == dawnFormatUndefined() {
+        graphicsDiagnostic("Kira Graphics: texture '" + descriptor.label + "' names no format WebGPU has")
+        return .Error(.DeviceRefused)
+    }
+    let samples = descriptor.sampleCount <= 1 ? 1 : descriptor.sampleCount
+    let texture = wgpuDeviceCreateTexture(state.dawn.device, WGPUTextureDescriptor {
+        label: dawnText(descriptor.label)
+        usage: dawnTextureUsage(descriptor.usage)
+        dimension: dawnTextureDimension2d()
+        size: WGPUExtent3D {
+            width: U32(descriptor.width)
+            height: U32(descriptor.height)
+            depthOrArrayLayers: U32(1)
+        }
+        format: format
+        mipLevelCount: U32(1)
+        sampleCount: U32(samples)
+    })
+    if pointerIsNull(texture) {
+        return .Error(.DeviceRefused)
+    }
+    state.dawn.allocatedBytes = state.dawn.allocatedBytes
+        + U64(descriptor.width * descriptor.height * 4 * samples)
+    let id = dawnRegisterObject(state, texture, format)
+    return .Ok(dawnTextureWithViews(state, id, texture, format, descriptor.width, descriptor.height, samples, descriptor.usage))
+}
+
+// Mints the views `usage` calls for and assembles the `GraphicsTexture`.
+@Native
+function dawnTextureWithViews(state: borrow mut GraphicsAppRuntimeState, id: U32, texture: RawPtr, format: I32, width: Int, height: Int, samples: Int, usage: borrow TextureUsage) -> GraphicsTexture {
+    var sampledId = U32(0)
+    var colorId = U32(0)
+    var depthId = U32(0)
+    var storageId = U32(0)
+    if dawnUsageIsSampled(usage) {
+        sampledId = dawnRegisterObject(state, dawnMakeView(texture, format, "sampled"), format)
+    }
+    if dawnUsageIsColorTarget(usage) {
+        colorId = dawnRegisterObject(state, dawnMakeView(texture, format, "color"), format)
+    }
+    if usage == .DepthStencil {
+        depthId = dawnRegisterObject(state, dawnMakeView(texture, format, "depth"), format)
+    }
+    if usage == .SampledStorage {
+        storageId = dawnRegisterObject(state, dawnMakeView(texture, format, "storage"), format)
+    }
+    return GraphicsTexture {
+        id: id
+        viewId: sampledId
+        colorViewId: colorId
+        depthViewId: depthId
+        storageViewId: storageId
+        width: width
+        height: height
+        sampleCount: samples
+    }
+}
+
+function dawnUsageIsSampled(usage: borrow TextureUsage) -> Bool {
+    match usage {
+        Sampled -> return true;
+        SampledStreaming -> return true;
+        RenderTarget -> return false;
+        RenderTargetSampled -> return true;
+        DepthStencil -> return false;
+        SampledStorage -> return true;
+    }
+}
+
+function dawnUsageIsColorTarget(usage: borrow TextureUsage) -> Bool {
+    match usage {
+        Sampled -> return false;
+        SampledStreaming -> return false;
+        RenderTarget -> return true;
+        RenderTargetSampled -> return true;
+        DepthStencil -> return false;
+        SampledStorage -> return false;
+    }
+}
+
+@Native
+function dawnMakeView(texture: RawPtr, format: I32, role: borrow String) -> RawPtr {
+    return wgpuTextureCreateView(texture, WGPUTextureViewDescriptor {
+        label: dawnText("kira-texture-view-" + role)
+        format: format
+        dimension: dawnTextureViewDimension2d()
+        baseMipLevel: U32(0)
+        mipLevelCount: U32(1)
+        baseArrayLayer: U32(0)
+        arrayLayerCount: U32(1)
+        aspect: dawnTextureAspectAll()
+    })
+}
+
+@Native
+function dawnCreateTextureFromPixels(context: RawPtr, descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
+    match dawnCreateTexture(context, descriptor) {
+        Error(reason) -> return .Error(reason);
+        Ok(texture) -> {
+            dawnWriteTexturePixels(context, texture, pixels)
+            return .Ok(texture)
+        }
+    }
+}
+
+// Whole-image upload, which is the shape the portable surface has.
+@Native
+function dawnWriteTexturePixels(context: RawPtr, texture: borrow GraphicsTexture, pixels: borrow [U8]) {
+    if !dawnHasDevice(context) || texture.id == 0 || pixels.count <= 0 {
+        return
+    }
+    let state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let handle = dawnObject(state, texture.id)
+    if pointerIsNull(handle) {
+        return
+    }
+    wgpuQueueWriteTexture(
+        state.dawn.queue,
+        WGPUTexelCopyTextureInfo {
+            texture: handle
+            mipLevel: U32(0)
+            aspect: dawnTextureAspectAll()
+        },
+        pixels,
+        U64(pixels.count),
+        WGPUTexelCopyBufferLayout {
+            offset: U64(0)
+            bytesPerRow: U32(texture.width * 4)
+            rowsPerImage: U32(texture.height)
+        },
+        WGPUExtent3D {
+            width: U32(texture.width)
+            height: U32(texture.height)
+            depthOrArrayLayers: U32(1)
+        },
+    )
+    return
+}
+
+// The same upload from raw memory the caller already owns — a glyph atlas, whose
+// CPU side has to exist anyway so a new glyph can be packed beside the old ones.
+@Native
+function dawnWriteTextureBytes(context: RawPtr, texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) {
+    if !dawnHasDevice(context) || texture.id == 0 || pointerIsNull(bytes) || byteCount <= 0 {
+        return
+    }
+    let state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let handle = dawnObject(state, texture.id)
+    if pointerIsNull(handle) {
+        return
+    }
+    wgpuQueueWriteTexture(
+        state.dawn.queue,
+        WGPUTexelCopyTextureInfo {
+            texture: handle
+            mipLevel: U32(0)
+            aspect: dawnTextureAspectAll()
+        },
+        bytes,
+        U64(byteCount),
+        WGPUTexelCopyBufferLayout {
+            offset: U64(0)
+            bytesPerRow: U32(texture.width * 4)
+            rowsPerImage: U32(texture.height)
+        },
+        WGPUExtent3D {
+            width: U32(texture.width)
+            height: U32(texture.height)
+            depthOrArrayLayers: U32(1)
+        },
+    )
+    return
+}
+
+@Native
+function dawnDestroyTexture(context: RawPtr, texture: borrow GraphicsTexture) {
+    if !dawnHasDevice(context) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    dawnReleaseView(state, texture.viewId)
+    dawnReleaseView(state, texture.colorViewId)
+    dawnReleaseView(state, texture.depthViewId)
+    dawnReleaseView(state, texture.storageViewId)
+    let handle = dawnObject(state, texture.id)
+    if pointerIsNull(handle) {
+        return
+    }
+    state.dawn.allocatedBytes = state.dawn.allocatedBytes
+        - U64(texture.width * texture.height * 4 * texture.sampleCount)
+    wgpuTextureDestroy(handle)
+    wgpuTextureRelease(handle)
+    dawnForgetObject(state, texture.id)
+    return
+}
+
+@Native
+function dawnReleaseView(state: borrow mut GraphicsAppRuntimeState, id: U32) {
+    let view = dawnObject(state, id)
+    if pointerIsNull(view) {
+        return
+    }
+    wgpuTextureViewRelease(view)
+    dawnForgetObject(state, id)
+    return
+}
+
+// --- samplers ------------------------------------------------------------
+
+@Native
+function dawnCreateSampler(context: RawPtr, descriptor: borrow SamplerDescriptor) -> SamplerResult {
+    if !dawnHasDevice(context) {
+        return .Error(.DeviceRefused)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let sampler = wgpuDeviceCreateSampler(state.dawn.device, WGPUSamplerDescriptor {
+        label: dawnText(descriptor.label)
+        addressModeU: dawnAddressMode(descriptor.addressModeU)
+        addressModeV: dawnAddressMode(descriptor.addressModeV)
+        addressModeW: dawnAddressMode(.ClampToEdge)
+        magFilter: dawnFilterMode(descriptor.magFilter)
+        minFilter: dawnFilterMode(descriptor.minFilter)
+        mipmapFilter: dawnFilterMode(descriptor.minFilter)
+        lodMinClamp: F32(0.0)
+        lodMaxClamp: F32(32.0)
+        maxAnisotropy: U16(1)
+    })
+    if pointerIsNull(sampler) {
+        return .Error(.DeviceRefused)
+    }
+    return .Ok(GraphicsSampler {
+        id: dawnRegisterObject(state, sampler, dawnFormatUndefined())
+    })
+}
+
+@Native
+function dawnDestroySampler(context: RawPtr, sampler: borrow GraphicsSampler) {
+    if !dawnHasDevice(context) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let handle = dawnObject(state, sampler.id)
+    if pointerIsNull(handle) {
+        return
+    }
+    wgpuSamplerRelease(handle)
+    dawnForgetObject(state, sampler.id)
+    return
+}

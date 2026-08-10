@@ -1,0 +1,347 @@
+import Foundation
+// Dawn's answers to `RenderBackend`.
+//
+// The third declaration of the family, beside `MetalRenderBackend` and
+// `SokolRenderBackend`. `context` is the `GraphicsAppRuntimeState` the run loop
+// keeps its window, its device and its resource table on; it is null only inside
+// `runApplication`, which is what creates it.
+//
+// Every member is written here. Where WebGPU does the work directly the body is
+// one call into the file that owns that half of the backend; where it does not,
+// the member says in its own body what it does instead. Nothing answers "this
+// backend cannot" — a capability a backend lacks is `KSEM234` at build time in
+// this family, not a `Result` a caller branches on.
+RenderBackend DawnRenderBackend(context: RawPtr) {
+    // --- shaders ---------------------------------------------------------
+    function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult {
+        return dawnCreateShaderFromSources(context, descriptor)
+    }
+
+    function createShaderFromKsl(descriptor: borrow KslShaderDescriptor) -> ShaderResult {
+        return dawnCreateShaderFromKsl(context, descriptor)
+    }
+
+    function createShaderFromKslArtifact(label: borrow String, artifact: borrow KslArtifact) -> ShaderResult {
+        return dawnCreateShaderFromArtifact(context, label, artifact)
+    }
+
+    function destroyShader(shader: borrow GraphicsShader) -> Void {
+        dawnDestroyShader(context, shader)
+        return
+    }
+
+    // --- pipelines -------------------------------------------------------
+    function createRenderPipeline(descriptor: borrow RenderPipelineDescriptor) -> PipelineResult {
+        return dawnCreateRenderPipeline(context, descriptor)
+    }
+
+    function destroyPipeline(pipeline: borrow RenderPipeline) -> Void {
+        dawnDestroyPipeline(context, pipeline)
+        return
+    }
+
+    // --- buffers ---------------------------------------------------------
+    function createDynamicBuffer(label: borrow String, floatCapacity: Int) -> DynamicBufferResult {
+        return dawnCreateDynamicBuffer(context, label, floatCapacity)
+    }
+
+    // Zero: there is no ring to claim a slot from. `wgpuQueueWriteBuffer` copies
+    // into staging the queue owns before it returns, so nothing the GPU is still
+    // reading is what the next write lands on, and every frame writes from the
+    // buffer's own base.
+    function dynamicBufferFrameStart(buffer: borrow GraphicsBuffer) -> Int {
+        return 0
+    }
+
+    function commitDynamicBuffer(buffer: borrow GraphicsBuffer, contents: RawPtr, floatCount: Int) -> Void {
+        dawnCommitDynamicBuffer(context, buffer, contents, floatCount)
+        return
+    }
+
+    function createBuffer(descriptor: borrow BufferDescriptor) -> BufferResult {
+        return dawnCreateBuffer(context, descriptor)
+    }
+
+    function createIndexBuffer(descriptor: borrow IndexBufferDescriptor) -> BufferResult {
+        return dawnCreateIndexBuffer(context, descriptor)
+    }
+
+    function destroyBuffer(buffer: borrow GraphicsBuffer) -> Void {
+        if dawnHasDevice(context) {
+            var state = nativeRecover<GraphicsAppRuntimeState>(context)
+            dawnDestroyBufferId(state, buffer.id)
+        }
+        return
+    }
+
+    // --- uniforms --------------------------------------------------------
+    function createUniform(descriptor: borrow UniformDescriptor) -> UniformResult {
+        return dawnCreateUniform(context, descriptor)
+    }
+
+    function updateUniform(uniform: borrow Uniform, data: borrow [F32]) -> Void {
+        dawnUpdateUniform(context, uniform, data)
+        return
+    }
+
+    function destroyUniform(uniform: borrow Uniform) -> Void {
+        dawnDestroyUniform(context, uniform)
+        return
+    }
+
+    // --- bind groups -----------------------------------------------------
+    function createBindGroup(descriptor: borrow BindGroupDescriptor) -> BindGroupResult {
+        return dawnCreateBindGroup(context, descriptor)
+    }
+
+    function createUniformBindGroup(label: borrow String, uniformSlot: Int, uniform: borrow Uniform) -> BindGroupResult {
+        return dawnCreateUniformBindGroup(context, label, uniformSlot, uniform)
+    }
+
+    function createStorageBufferBindGroup(label: borrow String, slot: Int, bufferId: U32) -> BindGroupResult {
+        return dawnCreateStorageBufferBindGroup(context, label, slot, bufferId)
+    }
+
+    function beginBindGroup(label: borrow String) -> BindGroupResult {
+        return dawnBeginBindGroup(label)
+    }
+
+    function bindGroupAddTexture(group: borrow BindGroup, slot: Int, texture: borrow GraphicsTexture) -> Void {
+        dawnBindGroupAddTexture(group, slot, texture)
+        return
+    }
+
+    function bindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: borrow GraphicsSampler) -> Void {
+        dawnBindGroupAddSampler(group, slot, sampler)
+        return
+    }
+
+    function bindGroupAddUniform(group: borrow BindGroup, slot: Int, uniform: borrow Uniform) -> Void {
+        dawnBindGroupAddUniform(group, slot, uniform)
+        return
+    }
+
+    function createTextureSamplerBindGroup(label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroupResult {
+        return dawnCreateTextureSamplerBindGroup(context, label, textureSlot, texture, samplerSlot, sampler)
+    }
+
+    function destroyBindGroup(bindGroup: borrow BindGroup) -> Void {
+        dawnDestroyBindGroup(context, bindGroup)
+        return
+    }
+
+    // --- textures and samplers -------------------------------------------
+    function createTexture(descriptor: borrow TextureDescriptor) -> TextureResult {
+        return dawnCreateTexture(context, descriptor)
+    }
+
+    function createTextureFromPixels(descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
+        return dawnCreateTextureFromPixels(context, descriptor, pixels)
+    }
+
+    function updateTexture(texture: borrow GraphicsTexture, width: Int, height: Int, pixels: borrow [U8]) -> Void {
+        dawnWriteTexturePixels(context, texture, pixels)
+        return
+    }
+
+    function updateTextureBytes(texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) -> Void {
+        dawnWriteTextureBytes(context, texture, bytes, byteCount)
+        return
+    }
+
+    function destroyTexture(texture: borrow GraphicsTexture) -> Void {
+        dawnDestroyTexture(context, texture)
+        return
+    }
+
+    function createSampler(descriptor: borrow SamplerDescriptor) -> SamplerResult {
+        return dawnCreateSampler(context, descriptor)
+    }
+
+    function destroySampler(sampler: borrow GraphicsSampler) -> Void {
+        dawnDestroySampler(context, sampler)
+        return
+    }
+
+    // --- the drawable ----------------------------------------------------
+    function backingScale() -> Float {
+        if pointerIsNull(context) {
+            return 1.0
+        }
+        return dawnWindowScale(nativeRecover<GraphicsAppRuntimeState>(context).dawn.window)
+    }
+
+    function contextWidth() -> Int {
+        if pointerIsNull(context) {
+            return 0
+        }
+        return nativeRecover<GraphicsAppRuntimeState>(context).dawn.surfaceWidth
+    }
+
+    function contextHeight() -> Int {
+        if pointerIsNull(context) {
+            return 0
+        }
+        return nativeRecover<GraphicsAppRuntimeState>(context).dawn.surfaceHeight
+    }
+
+    // Framebuffer pixels over the backing scale. The client area is measured in
+    // physical pixels, and points are what that divides to.
+    function viewportWidth() -> Float {
+        if pointerIsNull(context) {
+            return 0.0
+        }
+        let state = nativeRecover<GraphicsAppRuntimeState>(context)
+        return Float(state.dawn.surfaceWidth) / dawnWindowScale(state.dawn.window)
+    }
+
+    function viewportHeight() -> Float {
+        if pointerIsNull(context) {
+            return 0.0
+        }
+        let state = nativeRecover<GraphicsAppRuntimeState>(context)
+        return Float(state.dawn.surfaceHeight) / dawnWindowScale(state.dawn.window)
+    }
+
+    function windowMode() -> WindowMode {
+        if pointerIsNull(context) {
+            return .Windowed
+        }
+        return dawnReadWindowMode(nativeRecover<GraphicsAppRuntimeState>(context).dawn.window)
+    }
+
+    function setWindowMode(mode: borrow WindowMode) -> Void {
+        if pointerIsNull(context) {
+            return
+        }
+        let state = nativeRecover<GraphicsAppRuntimeState>(context)
+        dawnApplyWindowMode(state.dawn.window, mode, state.app.width, state.app.height)
+        return
+    }
+
+    // --- compute ---------------------------------------------------------
+    function supportsCompute() -> Bool {
+        return true
+    }
+
+    function createComputePipeline(label: borrow String, shader: borrow GraphicsShader, entryName: borrow String) -> Int {
+        return dawnCreateComputePipeline(context, label, shader, entryName)
+    }
+
+    function dispatchTextureComputePair(
+        horizontalPipeline: Int,
+        verticalPipeline: Int,
+        source: borrow GraphicsTexture,
+        secondSource: borrow GraphicsTexture,
+        blend: Float,
+        tempNear: borrow GraphicsTexture,
+        tempFar: borrow GraphicsTexture,
+        outputNear: borrow GraphicsTexture,
+        outputFar: borrow GraphicsTexture,
+        sampler: borrow GraphicsSampler,
+        width: Int,
+        height: Int,
+    ) -> Void {
+        dawnDispatchTextureComputePair(
+            context,
+            horizontalPipeline,
+            verticalPipeline,
+            source,
+            secondSource,
+            blend,
+            tempNear,
+            tempFar,
+            outputNear,
+            outputFar,
+            sampler,
+            width,
+            height,
+        )
+        return
+    }
+
+    function dispatchComputeBuffers(
+        pipeline: Int,
+        bufferIds: borrow [U32],
+        threadCount: Int,
+        threadsPerGroup: Int,
+    ) -> Void {
+        dawnDispatchComputeBuffers(context, pipeline, bufferIds, threadCount, threadsPerGroup)
+        return
+    }
+
+    function dispatchDepthComputeBuffers(
+        pipeline: Int,
+        depth: borrow GraphicsTexture,
+        bufferIds: borrow [U32],
+        threadCount: Int,
+        threadsPerGroup: Int,
+    ) -> Void {
+        dawnDispatchDepthComputeBuffers(context, pipeline, depth, bufferIds, threadCount, threadsPerGroup)
+        return
+    }
+
+    function readBufferU32(buffer: borrow GraphicsBuffer, index: Int) -> U32 {
+        return dawnReadBufferWord(context, buffer, index)
+    }
+
+    function createStorageBufferWords(label: borrow String, data: borrow [U32]) -> BufferResult {
+        return dawnCreateStorageBufferWords(context, label, data)
+    }
+
+    // Nothing to re-tile. Metal's blit exists because a Metal texture written
+    // through the shader-write usage keeps an uncompressed layout until
+    // `optimizeContentsForGPUAccess:` runs. WebGPU exposes no layout operation
+    // of any kind — a texture's internal arrangement is the implementation's and
+    // is re-picked on use — so the fast path is already what the next sample
+    // gets.
+    function optimizeTexture(textureId: Int) -> Void {
+        return
+    }
+
+    // --- frames and passes -----------------------------------------------
+    function monotonicNanoseconds() -> U64 {
+        return dawnMonotonicNanoseconds()
+    }
+
+    // Two. The queue owns one frame's submissions while the compositor holds the
+    // one before it, which is what a `Fifo` present mode means and what a
+    // telemetry readout should say about this backend.
+    function framesInFlight() -> Int {
+        return 2
+    }
+
+    function statistics() -> FrameStatistics {
+        return dawnFrameStatistics(context)
+    }
+
+    function beginRenderPass(frame: borrow RenderFrame) -> Bool {
+        return dawnBeginRenderPass(context, frame)
+    }
+
+    function endPassAndCommit(frame: borrow RenderFrame) -> Void {
+        dawnEndPassAndCommit(context)
+        return
+    }
+
+    // The run loop's state goes in the third slot. The first is the Metal
+    // context and the second the Sokol runtime, and an encoder takes the draw
+    // path of whichever one it was given.
+    function makeEncoder(passActive: Bool) -> RenderEncoder {
+        return makeRenderEncoderForBackend(passActive, nullPointer(), nullPointer(), context)
+    }
+
+    // The pass already submitted what it encoded, and the run loop presents. A
+    // frame has nothing left to hand over here — which is the honest answer,
+    // and the reason it is not also where the present happens is that a frame
+    // the application never drew into still has to reach the end of the loop.
+    function submitFrame(frame: borrow RenderFrame) -> Void {
+        return
+    }
+
+    // --- the run loop ----------------------------------------------------
+    function runApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Void {
+        dawnRunApplication(app, runtimeUserData)
+        return
+    }
+}

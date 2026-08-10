@@ -17,16 +17,11 @@ enum TextureUsage {
     RenderTarget
     RenderTargetSampled
     DepthStencil
-    // Written by a compute kernel through an image binding, drawn into by a
-    // render pass, and sampled by both.
-    //
-    // All three, because the effect that needs it is one texture wearing all
-    // three hats: a blur level is produced by a compute dispatch on a backend
-    // that has compute and by a render pass on one that does not, the choice is
-    // made per frame, and every composite samples the result either way. A
-    // texture created without the image bit would be refused by the dispatch;
-    // one created without the attachment bit would be refused by the fallback.
-    RenderTargetSampledStorage
+    // Written by a compute kernel through an image binding and sampled
+    // afterwards. What a blur level produced by a dispatch is: the kernel needs
+    // the image bit to store through, and every composite samples the result.
+    // No attachment bit — nothing rasterizes into one of these.
+    SampledStorage
 }
 
 function textureUsageCode(usage: TextureUsage) -> Int {
@@ -36,7 +31,7 @@ function textureUsageCode(usage: TextureUsage) -> Int {
         RenderTargetSampled -> return 3;
         DepthStencil -> return 4;
         SampledStreaming -> return 5;
-        RenderTargetSampledStorage -> return 6;
+        SampledStorage -> return 6;
     }
 }
 

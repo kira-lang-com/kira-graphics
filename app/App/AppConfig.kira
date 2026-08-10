@@ -36,7 +36,13 @@ struct GraphicsApplication {
     // Offscreen color-target format (Metal). Default swapchain (BGRA8); set to
     // the `R32Uint` texture format to render a visibility buffer.
     var colorFormat: TextureFormat = .Swapchain
-    var backend: RenderBackendKind = .Sokol
+    // The renderer, which `KIRA_GRAPHICS_BACKEND` overrides.
+    //
+    // Sokol without one, exactly as before. The override is what lets one
+    // program be run on two backends without being edited between the runs —
+    // and a comparison between two backends is only worth anything when the
+    // program either one drew is the same program.
+    var backend: RenderBackendKind = graphicsBackendFromEnvironment(.Sokol)
     var platform: Platform = .Unknown
     var initHandler: (Graphics) -> Void = graphicsApplicationDefaultInit
     var frameHandler: (borrow mut RenderFrame) -> Void = graphicsApplicationDefaultFrame

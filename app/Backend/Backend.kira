@@ -1,3 +1,4 @@
+import Foundation
 // Which renderer a program asks for, and the host it will run on.
 //
 // `RenderBackendKind` is the *selection* vocabulary — what a `GraphicsApplication`
@@ -8,6 +9,7 @@
 enum RenderBackendKind {
     Sokol
     Metal
+    Dawn
 }
 
 
@@ -42,12 +44,42 @@ struct RenderBackendSelection {
 function graphicsDefaultBackend() -> RenderBackendKind {
     let platform = hostPlatform()
     if platform == .MacOS {
-        return .Metal
+        return graphicsBackendFromEnvironment(.Metal)
     }
     if platform == .IOS {
+        return graphicsBackendFromEnvironment(.Metal)
+    }
+    return graphicsBackendFromEnvironment(.Sokol)
+}
+
+
+// The renderer a run was asked for, or `fallback` when it was not asked.
+//
+// `KIRA_GRAPHICS_BACKEND` names one of the three. It exists so that one program
+// can be run on two backends without being edited between the runs — which is
+// what makes a pixel comparison between them mean anything, since a difference
+// in the source would be a difference in the answer.
+//
+// A name that is none of the three is reported rather than ignored: a typo in an
+// environment variable that silently selects the default is a run that proves
+// nothing about the backend it was supposed to exercise.
+@Native
+function graphicsBackendFromEnvironment(fallback: RenderBackendKind) -> RenderBackendKind {
+    let requested = environmentValue("KIRA_GRAPHICS_BACKEND")
+    if requested.count == 0 {
+        return fallback
+    }
+    if requested == "sokol" {
+        return .Sokol
+    }
+    if requested == "metal" {
         return .Metal
     }
-    return .Sokol
+    if requested == "dawn" {
+        return .Dawn
+    }
+    graphicsDiagnostic("Kira Graphics: KIRA_GRAPHICS_BACKEND names '" + requested + "', which is not `sokol`, `metal` or `dawn`")
+    return fallback
 }
 
 
@@ -72,7 +104,30 @@ function validateRenderBackend(backend: RenderBackendKind, platform: Platform) -
             reason: ""
         };
         Metal -> return validateMetalBackend(move resolvedPlatform);
+        Dawn -> return validateDawnBackend(move resolvedPlatform);
     }
+}
+
+
+// Dawn reaches a GPU through whatever the platform has — D3D12 or Vulkan on
+// Windows, Vulkan on Linux, Metal on Apple — so nothing about WebGPU limits it
+// to one host. What limits this backend is its WINDOW: it opens one against
+// `user32`, because Dawn draws and does not own a window, and that is the whole
+// of what is Windows-only here. A second platform is a second window
+// implementation beside `DawnWindow.kira` and nothing else.
+@Native
+function validateDawnBackend(platform: Platform) -> RenderBackendSelection {
+    if platform == .Windows {
+        return RenderBackendSelection {
+            backend: .Dawn
+            platform: platform
+            supported: true
+            loaderName: "dawn"
+            requiredSymbolCount: 0
+            reason: ""
+        }
+    }
+    return unsupportedBackend(.Dawn, move platform, "Kira Graphics Dawn backend opens its window through Win32 and is only supported on Windows")
 }
 
 

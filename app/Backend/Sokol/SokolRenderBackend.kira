@@ -113,6 +113,11 @@ RenderBackend SokolRenderBackend(context: RawPtr) {
         return
     }
 
+    function bindGroupAddUniform(group: borrow BindGroup, slot: Int, uniform: borrow Uniform) -> Void {
+        sokolBindGroupAddUniform(group, slot, uniform)
+        return
+    }
+
     function bindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: borrow GraphicsSampler) -> Void {
         sokolBindGroupAddSampler(group, slot, sampler)
         return
@@ -202,6 +207,8 @@ RenderBackend SokolRenderBackend(context: RawPtr) {
         horizontalPipeline: Int,
         verticalPipeline: Int,
         source: borrow GraphicsTexture,
+        secondSource: borrow GraphicsTexture,
+        blend: Float,
         tempNear: borrow GraphicsTexture,
         tempFar: borrow GraphicsTexture,
         outputNear: borrow GraphicsTexture,
@@ -214,6 +221,8 @@ RenderBackend SokolRenderBackend(context: RawPtr) {
             horizontalPipeline,
             verticalPipeline,
             source,
+            secondSource,
+            blend,
             tempNear,
             tempFar,
             outputNear,
@@ -303,9 +312,10 @@ RenderBackend SokolRenderBackend(context: RawPtr) {
     }
 
     // The run loop's state goes in the second slot; the first is the Metal
-    // context, and an encoder given a non-null one takes the Metal draw path.
+    // context and the third is Dawn's, and an encoder given a non-null one takes
+    // that backend's draw path.
     function makeEncoder(passActive: Bool) -> RenderEncoder {
-        return makeRenderEncoderForBackend(passActive, nullPointer(), context)
+        return makeRenderEncoderForBackend(passActive, nullPointer(), context, nullPointer())
     }
 
     function submitFrame(frame: borrow RenderFrame) -> Void {

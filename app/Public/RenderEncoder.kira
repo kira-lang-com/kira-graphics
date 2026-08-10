@@ -13,6 +13,11 @@ struct RenderEncoderState {
     // counted where it is issued. Null on Metal, and null for an encoder built
     // outside a run loop.
     var sokolRuntime: RawPtr
+    // The same blob behind a Dawn frame, which is where the open pass encoder
+    // lives. Non-null selects the WebGPU draw path, on the same terms the two
+    // pointers above select theirs: three backends, three slots, and exactly one
+    // of them filled.
+    var dawnRuntime: RawPtr
 
     var vertexBufferId: U32 = 0
     var hasVertexBuffer: Bool = false
@@ -104,6 +109,10 @@ class RenderEncoder {
         state.indexCount = 0
         state.instanceCount = 1
         if (state.passActive && state.hasPipeline && state.pipeline.id != 0) {
+            if !pointerIsNull(state.dawnRuntime) {
+                dawnEncoderIssue(state, 0)
+                return
+            }
             if metalContextActive(state.backendContext) {
                 if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup0.id) }
                 if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup1.id) }
@@ -138,6 +147,10 @@ class RenderEncoder {
         state.vertexCount = 0
         state.instanceCount = 1
         if (state.passActive && state.hasPipeline && state.pipeline.id != 0) {
+            if !pointerIsNull(state.dawnRuntime) {
+                dawnEncoderIssue(state, 0)
+                return
+            }
             if metalContextActive(state.backendContext) {
                 if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup0.id) }
                 if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup1.id) }
@@ -191,6 +204,10 @@ class RenderEncoder {
         state.vertexCount = 0
         state.instanceCount = 1
         if state.passActive && state.hasPipeline && state.pipeline.id != 0 {
+            if !pointerIsNull(state.dawnRuntime) {
+                dawnEncoderIssue(state, firstIndex)
+                return
+            }
             if metalContextActive(state.backendContext) {
                 if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup0.id) }
                 if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup1.id) }
@@ -223,6 +240,10 @@ class RenderEncoder {
     function drawIndirect(indirectBufferId: Int) {
         var state = nativeRecover<RenderEncoderState>(self.storage)
         if (state.passActive && state.hasPipeline && state.pipeline.id != 0) {
+            if !pointerIsNull(state.dawnRuntime) {
+                dawnEncoderDrawIndirect(state, indirectBufferId)
+                return
+            }
             if metalContextActive(state.backendContext) {
                 if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup0.id) }
                 if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup1.id) }
@@ -241,6 +262,10 @@ class RenderEncoder {
         state.indexCount = 0
         state.instanceCount = instanceCount
         if (state.passActive && state.hasPipeline && state.pipeline.id != 0) {
+            if !pointerIsNull(state.dawnRuntime) {
+                dawnEncoderIssue(state, 0)
+                return
+            }
             if metalContextActive(state.backendContext) {
                 if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup0.id) }
                 if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup1.id) }
@@ -297,12 +322,36 @@ class RenderEncoder {
 
 }
 
-@Native
-function makeRenderEncoder() -> RenderEncoder {
-    return makeRenderEncoderForBackend(false, nullPointer(), nullPointer())
+// Everything a Dawn draw needs, read off the encoder's own state.
+//
+// One function rather than the same twenty arguments written out at each of the
+// five draw methods — the Metal and Sokol arms above predate it and still do.
+function dawnEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
+    dawnDrawWithBindings(
+        state.dawnRuntime,
+        state.hasScissor, state.scissorX, state.scissorY, state.scissorWidth, state.scissorHeight,
+        state.pipeline,
+        state.vertexBufferId, state.hasVertexBuffer,
+        state.indexBufferId, state.hasIndexBuffer,
+        state.indexFormat,
+        state.bindGroup0, state.hasBindGroup0,
+        state.bindGroup1, state.hasBindGroup1,
+        state.bindGroup2, state.hasBindGroup2,
+        state.bindGroup3, state.hasBindGroup3,
+        firstIndex,
+        state.vertexCount,
+        state.indexCount,
+        state.instanceCount
+    )
+    return
 }
 
-function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, sokolRuntime: RawPtr) -> RenderEncoder {
+@Native
+function makeRenderEncoder() -> RenderEncoder {
+    return makeRenderEncoderForBackend(false, nullPointer(), nullPointer(), nullPointer())
+}
+
+function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, sokolRuntime: RawPtr, dawnRuntime: RawPtr) -> RenderEncoder {
     let state = nativeState(RenderEncoderState {
         pipeline: emptyRenderPipeline()
         hasPipeline: false
@@ -310,6 +359,7 @@ function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, s
         hasScissor: false
         backendContext: backendContext
         sokolRuntime: sokolRuntime
+        dawnRuntime: dawnRuntime
         vertexBufferId: 0
         hasVertexBuffer: false
         indexBufferId: 0

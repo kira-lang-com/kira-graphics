@@ -1,0 +1,198 @@
+import Foundation
+// Render pipelines on WebGPU.
+//
+// A `WGPURenderPipeline` is built from the two shader modules, one vertex buffer
+// layout, the colour targets and — when the caller asked for one — a depth
+// state. Its layout is left NULL, which is WebGPU's "derive it from the
+// modules": that is what makes `wgpuRenderPipelineGetBindGroupLayout` answer at
+// draw time, and it is the only thing that lets a `BindGroup` built before any
+// pipeline existed be turned into a real one afterwards (see `DawnBindGroup`).
+//
+// `RenderPipeline` carries three ids because sokol needs two objects for one
+// pipeline. WebGPU needs one, so all three are the same id here — a caller
+// comparing `id` against zero reads the same answer on every backend.
+
+// The C extents the descriptor arrays are written into. A Kira array shorter
+// than the extent zero-fills the rest, and the count travelling beside the
+// pointer is what says how many WebGPU reads — so these are ceilings, not
+// sizes, and only a caller that exceeds one is refused.
+@FFI.Array { element: WGPUVertexAttribute; count: 16; }
+struct WGPUVertexAttributeArray16 {}
+
+@FFI.Array { element: WGPUColorTargetState; count: 8; }
+struct WGPUColorTargetStateArray8 {}
+
+function dawnMaxVertexAttributes() -> Int { return 16 }
+function dawnMaxColorTargets() -> Int { return 8 }
+
+@Native
+function dawnCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPipelineDescriptor) -> PipelineResult {
+    if !dawnHasDevice(context) {
+        return .Error(.DeviceRefused)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let shader = dawnShaderRecord(state, descriptor.shader.id)
+    if !shader.live || pointerIsNull(shader.vertexModule) || pointerIsNull(shader.fragmentModule) {
+        graphicsDiagnostic("Kira Graphics: pipeline '" + descriptor.label + "' names no compiled graphics shader")
+        return .Error(.ShaderRejected)
+    }
+    if descriptor.vertexLayout.attributes.count > dawnMaxVertexAttributes() {
+        graphicsDiagnostic("Kira Graphics: pipeline '" + descriptor.label + "' declares more vertex attributes than WebGPU accepts")
+        return .Error(.DeviceRefused)
+    }
+    if descriptor.colorTargets.count > dawnMaxColorTargets() {
+        graphicsDiagnostic("Kira Graphics: pipeline '" + descriptor.label + "' declares more colour targets than WebGPU accepts")
+        return .Error(.DeviceRefused)
+    }
+    var attributes: [WGPUVertexAttribute] = []
+    for attribute in descriptor.vertexLayout.attributes {
+        attributes.append(WGPUVertexAttribute {
+            format: dawnVertexFormat(attribute.format)
+            offset: U64(attribute.offset)
+            shaderLocation: U32(attribute.location)
+        })
+    }
+    var targets: [WGPUColorTargetState] = []
+    for target in descriptor.colorTargets {
+        targets.append(dawnColorTarget(state, target))
+    }
+    if targets.count == 0 {
+        targets.append(dawnColorTarget(state, ColorTargetDescriptor {
+            format: .Swapchain
+            blend: BlendState {}
+        }))
+    }
+    let pipeline = dawnBuildPipeline(state, descriptor, shader, attributes, targets)
+    if pointerIsNull(pipeline) {
+        return .Error(.DeviceRefused)
+    }
+    let id = dawnRegisterObject(state, pipeline, dawnFormatUndefined())
+    // What this pipeline's layout declares, carried forward from the shader so a
+    // draw can assemble one WebGPU group out of the encoder's four slots. A
+    // shader with no reflection records nothing, and a draw on it keeps reading
+    // the slots as group indices.
+    if shader.hasReflection {
+        dawnRecordPipelineBindings(state, id, shader.bindings)
+    }
+    return .Ok(RenderPipeline {
+        id: id
+        drawPipelineId: id
+        indexedPipelineId: id
+        hasPositionAttribute: descriptor.shader.hasPositionAttribute
+        requiredUniformMask: descriptor.shader.requiredUniformMask
+        availableUniformMask: descriptor.shader.availableUniformMask
+        uniformBlocks: descriptor.shader.uniformBlocks
+    })
+}
+
+// One colour target: its format with the swapchain sentinel resolved, and a
+// blend state only where the caller asked for one — a NULL blend is WebGPU's
+// "write the fragment through", which is what a disabled blend means.
+@Native
+function dawnColorTarget(state: borrow GraphicsAppRuntimeState, target: borrow ColorTargetDescriptor) -> WGPUColorTargetState {
+    if !target.blend.enabled {
+        return WGPUColorTargetState {
+            format: dawnResolvedFormat(state, target.format)
+            writeMask: dawnColorWriteMaskAll()
+        }
+    }
+    return WGPUColorTargetState {
+        format: dawnResolvedFormat(state, target.format)
+        blend: dawnBlendState(target.blend.preset)
+        writeMask: dawnColorWriteMaskAll()
+    }
+}
+
+// The descriptor itself, split out so the two depth cases read as the two shapes
+// they are rather than as one literal with a conditional member.
+@Native
+function dawnBuildPipeline(state: borrow GraphicsAppRuntimeState, descriptor: borrow RenderPipelineDescriptor, shader: borrow DawnShaderRecord, attributes: borrow [WGPUVertexAttribute], targets: borrow [WGPUColorTargetState]) -> RawPtr {
+    let vertex = WGPUVertexState {
+        module: shader.vertexModule
+        entryPoint: dawnText(shader.vertexEntry)
+        bufferCount: U64(descriptor.vertexLayout.stride > 0 ? 1 : 0)
+        buffers: WGPUVertexBufferLayout {
+            stepMode: dawnVertexStepModeVertex()
+            arrayStride: U64(descriptor.vertexLayout.stride)
+            attributeCount: U64(attributes.count)
+            attributes: WGPUVertexAttributeArray16 { elements: attributes }
+        }
+    }
+    let primitive = WGPUPrimitiveState {
+        topology: dawnPrimitiveTopology(descriptor.primitive.topology)
+        frontFace: dawnFrontFace(descriptor.rasterization.frontFace)
+        cullMode: dawnCullMode(descriptor.rasterization.cullMode)
+    }
+    let fragment = WGPUFragmentState {
+        module: shader.fragmentModule
+        entryPoint: dawnText(shader.fragmentEntry)
+        targetCount: U64(targets.count)
+        targets: WGPUColorTargetStateArray8 { elements: targets }
+    }
+    let multisample = WGPUMultisampleState {
+        count: U32(1)
+        mask: U32(4294967295)
+    }
+    if descriptor.depthStencil.format == .None {
+        return wgpuDeviceCreateRenderPipeline(state.dawn.device, WGPURenderPipelineDescriptor {
+            label: dawnText(descriptor.label)
+            vertex: vertex
+            primitive: primitive
+            multisample: multisample
+            fragment: fragment
+        })
+    }
+    return wgpuDeviceCreateRenderPipeline(state.dawn.device, WGPURenderPipelineDescriptor {
+        label: dawnText(descriptor.label)
+        vertex: vertex
+        primitive: primitive
+        depthStencil: dawnDepthState(state, descriptor.depthStencil)
+        multisample: multisample
+        fragment: fragment
+    })
+}
+
+// The depth state a pipeline bakes in.
+//
+// Both stencil faces are written out with `Always`: WebGPU refuses a stencil
+// comparison left at its zero, which names no function at all, and a pipeline
+// that declares depth still has to say what it does about stencil.
+@Native
+function dawnDepthState(state: borrow GraphicsAppRuntimeState, depth: borrow DepthStencilDescriptor) -> WGPUDepthStencilState {
+    let keep = WGPUStencilFaceState {
+        compare: dawnCompareFunction(.Always)
+        failOp: I32(1)
+        depthFailOp: I32(1)
+        passOp: I32(1)
+    }
+    return WGPUDepthStencilState {
+        format: dawnResolvedFormat(state, depth.format)
+        depthWriteEnabled: depth.depthWriteEnabled ? dawnOptionalTrue() : dawnOptionalFalse()
+        depthCompare: dawnCompareFunction(depth.depthEnabled ? depth.depthCompare : .Always)
+        stencilFront: keep
+        stencilBack: keep
+        stencilReadMask: U32(4294967295)
+        stencilWriteMask: U32(4294967295)
+    }
+}
+
+@Native
+function dawnDestroyPipeline(context: RawPtr, pipeline: borrow RenderPipeline) {
+    if !dawnHasDevice(context) || pipeline.id == 0 {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let handle = dawnObject(state, pipeline.id)
+    if pointerIsNull(handle) {
+        return
+    }
+    // Every merged bind group was built against some pipeline's layout, and the
+    // id this releases is about to be handed to another pipeline. Emptying the
+    // table is what keeps a later draw from binding a group built for the
+    // pipeline that used to answer to this id.
+    dawnReleaseMergedGroups(state)
+    dawnForgetPipelineBindings(state, pipeline.id)
+    wgpuRenderPipelineRelease(handle)
+    dawnForgetObject(state, pipeline.id)
+    return
+}

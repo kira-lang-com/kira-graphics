@@ -2,6 +2,12 @@ import Foundation
 
 @Native
 function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
+    // A VM hot patch can remap a callback while the original entrypoint is
+    // still suspended inside sokol_app. Re-entering this boundary would create
+    // a second native window; the process owns one Sokol application lifetime.
+    if sapp_isvalid() {
+        return
+    }
     let desc = sapp_desc {
         init_userdata_cb: kiraGraphicsSokolInit
         frame_userdata_cb: kiraGraphicsSokolFrame
@@ -99,6 +105,7 @@ function kiraGraphicsSokolFrame(runtimeUserData: RawPtr): Void {
     onFrame(frame)
     graphicsSubmitFrame(frame)
     state.frameStats = sokolEndFrameStats(state.frameStats)
+    noteFrameCost(state, state.frameStats.cpuSeconds, state.frameStats.passes, state.frameStats.draws)
     state.lifetimePeaks = sokolSampleLifetimePeaks(state.lifetimePeaks)
     if state.frameIndex == state.captureAtFrame {
         sokolCaptureFrame(state.capturePath)
@@ -121,6 +128,7 @@ function kiraGraphicsSokolCleanup(runtimeUserData: RawPtr): Void {
 
     onCleanup(move graphics)
     sokolDestroyPassResources(state)
+    reportFrameCost(state)
     sokolReportLifetime(state.lifetimePeaks)
     sg_shutdown()
     return
@@ -143,7 +151,7 @@ function kiraGraphicsSokolCleanup(runtimeUserData: RawPtr): Void {
 function readHarnessKnobs(state: borrow mut GraphicsAppRuntimeState) {
     state.quitAfterFrames = environmentInt("KIRA_GRAPHICS_QUIT_AFTER_FRAMES", 0)
     let logFps = environmentValue("KIRA_GRAPHICS_LOG_FPS")
-    state.pass.logFps = logFps.count > 0 && logFps != "0"
+    state.logFps = logFps.count > 0 && logFps != "0"
     let clickScript = environmentValue("KIRA_UI_CLICK_SCRIPT")
     if clickScript.count > 0 {
         state.clickScript = sokolEnvInts(clickScript)

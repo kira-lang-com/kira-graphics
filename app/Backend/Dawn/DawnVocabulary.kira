@@ -1,0 +1,336 @@
+import Foundation
+// WebGPU's own closed sets, and the two shapes its generated bindings cannot
+// carry, written out once.
+//
+// # Why the constants are here
+//
+// `webgpu.h` spells its enumerations as C `enum`s, and autobind carries types
+// and functions across rather than the values inside an enumeration — a Kira
+// binding names `format: I32`, and what a valid `I32` is stays in the header.
+// So the numbers live here, one function per value, in the same shape
+// `Formats.kira` and `PassVocabulary.kira` already use for Kira's own
+// vocabulary. Every mapper below turns one of those enums into one of these,
+// and a mapper names every variant with no `_` arm.
+//
+// # The two shapes the binding skips
+//
+// `WGPUDeviceDescriptor` is not in the generated file, and the file says why:
+// its `deviceLostCallbackInfo.callback` takes a `WGPUDevice const *`, a pointer
+// to a pointer with no C type name to point at. Only `WGPUDeviceDescriptor_ptr`
+// survives, and a pointer with no writable target cannot be built.
+//
+// A device created with a null descriptor works and reports nothing: no device-
+// lost callback, and no uncaptured-error callback — so a WGSL shader Dawn
+// rejects, a bind group that does not match its layout, and a draw outside a
+// pass all fail silently and leave a blank frame with no line saying why. That
+// is precisely the failure this backend cannot afford. So the descriptor is
+// declared here field for field, with the two callback parameters that have no
+// name declared as the pointer words they are, and `wgpuAdapterCreateDevice` is
+// declared a second time against it. The symbol is the same one; the Kira name
+// is different because the shape is.
+
+@FFI.Pointer { target: WGPUStringView; ownership: borrowed; }
+struct WGPUStringViewPointer {}
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
+function allocateSurfaceTexture(size: U64) -> WGPUSurfaceTexture_ptr;
+
+// `WGPUDeviceLostCallback`: `(WGPUDevice const *device, WGPUDeviceLostReason,
+// WGPUStringView message, void *userdata1, void *userdata2)`. The first is a
+// pointer to a handle, which is a pointer word; the message is a struct C passes
+// by value, and the seam hands it over as a pointer to it.
+@FFI.Callback { abi: c; params: [RawPtr, I32, WGPUStringView, RawPtr, RawPtr]; result: Void; }
+struct DawnDeviceLostCallback {}
+
+// `WGPUUncapturedErrorCallback`: the same shape with an error type in place of
+// the loss reason, and no callback mode beside it.
+@FFI.Callback { abi: c; params: [RawPtr, I32, WGPUStringView, RawPtr, RawPtr]; result: Void; }
+struct DawnUncapturedErrorCallback {}
+
+@FFI.Struct { layout: c; }
+struct DawnDeviceLostCallbackInfo {
+    var nextInChain: WGPUChainedStruct_ptr
+    var mode: I32 = 0
+    var callback: DawnDeviceLostCallback
+    var userdata1: RawPtr
+    var userdata2: RawPtr
+}
+
+@FFI.Struct { layout: c; }
+struct DawnUncapturedErrorCallbackInfo {
+    var nextInChain: WGPUChainedStruct_ptr
+    var callback: DawnUncapturedErrorCallback
+    var userdata1: RawPtr
+    var userdata2: RawPtr
+}
+
+@FFI.Struct { layout: c; }
+struct DawnDeviceDescriptor {
+    var nextInChain: WGPUChainedStruct_ptr
+    var label: WGPUStringView
+    var requiredFeatureCount: U64 = 0
+    var requiredFeatures: WGPUFeatureName_ptr
+    var requiredLimits: WGPULimits_ptr
+    var defaultQueue: WGPUQueueDescriptor
+    var deviceLostCallbackInfo: DawnDeviceLostCallbackInfo
+    var uncapturedErrorCallbackInfo: DawnUncapturedErrorCallbackInfo
+}
+
+@FFI.Pointer { target: DawnDeviceDescriptor; ownership: borrowed; }
+struct DawnDeviceDescriptorPointer {}
+
+@FFI.Extern { library: dawn; symbol: wgpuAdapterCreateDevice; abi: c; }
+function dawnCreateDevice(adapter: WGPUAdapterImpl_ptr, descriptor: DawnDeviceDescriptorPointer) -> WGPUDeviceImpl_ptr;
+
+// A `WGPUStringView` over Kira text. The length is the byte count rather than
+// `WGPU_STRLEN`, so a label carrying an interior NUL still measures right.
+function dawnText(text: borrow String) -> WGPUStringView {
+    return WGPUStringView {
+        data: text
+        length: U64(text.count)
+    }
+}
+
+// --- structure types -----------------------------------------------------
+// The `sType` of each chained extension this backend uses.
+function dawnStructureWgsl() -> I32 { return I32(2) }
+function dawnStructureWindowsHwnd() -> I32 { return I32(5) }
+
+// --- callback modes ------------------------------------------------------
+// `AllowProcessEvents`: the callback runs inside `wgpuInstanceProcessEvents`,
+// which is the one place this backend is willing to re-enter Kira from Dawn.
+function dawnCallbackOnProcessEvents() -> I32 { return I32(2) }
+
+// --- adapter selection ---------------------------------------------------
+function dawnFeatureLevelCore() -> I32 { return I32(2) }
+function dawnPowerPreferenceHighPerformance() -> I32 { return I32(2) }
+function dawnRequestAdapterSucceeded() -> I32 { return I32(1) }
+
+// --- surfaces ------------------------------------------------------------
+function dawnCompositeAlphaAuto() -> I32 { return I32(0) }
+function dawnPresentModeFifo() -> I32 { return I32(1) }
+// `SuccessOptimal` and `SuccessSuboptimal`. A suboptimal texture still draws;
+// it says the surface should be reconfigured, which a resize already does.
+function dawnSurfaceTextureOptimal() -> I32 { return I32(1) }
+function dawnSurfaceTextureSuboptimal() -> I32 { return I32(2) }
+// `WGPU_DEPTH_SLICE_UNDEFINED`, which a 2D colour attachment must carry: a zero
+// there names slice 0 of a 3D texture and is refused for a 2D one.
+function dawnDepthSliceUndefined() -> U32 { return U32(4294967295) }
+
+// --- texture formats -----------------------------------------------------
+function dawnFormatUndefined() -> I32 { return I32(0) }
+function dawnFormatRgba8Unorm() -> I32 { return I32(22) }
+function dawnFormatBgra8Unorm() -> I32 { return I32(27) }
+function dawnFormatRgba16Float() -> I32 { return I32(40) }
+function dawnFormatR32Uint() -> I32 { return I32(15) }
+function dawnFormatDepth24PlusStencil8() -> I32 { return I32(47) }
+
+// --- texture usage -------------------------------------------------------
+function dawnTextureUsageCopySource() -> U64 { return U64(1) }
+function dawnTextureUsageCopyDestination() -> U64 { return U64(2) }
+function dawnTextureUsageBinding() -> U64 { return U64(4) }
+function dawnTextureUsageStorageBinding() -> U64 { return U64(8) }
+function dawnTextureUsageRenderAttachment() -> U64 { return U64(16) }
+
+// --- buffer usage --------------------------------------------------------
+function dawnBufferUsageMapRead() -> U64 { return U64(1) }
+function dawnBufferUsageCopySource() -> U64 { return U64(4) }
+function dawnBufferUsageCopyDestination() -> U64 { return U64(8) }
+function dawnBufferUsageIndex() -> U64 { return U64(16) }
+function dawnBufferUsageVertex() -> U64 { return U64(32) }
+function dawnBufferUsageUniform() -> U64 { return U64(64) }
+function dawnBufferUsageStorage() -> U64 { return U64(128) }
+
+// --- pass actions --------------------------------------------------------
+function dawnLoadOpLoad() -> I32 { return I32(1) }
+function dawnLoadOpClear() -> I32 { return I32(2) }
+function dawnStoreOpStore() -> I32 { return I32(1) }
+function dawnStoreOpDiscard() -> I32 { return I32(2) }
+
+// --- views and copies ----------------------------------------------------
+function dawnTextureDimension2d() -> I32 { return I32(2) }
+function dawnTextureViewDimension2d() -> I32 { return I32(2) }
+function dawnTextureAspectAll() -> I32 { return I32(1) }
+function dawnColorWriteMaskAll() -> U64 { return U64(15) }
+function dawnMapModeRead() -> U64 { return U64(1) }
+function dawnMapSucceeded() -> I32 { return I32(1) }
+
+// --- optional bool -------------------------------------------------------
+function dawnOptionalFalse() -> I32 { return I32(0) }
+function dawnOptionalTrue() -> I32 { return I32(1) }
+
+// --- vertex ---------------------------------------------------------------
+function dawnVertexStepModeVertex() -> I32 { return I32(1) }
+function dawnIndexFormatUint16() -> I32 { return I32(1) }
+function dawnIndexFormatUint32() -> I32 { return I32(2) }
+
+// --- error reporting -----------------------------------------------------
+// `WGPUErrorType`, for the uncaptured-error callback's own message.
+function dawnErrorText(kind: I32) -> String {
+    if kind == I32(2) { return "validation" }
+    if kind == I32(3) { return "out of memory" }
+    if kind == I32(4) { return "internal" }
+    return "unknown"
+}
+
+// --- Kira's vocabulary, in WebGPU's numbers ------------------------------
+// `Swapchain` is the one format that is not a format: it names whatever the
+// surface turned out to be, which only the runtime knows, so the caller that
+// has the state resolves it before asking.
+function dawnTextureFormat(format: borrow TextureFormat) -> I32 {
+    match format {
+        Rgba8Unorm -> return dawnFormatRgba8Unorm();
+        Rgba16Float -> return dawnFormatRgba16Float();
+        Depth24Stencil8 -> return dawnFormatDepth24PlusStencil8();
+        R32Uint -> return dawnFormatR32Uint();
+        Swapchain -> return dawnFormatUndefined();
+        None -> return dawnFormatUndefined();
+    }
+}
+
+function dawnVertexFormat(format: borrow VertexFormat) -> I32 {
+    match format {
+        Float -> return I32(28);
+        Float2 -> return I32(29);
+        Float3 -> return I32(30);
+        Float4 -> return I32(31);
+    }
+}
+
+function dawnVertexFormatBytes(format: borrow VertexFormat) -> Int {
+    match format {
+        Float -> return 4;
+        Float2 -> return 8;
+        Float3 -> return 12;
+        Float4 -> return 16;
+    }
+}
+
+function dawnCompareFunction(compare: borrow CompareFunction) -> I32 {
+    match compare {
+        Never -> return I32(1);
+        Less -> return I32(2);
+        LessEqual -> return I32(4);
+        Equal -> return I32(3);
+        GreaterEqual -> return I32(7);
+        Greater -> return I32(5);
+        Always -> return I32(8);
+    }
+}
+
+function dawnCullMode(mode: borrow CullMode) -> I32 {
+    match mode {
+        None -> return I32(1);
+        Front -> return I32(2);
+        Back -> return I32(3);
+    }
+}
+
+function dawnFrontFace(face: borrow FrontFace) -> I32 {
+    match face {
+        CounterClockwise -> return I32(1);
+        Clockwise -> return I32(2);
+    }
+}
+
+function dawnPrimitiveTopology(topology: borrow PrimitiveTopology) -> I32 {
+    match topology {
+        TriangleList -> return I32(4);
+        TriangleStrip -> return I32(5);
+        LineList -> return I32(2);
+    }
+}
+
+function dawnIndexFormat(format: borrow IndexFormat) -> I32 {
+    match format {
+        Uint16 -> return dawnIndexFormatUint16();
+        Uint32 -> return dawnIndexFormatUint32();
+    }
+}
+
+function dawnLoadAction(action: borrow LoadAction) -> I32 {
+    match action {
+        Clear -> return dawnLoadOpClear();
+        Load -> return dawnLoadOpLoad();
+        // WebGPU has no "don't care" load: an attachment is either preserved or
+        // cleared, and clearing is the one of the two that cannot read back
+        // whatever the last pass left in the texture.
+        DontCare -> return dawnLoadOpClear();
+    }
+}
+
+function dawnStoreAction(action: borrow StoreAction) -> I32 {
+    match action {
+        Store -> return dawnStoreOpStore();
+        DontCare -> return dawnStoreOpDiscard();
+    }
+}
+
+function dawnFilterMode(filter: borrow TextureFilter) -> I32 {
+    match filter {
+        Nearest -> return I32(1);
+        Linear -> return I32(2);
+    }
+}
+
+function dawnAddressMode(mode: borrow AddressMode) -> I32 {
+    match mode {
+        ClampToEdge -> return I32(1);
+        Repeat -> return I32(2);
+    }
+}
+
+// The blend state a preset names, as WebGPU's factors and operation. Add is the
+// operation in every one of them; what differs is the pair of factors.
+function dawnBlendState(preset: borrow BlendPreset) -> WGPUBlendState {
+    match preset {
+        Replace -> return dawnBlendPair(I32(2), I32(1), I32(2), I32(1));
+        Alpha -> return dawnBlendPair(I32(5), I32(6), I32(2), I32(6));
+        PremultipliedAlpha -> return dawnBlendPair(I32(2), I32(6), I32(2), I32(6));
+        Additive -> return dawnBlendPair(I32(5), I32(2), I32(2), I32(2));
+    }
+}
+
+function dawnBlendPair(colorSource: I32, colorDestination: I32, alphaSource: I32, alphaDestination: I32) -> WGPUBlendState {
+    return WGPUBlendState {
+        color: WGPUBlendComponent {
+            operation: I32(1)
+            srcFactor: colorSource
+            dstFactor: colorDestination
+        }
+        alpha: WGPUBlendComponent {
+            operation: I32(1)
+            srcFactor: alphaSource
+            dstFactor: alphaDestination
+        }
+    }
+}
+
+// What a texture created for `usage` may be used as.
+//
+// Every one of them carries `CopyDst`, because `createTextureFromPixels` and
+// `updateTexture` both write through the queue, and `CopySrc` so a frame
+// capture can read a render target back.
+function dawnTextureUsage(usage: borrow TextureUsage) -> U64 {
+    let shared = dawnTextureUsageCopyDestination() | dawnTextureUsageCopySource()
+    match usage {
+        Sampled -> return shared | dawnTextureUsageBinding();
+        SampledStreaming -> return shared | dawnTextureUsageBinding();
+        RenderTarget -> return shared | dawnTextureUsageRenderAttachment();
+        RenderTargetSampled -> return shared | dawnTextureUsageRenderAttachment() | dawnTextureUsageBinding();
+        DepthStencil -> return shared | dawnTextureUsageRenderAttachment();
+        SampledStorage -> return shared
+            | dawnTextureUsageBinding()
+            | dawnTextureUsageStorageBinding();
+    }
+}
+
+function dawnBufferUsage(usage: borrow BufferUsage) -> U64 {
+    let shared = dawnBufferUsageCopyDestination() | dawnBufferUsageCopySource()
+    match usage {
+        Vertex -> return shared | dawnBufferUsageVertex();
+        Index -> return shared | dawnBufferUsageIndex();
+        Uniform -> return shared | dawnBufferUsageUniform();
+        Storage -> return shared | dawnBufferUsageStorage();
+    }
+}

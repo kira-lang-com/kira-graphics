@@ -1,0 +1,145 @@
+import Foundation
+// Reading a presented frame back into a file.
+//
+// This is the instrument every claim about what a frame CONTAINS rests on.
+// Everything else a run can report — a pass that began, a draw that was counted,
+// a first-frame marker — is equally true of a frame that came out blank, and a
+// backend brought up without a way to look at its own output is a backend nobody
+// can tell from a clear screen.
+//
+// The path is WebGPU's only one: copy the texture into a buffer, map the buffer,
+// read the bytes. `CopySrc` is in the surface's configured usage for exactly
+// this. The copy's rows are padded to the 256-byte multiple WebGPU requires of
+// `bytesPerRow`, so the reader walks rows rather than one flat run.
+
+function dawnCopyRowAlignment() -> Int { return 256 }
+
+// The presented frame as a binary PPM at `path`, taken before the present so the
+// texture is still this frame's.
+@Native
+function dawnCaptureFrame(context: RawPtr, path: borrow String) {
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let width = state.dawn.surfaceWidth
+    let height = state.dawn.surfaceHeight
+    if width <= 0 || height <= 0 || pointerIsNull(state.dawn.frameTexture) {
+        graphicsDiagnostic("Kira Graphics could not read the Dawn swapchain back into " + path)
+        return
+    }
+    let bytesPerRow = (width * 4 + dawnCopyRowAlignment() - 1) / dawnCopyRowAlignment() * dawnCopyRowAlignment()
+    let byteCount = bytesPerRow * height
+    let readback = wgpuDeviceCreateBuffer(state.dawn.device, WGPUBufferDescriptor {
+        label: dawnText("kira-frame-capture")
+        usage: dawnBufferUsageMapRead() | dawnBufferUsageCopyDestination()
+        size: U64(byteCount)
+    })
+    if pointerIsNull(readback) {
+        graphicsDiagnostic("Kira Graphics could not allocate a capture buffer for " + path)
+        return
+    }
+    let encoder = wgpuDeviceCreateCommandEncoder(state.dawn.device, WGPUCommandEncoderDescriptor {
+        label: dawnText("kira-frame-capture-encoder")
+    })
+    wgpuCommandEncoderCopyTextureToBuffer(
+        encoder,
+        WGPUTexelCopyTextureInfo {
+            texture: state.dawn.frameTexture
+            mipLevel: U32(0)
+            aspect: dawnTextureAspectAll()
+        },
+        WGPUTexelCopyBufferInfo {
+            layout: WGPUTexelCopyBufferLayout {
+                offset: U64(0)
+                bytesPerRow: U32(bytesPerRow)
+                rowsPerImage: U32(height)
+            }
+            buffer: readback
+        },
+        WGPUExtent3D {
+            width: U32(width)
+            height: U32(height)
+            depthOrArrayLayers: U32(1)
+        },
+    )
+    let commands = wgpuCommandEncoderFinish(encoder, WGPUCommandBufferDescriptor {})
+    let submission: [RawPtr] = [commands]
+    wgpuQueueSubmit(state.dawn.queue, U64(1), submission)
+    wgpuCommandBufferRelease(commands)
+    wgpuCommandEncoderRelease(encoder)
+
+    state.dawn.mapResolved = false
+    state.dawn.mapSucceeded = false
+    wgpuBufferMapAsync(readback, dawnMapModeRead(), U64(0), U64(byteCount), WGPUBufferMapCallbackInfo {
+        mode: dawnCallbackOnProcessEvents()
+        callback: dawnBufferMapped
+        userdata1: context
+    })
+    var spins = 0
+    while !state.dawn.mapResolved && spins < 1000000 {
+        wgpuDeviceTick(state.dawn.device)
+        wgpuInstanceProcessEvents(state.dawn.instance)
+        spins = spins + 1
+    }
+    if !state.dawn.mapSucceeded {
+        graphicsDiagnostic("Kira Graphics could not map the Dawn capture buffer for " + path)
+        wgpuBufferDestroy(readback)
+        wgpuBufferRelease(readback)
+        return
+    }
+    let mapped = wgpuBufferGetConstMappedRange(readback, U64(0), U64(byteCount))
+    let wrote = writeBytesFile(path, dawnPortablePixmap(mapped, width, height, bytesPerRow, state.dawn.surfaceFormat))
+    wgpuBufferUnmap(readback)
+    wgpuBufferDestroy(readback)
+    wgpuBufferRelease(readback)
+    if wrote {
+        graphicsDiagnostic("Kira Graphics wrote the presented frame to " + path)
+    } else {
+        graphicsDiagnostic("Kira Graphics could not write the presented frame to " + path)
+    }
+    return
+}
+
+// A binary PPM (`P6`) over the mapped rows.
+//
+// The channel order is the surface's: a BGRA8 swapchain — which is what every
+// Windows swapchain is — stores blue first, and a PPM stores red first, so the
+// two outer channels swap. Writing the bytes in the wrong order would produce a
+// picture that looks plausible and compares as different everywhere, which is
+// the worst possible answer from an instrument.
+@Native
+function dawnPortablePixmap(mapped: RawPtr, width: Int, height: Int, bytesPerRow: Int, format: I32) -> [U8] {
+    let blueFirst = format == dawnFormatBgra8Unorm()
+    var bytes: [U8] = []
+    for byte in dawnAsciiBytes("P6\n" + String(width) + " " + String(height) + "\n255\n") {
+        bytes.append(byte)
+    }
+    var row = 0
+    while row < height {
+        let base = U64(row * bytesPerRow)
+        var column = 0
+        while column < width {
+            let pixel = base + U64(column * 4)
+            let first = byteAt(mapped, pixel)
+            let green = byteAt(mapped, pixel + U64(1))
+            let third = byteAt(mapped, pixel + U64(2))
+            bytes.append(blueFirst ? third : first)
+            bytes.append(green)
+            bytes.append(blueFirst ? first : third)
+            column = column + 1
+        }
+        row = row + 1
+    }
+    return bytes
+}
+
+// The bytes of a header line. The header is ASCII by the format's own
+// definition, so one byte per scalar.
+@Native
+function dawnAsciiBytes(text: borrow String) -> [U8] {
+    var bytes: [U8] = []
+    var index = 0
+    while index < text.count {
+        bytes.append(U8(text.charAt(index)))
+        index = index + 1
+    }
+    return bytes
+}
