@@ -161,8 +161,10 @@ function sokolComputeSamplers(reflection: borrow KslResourceReflection) -> [sg_s
     return samplers
 }
 
-// Textures and storage images share one slot space, because `sg_bindings.views`
-// is one array — which is also why a shader numbers both out of it.
+// Textures, storage buffers and storage images share one slot space, because
+// `sg_bindings.views` is one array — which is also why a shader numbers all
+// three out of it. The backend register spaces remain kind-specific, so the
+// per-kind `index` below is separate from the logical view slot.
 @Native
 function sokolComputeViews(reflection: borrow KslResourceReflection) -> [sg_shader_view] {
     var views: [sg_shader_view] = []
@@ -181,6 +183,29 @@ function sokolComputeViews(reflection: borrow KslResourceReflection) -> [sg_shad
                 msl_texture_n: U8(texture.binding)
                 wgsl_group1_binding_n: U8(texture.binding)
                 spirv_set1_binding_n: U8(texture.binding)
+            }
+        }
+        index = index + 1
+    }
+    index = 0
+    while index < reflection.storageBuffers.count {
+        let buffer = reflection.storageBuffers[index]
+        while views.count <= buffer.binding {
+            views.append(sokolEmptyShaderView())
+        }
+        views[buffer.binding] = sg_shader_view {
+            storage_buffer: sg_shader_storage_buffer_view {
+                stage: sokolShaderStageCompute()
+                readonly: buffer.readOnly
+                // HLSL gives read-only and read/write storage buffers separate
+                // register spaces. Sokol selects the one matching `readonly`.
+                hlsl_register_t_n: U8(index)
+                hlsl_register_u_n: U8(index)
+                // Sokol reserves buffer slots 0..7 for uniform blocks.
+                msl_buffer_n: U8(8 + index)
+                wgsl_group1_binding_n: U8(buffer.binding)
+                spirv_set1_binding_n: U8(buffer.binding)
+                glsl_binding_n: U8(buffer.glslBinding)
             }
         }
         index = index + 1
@@ -263,14 +288,6 @@ function sokolCreateComputeShader(label: borrow String, artifact: borrow KslArti
         return .Error(.ShaderRejected)
     }
     let reflection = kslParseResourceReflection(artifact.resourceReflection)
-    // A storage buffer in a compute shader would need the dispatch to name the
-    // buffer that fills it, and no dispatch here takes one. Refused rather than
-    // left undeclared: an undeclared block reaches the driver, binds nothing,
-    // and reads zero.
-    if reflection.storageBuffers.count > 0 {
-        graphicsDiagnostic("Kira Graphics: '" + label + "' declares a storage buffer, which the compute dispatch cannot bind")
-        return .Error(.ShaderRejected)
-    }
     let shader = sg_make_shader(move sg_shader_desc {
         compute_func: sg_shader_function {
             source: source
