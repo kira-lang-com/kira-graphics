@@ -26,6 +26,12 @@ struct SamplerBindEntry {
 struct StorageBindEntry {
     var storageSlot: Int = 0
     var viewId: U32 = 0
+    // How many bytes of the buffer the shader reads.
+    //
+    // WebGPU binds a buffer as a range, and a range needs a length; sokol binds
+    // the whole view and has no use for one. Carried here because the side that
+    // creates the entry is the side that still holds the buffer it came from.
+    var byteSize: Int = 0
 }
 
 struct BindGroupDescriptor {

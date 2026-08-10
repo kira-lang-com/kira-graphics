@@ -1,0 +1,143 @@
+import KiraGraphics
+import Foundation
+
+// One triangle, drawn on Dawn.
+//
+// The point of the example is not the triangle: it is that the SAME program runs
+// on the WebGPU backend and on the Sokol one, so what each draws can be compared
+// pixel for pixel. `KIRA_GRAPHICS_BACKEND=sokol` is the only difference between
+// the two runs, and a difference in the source would be a difference in the
+// answer — which is why the backend is a run-time selection here rather than a
+// second copy of the file.
+//
+// Run it with `KIRA_GRAPHICS_QUIT_AFTER_FRAMES` set. A windowed example has no
+// way to end on its own, and an unbounded run leaves the executable holding a
+// link lock on itself.
+
+struct TriangleState {
+    var shader: GraphicsShader
+    var pipeline: RenderPipeline
+    var vertices: GraphicsBuffer
+}
+
+// Position and colour per vertex, so the frame carries more than one flat fill:
+// a triangle of one colour cannot tell a working fragment stage from a clear.
+function dawnTriangleVertices() -> [F32] {
+    return [
+        0.0, 0.55, 0.95, 0.35, 0.25,
+        0.55, -0.55, 0.25, 0.85, 0.45,
+        -0.55, -0.55, 0.30, 0.45, 0.95
+    ]
+}
+
+function dawnTriangleVertexLayout() -> VertexLayout {
+    return VertexLayout {
+        stride: 20
+        attributes: [
+            VertexAttribute {
+                name: "position"
+                location: 0
+                format: VertexFormat.Float2
+                offset: 0
+            },
+            VertexAttribute {
+                name: "color"
+                location: 1
+                format: VertexFormat.Float3
+                offset: 8
+            }
+        ]
+    }
+}
+
+@Main
+@Native
+function main() {
+    var app = GraphicsApplication {
+        title: "Kira Graphics Dawn Triangle"
+        width: 640
+        height: 480
+        sampleCount: 1
+        highDpi: false
+        backend: graphicsBackendFromEnvironment(.Dawn)
+    }
+    let state = nativeState(TriangleState {
+        shader: emptyGraphicsShader()
+        pipeline: emptyRenderPipeline()
+        vertices: emptyGraphicsBuffer()
+    })
+
+    app.onInit { graphics in
+        var triangleState = nativeRecover<TriangleState>(graphics.userData)
+
+        let artifact = ksl!("Shaders/DawnTriangle.ksl")
+        triangleState.shader = shaderOrReport(
+            graphics.createShaderFromKslArtifact("dawn-triangle-shader", artifact),
+            "shader"
+        )
+
+        triangleState.vertices = bufferOrReport(graphics.createBuffer(BufferDescriptor {
+            label: "dawn-triangle-vertices"
+            usage: BufferUsage.Vertex
+            data: dawnTriangleVertices()
+        }), "vertices")
+
+        triangleState.pipeline = pipelineOrReport(graphics.createRenderPipeline(RenderPipelineDescriptor {
+            label: "dawn-triangle-pipeline"
+            shader: triangleState.shader
+            vertexLayout: dawnTriangleVertexLayout()
+            colorTargets: [
+                ColorTargetDescriptor {
+                    format: TextureFormat.Swapchain
+                    blend: BlendState {
+                        enabled: false
+                        preset: BlendPreset.Replace
+                    }
+                }
+            ]
+            depthStencil: DepthStencilDescriptor {
+                depthEnabled: false
+                depthWriteEnabled: false
+                depthCompare: CompareFunction.Always
+                format: TextureFormat.None
+            }
+            rasterization: RasterizationDescriptor {
+                cullMode: CullMode.None
+                frontFace: FrontFace.CounterClockwise
+            }
+            primitive: PrimitiveDescriptor {
+                topology: PrimitiveTopology.TriangleList
+            }
+        }), "pipeline")
+        return
+    }
+
+    app.onFrame { frame in
+        var triangleState = nativeRecover<TriangleState>(frame.userData)
+        let pipeline = triangleState.pipeline
+        let vertices = triangleState.vertices
+
+        let encoder = frame.beginRenderPass(clearSwapchainRenderPass(Color {
+            r: 0.03
+            g: 0.04
+            b: 0.07
+            a: 1.0
+        }))
+        encoder.setPipeline(pipeline)
+        encoder.setVertexBuffer(vertices)
+        encoder.draw(3)
+        frame.endPass()
+        return
+    }
+
+    app.onCleanup { graphics in
+        var triangleState = nativeRecover<TriangleState>(graphics.userData)
+        graphics.destroyBuffer(triangleState.vertices)
+        graphics.destroyRenderPipeline(triangleState.pipeline)
+        graphics.destroyShader(triangleState.shader)
+        return
+    }
+
+    app.run(nativeUserData(state))
+    return
+}

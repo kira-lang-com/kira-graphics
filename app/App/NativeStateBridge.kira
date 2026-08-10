@@ -17,6 +17,31 @@ struct GraphicsAppRuntimeState {
     // were C statics until the legacy immediate-mode UI renderer that shared
     // them was deleted.
     var pass: SokolPassState = SokolPassState {}
+    // The Dawn backend's window, device, resource table and pass state (see
+    // `app/Backend/Dawn/DawnContext.kira`). Here for the same reason the Sokol
+    // blocks above are: this is the one state blob the run loop, a frame and a
+    // draw all already recover.
+    var dawn: DawnState = dawnEmptyState()
+    // Whether this run was asked for frame-rate telemetry
+    // (`KIRA_GRAPHICS_LOG_FPS`). A harness knob rather than pass state, which is
+    // why it sits beside the other three rather than inside one backend's.
+    var logFps: Bool = false
+    // What the frames of this run cost the RENDERER, in seconds: how many were
+    // measured, their total, and the worst single one.
+    //
+    // Deliberately not the frame *rate*. A presented frame arrives at the
+    // display's cadence whatever the renderer did, so a run pinned at 60 fps
+    // says nothing about whether a frame took 1 ms or 15 — and a regression that
+    // doubles the cost of a frame is invisible until it crosses the vsync
+    // interval, at which point it looks like a cliff. Both backends measure the
+    // same span: the application's own frame callback, with the wait for a
+    // drawable outside it.
+    var frameCostCount: Int = 0
+    var frameCostTotalSeconds: Float = 0.0
+    var frameCostWorstSeconds: Float = 0.0
+    var frameCostFirstSeconds: Float = 0.0
+    var frameCostPasses: Int = 0
+    var frameCostDraws: Int = 0
     // The harness knobs, read once at init rather than per frame.
     //
     // They are launch settings — nothing changes them while a process runs — and

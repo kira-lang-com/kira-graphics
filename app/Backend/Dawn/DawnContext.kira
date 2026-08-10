@@ -1,0 +1,453 @@
+import Foundation
+// The Dawn backend's per-run state, and how a device and a surface come to
+// exist.
+//
+// `DawnState` sits on `GraphicsAppRuntimeState`, which is the blob the run loop,
+// a frame and a draw all already recover — the same place the Sokol backend's
+// pass state and lifetime peaks live. Every member of `DawnRenderBackend` is
+// handed that blob as its `context` and reads its state out of here.
+//
+// # The object table
+//
+// Kira's public handles are `U32` ids (`GraphicsBuffer.id`, `GraphicsTexture
+// .viewId`, `RenderPipeline.drawPipelineId`, …) and WebGPU's are pointers, so
+// something has to map between them. One flat table does it for every kind: a
+// WebGPU handle is a WebGPU handle, an id is its slot plus one, and zero stays
+// what it already means everywhere in this repo — no resource. A destroyed slot
+// goes back on a free list, so a long run of create/destroy does not grow the
+// table without bound.
+//
+// A texture's slot also remembers its WebGPU format. That is the one fact about
+// a texture that Kira's `GraphicsTexture` does not carry and that both a view
+// and a pipeline's colour target need.
+
+struct DawnState {
+    // --- the window ------------------------------------------------------
+    var moduleInstance: RawPtr
+    var window: RawPtr
+    // The `MSG` and `WGPUSurfaceTexture` blocks, allocated once at startup
+    // rather than per frame: both are pure out-parameters, and a fresh
+    // allocation per frame would be two allocations per frame for nothing.
+    var messageBlock: RawPtr
+    var surfaceTextureBlock: RawPtr
+    var quitRequested: Bool = false
+    var focused: Bool = true
+    var pointerX: Float = 0.0
+    var pointerY: Float = 0.0
+    var hasPointer: Bool = false
+
+    // --- the device ------------------------------------------------------
+    var instance: RawPtr
+    var adapter: RawPtr
+    var device: RawPtr
+    var queue: RawPtr
+    var surface: RawPtr
+    var adapterResolved: Bool = false
+    var surfaceFormat: I32 = 0
+    var surfaceWidth: Int = 0
+    var surfaceHeight: Int = 0
+
+    // --- resources -------------------------------------------------------
+    var objects: [RawPtr] = []
+    var objectFormats: [I32] = []
+    // A second pointer per slot, for the one resource that owns storage beside
+    // its WebGPU handle: a dynamic buffer's CPU block. Freed with the slot, so
+    // the block does not outlive the buffer whose writes it staged.
+    var objectExtra: [RawPtr] = []
+    // Shaders keep a table of their own: a `GraphicsShader` is one id and a
+    // WebGPU graphics shader is two modules and two entry names. See
+    // `DawnShader.kira`.
+    var shaders: [DawnShaderRecord] = []
+    // What each pipeline's layout declares, and the merged bind groups built
+    // against those declarations. See `DawnBindLayout.kira` — WebGPU takes one
+    // group per `@group(n)` and a Kira encoder carries four slots of one group.
+    var pipelineBindings: [DawnPipelineBindings] = []
+    var mergedGroups: [DawnMergedBindGroup] = []
+    var nextGroupIdentity: Int = 0
+    // Slots a destroy gave back, and how many of them are live. An array grows
+    // and reads but never shrinks, so the count is what says where the stack of
+    // free slots ends; the entries past it are the ones already handed out.
+    var freeSlots: [Int] = []
+    var freeCount: Int = 0
+
+    // --- the frame in progress -------------------------------------------
+    var frameTexture: RawPtr
+    var frameView: RawPtr
+    var encoder: RawPtr
+    var passEncoder: RawPtr
+    var passActive: Bool = false
+    var passWidth: Int = 0
+    var passHeight: Int = 0
+    // The colour format the open pass writes, so a pipeline built with the
+    // `Swapchain` sentinel resolves to what this pass actually has.
+    var passFormat: I32 = 0
+    var passIsSwapchain: Bool = false
+    var announcedFrameSubmitted: Bool = false
+    // The managed depth-stencil target, sized to whichever pass last asked for
+    // depth without naming a texture. WebGPU has no implicit depth buffer, so a
+    // swapchain pass that wants one gets this.
+    var depthTextureId: U32 = 0
+    var depthViewId: U32 = 0
+    var depthWidth: Int = 0
+    var depthHeight: Int = 0
+    // The two-word extent uniform the separable blur reads, kept for the run.
+    var blurExtentBufferId: U32 = 0
+
+    // --- a buffer readback in progress -----------------------------------
+    // `wgpuBufferMapAsync` answers through a callback, and the one caller that
+    // wants the answer is spinning on these two.
+    var mapResolved: Bool = false
+    var mapSucceeded: Bool = false
+
+    // --- telemetry -------------------------------------------------------
+    var stats: DawnFrameStats = DawnFrameStats {}
+    var trace: DawnGpuTrace = DawnGpuTrace {}
+    // The GPU's own clock, read while the frame is presented rather than by
+    // stopping it (see `DawnTimestamps.kira`).
+    var clock: DawnGpuClock = DawnGpuClock {}
+    var allocatedBytes: U64 = 0
+    var resourceCount: Int = 0
+}
+
+// A state with nothing in it, for the run loop to fill.
+//
+// Written out rather than defaulted because a `RawPtr` field has no zero a Kira
+// struct declaration can name: the null pointer is a call, and a field default
+// is a value.
+@Native
+function dawnEmptyState() -> DawnState {
+    return DawnState {
+        moduleInstance: nullPointer()
+        window: nullPointer()
+        messageBlock: nullPointer()
+        surfaceTextureBlock: nullPointer()
+        instance: nullPointer()
+        adapter: nullPointer()
+        device: nullPointer()
+        queue: nullPointer()
+        surface: nullPointer()
+        frameTexture: nullPointer()
+        frameView: nullPointer()
+        encoder: nullPointer()
+        passEncoder: nullPointer()
+    }
+}
+
+// Every site below writes `nativeRecover<GraphicsAppRuntimeState>(context)` out
+// in full rather than reaching it through a helper, and that is load-bearing: a
+// helper *returns* the state, which copies it out of the native storage, and a
+// write to the copy lands nowhere. The failure is silent — an id is handed back,
+// the table it was meant to grow is still empty, and the first sign is a
+// pipeline that cannot find the shader a caller just created.
+
+// Whether a backend member was reached before the run loop built a context.
+// Every member that touches the device asks this first, so a call made outside
+// a run answers with a diagnostic rather than a null dereference.
+@Native
+function dawnHasDevice(context: RawPtr) -> Bool {
+    if pointerIsNull(context) {
+        return false
+    }
+    return !pointerIsNull(nativeRecover<GraphicsAppRuntimeState>(context).dawn.device)
+}
+
+// --- the object table ----------------------------------------------------
+
+// Records a WebGPU handle and answers the id Kira will carry it as. A null
+// handle is id 0, which is what every `*Result` lifter in this repo reads as
+// "the device refused it".
+@Native
+function dawnRegisterObject(state: borrow mut GraphicsAppRuntimeState, object: RawPtr, format: I32) -> U32 {
+    if pointerIsNull(object) {
+        return U32(0)
+    }
+    state.dawn.resourceCount = state.dawn.resourceCount + 1
+    if state.dawn.freeCount > 0 {
+        state.dawn.freeCount = state.dawn.freeCount - 1
+        let slot = state.dawn.freeSlots[state.dawn.freeCount]
+        state.dawn.objects[slot] = object
+        state.dawn.objectFormats[slot] = format
+        state.dawn.objectExtra[slot] = nullPointer()
+        return U32(slot + 1)
+    }
+    state.dawn.objects.append(object)
+    state.dawn.objectFormats.append(format)
+    state.dawn.objectExtra.append(nullPointer())
+    return U32(state.dawn.objects.count)
+}
+
+// Gives a slot the CPU block that belongs to it, and takes it back.
+@Native
+function dawnAttachExtra(state: borrow mut GraphicsAppRuntimeState, id: U32, extra: RawPtr) {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.dawn.objectExtra.count {
+        return
+    }
+    state.dawn.objectExtra[slot] = extra
+    return
+}
+
+@Native
+function dawnFreeExtra(state: borrow mut GraphicsAppRuntimeState, id: U32) {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.dawn.objectExtra.count {
+        return
+    }
+    if pointerIsNull(state.dawn.objectExtra[slot]) {
+        return
+    }
+    freeBytes(state.dawn.objectExtra[slot])
+    state.dawn.objectExtra[slot] = nullPointer()
+    return
+}
+
+@Native
+function dawnObject(state: borrow GraphicsAppRuntimeState, id: U32) -> RawPtr {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.dawn.objects.count {
+        return nullPointer()
+    }
+    return state.dawn.objects[slot]
+}
+
+@Native
+function dawnObjectFormat(state: borrow GraphicsAppRuntimeState, id: U32) -> I32 {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.dawn.objectFormats.count {
+        return dawnFormatUndefined()
+    }
+    return state.dawn.objectFormats[slot]
+}
+
+// Forgets a slot, so the id stops naming anything and the slot is reused. The
+// WebGPU handle itself is released by the caller, which is the side that knows
+// which `wgpu*Release` the object answers to.
+@Native
+function dawnForgetObject(state: borrow mut GraphicsAppRuntimeState, id: U32) {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.dawn.objects.count {
+        return
+    }
+    if pointerIsNull(state.dawn.objects[slot]) {
+        return
+    }
+    state.dawn.objects[slot] = nullPointer()
+    state.dawn.objectFormats[slot] = dawnFormatUndefined()
+    if state.dawn.freeCount < state.dawn.freeSlots.count {
+        state.dawn.freeSlots[state.dawn.freeCount] = slot
+    } else {
+        state.dawn.freeSlots.append(slot)
+    }
+    state.dawn.freeCount = state.dawn.freeCount + 1
+    state.dawn.resourceCount = state.dawn.resourceCount - 1
+    return
+}
+
+// --- bring-up ------------------------------------------------------------
+
+// The text behind a `WGPUStringView` Dawn handed over.
+//
+// A `CString` member read out of a C-layout struct is the opaque pointer word it
+// is, with no spelling for its text — so the pointer is read out of the view's
+// first field and the bytes behind it are walked. Dawn's messages are the only
+// account of why a shader, a pipeline or a bind group was refused, so reading
+// them is not optional.
+@Native
+function dawnViewText(view: WGPUStringViewPointer) -> String {
+    return textFromBytes(pointerAt(view, U64(0)), Int(view.length))
+}
+
+// Dawn's answer to `wgpuInstanceRequestAdapter`.
+//
+// Runs inside `wgpuInstanceProcessEvents`, which is what
+// `dawnCallbackOnProcessEvents` asked for: the spin below is the only place this
+// backend re-enters Kira from Dawn, and it happens before a frame exists.
+function dawnAdapterReady(status: I32, adapter: WGPUAdapterImpl_ptr, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
+    var state = nativeRecover<GraphicsAppRuntimeState>(userdata1)
+    state.dawn.adapterResolved = true
+    if status != dawnRequestAdapterSucceeded() {
+        graphicsDiagnostic("Kira Graphics: Dawn refused an adapter — " + dawnViewText(message))
+        return
+    }
+    state.dawn.adapter = adapter
+    return
+}
+
+// A device Dawn lost after it was created — a removed GPU, a driver reset, a
+// TDR. Nothing can be recorded on the runtime state from here: the callback
+// carries no user data this backend can trust past shutdown, so it reports.
+function dawnDeviceLost(device: RawPtr, reason: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
+    graphicsDiagnostic("Kira Graphics: the Dawn device was lost — " + dawnViewText(message))
+    return
+}
+
+// Every validation failure Dawn does not hand back through a return value.
+//
+// This is the difference between a blank frame and a diagnosis. A WGSL shader
+// Dawn rejects still answers with a shader module object; a bind group that does
+// not match its layout still encodes; a pipeline whose colour format differs
+// from the pass's is refused at the draw. All three arrive here and nowhere
+// else.
+function dawnUncapturedError(device: RawPtr, kind: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
+    graphicsDiagnostic("Kira Graphics: Dawn reported a " + dawnErrorText(kind) + " error — " + dawnViewText(message))
+    return
+}
+
+// Creates the instance, drives the adapter request to completion, and creates
+// the device synchronously. Answers whether a device exists afterwards.
+@Native
+function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) -> Bool {
+    state.dawn.instance = wgpuCreateInstance(WGPUInstanceDescriptor {})
+    if pointerIsNull(state.dawn.instance) {
+        graphicsDiagnostic("Kira Graphics: Dawn could not create a WebGPU instance")
+        return false
+    }
+    state.dawn.adapterResolved = false
+    wgpuInstanceRequestAdapter(state.dawn.instance, WGPURequestAdapterOptions {
+        featureLevel: dawnFeatureLevelCore()
+        powerPreference: dawnPowerPreferenceHighPerformance()
+    }, WGPURequestAdapterCallbackInfo {
+        mode: dawnCallbackOnProcessEvents()
+        callback: dawnAdapterReady
+        userdata1: runtimeUserData
+    })
+    // Bounded rather than open: an adapter request that never completes is a
+    // driver that will never answer, and spinning on it forever would hang the
+    // program before it drew anything, with nothing on the log.
+    var spins = 0
+    while !state.dawn.adapterResolved && spins < 100000 {
+        wgpuInstanceProcessEvents(state.dawn.instance)
+        spins = spins + 1
+    }
+    if pointerIsNull(state.dawn.adapter) {
+        graphicsDiagnostic("Kira Graphics: Dawn found no adapter for this machine")
+        return false
+    }
+    // A device gets the optional features it asked for and no others, so timing
+    // a frame is a decision taken here: the adapter is asked whether it can, and
+    // the feature is requested where it can. A machine whose adapter cannot
+    // leaves `hasGpuSeconds` false rather than reporting a zero.
+    state.dawn.clock.supported = dawnAdapterTimesFrames(state.dawn.adapter)
+    let features: [I32] = [dawnFeatureTimestampQuery()]
+    state.dawn.device = dawnCreateDevice(state.dawn.adapter, DawnDeviceDescriptor {
+        label: dawnText("kira-graphics-device")
+        requiredFeatureCount: U64(state.dawn.clock.supported ? 1 : 0)
+        requiredFeatures: features
+        deviceLostCallbackInfo: DawnDeviceLostCallbackInfo {
+            mode: dawnCallbackOnProcessEvents()
+            callback: dawnDeviceLost
+        }
+        uncapturedErrorCallbackInfo: DawnUncapturedErrorCallbackInfo {
+            callback: dawnUncapturedError
+        }
+    })
+    if pointerIsNull(state.dawn.device) {
+        graphicsDiagnostic("Kira Graphics: Dawn refused a device on the adapter it chose")
+        return false
+    }
+    dawnReadGpuTimesKnob(state)
+    state.dawn.queue = wgpuDeviceGetQueue(state.dawn.device)
+    return !pointerIsNull(state.dawn.queue)
+}
+
+// Creates the surface for the window this run opened, chaining the HWND source
+// onto the descriptor.
+@Native
+function dawnCreateSurface(state: borrow mut GraphicsAppRuntimeState) -> Bool {
+    state.dawn.surface = wgpuInstanceCreateSurface(state.dawn.instance, WGPUSurfaceDescriptor {
+        nextInChain: WGPUSurfaceSourceWindowsHWND {
+            chain: WGPUChainedStruct {
+                sType: dawnStructureWindowsHwnd()
+            }
+            hinstance: state.dawn.moduleInstance
+            hwnd: state.dawn.window
+        }
+        label: dawnText("kira-graphics-surface")
+    })
+    if pointerIsNull(state.dawn.surface) {
+        graphicsDiagnostic("Kira Graphics: Dawn could not create a surface for the window")
+        return false
+    }
+    // BGRA8 is what every Windows swapchain presents and what Dawn's D3D12
+    // backend reports first in its capabilities. Naming it rather than reading
+    // the capability list keeps a pipeline's `Swapchain` colour target and the
+    // surface in agreement without a query per pipeline.
+    state.dawn.surfaceFormat = dawnFormatBgra8Unorm()
+    return dawnConfigureSurface(state, dawnClientWidth(state.dawn.window), dawnClientHeight(state.dawn.window))
+}
+
+// Sizes the surface to the window's client area. Called at startup and again
+// whenever the client area changes, because a surface configured for one size
+// answers `Outdated` for every texture after it.
+@Native
+function dawnConfigureSurface(state: borrow mut GraphicsAppRuntimeState, width: Int, height: Int) -> Bool {
+    if width <= 0 || height <= 0 {
+        return false
+    }
+    if state.dawn.surfaceWidth == width && state.dawn.surfaceHeight == height {
+        return true
+    }
+    wgpuSurfaceConfigure(state.dawn.surface, WGPUSurfaceConfiguration {
+        device: state.dawn.device
+        format: state.dawn.surfaceFormat
+        // `CopySrc` beside the attachment bit, so a presented frame can be read
+        // back into a capture. That readback is what proves a frame contains
+        // anything; every other signal a run can emit is equally true of a
+        // frame that came out blank.
+        usage: dawnTextureUsageRenderAttachment() | dawnTextureUsageCopySource()
+        width: U32(width)
+        height: U32(height)
+        alphaMode: dawnCompositeAlphaAuto()
+        presentMode: dawnPresentModeFifo()
+    })
+    state.dawn.surfaceWidth = width
+    state.dawn.surfaceHeight = height
+    return true
+}
+
+// Releases everything the run created, in the order WebGPU's ownership implies:
+// the resources a device made, then the surface, the device, the adapter and the
+// instance.
+@Native
+function dawnShutdown(state: borrow mut GraphicsAppRuntimeState) {
+    for slot in 0..state.dawn.objects.count {
+        state.dawn.objects[slot] = nullPointer()
+    }
+    state.dawn.freeCount = 0
+    state.dawn.mergedGroups = []
+    state.dawn.pipelineBindings = []
+    if !pointerIsNull(state.dawn.surface) {
+        wgpuSurfaceUnconfigure(state.dawn.surface)
+        wgpuSurfaceRelease(state.dawn.surface)
+        state.dawn.surface = nullPointer()
+    }
+    if !pointerIsNull(state.dawn.queue) {
+        wgpuQueueRelease(state.dawn.queue)
+        state.dawn.queue = nullPointer()
+    }
+    if !pointerIsNull(state.dawn.device) {
+        wgpuDeviceRelease(state.dawn.device)
+        state.dawn.device = nullPointer()
+    }
+    if !pointerIsNull(state.dawn.adapter) {
+        wgpuAdapterRelease(state.dawn.adapter)
+        state.dawn.adapter = nullPointer()
+    }
+    if !pointerIsNull(state.dawn.instance) {
+        wgpuInstanceRelease(state.dawn.instance)
+        state.dawn.instance = nullPointer()
+    }
+    if !pointerIsNull(state.dawn.messageBlock) {
+        freeBytes(state.dawn.messageBlock)
+        state.dawn.messageBlock = nullPointer()
+    }
+    if !pointerIsNull(state.dawn.surfaceTextureBlock) {
+        freeBytes(state.dawn.surfaceTextureBlock)
+        state.dawn.surfaceTextureBlock = nullPointer()
+    }
+    if !pointerIsNull(state.dawn.window) {
+        destroyWindowHandle(state.dawn.window)
+        state.dawn.window = nullPointer()
+    }
+    return
+}

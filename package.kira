@@ -25,6 +25,54 @@ Package KiraGraphics {
             ],
         },
         NativeLibrary {
+            // Dawn, consumed as the binaries kira-lang-com/dawn publishes
+            // rather than built here: it is a C++ tree with its own dependency
+            // fetch, and building it per Kira build would put half an hour on
+            // every one. NativeLibs/Dawn/<triple> holds a release payload
+            // unpacked exactly as it ships.
+            //
+            // Dynamic rather than static: the desktop slices are a monolithic
+            // webgpu_dawn shared library, and the static ones exist only where
+            // a shared library cannot go. Dawn also loads dxcompiler.dll by
+            // name at run time, so a consumer deploys bin/ beside the
+            // executable instead of linking it.
+            name: "dawn",
+            linkMode: LinkMode.Dynamic,
+            //
+            // `WGPU_SKIP_PROCS` leaves out the function-pointer typedefs a
+            // dynamic loader would use, which nothing here does — and with them
+            // `emscripten_webgpu_get_device`, the one declaration in the header
+            // that no desktop build of Dawn exports. Binding it would put an
+            // unresolved symbol on every Windows link line.
+            headers: Headers { entrypoint: "NativeLibs/Dawn/x86_64-windows-msvc/include/webgpu/webgpu.h", includeDirs: ["NativeLibs/Dawn/x86_64-windows-msvc/include"], defines: ["WGPU_SKIP_PROCS"] },
+            autobind: Autobind { module: "webgpu", headers: ["NativeLibs/Dawn/x86_64-windows-msvc/include/dawn/webgpu.h"], mode: AutobindMode.AllPublic },
+            nativeTargets: [
+                // `runtimeFiles` is the payload's `bin/`: `webgpu_dawn.dll`
+                // beside the executable so the loader finds it, and
+                // `dxcompiler.dll`/`dxil.dll` beside that because Dawn opens the
+                // first by name when it compiles a shader for D3D12.
+                NativeTarget { triple: "x86_64-windows-msvc", dynamicLib: "NativeLibs/Dawn/x86_64-windows-msvc/lib/webgpu_dawn.lib", runtimeFiles: ["NativeLibs/Dawn/x86_64-windows-msvc/bin"] }
+            ],
+        },
+        NativeLibrary {
+            // The window the Dawn backend draws into. Dawn renders and does not
+            // own a window, and WebGPU takes a surface — on Windows an `HWND` —
+            // so the backend opens one itself against the two libraries every
+            // Windows process already links. No archive of its own: these are
+            // the system's, named so the link line carries them.
+            //
+            // Optional, and that is what keeps a macOS or Linux build of this
+            // package working: there is no row for those targets, the binding is
+            // excluded, and `validateRenderBackend` refuses the Dawn backend
+            // there before anything calls into it.
+            name: "win32",
+            linkMode: LinkMode.Dynamic,
+            availability: Availability.Optional,
+            nativeTargets: [
+                NativeTarget { triple: "x86_64-windows-msvc", systemLibs: ["user32", "kernel32"] }
+            ],
+        },
+        NativeLibrary {
             // Kira's own runtime archive, already on every native link line.
             // The raw-memory primitives a backend lays its C-shaped context out
             // with live there — and so, now, do shared-library loading and the

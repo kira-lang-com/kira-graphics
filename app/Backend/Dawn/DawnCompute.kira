@@ -1,0 +1,265 @@
+import Foundation
+// Compute on WebGPU.
+//
+// A compute pipeline is one module and one entry, so `createComputePipeline`
+// takes the shader a `ksl!` compute artifact produced and builds it. Its layout
+// is derived from the module, exactly as a render pipeline's is, so
+// `wgpuComputePipelineGetBindGroupLayout` answers for the group a dispatch
+// binds.
+//
+// The two dispatch shapes the surface asks for are the two a real renderer has:
+// a separable image filter over textures, and a kernel over buffers. Both record
+// onto the FRAME's command encoder, in the order the caller asked for, alongside
+// the render passes around them — see `DawnPass.kira` for why the frame is one
+// command buffer and not one per pass.
+
+@FFI.Array { element: WGPUBindGroupEntry; count: 12; }
+struct WGPUBindGroupEntryArray12 {}
+
+@Native
+function dawnCreateComputePipeline(context: RawPtr, label: borrow String, shader: borrow GraphicsShader, entryName: borrow String) -> Int {
+    if !dawnHasDevice(context) {
+        return 0
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let record = dawnShaderRecord(state, shader.id)
+    if !record.live || pointerIsNull(record.computeModule) {
+        graphicsDiagnostic("Kira Graphics: compute pipeline '" + label + "' names no compiled compute shader")
+        return 0
+    }
+    let entry = entryName.count > 0 ? entryName : record.computeEntry
+    let pipeline = wgpuDeviceCreateComputePipeline(state.dawn.device, WGPUComputePipelineDescriptor {
+        label: dawnText(label)
+        compute: WGPUComputeState {
+            module: record.computeModule
+            entryPoint: dawnText(entry)
+        }
+    })
+    if pointerIsNull(pipeline) {
+        return 0
+    }
+    return Int(dawnRegisterObject(state, pipeline, dawnFormatUndefined()))
+}
+
+// One dispatch, with the entries already assembled, recorded on the frame's
+// encoder.
+//
+// The bind group is built against the pipeline's own layout and released as soon
+// as it is recorded: a WebGPU command encoder retains what it references, so the
+// group stays alive as long as the command buffer needs it, and the entries
+// differ per call by construction so there is nothing to cache.
+@Native
+function dawnDispatch(state: borrow mut GraphicsAppRuntimeState, pipelineId: Int, entries: borrow [WGPUBindGroupEntry], groupsX: Int, groupsY: Int) {
+    dawnTraceOpenSegment(state)
+    let pipeline = dawnObject(state, U32(pipelineId))
+    if pointerIsNull(pipeline) || entries.count == 0 {
+        return
+    }
+    let layout = wgpuComputePipelineGetBindGroupLayout(pipeline, U32(0))
+    if pointerIsNull(layout) {
+        return
+    }
+    let group = wgpuDeviceCreateBindGroup(state.dawn.device, WGPUBindGroupDescriptor {
+        label: dawnText("kira-compute-bindings")
+        layout: layout
+        entryCount: U64(entries.count)
+        entries: WGPUBindGroupEntryArray12 { elements: entries }
+    })
+    wgpuBindGroupLayoutRelease(layout)
+    if pointerIsNull(group) {
+        return
+    }
+    if state.dawn.passActive {
+        graphicsDiagnostic("Kira Graphics: a compute dispatch was asked for while a Dawn render pass is open; end the pass first")
+        wgpuBindGroupRelease(group)
+        return
+    }
+    let encoder = dawnFrameEncoder(state)
+    let timed = dawnClockOpenPair(state, false)
+    var pass = nullPointer()
+    if timed < 0 {
+        pass = wgpuCommandEncoderBeginComputePass(encoder, WGPUComputePassDescriptor {
+            label: dawnText("kira-compute-pass")
+        })
+    } else {
+        pass = wgpuCommandEncoderBeginComputePass(encoder, WGPUComputePassDescriptor {
+            label: dawnText("kira-compute-pass")
+            timestampWrites: dawnClockWrites(state, timed)
+        })
+    }
+    wgpuComputePassEncoderSetPipeline(pass, pipeline)
+    wgpuComputePassEncoderSetBindGroup(pass, U32(0), group, U64(0), nullPointer())
+    wgpuComputePassEncoderDispatchWorkgroups(pass, U32(groupsX), U32(groupsY), U32(1))
+    wgpuComputePassEncoderEnd(pass)
+    wgpuComputePassEncoderRelease(pass)
+    wgpuBindGroupRelease(group)
+    return
+}
+
+// How many workgroups cover `extent` threads at `perGroup` threads each.
+function dawnWorkgroupCount(extent: Int, perGroup: Int) -> Int {
+    let size = perGroup <= 0 ? 1 : perGroup
+    if extent <= 0 {
+        return 1
+    }
+    return (extent + size - 1) / size
+}
+
+// The separable blur pair. Each axis is one dispatch: the sources are read
+// through sampled views, the two levels are written through storage views, and
+// the sampler is bound because a compute stage cannot declare one inline.
+//
+// Bindings are numbered the way a KSL kernel numbers its own resources: the
+// extent uniform, the sampler, the two input textures, then the near and far
+// outputs. Both halves read two — the horizontal one blends a crossfade as it
+// filters, the vertical one reads the two levels the horizontal one wrote — so
+// one layout serves the pair.
+@Native
+function dawnDispatchTextureComputePair(
+    context: RawPtr,
+    horizontalPipeline: Int,
+    verticalPipeline: Int,
+    source: borrow GraphicsTexture,
+    secondSource: borrow GraphicsTexture,
+    blend: Float,
+    tempNear: borrow GraphicsTexture,
+    tempFar: borrow GraphicsTexture,
+    outputNear: borrow GraphicsTexture,
+    outputFar: borrow GraphicsTexture,
+    sampler: borrow GraphicsSampler,
+    width: Int,
+    height: Int,
+) {
+    if !dawnHasDevice(context) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let extent = dawnBlurExtentBuffer(state, width, height, blend)
+    if pointerIsNull(extent) {
+        return
+    }
+    // 16x16, which is the threadgroup both halves declare. A dispatch that
+    // rounded to another size would leave a strip of the target unwritten or run
+    // threads the kernel's own bounds check has to discard.
+    let groupsX = dawnWorkgroupCount(width, 16)
+    let groupsY = dawnWorkgroupCount(height, 16)
+    dawnDispatch(state, horizontalPipeline, dawnBlurEntries(state, extent, sampler, source, secondSource, tempNear, tempFar), groupsX, groupsY)
+    dawnTraceSegment(context, state, "blurH", false)
+    dawnDispatch(state, verticalPipeline, dawnBlurEntries(state, extent, sampler, tempNear, tempFar, outputNear, outputFar), groupsX, groupsY)
+    dawnTraceSegment(context, state, "blurV", false)
+    return
+}
+
+// The extent uniform both halves of the blur read, kept for the run rather than
+// built per dispatch: it is four words, it is rewritten twice a frame, and a
+// buffer created and destroyed at that rate is a resource churn with nothing to
+// show for it.
+//
+// Floats throughout, including the extent: the kernel's only uses of it are the
+// tail-thread bounds test and the texel step it divides out of it, both exact in
+// a float at any extent a texture can have.
+@Native
+function dawnBlurExtentBuffer(state: borrow mut GraphicsAppRuntimeState, width: Int, height: Int, blend: Float) -> RawPtr {
+    if state.dawn.blurExtentBufferId == 0 {
+        state.dawn.blurExtentBufferId = dawnMakeBuffer(state, "kira-blur-extent", dawnBufferUsage(.Uniform), 16)
+    }
+    let buffer = dawnObject(state, state.dawn.blurExtentBufferId)
+    if pointerIsNull(buffer) {
+        return buffer
+    }
+    let extent: [F32] = [F32(Float(width)), F32(Float(height)), F32(blend), F32(0.0)]
+    wgpuQueueWriteBuffer(state.dawn.queue, buffer, U64(0), extent, U64(16))
+    return buffer
+}
+
+// One half's bindings: the target extent, the sampler the filter reads through,
+// the two textures it reads, and the two levels it writes.
+@Native
+function dawnBlurEntries(state: borrow GraphicsAppRuntimeState, extent: RawPtr, sampler: borrow GraphicsSampler, firstSource: borrow GraphicsTexture, secondSource: borrow GraphicsTexture, near: borrow GraphicsTexture, far: borrow GraphicsTexture) -> [WGPUBindGroupEntry] {
+    let sources: [GraphicsTexture] = [firstSource, secondSource]
+    var entries: [WGPUBindGroupEntry] = []
+    entries.append(WGPUBindGroupEntry {
+        binding: U32(0)
+        buffer: extent
+        offset: U64(0)
+        size: U64(16)
+    })
+    entries.append(WGPUBindGroupEntry {
+        binding: U32(1)
+        sampler: dawnObject(state, sampler.id)
+    })
+    var binding = 2
+    for source in sources {
+        entries.append(WGPUBindGroupEntry {
+            binding: U32(binding)
+            textureView: dawnObject(state, source.viewId)
+        })
+        binding = binding + 1
+    }
+    entries.append(WGPUBindGroupEntry {
+        binding: U32(binding)
+        textureView: dawnObject(state, near.storageViewId)
+    })
+    entries.append(WGPUBindGroupEntry {
+        binding: U32(binding + 1)
+        textureView: dawnObject(state, far.storageViewId)
+    })
+    return entries
+}
+
+// A kernel over buffers. The ids bind in order at binding 0, 1, … which is how a
+// KSL kernel numbers its own storage arguments.
+@Native
+function dawnDispatchComputeBuffers(context: RawPtr, pipeline: Int, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
+    if !dawnHasDevice(context) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    dawnDispatch(state, pipeline, dawnBufferEntries(state, bufferIds, 0), dawnWorkgroupCount(threadCount, threadsPerGroup), 1)
+    return
+}
+
+// The same dispatch with a depth texture bound ahead of the buffers, for a
+// kernel that reads the depth a pass just rasterized.
+@Native
+function dawnDispatchDepthComputeBuffers(context: RawPtr, pipeline: Int, depth: borrow GraphicsTexture, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
+    if !dawnHasDevice(context) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    var entries = dawnBufferEntries(state, bufferIds, 1)
+    let view = dawnObject(state, depth.depthViewId != 0 ? depth.depthViewId : depth.viewId)
+    if pointerIsNull(view) {
+        graphicsDiagnostic("Kira Graphics: the depth texture handed to a compute dispatch has no view to bind")
+        return
+    }
+    var ordered: [WGPUBindGroupEntry] = []
+    ordered.append(WGPUBindGroupEntry {
+        binding: U32(0)
+        textureView: view
+    })
+    for entry in entries {
+        ordered.append(entry)
+    }
+    dawnDispatch(state, pipeline, ordered, dawnWorkgroupCount(threadCount, threadsPerGroup), 1)
+    return
+}
+
+@Native
+function dawnBufferEntries(state: borrow GraphicsAppRuntimeState, bufferIds: borrow [U32], firstBinding: Int) -> [WGPUBindGroupEntry] {
+    var entries: [WGPUBindGroupEntry] = []
+    var index = 0
+    while index < bufferIds.count {
+        let buffer = dawnObject(state, bufferIds[index])
+        if !pointerIsNull(buffer) {
+            entries.append(WGPUBindGroupEntry {
+                binding: U32(firstBinding + index)
+                buffer: buffer
+                offset: U64(0)
+                size: wgpuBufferGetSize(buffer)
+            })
+        }
+        index = index + 1
+    }
+    return entries
+}

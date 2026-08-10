@@ -19,6 +19,35 @@ struct BindGroupState {
     var textureEntries: [TextureBindEntry] = []
     var samplerEntries: [SamplerBindEntry] = []
     var storageEntries: [StorageBindEntry] = []
+    // How many times the entries above have changed.
+    //
+    // A backend that has to mint a device-side object from them — WebGPU's
+    // `WGPUBindGroup` is immutable once created — caches that object and rebuilds
+    // it when this moves. Sokol needs none: it applies the entries at the draw
+    // and has nothing to invalidate.
+    var revision: Int = 0
+    // The Dawn backend's cached `WGPUBindGroup`, and what it was built for.
+    //
+    // A WebGPU bind group is created against a *pipeline's* layout for a
+    // *particular* group index, and neither is known when a caller builds the
+    // group — the group usually exists before any pipeline does. So the real
+    // object is minted at the first draw that binds it and kept until the
+    // pipeline, the slot, or the entries change. Ids rather than pointers,
+    // because the id space is the backend's own table and a `RawPtr` field has
+    // no zero a struct declaration can name.
+    var deviceGroupId: U32 = 0
+    var devicePipeline: U32 = 0
+    var deviceSlot: Int = 0 - 1
+    var deviceRevision: Int = 0 - 1
+    // What tells this group apart from every other one, for a cache keyed on
+    // several groups at once.
+    //
+    // `BindGroup.id` cannot: every live group answers the same non-zero
+    // sentinel, because nothing else keys on it. Assigned on first use by the
+    // backend that needs it (Dawn merges an encoder's four slots into one
+    // WebGPU group and caches the result against the combination), so a run on
+    // a backend that does not need identities never spends one.
+    var identity: Int = 0
 }
 
 class BindGroup {
@@ -34,12 +63,16 @@ function emptyBindGroup() -> BindGroup {
     }
 }
 
-// sokol_gfx.h's `SG_MAX_UNIFORMBLOCK_BINDSLOTS` / `SG_MAX_VIEW_BINDSLOTS` /
-// `SG_MAX_SAMPLER_BINDSLOTS`. An entry's *slot* is checked against these
-// before it is kept — Sokol itself would only catch an out-of-range slot at
-// the draw that finally applies it, past the point a caller could tell why.
-function sokolMaxUniformBlockBindSlots() -> Int { return 8 }
+// sokol_gfx.h's `SG_MAX_VIEW_BINDSLOTS` / `SG_MAX_SAMPLER_BINDSLOTS`. An
+// entry's *slot* is checked against these before it is kept — Sokol itself
+// would only catch an out-of-range slot at the draw that finally applies it,
+// past the point a caller could tell why.
 function sokolMaxViewBindSlots() -> Int { return 32 }
+// `SG_MAX_UNIFORMBLOCK_BINDSLOTS`: how many uniform blocks one pipeline may
+// have. Not a limit on where a SHADER numbers its uniform — that is a binding
+// index in the same space as its textures — but on the slot sokol resolves that
+// binding to, which is what `sg_apply_uniforms` takes.
+function sokolMaxUniformBlockSlots() -> Int { return 8 }
 function sokolMaxSamplerBindSlots() -> Int { return 12 }
 
 // Sokol's half of `Graphics.beginBindGroup` / `createBindGroup` /
@@ -58,11 +91,17 @@ function sokolCreateBindGroupId(label: borrow String) -> BindGroup {
     }
 }
 
+// The slot is the shader's own `@group(0)` binding index, not a sokol block
+// slot: sokol numbers its blocks itself, in the order the reflection reports
+// them, and `sokolUniformTargetMask` is what turns one into the other. So the
+// range this is checked against is the binding space a KSL group numbers into —
+// the same one a texture entry is checked against — and a shader that declares
+// its uniform after eight textures is not asking sokol for a ninth block.
 @Native
 function sokolBindGroupAddUniform(group: borrow BindGroup, uniformSlot: Int, uniform: borrow Uniform) {
     var state = nativeRecover<BindGroupState>(group.storage)
-    if uniformSlot < 0 || uniformSlot >= sokolMaxUniformBlockBindSlots() {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' uniform slot is outside Sokol's supported uniform block range")
+    if uniformSlot < 0 || uniformSlot >= sokolMaxViewBindSlots() {
+        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' uniform slot is outside the binding range a shader group numbers into")
         return
     }
     state.uniformEntries.append(UniformBindEntry {

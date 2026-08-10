@@ -13,11 +13,15 @@
 // m|name:binding:stageMask
 // ```
 //
-// Read here rather than in C because the side that builds an `sg_shader_desc`
-// is the side that needs it, and that side is Kira for every shader the compute
-// seam creates. A record whose kind this does not know is skipped rather than
-// misread as another kind's fields: the format is append-only, so a shader
-// compiled by a newer toolchain still binds what this understands.
+// Read here rather than in C because the sides that need it are Kira: Sokol
+// builds an `sg_shader_desc` from it, and Dawn decides from it which of the
+// bindings an encoder carries belong in the one WebGPU group a pipeline reads.
+// A record whose kind this does not know is skipped rather than misread as
+// another kind's fields: the format is append-only, so a shader compiled by a
+// newer toolchain still binds what this understands.
+//
+// `stageMask` is bit 0 vertex, bit 1 fragment, bit 2 compute — the same three
+// bits, in the same order, that `WGPUShaderStage` uses.
 
 // How a uniform member's bytes are loaded.
 //
@@ -73,16 +77,22 @@ struct KslSamplerBinding {
     var stageMask: Int = 0
 }
 
+struct KslStorageBuffer {
+    var name: String = ""
+    var binding: Int = 0
+    var stageMask: Int = 0
+    // The `std430` block's own GLSL binding, which is not the slot a host binds
+    // the buffer at — the same distinction `KslStorageImage.glslBinding` draws.
+    var glslBinding: Int = 0
+    var readOnly: Bool = true
+}
+
 struct KslResourceReflection {
     var uniforms: [KslUniformBlock] = []
     var textures: [KslTextureBinding] = []
     var images: [KslStorageImage] = []
     var samplers: [KslSamplerBinding] = []
-    // Storage buffers are counted rather than described: nothing that reads this
-    // reflection binds one yet, and a count is what lets the reader refuse a
-    // shader it cannot fully bind instead of building one whose block is never
-    // written.
-    var storageBufferCount: Int = 0
+    var storageBuffers: [KslStorageBuffer] = []
 }
 
 // The number a digest field spells, or zero when it spells none.
@@ -196,7 +206,13 @@ function kslParseResourceReflection(digest: borrow String) -> KslResourceReflect
                 writeOnly: kslDigestInt(kslDigestField(fields, 4)) != 0
             })
         } else if record.startsWith("s|") {
-            reflection.storageBufferCount = reflection.storageBufferCount + 1
+            reflection.storageBuffers.append(KslStorageBuffer {
+                name: kslDigestField(fields, 0)
+                binding: kslDigestInt(kslDigestField(fields, 1))
+                stageMask: kslDigestInt(kslDigestField(fields, 2))
+                glslBinding: kslDigestInt(kslDigestField(fields, 3))
+                readOnly: kslDigestInt(kslDigestField(fields, 4)) != 0
+            })
         }
     }
     return reflection

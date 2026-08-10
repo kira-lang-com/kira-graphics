@@ -1,0 +1,172 @@
+import Foundation
+// What one presented frame cost, on the Dawn backend, and the clock it is
+// measured with.
+//
+// The counters are gathered while the frame is built and moved to the `last*`
+// fields when it ends, because an application lays its HUD out while the frame
+// the HUD will appear in is still being recorded — so the last COMPLETED frame
+// is what there is to report.
+//
+// `gpuSeconds` is the GPU's own clock, read through a timestamp query set while
+// the frame is presented rather than by draining the queue around it — see
+// `DawnTimestamps.kira`. Where the adapter does not report the `timestamp-query`
+// feature there is no timer, and `hasGpuSeconds` says so: a counter a backend
+// cannot measure is not a counter that measured zero.
+
+// `QueryPerformanceCounter` and its frequency. A monotonic clock is a platform
+// call — Kira has no clock of its own — and this is Windows', read through the
+// same `LARGE_INTEGER` out-parameter shape the window messages use.
+@FFI.Extern { library: win32; symbol: QueryPerformanceCounter; abi: c; }
+function performanceCounter(value: RawPtr) -> I32;
+
+@FFI.Extern { library: win32; symbol: QueryPerformanceFrequency; abi: c; }
+function performanceFrequency(value: RawPtr) -> I32;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u64_at; abi: c; }
+function readDoubleWord(ptr: RawPtr, offset: U64) -> U64;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u64_at; abi: c; }
+function writeDoubleWord(ptr: RawPtr, offset: U64, value: U64) -> Void;
+
+struct DawnFrameStats {
+    // The frame being recorded.
+    var drawCount: Int = 0
+    var triangleCount: Int = 0
+    var passCount: Int = 0
+    var startedAt: U64 = 0
+    // The frame before it, which is what a caller may honestly read.
+    var frameSerial: Int = 0
+    var lastFrameSeconds: Float = 0.0
+    var lastDrawCount: Int = 0
+    var lastTriangleCount: Int = 0
+    var lastPassCount: Int = 0
+    // Frame-rate telemetry (`KIRA_GRAPHICS_LOG_FPS`): committed frames per wall
+    // second, so a pacing regression is measurable instead of eyeballed.
+    var fpsWindowStartNanoseconds: U64 = 0
+    var fpsFrames: Int = 0
+}
+
+// Nanoseconds on Windows' monotonic performance counter.
+//
+// Whole seconds and the remainder are scaled separately. Multiplying the raw
+// tick count by a billion first would overflow a 64-bit word after about two
+// hours of uptime on a 10 MHz counter, and the answer would go backwards.
+@Native
+function dawnMonotonicNanoseconds() -> U64 {
+    let ticks = Int(dawnPerformanceTicks())
+    let perSecond = Int(dawnPerformanceTicksPerSecond())
+    return U64(ticks / perSecond * 1000000000 + ticks % perSecond * 1000000000 / perSecond)
+}
+
+// The counter's current tick and the ticks-per-second beside it.
+@Native
+function dawnPerformanceTicks() -> U64 {
+    let block = allocateBytes(U64(8))
+    if pointerIsNull(block) {
+        return U64(0)
+    }
+    var ticks = U64(0)
+    if performanceCounter(block) != 0 {
+        ticks = readDoubleWord(block, U64(0))
+    }
+    freeBytes(block)
+    return ticks
+}
+
+@Native
+function dawnPerformanceTicksPerSecond() -> U64 {
+    let block = allocateBytes(U64(8))
+    if pointerIsNull(block) {
+        return U64(1)
+    }
+    var ticks = U64(1)
+    if performanceFrequency(block) != 0 {
+        ticks = readDoubleWord(block, U64(0))
+    }
+    freeBytes(block)
+    if ticks == U64(0) {
+        return U64(1)
+    }
+    return ticks
+}
+
+// Opens a frame's counters.
+@Native
+function dawnBeginFrameStats(state: borrow mut GraphicsAppRuntimeState) {
+    state.dawn.stats.drawCount = 0
+    state.dawn.stats.triangleCount = 0
+    state.dawn.stats.passCount = 0
+    state.dawn.stats.startedAt = dawnPerformanceTicks()
+    dawnClockBeginFrame(state)
+    return
+}
+
+// Closes them, moving what the frame cost to where a HUD may read it.
+@Native
+function dawnEndFrameStats(state: borrow mut GraphicsAppRuntimeState) {
+    let elapsed = dawnPerformanceTicks() - state.dawn.stats.startedAt
+    state.dawn.stats.lastFrameSeconds = Float(Int(elapsed)) / Float(Int(dawnPerformanceTicksPerSecond()))
+    state.dawn.stats.lastDrawCount = state.dawn.stats.drawCount
+    state.dawn.stats.lastTriangleCount = state.dawn.stats.triangleCount
+    state.dawn.stats.lastPassCount = state.dawn.stats.passCount
+    state.dawn.stats.frameSerial = state.dawn.stats.frameSerial + 1
+    noteFrameCost(state, state.dawn.stats.lastFrameSeconds, state.dawn.stats.lastPassCount, state.dawn.stats.lastDrawCount)
+    return
+}
+
+@Native
+function dawnFrameStatistics(context: RawPtr) -> FrameStatistics {
+    if pointerIsNull(context) {
+        return FrameStatistics {}
+    }
+    let state = nativeRecover<GraphicsAppRuntimeState>(context)
+    return FrameStatistics {
+        frameSeconds: state.dawn.stats.lastFrameSeconds
+        cpuSeconds: state.dawn.stats.lastFrameSeconds
+        gpuSeconds: state.dawn.clock.frameMilliseconds / 1000.0
+        hasGpuSeconds: state.dawn.clock.measured
+        drawableWidth: state.dawn.surfaceWidth
+        drawableHeight: state.dawn.surfaceHeight
+        allocatedBytes: state.dawn.allocatedBytes
+        hasAllocatedBytes: true
+        resourceCount: state.dawn.resourceCount
+        passCount: state.dawn.stats.lastPassCount
+        drawCount: state.dawn.stats.lastDrawCount
+        triangleCount: state.dawn.stats.lastTriangleCount
+        framesInFlight: 2
+        frameSerial: state.dawn.stats.frameSerial
+        windowState: state.dawn.focused ? 1 : 2
+    }
+}
+
+// A number to one decimal place, without a float formatter. The frame rate is
+// the one measurement whose whole point is comparing two runs, and rounding 59.6
+// to 60 hides exactly the difference being looked for.
+@Native
+function dawnTenths(value: Float) -> String {
+    let tenths = Int(value * 10.0 + 0.5)
+    return String(tenths / 10) + "." + String(tenths % 10)
+}
+
+@Native
+function dawnLogFrameRate(state: borrow mut GraphicsAppRuntimeState) {
+    if !state.logFps {
+        return
+    }
+    let now = dawnPerformanceTicks()
+    if state.dawn.stats.fpsWindowStartNanoseconds == U64(0) {
+        state.dawn.stats.fpsWindowStartNanoseconds = now
+    }
+    state.dawn.stats.fpsFrames = state.dawn.stats.fpsFrames + 1
+    let elapsed = Float(Int(now - state.dawn.stats.fpsWindowStartNanoseconds))
+        / Float(Int(dawnPerformanceTicksPerSecond()))
+    if elapsed >= 1.0 {
+        graphicsDiagnostic(
+            "KiraGraphics: fps=" + dawnTenths(Float(state.dawn.stats.fpsFrames) / elapsed)
+                + " frames=" + String(state.dawn.stats.fpsFrames)
+        )
+        state.dawn.stats.fpsWindowStartNanoseconds = now
+        state.dawn.stats.fpsFrames = 0
+    }
+    return
+}

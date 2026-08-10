@@ -194,6 +194,14 @@ typedef struct {
     uint32_t pipelines;
 } kg_lifetime_peaks;
 
+// The shader sokol is building right now, or NULL between builds.
+//
+// Every message the GL backend emits while linking names a resource and not the
+// program it was linking, which leaves a reader holding a name and a directory
+// of shaders to try it against. This is set around the calls that can produce
+// one and printed beside them.
+static const char* kg_building_shader_label = NULL;
+
 static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* message, uint32_t line, const char* filename, void* user_data) {
     (void)user_data;
     const char* level = "info";
@@ -204,12 +212,14 @@ static void kg_sokol_log(const char* tag, uint32_t log_level, uint32_t log_item_
     } else if (log_level == 2) {
         level = "warning";
     }
-    printf("Kira Graphics: %s[%u] %s:%u: %s: %s\n",
+    printf("Kira Graphics: %s[%u] %s:%u: %s:%s%s %s\n",
         tag ? tag : "sokol",
         log_item_id,
         filename ? filename : "sokol_gfx.h",
         line,
         level,
+        kg_building_shader_label ? " shader " : "",
+        kg_building_shader_label ? kg_building_shader_label : "",
         message ? message : "");
     if (log_level == 0) {
         abort();
@@ -1541,7 +1551,9 @@ static kg_shader_info kg_make_shader_with_entries_reflected(
     }
 
     desc.label = label;
+    kg_building_shader_label = label;
     uint32_t shader_id = sg_make_shader(&desc).id;
+    kg_building_shader_label = NULL;
     kg_owned_text_deinit(&prepared_vertex_source);
     kg_owned_text_deinit(&prepared_fragment_source);
     return kg_make_shader_info(shader_id, has_position_attribute, has_normal_attribute, required_uniform_mask, available_uniform_mask, found.uniforms, found.uniform_count);
@@ -1630,7 +1642,9 @@ static kg_shader_info kg_make_spirv_shader(
     const uint32_t available_uniform_mask = kg_configure_uniform_blocks(&desc, vertex_metadata.ptr, fragment_metadata.ptr);
     kg_configure_legacy_sampled_textures(&desc, fragment_metadata.ptr);
     desc.label = label;
+    kg_building_shader_label = label;
     const uint32_t shader_id = sg_make_shader(&desc).id;
+    kg_building_shader_label = NULL;
     free(vertex_bytecode.ptr);
     free(fragment_bytecode.ptr);
     kg_owned_text_deinit(&vertex_metadata);

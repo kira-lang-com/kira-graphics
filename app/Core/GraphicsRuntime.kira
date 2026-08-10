@@ -1,3 +1,62 @@
+// Records what one frame cost the renderer.
+//
+// Called by every backend's run loop with the span it measured, so the summary
+// below compares like with like across them.
+// The first frame is kept out of the mean and reported on its own. It is the
+// frame that decodes the assets, compiles the shaders and builds every pipeline,
+// so folding it in makes a 300-frame run's average say more about start-up than
+// about drawing — a 2.5 s first frame moves a 300-frame mean by 8 ms.
+@Native
+function noteFrameCost(state: borrow mut GraphicsAppRuntimeState, seconds: Float, passes: Int, draws: Int) {
+    if state.frameCostCount == 0 && state.frameCostFirstSeconds == 0.0 {
+        state.frameCostFirstSeconds = seconds
+        return
+    }
+    state.frameCostCount = state.frameCostCount + 1
+    state.frameCostTotalSeconds = state.frameCostTotalSeconds + seconds
+    if seconds > state.frameCostWorstSeconds {
+        state.frameCostWorstSeconds = seconds
+    }
+    // The last frame's shape, so a frame time is read beside the amount of work
+    // it paid for. A mean with no denominator says a frame is slow; a mean with
+    // one says whether it is slow per draw or slow because there are thousands.
+    state.frameCostPasses = passes
+    state.frameCostDraws = draws
+    return
+}
+
+// A number to two decimal places, without a float formatter. A frame time is
+// read in milliseconds and the interesting digits are the fractional ones —
+// rounding 1.4 ms to 1 hides the difference a comparison is being made for.
+@Native
+function graphicsHundredths(value: Float) -> String {
+    let hundredths = Int(value * 100.0 + 0.5)
+    let fraction = hundredths % 100
+    return String(hundredths / 100) + "." + (fraction < 10 ? "0" : "") + String(fraction)
+}
+
+// What the run's frames cost, printed once at shutdown when the run asked for
+// frame telemetry.
+//
+// Mean and worst rather than a rate, and in milliseconds because that is the
+// unit a frame budget is written in.
+@Native
+function reportFrameCost(state: borrow GraphicsAppRuntimeState) {
+    if !state.logFps || state.frameCostCount == 0 {
+        return
+    }
+    let mean = state.frameCostTotalSeconds / Float(state.frameCostCount) * 1000.0
+    graphicsDiagnostic(
+        "KiraGraphics: frames=" + String(state.frameCostCount)
+            + " mean=" + graphicsHundredths(mean) + "ms"
+            + " worst=" + graphicsHundredths(state.frameCostWorstSeconds * 1000.0) + "ms"
+            + " first=" + graphicsHundredths(state.frameCostFirstSeconds * 1000.0) + "ms"
+            + " passes=" + String(state.frameCostPasses)
+            + " draws=" + String(state.frameCostDraws)
+    )
+    return
+}
+
 @Native
 function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
     var runtimeState = nativeState(GraphicsAppRuntimeState {

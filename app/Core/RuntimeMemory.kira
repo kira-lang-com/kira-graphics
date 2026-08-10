@@ -14,6 +14,46 @@ function freeBytes(ptr: RawPtr): Void;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u8_at; abi: c; }
 function writeByte(ptr: RawPtr, offset: U64, value: U8): Void;
 
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u8_at; abi: c; }
+function byteAt(ptr: RawPtr, offset: U64) -> U8;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u32_at; abi: c; }
+function writeWord(ptr: RawPtr, offset: U64, value: U32): Void;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u32_at; abi: c; }
+function wordAt(ptr: RawPtr, offset: U64) -> U32;
+
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_f32_at; abi: c; }
+function writeFloat32(ptr: RawPtr, offset: U64, value: F32): Void;
+
+// The pointer stored at a byte offset. A `CString` member read out of a C-layout
+// struct comes back as the opaque word it is, with no way to spell its text — so
+// text C owns is read as the bytes behind this pointer instead.
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_ptr_at; abi: c; }
+function pointerAt(ptr: RawPtr, offset: U64) -> RawPtr;
+
+// The text at `ptr`, `count` bytes of it.
+//
+// For a message a C library hands over as a pointer and a length — Dawn reports
+// every validation failure that way, and a backend that could not read one would
+// answer a rejected shader with a blank frame and no reason.
+function textFromBytes(ptr: RawPtr, count: Int) -> String {
+    if pointerIsNull(ptr) || count <= 0 {
+        return ""
+    }
+    var text = ""
+    var index = 0
+    while index < count {
+        let byte = Int(byteAt(ptr, U64(index)))
+        if byte == 0 {
+            return text
+        }
+        text = text + scalarText(byte)
+        index = index + 1
+    }
+    return text
+}
+
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_null_ptr; abi: c; }
 function nullPointer(): RawPtr;
 

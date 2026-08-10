@@ -125,12 +125,19 @@ class RenderFrame {
         return
     }
 
-    // Run a two-axis separable blur over `source`, one dispatch per axis.
+    // Run a two-axis separable blur over `mix(source, secondSource, blend)`, one
+    // dispatch per axis.
     //
     // Both kernels produce two levels at once — near and far read the same
     // input and write their own target — so the pyramid costs one dispatch per
     // axis rather than one per level. The horizontal half writes the two temps;
     // the vertical half reads them and writes the two outputs.
+    //
+    // The horizontal half reads two images and blends them as it filters. A blur
+    // is linear, so filtering the blend costs what filtering one image costs and
+    // saves the caller compositing a crossfade into a third full-resolution
+    // texture the filter would then read at a quarter of that resolution. One
+    // image is the same call with the texture passed twice and `blend` 0.
     //
     // Textures rather than ids, because the two backends bind different things:
     // Metal binds the texture object, and sokol binds a *view* — a sampled one
@@ -140,6 +147,8 @@ class RenderFrame {
         horizontalPipeline: Int,
         verticalPipeline: Int,
         source: borrow GraphicsTexture,
+        secondSource: borrow GraphicsTexture,
+        blend: Float,
         tempNear: borrow GraphicsTexture,
         tempFar: borrow GraphicsTexture,
         outputNear: borrow GraphicsTexture,
@@ -154,6 +163,8 @@ class RenderFrame {
             horizontalPipeline,
             verticalPipeline,
             source,
+            secondSource,
+            blend,
             tempNear,
             tempFar,
             outputNear,

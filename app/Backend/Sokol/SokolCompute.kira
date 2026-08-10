@@ -24,14 +24,16 @@ function sokolDispatchGroupCount(extent: Int) -> I32 {
     return I32((extent + size - 1) / size)
 }
 
-// The extent uniform both kernels read, as the words their `std140` block holds.
+// The extent uniform both kernels read, as the words their `std140` block holds:
+// the target's extent and the crossfade weight the horizontal half blends its
+// two sources with.
 //
-// Four rather than two: the block's declared size is 16 bytes and sokol checks
+// Four rather than three: the block's declared size is 16 bytes and sokol checks
 // the range it is handed against it, so the padding the layout describes is
 // written rather than assumed away.
 @Native
-function sokolBlurExtentWords(width: Int, height: Int) -> [U32] {
-    return [U32(width), U32(height), U32(0), U32(0)]
+function sokolBlurExtentWords(width: Int, height: Int, blend: Float) -> [F32] {
+    return [F32(Float(width)), F32(Float(height)), F32(blend), F32(0.0)]
 }
 
 // One dispatch over buffers: a simulation step rather than an image filter.
@@ -86,10 +88,8 @@ function sokolDispatchComputeBuffers(
     })
     sg_dispatch(I32((threadCount + threadsPerGroup - 1) / threadsPerGroup), 1, 1)
     sg_end_pass()
-    var done = 0
-    while done < views.count {
+    for done in 0..views.count {
         sg_destroy_view(views[done])
-        done = done + 1
     }
     return
 }
@@ -105,6 +105,7 @@ function sokolDispatchBlurHalf(
     sampler: borrow GraphicsSampler,
     width: Int,
     height: Int,
+    blend: Float,
 ) {
     sg_begin_pass(move sg_pass {
         compute: true
@@ -133,7 +134,7 @@ function sokolDispatchBlurHalf(
         }
     })
 
-    let extent = sokolBlurExtentWords(width, height)
+    let extent = sokolBlurExtentWords(width, height, blend)
     sg_apply_uniforms(0, move sg_range {
         ptr: extent
         size: U64(extent.count * 4)
@@ -176,6 +177,8 @@ function sokolDispatchTextureComputePair(
     horizontalPipelineId: Int,
     verticalPipelineId: Int,
     source: borrow GraphicsTexture,
+    secondSource: borrow GraphicsTexture,
+    blend: Float,
     tempNear: borrow GraphicsTexture,
     tempFar: borrow GraphicsTexture,
     outputNear: borrow GraphicsTexture,
@@ -187,7 +190,7 @@ function sokolDispatchTextureComputePair(
     if horizontalPipelineId == 0 || verticalPipelineId == 0 || width <= 0 || height <= 0 {
         return
     }
-    let horizontalReads: [GraphicsTexture] = [source]
+    let horizontalReads: [GraphicsTexture] = [source, secondSource]
     let horizontalWrites: [GraphicsTexture] = [tempNear, tempFar]
     let verticalReads: [GraphicsTexture] = [tempNear, tempFar]
     let verticalWrites: [GraphicsTexture] = [outputNear, outputFar]
@@ -196,7 +199,10 @@ function sokolDispatchTextureComputePair(
         graphicsDiagnostic("Kira Graphics skipped the blur dispatch because a texture it writes was not created with a storage-image usage")
         return
     }
-    sokolDispatchBlurHalf(horizontalPipelineId, horizontalReads, horizontalWrites, sampler, width, height)
-    sokolDispatchBlurHalf(verticalPipelineId, verticalReads, verticalWrites, sampler, width, height)
+    // One block serves both halves. The vertical one filters what the horizontal
+    // one already blended and never reads the weight — its two reads are the two
+    // levels, not two images of one scene.
+    sokolDispatchBlurHalf(horizontalPipelineId, horizontalReads, horizontalWrites, sampler, width, height, blend)
+    sokolDispatchBlurHalf(verticalPipelineId, verticalReads, verticalWrites, sampler, width, height, blend)
     return
 }

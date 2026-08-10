@@ -44,7 +44,12 @@ function sokolUniformTargetMask(pipeline: borrow RenderPipeline, publicSlot: Int
     } else if publicSlot >= 0 && publicSlot < 32 {
         targetMask = pipeline.availableUniformMask & (1 << publicSlot)
     }
-    if targetMask == 0 && publicSlot >= 0 && publicSlot < 32 {
+    // Last resort for a shader with no reflection at all: take the public slot
+    // as the block slot. Bounded by how many blocks sokol has, because that is
+    // what the guess is a guess AT — a caller binding a uniform at a slot past
+    // them is binding one this pipeline does not declare, and the answer there
+    // is to apply nothing rather than to name a block that cannot exist.
+    if targetMask == 0 && publicSlot >= 0 && publicSlot < sokolMaxUniformBlockSlots() {
         targetMask = 1 << publicSlot
     }
     return targetMask
@@ -242,8 +247,15 @@ function sokolDrawWithBindings(
                 if !sokolApplyUniformEntry(pipeline, entry) {
                     return false
                 }
+                // The mask this is checked against counts SOKOL BLOCK SLOTS —
+                // sokol numbers its blocks itself, in the order the reflection
+                // reports them — so a bound entry is recorded at the slots its
+                // public binding resolves to and not at the binding. The two
+                // agree only for a shader whose uniform is its first resource,
+                // and a shader that declares one after its textures would
+                // otherwise have every draw refused for a block it did bind.
                 if entry.uniform.id != 0 {
-                    appliedMask = appliedMask | (1 << entry.uniformSlot)
+                    appliedMask = appliedMask | sokolUniformTargetMask(pipeline, entry.uniformSlot)
                 }
                 uniformIndex = uniformIndex + 1
             }

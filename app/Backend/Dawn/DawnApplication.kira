@@ -1,0 +1,373 @@
+import Foundation
+// The Dawn backend's run loop: open a window, bring a device up against it, and
+// drive frames until the program or the user asks to stop.
+//
+// Dawn has no run loop of its own — it is a GPU API and nothing more — so this
+// is an ordinary `while` over the Win32 message queue rather than a callback
+// registration. That makes the order plain: pump the queue, run the frame, end
+// it, present. Every message the application reacts to is read here, where the
+// runtime state is in hand, because a `WNDPROC` is handed no user pointer to
+// reach it through (see `DawnWindow.kira`).
+
+@Native
+function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Void {
+    var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    state.dawn = dawnEmptyState()
+    readHarnessKnobs(state)
+    dawnReadGpuTraceKnob(state)
+    // System-DPI awareness before the window exists: a process that declares it
+    // later has already been told a scaled size for a window it has not opened,
+    // and the client area it then measures is the virtualized one.
+    //
+    // Declared only for an application that asked for a full-resolution
+    // framebuffer, which is what `highDpi` asks for. Without it Windows renders
+    // the process at 96 DPI and upscales, every DPI query answers 96, and the
+    // window is sized in the logical pixels the application meant — the same
+    // split sokol-app makes for the same flag.
+    if app.highDpi {
+        markProcessDpiAware()
+    }
+    state.dawn.moduleInstance = moduleHandle("")
+    if !dawnRegisterWindowClass(state.dawn.moduleInstance, "KiraGraphicsDawnWindow") {
+        graphicsDiagnostic("Kira Graphics: Windows refused the Dawn backend's window class")
+        return
+    }
+    state.dawn.window = dawnOpenWindow(
+        state.dawn.moduleInstance,
+        "KiraGraphicsDawnWindow",
+        app.title,
+        app.width,
+        app.height,
+        app.windowMode,
+    )
+    if pointerIsNull(state.dawn.window) {
+        graphicsDiagnostic("Kira Graphics: Windows refused the Dawn backend's window")
+        return
+    }
+    state.dawn.messageBlock = allocateBytes(U64(48))
+    state.dawn.surfaceTextureBlock = allocateBytes(U64(24))
+    if !dawnCreateDeviceAndQueue(state, runtimeUserData) || !dawnCreateSurface(state) {
+        dawnShutdown(state)
+        return
+    }
+    kiraGraphicsLiveBackendInitialized()
+
+    let graphics = Graphics {
+        userData: state.userData
+        backend: .Dawn
+        backendContext: runtimeUserData
+    }
+    let onInit: (Graphics) -> Void = state.app.initHandler
+    onInit(move graphics)
+
+    dawnDriveFrames(state, runtimeUserData)
+
+    let cleanupGraphics = Graphics {
+        userData: state.userData
+        backend: .Dawn
+        backendContext: runtimeUserData
+    }
+    let onCleanup: (Graphics) -> Void = state.app.cleanupHandler
+    onCleanup(move cleanupGraphics)
+    reportFrameCost(state)
+    dawnReportGpuTrace(state)
+    dawnReleaseDepthTarget(state)
+    dawnShutdown(state)
+    return
+}
+
+// One frame after another until the window closes, the application requests a
+// quit, or the harness's frame limit is reached.
+@Native
+function dawnDriveFrames(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
+    while !state.dawn.quitRequested {
+        dawnPumpMessages(state, runtimeUserData)
+        if state.dawn.quitRequested {
+            return
+        }
+        dawnResizeIfNeeded(state, runtimeUserData)
+        dawnRunFrame(state, runtimeUserData)
+        if state.quitAfterFrames > 0 && state.frameIndex >= state.quitAfterFrames {
+            return
+        }
+    }
+    return
+}
+
+// One frame: hand the application a `RenderFrame`, then end whatever it left
+// open and present.
+@Native
+function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
+    let graphics = Graphics {
+        userData: state.userData
+        backend: .Dawn
+        backendContext: runtimeUserData
+    }
+    var frame = graphics.frame()
+    state.frameIndex = state.frameIndex + 1
+    // The drawable is taken before the clock starts, and that is deliberate.
+    // Under `Fifo` the compositor hands one over at the display's rate, so the
+    // wait for it is the *presentation* interval and not the renderer's cost —
+    // and a frame time that includes it measures the monitor. Sokol's own
+    // measurement excludes it for the same reason: sokol-app waits outside the
+    // frame callback it times.
+    dawnAcquireSurfaceTexture(state)
+    dawnBeginFrameStats(state)
+    dawnTraceBeginFrame(state)
+
+    // Drive UI through the same event handler a real pointer would, so a
+    // scripted run stays honest: Foundation still updates hover and press
+    // state, finds the hit region, invokes the callback and rebuilds before
+    // anything renders.
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    let scriptFrame = state.frameIndex - 1
+    var clickIndex = 0
+    while clickIndex + 3 <= state.clickScript.count {
+        if state.clickScript[clickIndex] == scriptFrame {
+            let px = Float(state.clickScript[clickIndex + 1])
+            let py = Float(state.clickScript[clickIndex + 2])
+            onEvent(AppEvent {
+                kind: .PointerDown
+                pointerButton: .Left
+                pointerX: px
+                pointerY: py
+            })
+            onEvent(AppEvent {
+                kind: .PointerUp
+                pointerButton: .Left
+                pointerX: px
+                pointerY: py
+            })
+        }
+        clickIndex = clickIndex + 3
+    }
+
+    let onFrame: (borrow mut RenderFrame) -> Void = state.app.frameHandler
+    onFrame(frame)
+    if frame.shouldQuit {
+        state.dawn.quitRequested = true
+    }
+    var capturePath = ""
+    if state.captureAtFrame > 0 && state.frameIndex == state.captureAtFrame {
+        capturePath = state.capturePath
+    }
+    dawnPresentFrame(runtimeUserData, capturePath)
+    dawnEndFrameStats(state)
+    dawnTraceEndFrame(state)
+    dawnLogFrameRate(state)
+    return
+}
+
+// Reconfigures the surface when the client area has moved, and tells the
+// application about it.
+//
+// Polled rather than driven from `WM_SIZE`: a size message arrives while the
+// window is being dragged, several times a frame, and reconfiguring a surface
+// mid-drag costs more than measuring the rectangle once.
+@Native
+function dawnResizeIfNeeded(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
+    let width = dawnClientWidth(state.dawn.window)
+    let height = dawnClientHeight(state.dawn.window)
+    if width <= 0 || height <= 0 {
+        return
+    }
+    if width == state.dawn.surfaceWidth && height == state.dawn.surfaceHeight {
+        return
+    }
+    dawnConfigureSurface(state, width, height)
+    let scale = dawnWindowScale(state.dawn.window)
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    onEvent(AppEvent {
+        kind: .Resized
+        modifiers: dawnModifierState()
+        windowWidth: Int(Float(width) / scale)
+        windowHeight: Int(Float(height) / scale)
+        framebufferWidth: width
+        framebufferHeight: height
+    })
+    return
+}
+
+// Drains the message queue, turning what the application cares about into
+// `AppEvent`s and dispatching the rest.
+@Native
+function dawnPumpMessages(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
+    let messages: WindowMessagePointer = state.dawn.messageBlock
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    while peekMessage(messages, nullPointer(), U32(0), U32(0), U32(1)) != 0 {
+        let message = messages.message
+        if message == dawnMessageQuit() {
+            state.dawn.quitRequested = true
+            onEvent(AppEvent {
+                kind: .QuitRequested
+                modifiers: dawnModifierState()
+            })
+            return
+        }
+        dawnDeliverMessage(state, message, messages.wparam, messages.lparam)
+        translateMessage(messages)
+        dispatchMessage(messages)
+    }
+    return
+}
+
+// One queued message as an `AppEvent`, or nothing when the application has no
+// vocabulary for it.
+@Native
+function dawnDeliverMessage(state: borrow mut GraphicsAppRuntimeState, message: U32, wparam: U64, lparam: Int) {
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    let scale = dawnWindowScale(state.dawn.window)
+    // A pointer message carries its position in the low and high halves of
+    // `lParam`, in CLIENT pixels. Layout and hit-testing are in points, so the
+    // backing scale divides out here rather than at every caller.
+    let rawX = Float(lparam & 65535)
+    let rawY = Float((lparam >> 16) & 65535)
+    let x = rawX / scale
+    let y = rawY / scale
+    if message == dawnMessagePointerMove() {
+        let deltaX = state.dawn.hasPointer ? x - state.dawn.pointerX : 0.0
+        let deltaY = state.dawn.hasPointer ? y - state.dawn.pointerY : 0.0
+        state.dawn.pointerX = x
+        state.dawn.pointerY = y
+        state.dawn.hasPointer = true
+        onEvent(AppEvent {
+            kind: .PointerMoved
+            modifiers: dawnModifierState()
+            pointerX: x
+            pointerY: y
+            pointerDeltaX: deltaX
+            pointerDeltaY: deltaY
+        })
+        return
+    }
+    if dawnMessageIsPointerButton(message) {
+        state.dawn.pointerX = x
+        state.dawn.pointerY = y
+        state.dawn.hasPointer = true
+        onEvent(AppEvent {
+            kind: dawnMessageIsPointerDown(message) ? .PointerDown : .PointerUp
+            modifiers: dawnModifierState()
+            pointerButton: dawnPointerButton(message)
+            pointerX: x
+            pointerY: y
+        })
+        return
+    }
+    if message == dawnMessageWheel() {
+        // The wheel reports its position in SCREEN pixels and its notches in
+        // the high half of `wParam`, signed, in units of 120.
+        onEvent(AppEvent {
+            kind: .Scroll
+            modifiers: dawnModifierState()
+            pointerX: state.dawn.pointerX
+            pointerY: state.dawn.pointerY
+            scrollY: Float(dawnWheelNotches(wparam)) / 120.0
+        })
+        return
+    }
+    if message == dawnMessageKeyDown() || message == dawnMessageSystemKeyDown() {
+        onEvent(AppEvent {
+            kind: .KeyDown
+            modifiers: dawnModifierState()
+            keyCode: dawnKeyCode(Int(wparam))
+            // Bit 30 of `lParam` is "the key was already down", which is what a
+            // repeat is.
+            keyRepeat: ((lparam >> 30) & 1) == 1
+        })
+        return
+    }
+    if message == dawnMessageKeyUp() || message == dawnMessageSystemKeyUp() {
+        onEvent(AppEvent {
+            kind: .KeyUp
+            modifiers: dawnModifierState()
+            keyCode: dawnKeyCode(Int(wparam))
+        })
+        return
+    }
+    if message == dawnMessageChar() {
+        let codepoint = Int(wparam)
+        // Surrogates and the control range are not text a field should insert.
+        if codepoint >= 32 && (codepoint < 55296 || codepoint > 57343) {
+            onEvent(AppEvent {
+                kind: .TextInput
+                modifiers: dawnModifierState()
+                textCodepoint: codepoint
+            })
+        }
+        return
+    }
+    if message == dawnMessageSetFocus() {
+        state.dawn.focused = true
+        onEvent(AppEvent { kind: .Focused })
+        return
+    }
+    if message == dawnMessageKillFocus() {
+        state.dawn.focused = false
+        onEvent(AppEvent { kind: .Unfocused })
+        return
+    }
+    return
+}
+
+function dawnMessageIsPointerButton(message: U32) -> Bool {
+    return message == dawnMessageLeftDown()
+        || message == dawnMessageLeftUp()
+        || message == dawnMessageRightDown()
+        || message == dawnMessageRightUp()
+        || message == dawnMessageMiddleDown()
+        || message == dawnMessageMiddleUp()
+}
+
+function dawnMessageIsPointerDown(message: U32) -> Bool {
+    return message == dawnMessageLeftDown()
+        || message == dawnMessageRightDown()
+        || message == dawnMessageMiddleDown()
+}
+
+function dawnPointerButton(message: U32) -> PointerButton {
+    if message == dawnMessageLeftDown() || message == dawnMessageLeftUp() {
+        return .Left
+    }
+    if message == dawnMessageRightDown() || message == dawnMessageRightUp() {
+        return .Right
+    }
+    return .Middle
+}
+
+// The wheel delta out of `wParam`'s high half, as a signed number of 120ths.
+function dawnWheelNotches(wparam: U64) -> Int {
+    let high = Int(wparam >> U64(16)) & 65535
+    if high >= 32768 {
+        return high - 65536
+    }
+    return high
+}
+
+// A Windows virtual key as the code every other backend reports.
+//
+// The portable vocabulary in this repo is sokol's, which is GLFW's: printable
+// keys are their ASCII uppercase, and the rest are numbered from 256. Windows
+// agrees on letters and digits and disagrees on everything else, so only the
+// disagreements are listed.
+function dawnKeyCode(virtualKey: Int) -> Int {
+    if virtualKey == 8 { return 259 }
+    if virtualKey == 9 { return 258 }
+    if virtualKey == 13 { return 257 }
+    if virtualKey == 27 { return 256 }
+    if virtualKey == 32 { return 32 }
+    if virtualKey == 33 { return 266 }
+    if virtualKey == 34 { return 267 }
+    if virtualKey == 35 { return 269 }
+    if virtualKey == 36 { return 268 }
+    if virtualKey == 37 { return 263 }
+    if virtualKey == 38 { return 265 }
+    if virtualKey == 39 { return 262 }
+    if virtualKey == 40 { return 264 }
+    if virtualKey == 45 { return 260 }
+    if virtualKey == 46 { return 261 }
+    if virtualKey == 16 { return 340 }
+    if virtualKey == 17 { return 341 }
+    if virtualKey == 18 { return 342 }
+    if virtualKey >= 112 && virtualKey <= 123 { return 290 + virtualKey - 112 }
+    return virtualKey
+}
