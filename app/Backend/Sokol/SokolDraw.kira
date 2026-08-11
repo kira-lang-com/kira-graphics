@@ -1,3 +1,5 @@
+import Foundation
+
 // The Sokol backend's draw path: applying a pipeline, its vertex/index
 // buffers, its bound textures/samplers and its bound uniforms, then issuing
 // the draw call — directly through the generated `sg_*` bindings.
@@ -88,7 +90,9 @@ function sokolApplyUniformEntry(pipeline: borrow RenderPipeline, entry: borrow U
     if entry.uniform.id == 0 {
         return true
     }
-    let uniform = sokolUniformState(entry.uniform)
+    // `UniformState` contains the live float array. Recover it in place here;
+    // returning it by value would retain a fresh array for every draw.
+    var uniform = nativeRecover<UniformState>(entry.uniform.storage)
     let byteSize = uniform.values.count * 4
     let expectedSize = sokolExpectedUniformSlotSize(pipeline, entry.uniformSlot, byteSize)
     if byteSize == 0 || byteSize != expectedSize {
@@ -99,7 +103,7 @@ function sokolApplyUniformEntry(pipeline: borrow RenderPipeline, entry: borrow U
     var targetSlot = 0
     while targetSlot < 32 {
         if (targetMask & (1 << targetSlot)) != 0 {
-            sokolApplyUniformFloats(targetSlot, uniform.values)
+            sokolApplyUniformFloats(targetSlot, entry.uniform)
         }
         targetSlot = targetSlot + 1
     }
@@ -110,9 +114,79 @@ function sokolApplyUniformEntry(pipeline: borrow RenderPipeline, entry: borrow U
 // The elements name the `sg_range`'s data pointer, so the call reaches sokol
 // with nothing of Kira's in between.
 @Native
-function sokolApplyUniformFloats(slot: Int, values: borrow [F32]) {
-    sg_apply_uniforms(I32(slot), move sg_range { ptr: values, size: U64(values.count * 4) })
+function sokolApplyUniformFloats(slot: Int, uniform: borrow Uniform) {
+    var state = nativeRecover<UniformState>(uniform.storage)
+    sg_apply_uniforms(I32(slot), move sg_range { ptr: state.values, size: U64(state.values.count * 4) })
     return
+}
+
+// Read a bind group's resources without returning its state. BindGroupState
+// owns four dynamic entry arrays; returning that aggregate by value at every
+// draw copied those arrays into a temporary retained by the native bridge.
+@Native
+function sokolAppendBindGroupResources(
+    group: borrow BindGroup,
+    views: borrow mut [sg_view],
+    samplers: borrow mut [sg_sampler]
+) {
+    var state = nativeRecover<BindGroupState>(group.storage)
+
+    var textureIndex = 0
+    while textureIndex < state.textureEntries.count {
+        let entry = state.textureEntries[textureIndex]
+        while views.count <= entry.textureSlot {
+            views.append(sg_view { id: 0 })
+        }
+        views[entry.textureSlot] = sg_view { id: U32(entry.texture.viewId) }
+        textureIndex = textureIndex + 1
+    }
+
+    var samplerIndex = 0
+    while samplerIndex < state.samplerEntries.count {
+        let entry = state.samplerEntries[samplerIndex]
+        while samplers.count <= entry.samplerSlot {
+            samplers.append(sg_sampler { id: 0 })
+        }
+        samplers[entry.samplerSlot] = sg_sampler { id: entry.sampler.id }
+        samplerIndex = samplerIndex + 1
+    }
+
+    // Storage buffers share the view array with textures, which is why a
+    // shader numbers both out of one slot space.
+    var storageIndex = 0
+    while storageIndex < state.storageEntries.count {
+        let entry = state.storageEntries[storageIndex]
+        while views.count <= entry.storageSlot {
+            views.append(sg_view { id: 0 })
+        }
+        views[entry.storageSlot] = sg_view { id: entry.viewId }
+        storageIndex = storageIndex + 1
+    }
+    return
+}
+
+// Apply a bind group's uniforms without copying its entry arrays. The mask is
+// returned as a scalar so the caller can accumulate four groups in order.
+@Native
+function sokolApplyBindGroupUniforms(
+    pipeline: borrow RenderPipeline,
+    group: borrow BindGroup,
+    appliedMask: Int
+) -> Int {
+    var state = nativeRecover<BindGroupState>(group.storage)
+    var result = appliedMask
+    var uniformIndex = 0
+    while uniformIndex < state.uniformEntries.count {
+        let entry = state.uniformEntries[uniformIndex]
+        if !sokolApplyUniformEntry(pipeline, entry) {
+            return result
+        }
+        if entry.uniform.id != 0 {
+            result = result | sokolUniformTargetMask(pipeline, entry.uniformSlot)
+        }
+        uniformIndex = uniformIndex + 1
+    }
+    return result
 }
 
 // Applies a pipeline, its vertex/index buffers, up to four bind groups' worth
@@ -175,46 +249,19 @@ function sokolDrawWithBindings(
         vertexBuffers.append(sg_buffer { id: vertexBufferId })
     }
 
-    let groups: [BindGroup] = [bindGroup0, bindGroup1, bindGroup2, bindGroup3]
-    let hasGroups: [Bool] = [hasBindGroup0, hasBindGroup1, hasBindGroup2, hasBindGroup3]
-
     var views: [sg_view] = []
     var samplers: [sg_sampler] = []
-    var groupIndex = 0
-    while groupIndex < 4 {
-        if hasGroups[groupIndex] {
-            let state = sokolBindGroupState(groups[groupIndex])
-            var textureIndex = 0
-            while textureIndex < state.textureEntries.count {
-                let entry = state.textureEntries[textureIndex]
-                while views.count <= entry.textureSlot {
-                    views.append(sg_view { id: 0 })
-                }
-                views[entry.textureSlot] = sg_view { id: U32(entry.texture.viewId) }
-                textureIndex = textureIndex + 1
-            }
-            var samplerIndex = 0
-            while samplerIndex < state.samplerEntries.count {
-                let entry = state.samplerEntries[samplerIndex]
-                while samplers.count <= entry.samplerSlot {
-                    samplers.append(sg_sampler { id: 0 })
-                }
-                samplers[entry.samplerSlot] = sg_sampler { id: entry.sampler.id }
-                samplerIndex = samplerIndex + 1
-            }
-            // Storage buffers share the view array with textures, which is why
-            // a shader numbers both out of one slot space.
-            var storageIndex = 0
-            while storageIndex < state.storageEntries.count {
-                let entry = state.storageEntries[storageIndex]
-                while views.count <= entry.storageSlot {
-                    views.append(sg_view { id: 0 })
-                }
-                views[entry.storageSlot] = sg_view { id: entry.viewId }
-                storageIndex = storageIndex + 1
-            }
-        }
-        groupIndex = groupIndex + 1
+    if hasBindGroup0 {
+        sokolAppendBindGroupResources(bindGroup0, views, samplers)
+    }
+    if hasBindGroup1 {
+        sokolAppendBindGroupResources(bindGroup1, views, samplers)
+    }
+    if hasBindGroup2 {
+        sokolAppendBindGroupResources(bindGroup2, views, samplers)
+    }
+    if hasBindGroup3 {
+        sokolAppendBindGroupResources(bindGroup3, views, samplers)
     }
 
     sg_apply_bindings(move sg_bindings {
@@ -237,30 +284,17 @@ function sokolDrawWithBindings(
     })
 
     var appliedMask = 0
-    groupIndex = 0
-    while groupIndex < 4 {
-        if hasGroups[groupIndex] {
-            let state = sokolBindGroupState(groups[groupIndex])
-            var uniformIndex = 0
-            while uniformIndex < state.uniformEntries.count {
-                let entry = state.uniformEntries[uniformIndex]
-                if !sokolApplyUniformEntry(pipeline, entry) {
-                    return false
-                }
-                // The mask this is checked against counts SOKOL BLOCK SLOTS —
-                // sokol numbers its blocks itself, in the order the reflection
-                // reports them — so a bound entry is recorded at the slots its
-                // public binding resolves to and not at the binding. The two
-                // agree only for a shader whose uniform is its first resource,
-                // and a shader that declares one after its textures would
-                // otherwise have every draw refused for a block it did bind.
-                if entry.uniform.id != 0 {
-                    appliedMask = appliedMask | sokolUniformTargetMask(pipeline, entry.uniformSlot)
-                }
-                uniformIndex = uniformIndex + 1
-            }
-        }
-        groupIndex = groupIndex + 1
+    if hasBindGroup0 {
+        appliedMask = sokolApplyBindGroupUniforms(pipeline, bindGroup0, appliedMask)
+    }
+    if hasBindGroup1 {
+        appliedMask = sokolApplyBindGroupUniforms(pipeline, bindGroup1, appliedMask)
+    }
+    if hasBindGroup2 {
+        appliedMask = sokolApplyBindGroupUniforms(pipeline, bindGroup2, appliedMask)
+    }
+    if hasBindGroup3 {
+        appliedMask = sokolApplyBindGroupUniforms(pipeline, bindGroup3, appliedMask)
     }
 
     if (pipeline.requiredUniformMask & appliedMask) != pipeline.requiredUniformMask {
