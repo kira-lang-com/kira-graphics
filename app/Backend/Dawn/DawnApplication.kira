@@ -198,6 +198,49 @@ function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData
         }
         scrollIndex = scrollIndex + 4
     }
+    // Drags, as (startFrame, x, y, dx, dy, buttonRaw, steps): the press lands on
+    // the start frame, each following frame carries one step of the move, and
+    // the release lands on the frame after the last step. Spreading the moves
+    // over frames is what a hand does, and what the drag threshold measures.
+    var dragIndex = 0
+    while dragIndex + 7 <= state.dragScript.count {
+        let startFrame = state.dragScript[dragIndex]
+        let steps = state.dragScript[dragIndex + 6]
+        let px = Float(state.dragScript[dragIndex + 1])
+        let py = Float(state.dragScript[dragIndex + 2])
+        let dx = Float(state.dragScript[dragIndex + 3])
+        let dy = Float(state.dragScript[dragIndex + 4])
+        if scriptFrame == startFrame {
+            onEvent(AppEvent {
+                kind: .PointerMoved
+                pointerX: px
+                pointerY: py
+            })
+            onEvent(AppEvent {
+                kind: .PointerDown
+                pointerButton: dawnScriptButton(state.dragScript[dragIndex + 5])
+                pointerX: px
+                pointerY: py
+            })
+        }
+        if steps > 0 && scriptFrame > startFrame && scriptFrame <= startFrame + steps {
+            let step = Float(scriptFrame - startFrame) / Float(steps)
+            onEvent(AppEvent {
+                kind: .PointerMoved
+                pointerX: px + dx * step
+                pointerY: py + dy * step
+            })
+        }
+        if scriptFrame == startFrame + steps + 1 {
+            onEvent(AppEvent {
+                kind: .PointerUp
+                pointerButton: dawnScriptButton(state.dragScript[dragIndex + 5])
+                pointerX: px + dx
+                pointerY: py + dy
+            })
+        }
+        dragIndex = dragIndex + 7
+    }
 
     let onFrame: (borrow mut RenderFrame) -> Void = state.app.frameHandler
     onFrame(frame)
@@ -450,4 +493,16 @@ function dawnKeyCode(virtualKey: Int) -> Int {
     if virtualKey == 18 { return 342 }
     if virtualKey >= 112 && virtualKey <= 123 { return 290 + virtualKey - 112 }
     return virtualKey
+}
+
+// The button a script names: 0 left, 1 right, 2 middle — the spelling the drag
+// scripts on every backend already use.
+function dawnScriptButton(raw: Int) -> PointerButton {
+    if raw == 1 {
+        return PointerButton.Right
+    }
+    if raw == 2 {
+        return PointerButton.Middle
+    }
+    return PointerButton.Left
 }
