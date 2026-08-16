@@ -133,7 +133,15 @@ function dawnBuildPipeline(state: borrow GraphicsAppRuntimeState, descriptor: bo
         count: U32(1)
         mask: U32(4294967295)
     }
-    if descriptor.depthStencil.format == .None {
+    // A pipeline that neither tests nor writes depth needs no depth state, and
+    // must not declare one: WebGPU matches a pipeline's attachment state against
+    // the pass's, so a depth state nothing uses forces every pass that draws
+    // with this pipeline to carry a depth attachment it never reads. A format
+    // alone does not make a pipeline use depth — `depthEnabled` is the flag the
+    // other backends read, and a descriptor may name a format beside it while
+    // asking for neither test nor write.
+    let usesDepth = descriptor.depthStencil.depthEnabled || descriptor.depthStencil.depthWriteEnabled
+    if descriptor.depthStencil.format == .None || !usesDepth {
         return wgpuDeviceCreateRenderPipeline(state.dawn.device, WGPURenderPipelineDescriptor {
             label: dawnText(descriptor.label)
             vertex: vertex

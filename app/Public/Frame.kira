@@ -54,6 +54,23 @@ class RenderFrame {
         return self.renderBackend().viewportHeight()
     }
 
+    // The drawable in DEVICE pixels, and how many of them one point buys.
+    //
+    // A viewport in points already divides one by the other, so a caller that
+    // wants to divide them differently — anything rendering at a scale other
+    // than the display's — needs both numbers rather than their quotient.
+    function drawableWidth() -> Int {
+        return self.renderBackend().contextWidth()
+    }
+
+    function drawableHeight() -> Int {
+        return self.renderBackend().contextHeight()
+    }
+
+    function backingScale() -> Float {
+        return self.renderBackend().backingScale()
+    }
+
     // How the window is presented, and moving it to another mode. This is where
     // a library reaches fullscreen from: the frame is what an event handler and
     // a render pass both already hold, and neither has to name a backend.

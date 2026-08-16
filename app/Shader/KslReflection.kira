@@ -45,6 +45,10 @@ struct KslUniformMember {
 struct KslUniformBlock {
     var name: String = ""
     var binding: Int = 0
+    // The resource group this block sits in. A binding is numbered from zero
+    // within its group, so the pair identifies a resource and the binding alone
+    // does not.
+    var group: Int = 0
     var size: Int = 0
     var stageMask: Int = 0
     var members: [KslUniformMember] = []
@@ -53,6 +57,7 @@ struct KslUniformBlock {
 struct KslTextureBinding {
     var name: String = ""
     var binding: Int = 0
+    var group: Int = 0
     var stageMask: Int = 0
     // The slot of the sampler the shader's body samples this texture with, or
     // 255 when no stage samples it. GL collapses the pair into one `sampler2D`,
@@ -64,6 +69,7 @@ struct KslTextureBinding {
 struct KslStorageImage {
     var name: String = ""
     var binding: Int = 0
+    var group: Int = 0
     var stageMask: Int = 0
     // The image unit its `layout(binding = n)` was emitted with. Distinct from
     // `binding`, which is the slot a host binds the view at.
@@ -74,12 +80,14 @@ struct KslStorageImage {
 struct KslSamplerBinding {
     var name: String = ""
     var binding: Int = 0
+    var group: Int = 0
     var stageMask: Int = 0
 }
 
 struct KslStorageBuffer {
     var name: String = ""
     var binding: Int = 0
+    var group: Int = 0
     var stageMask: Int = 0
     // The `std430` block's own GLSL binding, which is not the slot a host binds
     // the buffer at — the same distinction `KslStorageImage.glslBinding` draws.
@@ -157,6 +165,7 @@ function kslParseUniformBlock(fields: borrow [String]) -> KslUniformBlock {
         binding: kslDigestInt(kslDigestField(fields, 1))
         size: kslDigestInt(kslDigestField(fields, 2))
         stageMask: kslDigestInt(kslDigestField(fields, 3))
+        group: kslDigestInt(kslDigestField(fields, 7))
     }
     let memberCount = kslDigestInt(kslDigestField(fields, 4))
     if memberCount == 0 {
@@ -188,6 +197,7 @@ function kslParseResourceReflection(digest: borrow String) -> KslResourceReflect
                 name: kslDigestField(fields, 0)
                 binding: kslDigestInt(kslDigestField(fields, 1))
                 stageMask: kslDigestInt(kslDigestField(fields, 2))
+                group: kslDigestInt(kslDigestField(fields, 3))
             })
         } else if record.startsWith("t|") {
             reflection.textures.append(KslTextureBinding {
@@ -196,6 +206,7 @@ function kslParseResourceReflection(digest: borrow String) -> KslResourceReflect
                 stageMask: kslDigestInt(kslDigestField(fields, 2))
                 samplerBinding: kslDigestInt(kslDigestField(fields, 3))
                 glslName: kslDigestField(fields, 4)
+                group: kslDigestInt(kslDigestField(fields, 5))
             })
         } else if record.startsWith("i|") {
             reflection.images.append(KslStorageImage {
@@ -204,6 +215,7 @@ function kslParseResourceReflection(digest: borrow String) -> KslResourceReflect
                 stageMask: kslDigestInt(kslDigestField(fields, 2))
                 glslBinding: kslDigestInt(kslDigestField(fields, 3))
                 writeOnly: kslDigestInt(kslDigestField(fields, 4)) != 0
+                group: kslDigestInt(kslDigestField(fields, 5))
             })
         } else if record.startsWith("s|") {
             reflection.storageBuffers.append(KslStorageBuffer {
@@ -212,6 +224,7 @@ function kslParseResourceReflection(digest: borrow String) -> KslResourceReflect
                 stageMask: kslDigestInt(kslDigestField(fields, 2))
                 glslBinding: kslDigestInt(kslDigestField(fields, 3))
                 readOnly: kslDigestInt(kslDigestField(fields, 4)) != 0
+                group: kslDigestInt(kslDigestField(fields, 5))
             })
         }
     }

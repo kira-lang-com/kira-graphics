@@ -50,6 +50,11 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
         dawnShutdown(state)
         return
     }
+    // What the window procedure draws with while Windows owns the loop during a
+    // resize; see `dawnWindowProcedure`. Attached after the device exists, so a
+    // `WM_SIZE` that arrives first finds nothing and falls through rather than
+    // driving a frame against a surface that is not there.
+    dawnAttachWindowRuntime(state.dawn.window, runtimeUserData)
     kiraGraphicsLiveBackendInitialized()
 
     let graphics = Graphics {
@@ -76,6 +81,29 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
     return
 }
 
+// Moves the window's size on by a step, when a run asked to measure resizing.
+//
+// A real resize is a drag, which no test can repeat and no hand can hold steady
+// for six hundred frames. This walks the size up and back down instead, so every
+// frame takes the resize path — the same `WM_SIZE`, the same reconfigure, the
+// same relayout — and a frame-cost summary describes resizing rather than
+// idling.
+@Native
+function dawnSweepWindowSize(state: borrow mut GraphicsAppRuntimeState) {
+    if state.resizeSweep <= 0 {
+        return
+    }
+    let span = 240
+    var step = state.frameIndex % (span * 2)
+    if step >= span {
+        step = span * 2 - step
+    }
+    let width = 1000 + step * state.resizeSweep
+    let height = 700 + step * state.resizeSweep / 2
+    dawnResizeWindow(state.dawn.window, width, height)
+    return
+}
+
 // One frame after another until the window closes, the application requests a
 // quit, or the harness's frame limit is reached.
 @Native
@@ -85,8 +113,16 @@ function dawnDriveFrames(state: borrow mut GraphicsAppRuntimeState, runtimeUserD
         if state.dawn.quitRequested {
             return
         }
+        dawnSweepWindowSize(state)
         dawnResizeIfNeeded(state, runtimeUserData)
-        dawnRunFrame(state, runtimeUserData)
+        // Guarded for the same reason the resize path is: a message dispatched
+        // by the pump above can re-enter through the window procedure, and one
+        // encoder cannot record two frames.
+        if !state.dawn.inFrame {
+            state.dawn.inFrame = true
+            dawnRunFrame(state, runtimeUserData)
+            state.dawn.inFrame = false
+        }
         if state.quitAfterFrames > 0 && state.frameIndex >= state.quitAfterFrames {
             return
         }
@@ -141,6 +177,27 @@ function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData
         }
         clickIndex = clickIndex + 3
     }
+    // Wheel turns, as (frame, x, y, deltaYTenths): the pointer is moved onto the
+    // region first, because a wheel goes to whatever is under the pointer.
+    var scrollIndex = 0
+    while scrollIndex + 4 <= state.scrollScript.count {
+        if state.scrollScript[scrollIndex] == scriptFrame {
+            let px = Float(state.scrollScript[scrollIndex + 1])
+            let py = Float(state.scrollScript[scrollIndex + 2])
+            onEvent(AppEvent {
+                kind: .PointerMoved
+                pointerX: px
+                pointerY: py
+            })
+            onEvent(AppEvent {
+                kind: .Scroll
+                pointerX: px
+                pointerY: py
+                scrollY: Float(state.scrollScript[scrollIndex + 3]) / 10.0
+            })
+        }
+        scrollIndex = scrollIndex + 4
+    }
 
     let onFrame: (borrow mut RenderFrame) -> Void = state.app.frameHandler
     onFrame(frame)
@@ -185,6 +242,29 @@ function dawnResizeIfNeeded(state: borrow mut GraphicsAppRuntimeState, runtimeUs
         framebufferWidth: width
         framebufferHeight: height
     })
+    return
+}
+
+// One frame, driven from the window procedure while Windows owns the loop.
+//
+// A border drag never returns to `dawnDriveFrames`, so this is the only place a
+// frame can come from for the whole gesture. It does what the loop's body does
+// and nothing else: take the new size, then render.
+//
+// Re-entrancy is refused rather than queued. A frame can present, and presenting
+// can pump, and a pumped `WM_SIZE` arriving inside a frame would begin a second
+// one against an encoder the first still holds. The dropped frame costs a
+// repeated size; running it would corrupt the one in flight.
+@Native
+function dawnDriveResizeFrame(runtimeUserData: RawPtr) {
+    var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    if state.dawn.inFrame || state.dawn.quitRequested || pointerIsNull(state.dawn.device) {
+        return
+    }
+    state.dawn.inFrame = true
+    dawnResizeIfNeeded(state, runtimeUserData)
+    dawnRunFrame(state, runtimeUserData)
+    state.dawn.inFrame = false
     return
 }
 

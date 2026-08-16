@@ -150,11 +150,21 @@ function kiraGraphicsSokolCleanup(runtimeUserData: RawPtr): Void {
 @Native
 function readHarnessKnobs(state: borrow mut GraphicsAppRuntimeState) {
     state.quitAfterFrames = environmentInt("KIRA_GRAPHICS_QUIT_AFTER_FRAMES", 0)
+    // How many points the window's size sweeps by each frame, for measuring the
+    // resize path. A resize is the expensive frame — the layout is redone, and
+    // for a host that rebuilds, the whole tree with it — and it is the one a
+    // hand cannot drive repeatably. Zero, so a run that did not ask resizes
+    // nothing.
+    state.resizeSweep = environmentInt("KIRA_GRAPHICS_RESIZE_SWEEP", 0)
     let logFps = environmentValue("KIRA_GRAPHICS_LOG_FPS")
     state.logFps = logFps.count > 0 && logFps != "0"
     let clickScript = environmentValue("KIRA_UI_CLICK_SCRIPT")
     if clickScript.count > 0 {
         state.clickScript = sokolEnvInts(clickScript)
+    }
+    let scrollScript = environmentValue("KIRA_UI_SCROLL_SCRIPT")
+    if scrollScript.count > 0 {
+        state.scrollScript = sokolEnvInts(scrollScript)
     }
     state.capturePath = environmentValue("KIRA_GRAPHICS_CAPTURE_FRAME")
     if state.capturePath.count == 0 {

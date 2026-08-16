@@ -100,93 +100,107 @@ function allocateWindowRect(size: U64) -> WindowRectPointer;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
 function allocateMonitorInfo(size: U64) -> MonitorInfoPointer;
 
-@FFI.Extern { library: win32; symbol: GetModuleHandleA; abi: c; }
+@FFI.Extern { library: kernel32; symbol: GetModuleHandleA; abi: c; }
 function moduleHandle(name: CString) -> RawPtr;
 
 // `LoadCursorA(NULL, IDC_ARROW)`. The second parameter is `LPCSTR`, and a stock
 // cursor is named by an integer cast to one — `MAKEINTRESOURCE`. There is no
 // integer-to-pointer cast in Kira, and none is needed: the parameter is a
 // pointer-sized word either way, so it is declared as the integer it carries.
-@FFI.Extern { library: win32; symbol: LoadCursorA; abi: c; }
+@FFI.Extern { library: user32; symbol: LoadCursorA; abi: c; }
 function loadCursor(instance: RawPtr, name: U64) -> RawPtr;
 
-@FFI.Extern { library: win32; symbol: RegisterClassExA; abi: c; }
+@FFI.Extern { library: user32; symbol: RegisterClassExA; abi: c; }
 function registerWindowClass(windowClass: WindowClassPointer) -> U16;
 
-@FFI.Extern { library: win32; symbol: CreateWindowExA; abi: c; }
+@FFI.Extern { library: user32; symbol: CreateWindowExA; abi: c; }
 function createWindowHandle(exStyle: U32, className: CString, title: CString, style: U32, x: I32, y: I32, width: I32, height: I32, parent: RawPtr, menu: RawPtr, instance: RawPtr, param: RawPtr) -> RawPtr;
 
-@FFI.Extern { library: win32; symbol: DestroyWindow; abi: c; }
+@FFI.Extern { library: user32; symbol: DestroyWindow; abi: c; }
 function destroyWindowHandle(window: RawPtr) -> I32;
 
-@FFI.Extern { library: win32; symbol: ShowWindow; abi: c; }
+@FFI.Extern { library: user32; symbol: ShowWindow; abi: c; }
 function showWindow(window: RawPtr, command: I32) -> I32;
 
-@FFI.Extern { library: win32; symbol: SetForegroundWindow; abi: c; }
+@FFI.Extern { library: user32; symbol: SetForegroundWindow; abi: c; }
 function setForegroundWindow(window: RawPtr) -> I32;
 
-@FFI.Extern { library: win32; symbol: PeekMessageA; abi: c; }
+@FFI.Extern { library: user32; symbol: PeekMessageA; abi: c; }
 function peekMessage(message: WindowMessagePointer, window: RawPtr, first: U32, last: U32, remove: U32) -> I32;
 
-@FFI.Extern { library: win32; symbol: TranslateMessage; abi: c; }
+@FFI.Extern { library: user32; symbol: TranslateMessage; abi: c; }
 function translateMessage(message: WindowMessagePointer) -> I32;
 
-@FFI.Extern { library: win32; symbol: DispatchMessageA; abi: c; }
+@FFI.Extern { library: user32; symbol: DispatchMessageA; abi: c; }
 function dispatchMessage(message: WindowMessagePointer) -> Int;
 
-@FFI.Extern { library: win32; symbol: DefWindowProcA; abi: c; }
+@FFI.Extern { library: user32; symbol: DefWindowProcA; abi: c; }
 function defaultWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: Int) -> Int;
 
-@FFI.Extern { library: win32; symbol: PostQuitMessage; abi: c; }
+@FFI.Extern { library: user32; symbol: PostQuitMessage; abi: c; }
 function postQuitMessage(code: I32) -> Void;
 
-@FFI.Extern { library: win32; symbol: GetClientRect; abi: c; }
+@FFI.Extern { library: user32; symbol: GetClientRect; abi: c; }
 function windowClientRect(window: RawPtr, rect: WindowRectPointer) -> I32;
 
-@FFI.Extern { library: win32; symbol: AdjustWindowRect; abi: c; }
+@FFI.Extern { library: user32; symbol: AdjustWindowRect; abi: c; }
 function adjustWindowRect(rect: WindowRectPointer, style: U32, hasMenu: I32) -> I32;
 
-@FFI.Extern { library: win32; symbol: SetProcessDPIAware; abi: c; }
+@FFI.Extern { library: user32; symbol: SetProcessDPIAware; abi: c; }
 function markProcessDpiAware() -> I32;
 
-@FFI.Extern { library: win32; symbol: GetDpiForWindow; abi: c; }
+@FFI.Extern { library: user32; symbol: GetDpiForWindow; abi: c; }
 function windowDpi(window: RawPtr) -> U32;
 
-@FFI.Extern { library: win32; symbol: GetDpiForSystem; abi: c; }
+@FFI.Extern { library: user32; symbol: GetDpiForSystem; abi: c; }
 function systemDpi() -> U32;
 
-@FFI.Extern { library: win32; symbol: GetWindowLongPtrA; abi: c; }
+@FFI.Extern { library: user32; symbol: GetWindowLongPtrA; abi: c; }
 function windowLong(window: RawPtr, index: I32) -> Int;
 
-@FFI.Extern { library: win32; symbol: SetWindowLongPtrA; abi: c; }
+@FFI.Extern { library: user32; symbol: SetWindowLongPtrA; abi: c; }
 function setWindowLong(window: RawPtr, index: I32, value: Int) -> Int;
 
-@FFI.Extern { library: win32; symbol: SetWindowPos; abi: c; }
+// The same two calls, typed for the one word a window carries for its creator.
+// A pointer rather than an integer because that is what the word holds here, and
+// spelling it so needs no conversion in either direction.
+@FFI.Extern { library: user32; symbol: GetWindowLongPtrA; abi: c; }
+function windowUserPointer(window: RawPtr, index: I32) -> RawPtr;
+
+@FFI.Extern { library: user32; symbol: SetWindowLongPtrA; abi: c; }
+function setWindowUserPointer(window: RawPtr, index: I32, value: RawPtr) -> RawPtr;
+
+@FFI.Extern { library: user32; symbol: SetWindowPos; abi: c; }
 function setWindowPosition(window: RawPtr, after: RawPtr, x: I32, y: I32, width: I32, height: I32, flags: U32) -> I32;
 
-@FFI.Extern { library: win32; symbol: MonitorFromWindow; abi: c; }
+@FFI.Extern { library: user32; symbol: MonitorFromWindow; abi: c; }
 function monitorForWindow(window: RawPtr, fallback: U32) -> RawPtr;
 
-@FFI.Extern { library: win32; symbol: GetMonitorInfoA; abi: c; }
+@FFI.Extern { library: user32; symbol: GetMonitorInfoA; abi: c; }
 function readMonitorInfo(monitor: RawPtr, info: MonitorInfoPointer) -> I32;
 
-@FFI.Extern { library: win32; symbol: GetKeyState; abi: c; }
+@FFI.Extern { library: user32; symbol: GetKeyState; abi: c; }
 function keyState(virtualKey: I32) -> I16;
 
-@FFI.Extern { library: win32; symbol: ShowCursor; abi: c; }
+@FFI.Extern { library: user32; symbol: ShowCursor; abi: c; }
 function showCursor(show: Bool) -> I32;
 
-@FFI.Extern { library: win32; symbol: ClipCursor; abi: c; }
+@FFI.Extern { library: user32; symbol: ClipCursor; abi: c; }
 function clipCursor(bounds: WindowRectPointer) -> I32;
 
 // The window styles the three window modes are made of.
-function dawnWindowedStyle() -> U32 { return U32(13565952) }
-function dawnBorderlessStyle() -> U32 { return U32(2147483648) }
+function dawnClipChildrenStyle() -> U32 { return U32(33554432) }
+function dawnWindowedStyle() -> U32 { return U32(13565952) + dawnClipChildrenStyle() }
+function dawnBorderlessStyle() -> U32 { return U32(2147483648) + dawnClipChildrenStyle() }
 function dawnVisibleStyle() -> U32 { return U32(268435456) }
 
 // The messages the pump and the procedure name.
 function dawnMessageDestroy() -> U32 { return U32(2) }
 function dawnMessageSize() -> U32 { return U32(5) }
+function dawnMessageEnterSizeMove() -> U32 { return U32(561) }
+function dawnMessageExitSizeMove() -> U32 { return U32(562) }
+// `GWLP_USERDATA`, the one word a window carries for whoever created it.
+function dawnWindowUserDataIndex() -> I32 { return I32(0 - 21) }
 function dawnMessageSetFocus() -> U32 { return U32(7) }
 function dawnMessageKillFocus() -> U32 { return U32(8) }
 function dawnMessageClose() -> U32 { return U32(16) }
@@ -211,6 +225,18 @@ function dawnMessageWheel() -> U32 { return U32(522) }
 // hears the title bar's close button at all. Destroying the window in answer to
 // it posts `WM_QUIT`, which the queue does carry, and that is what the pump
 // turns into `AppEventKind.QuitRequested`.
+// A drag of the window's border is the other thing the queue never shows. Windows
+// runs its own loop inside `DefWindowProc` for the whole gesture and returns only
+// when the mouse comes up, so an application that draws from its own
+// `PeekMessage` loop draws nothing at all while the user resizes — the window
+// freezes on whatever was last presented, and the frame rate during a resize is
+// zero rather than the sixty it holds either side of one.
+//
+// So a frame is driven from here, where Windows is willing to call: `WM_SIZE`
+// arrives repeatedly during the drag, and answering it with a reconfigure and one
+// frame is what makes a resize live. The state to draw with is the window's own
+// user word, put there when the window opened, because a procedure is handed no
+// pointer of its own — the reason the pump used to be the only place with it.
 function dawnWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: Int) -> Int {
     if message == dawnMessageClose() {
         destroyWindowHandle(window)
@@ -220,7 +246,27 @@ function dawnWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: 
         postQuitMessage(0)
         return 0
     }
+    if message == dawnMessageSize() {
+        let runtimeUserData = dawnWindowRuntime(window)
+        if !pointerIsNull(runtimeUserData) {
+            dawnDriveResizeFrame(runtimeUserData)
+        }
+        return 0
+    }
     return defaultWindowProcedure(window, message, wparam, lparam)
+}
+
+// The runtime state a window was opened for, or null before it was attached.
+@Native
+function dawnWindowRuntime(window: RawPtr) -> RawPtr {
+    return windowUserPointer(window, dawnWindowUserDataIndex())
+}
+
+// Attaches the runtime state to the window, so its procedure can reach it.
+@Native
+function dawnAttachWindowRuntime(window: RawPtr, runtimeUserData: RawPtr) {
+    setWindowUserPointer(window, dawnWindowUserDataIndex(), runtimeUserData)
+    return
 }
 
 // Registers the window class once per process and answers whether it is there.
@@ -425,6 +471,32 @@ function dawnReadWindowMode(window: RawPtr) -> WindowMode {
         return .Fullscreen
     }
     return .WindowedBorderless
+}
+
+// Resizes the window's client area, in points, leaving its position and style
+// alone.
+//
+// `SWP_NOMOVE | SWP_NOZORDER`. Windows answers with the same `WM_SIZE` a drag
+// produces, which is what makes a swept size exercise the resize path rather
+// than a path of its own.
+@Native
+function dawnResizeWindow(window: RawPtr, width: Int, height: Int) {
+    if pointerIsNull(window) {
+        return
+    }
+    let scale = dawnWindowScale(window)
+    var outerWidth = dawnPixelsFromPoints(width, scale)
+    var outerHeight = dawnPixelsFromPoints(height, scale)
+    let frame = allocateWindowRect(U64(16))
+    writeWord(frame, U64(8), U32(outerWidth))
+    writeWord(frame, U64(12), U32(outerHeight))
+    if adjustWindowRect(frame, U32(windowLong(window, I32(0 - 16))), 0) != 0 {
+        outerWidth = Int(frame.right) - Int(frame.left)
+        outerHeight = Int(frame.bottom) - Int(frame.top)
+    }
+    freeBytes(frame)
+    setWindowPosition(window, nullPointer(), I32(0), I32(0), I32(outerWidth), I32(outerHeight), U32(6))
+    return
 }
 
 // Moves the window to `mode`, sized in POINTS as `dawnOpenWindow` is. The style

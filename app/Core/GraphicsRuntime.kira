@@ -16,7 +16,13 @@ function noteFrameCost(state: borrow mut GraphicsAppRuntimeState, seconds: Float
     state.frameCostTotalSeconds = state.frameCostTotalSeconds + seconds
     if seconds > state.frameCostWorstSeconds {
         state.frameCostWorstSeconds = seconds
+        state.frameCostWorstIndex = state.frameCostCount
     }
+    // Every frame's cost, so the summary can say what the distribution is rather
+    // than only its two ends. A budget is written against the worst frame, and a
+    // single maximum cannot tell one hitch from a shape: p50 beside p99 beside
+    // the maximum says which of the two a run has.
+    state.frameCostSamples.append(seconds)
     // The last frame's shape, so a frame time is read beside the amount of work
     // it paid for. A mean with no denominator says a frame is slow; a mean with
     // one says whether it is slow per draw or slow because there are thousands.
@@ -46,15 +52,82 @@ function reportFrameCost(state: borrow GraphicsAppRuntimeState) {
         return
     }
     let mean = state.frameCostTotalSeconds / Float(state.frameCostCount) * 1000.0
+    var sorted = graphicsSortedCosts(state.frameCostSamples)
     graphicsDiagnostic(
         "KiraGraphics: frames=" + String(state.frameCostCount)
             + " mean=" + graphicsHundredths(mean) + "ms"
+            + " p50=" + graphicsHundredths(graphicsPercentile(sorted, 50) * 1000.0) + "ms"
+            + " p95=" + graphicsHundredths(graphicsPercentile(sorted, 95) * 1000.0) + "ms"
+            + " p99=" + graphicsHundredths(graphicsPercentile(sorted, 99) * 1000.0) + "ms"
             + " worst=" + graphicsHundredths(state.frameCostWorstSeconds * 1000.0) + "ms"
+            + " worstAt=" + String(state.frameCostWorstIndex)
             + " first=" + graphicsHundredths(state.frameCostFirstSeconds * 1000.0) + "ms"
             + " passes=" + String(state.frameCostPasses)
             + " draws=" + String(state.frameCostDraws)
     )
+    // Where the frames over a budget actually are. A count says how many missed;
+    // the indices say whether they are one hitch, a periodic flush, or a run
+    // that degrades — three different bugs a percentile cannot tell apart.
+    graphicsReportBudgetMisses(state, 8.3)
+    graphicsReportBudgetMisses(state, 4.0)
     return
+}
+
+// The frames whose cost exceeded `budgetMs`, counted and located.
+@Native
+function graphicsReportBudgetMisses(state: borrow GraphicsAppRuntimeState, budgetMs: Float) {
+    var count = 0
+    var where = ""
+    var index = 0
+    while index < state.frameCostSamples.count {
+        if state.frameCostSamples[index] * 1000.0 > budgetMs {
+            count = count + 1
+            if count <= 12 {
+                where = where + " " + String(index + 1)
+            }
+        }
+        index = index + 1
+    }
+    graphicsDiagnostic(
+        "KiraGraphics: over" + graphicsHundredths(budgetMs) + "ms=" + String(count)
+            + " of " + String(state.frameCostSamples.count)
+            + " at" + (where.count > 0 ? where : " none")
+            + (count > 12 ? " …" : "")
+    )
+    return
+}
+
+// The frame costs in ascending order.
+//
+// An insertion sort, because this runs once at shutdown over a few thousand
+// numbers and the alternative is a sort this corpus does not have.
+@Native
+function graphicsSortedCosts(samples: borrow [Float]) -> [Float] {
+    var sorted: [Float] = []
+    for sample in samples {
+        sorted.append(sample)
+        var at = sorted.count - 1
+        while at > 0 && sorted[at - 1] > sorted[at] {
+            let held = sorted[at - 1]
+            sorted[at - 1] = sorted[at]
+            sorted[at] = held
+            at = at - 1
+        }
+    }
+    return move sorted
+}
+
+// The `percent`th percentile of an ascending list, or zero when it is empty.
+@Native
+function graphicsPercentile(sorted: borrow [Float], percent: Int) -> Float {
+    if sorted.count == 0 {
+        return 0.0
+    }
+    var at = sorted.count * percent / 100
+    if at >= sorted.count {
+        at = sorted.count - 1
+    }
+    return sorted[at]
 }
 
 @Native

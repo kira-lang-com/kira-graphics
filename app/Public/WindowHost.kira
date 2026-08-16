@@ -12,3 +12,31 @@ function kiraGraphicsViewportWidth() -> I32 {
 function kiraGraphicsViewportHeight() -> I32 {
     return sapp_height()
 }
+
+// Backend-neutral host accessors for embedders that attach a native child
+// control to the graphics window. The legacy accessors above are intentionally
+// Sokol-only; Dawn owns a separate Win32 window and must never call sapp_*.
+function kiraGraphicsHostWindowHandle(frame: borrow RenderFrame) -> RawPtr {
+    match frame.backend {
+        Sokol -> return sapp_win32_get_hwnd()
+        Dawn -> {
+            if pointerIsNull(frame.backendContext) {
+                return nullPointer()
+            }
+            return nativeRecover<GraphicsAppRuntimeState>(frame.backendContext).dawn.window
+        }
+        Metal -> return nullPointer()
+    }
+}
+
+function kiraGraphicsHostDrawableWidth(frame: borrow RenderFrame) -> I32 {
+    return I32(frame.drawableWidth())
+}
+
+function kiraGraphicsHostDrawableHeight(frame: borrow RenderFrame) -> I32 {
+    return I32(frame.drawableHeight())
+}
+
+function kiraGraphicsHostBackingScale(frame: borrow RenderFrame) -> Float {
+    return frame.backingScale()
+}

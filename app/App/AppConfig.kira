@@ -38,11 +38,11 @@ struct GraphicsApplication {
     var colorFormat: TextureFormat = .Swapchain
     // The renderer, which `KIRA_GRAPHICS_BACKEND` overrides.
     //
-    // Sokol without one, exactly as before. The override is what lets one
+    // The platform's own default without one. The override is what lets one
     // program be run on two backends without being edited between the runs —
     // and a comparison between two backends is only worth anything when the
     // program either one drew is the same program.
-    var backend: RenderBackendKind = graphicsBackendFromEnvironment(.Sokol)
+    var backend: RenderBackendKind = graphicsDefaultBackend()
     var platform: Platform = .Unknown
     var initHandler: (Graphics) -> Void = graphicsApplicationDefaultInit
     var frameHandler: (borrow mut RenderFrame) -> Void = graphicsApplicationDefaultFrame

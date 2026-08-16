@@ -31,6 +31,9 @@ struct DawnState {
     var messageBlock: RawPtr
     var surfaceTextureBlock: RawPtr
     var quitRequested: Bool = false
+    // Whether a frame is being recorded right now. Read by the window
+    // procedure, which Windows may call from inside one.
+    var inFrame: Bool = false
     var focused: Bool = true
     var pointerX: Float = 0.0
     var pointerY: Float = 0.0
@@ -398,7 +401,7 @@ function dawnConfigureSurface(state: borrow mut GraphicsAppRuntimeState, width: 
         width: U32(width)
         height: U32(height)
         alphaMode: dawnCompositeAlphaAuto()
-        presentMode: dawnPresentModeFifo()
+        presentMode: dawnPresentModeFromEnvironment()
     })
     state.dawn.surfaceWidth = width
     state.dawn.surfaceHeight = height

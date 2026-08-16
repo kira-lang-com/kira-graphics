@@ -22,12 +22,12 @@ struct DawnShaderRecord {
     var fragmentEntry: String = ""
     var computeEntry: String = ""
     var live: Bool = false
-    // Which `@binding(n)` some stage of this shader reads, off its KSL
+    // Which `@group(n) @binding(m)` some stage of this shader reads, off its KSL
     // reflection, and whether it came with a reflection at all. A pipeline built
-    // from it carries these forward so a draw can assemble the one group WebGPU
+    // from it carries these forward so a draw can assemble the groups WebGPU
     // binds; see `DawnBindLayout.kira`. Absent for raw WGSL a caller compiled
     // itself, which keeps the slot-per-group reading instead.
-    var bindings: [Int] = []
+    var bindings: [DawnShaderBinding] = []
     var hasReflection: Bool = false
 }
 
