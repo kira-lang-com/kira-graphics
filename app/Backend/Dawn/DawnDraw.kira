@@ -43,6 +43,13 @@ function dawnApplyBindings(
 ) -> Bool {
     let slot = dawnPipelineBindingSlot(state, pipelineId)
     if slot >= 0 {
+        // A KSL shader that writes several resource groups asks for exactly what
+        // caller-written WGSL asks for — one bind group per `@group(n)` — so it
+        // takes the same path, each slot filtered to its own group's bindings.
+        // Merging is for the one-group shader the merge was written for.
+        if dawnDistinctGroupCount(state.dawn.pipelineBindings[slot].groups) > 1 {
+            return dawnBindPerGroup(state, pipelineHandle, pipelineId, slot, group0, has0, group1, has1, group2, has2, group3, has3)
+        }
         return dawnBindMergedGroup(state, pipelineHandle, pipelineId, slot, group0, has0, group1, has1, group2, has2, group3, has3)
     }
     dawnApplyBindGroup(state, pipelineHandle, pipelineId, 0, group0, has0)

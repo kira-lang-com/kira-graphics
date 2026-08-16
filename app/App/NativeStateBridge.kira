@@ -39,6 +39,14 @@ struct GraphicsAppRuntimeState {
     var frameCostCount: Int = 0
     var frameCostTotalSeconds: Float = 0.0
     var frameCostWorstSeconds: Float = 0.0
+    // Which frame the worst one was, counting from the first after start-up. A
+    // maximum at frame 3 is start-up leaking past the first frame; one at 250 of
+    // 300 is the shape of the run.
+    var frameCostWorstIndex: Int = 0
+    // Every frame's cost, for the percentiles `reportFrameCost` prints. A budget
+    // is written against the worst frame, and a maximum alone cannot tell one
+    // hitch from a distribution.
+    var frameCostSamples: [Float] = []
     var frameCostFirstSeconds: Float = 0.0
     var frameCostPasses: Int = 0
     var frameCostDraws: Int = 0
@@ -49,11 +57,17 @@ struct GraphicsAppRuntimeState {
     // every frame, in a callback whose whole job is not to allocate. Read once,
     // the frame callback only compares two integers.
     var quitAfterFrames: Int = 0
+    // Points the window's size sweeps by each frame; zero resizes nothing.
+    var resizeSweep: Int = 0
     var captureAtFrame: Int = 0
     var capturePath: String = ""
-    // Sokol's copy of the UI driving script. It is parsed once at init and
-    // injected through the normal AppEvent handler before a frame draws.
+    // The UI driving scripts, parsed once at init and injected through the
+    // normal AppEvent handler before a frame draws: clicks as (frame, x, y)
+    // triples, wheel turns as (frame, x, y, deltaYTenths) quadruples. A wheel
+    // delta is in tenths because an environment script carries integers and a
+    // notch is not one.
     var clickScript: [Int] = []
+    var scrollScript: [Int] = []
     // What the Sokol backend answers `frame.statistics()` with. Here because a
     // frame's counters have to outlive the frame that produced them: a HUD is
     // laid out while the frame it describes is still being built, so what it

@@ -34,12 +34,11 @@ struct RenderBackendSelection {
 
 
 // Platform-aware default backend for hosts that do not pick one explicitly:
-// Metal owns Apple hosts (the dynamic-FFI platform probe reports the Apple
-// platform code for macOS; iOS maps the same way), everything else defaults
-// to Sokol — the portable backend. This includes Web/WASM honestly: the
-// browser sandbox has no host-OS probe, so `hostPlatform()` returns `Unknown`
-// there, and Unknown -> Sokol is the correct choice because Sokol (WebGPU) is
-// the only backend that exists on wasm32-emscripten.
+// Metal owns Apple hosts, Dawn owns Windows, and everything else defaults to
+// Sokol — the portable backend. Web/WASM lands there honestly: the browser
+// sandbox has no host-OS probe, so `hostPlatform()` returns `Unknown` there,
+// and Unknown -> Sokol is the correct choice because Sokol (WebGPU) is the
+// only backend that exists on wasm32-emscripten.
 @Native
 function graphicsDefaultBackend() -> RenderBackendKind {
     let platform = hostPlatform()
@@ -48,6 +47,9 @@ function graphicsDefaultBackend() -> RenderBackendKind {
     }
     if platform == .IOS {
         return graphicsBackendFromEnvironment(.Metal)
+    }
+    if platform == .Windows {
+        return graphicsBackendFromEnvironment(.Dawn)
     }
     return graphicsBackendFromEnvironment(.Sokol)
 }

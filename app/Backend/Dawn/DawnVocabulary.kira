@@ -109,6 +109,35 @@ function dawnRequestAdapterSucceeded() -> I32 { return I32(1) }
 // --- surfaces ------------------------------------------------------------
 function dawnCompositeAlphaAuto() -> I32 { return I32(0) }
 function dawnPresentModeFifo() -> I32 { return I32(1) }
+function dawnPresentModeFifoRelaxed() -> I32 { return I32(2) }
+function dawnPresentModeImmediate() -> I32 { return I32(3) }
+function dawnPresentModeMailbox() -> I32 { return I32(4) }
+
+// The present mode a run asked for, or `Fifo` when it asked for none.
+//
+// `Fifo` is the only mode every surface must support, so it stays the default.
+// The others exist because a frame-cost measurement taken under `Fifo` measures
+// the display's refresh interval rather than the renderer: the wait for a
+// drawable *is* the frame time there, and nothing about the program's own cost
+// is visible under it.
+@Native
+function dawnPresentModeFromEnvironment() -> I32 {
+    let requested = environmentValue("KIRA_GRAPHICS_PRESENT_MODE")
+    if requested.count == 0 || requested == "fifo" {
+        return dawnPresentModeFifo()
+    }
+    if requested == "fifo-relaxed" {
+        return dawnPresentModeFifoRelaxed()
+    }
+    if requested == "immediate" {
+        return dawnPresentModeImmediate()
+    }
+    if requested == "mailbox" {
+        return dawnPresentModeMailbox()
+    }
+    graphicsDiagnostic("Kira Graphics: KIRA_GRAPHICS_PRESENT_MODE names '" + requested + "', which is not `fifo`, `fifo-relaxed`, `immediate` or `mailbox`")
+    return dawnPresentModeFifo()
+}
 // `SuccessOptimal` and `SuccessSuboptimal`. A suboptimal texture still draws;
 // it says the surface should be reconfigured, which a resize already does.
 function dawnSurfaceTextureOptimal() -> I32 { return I32(1) }

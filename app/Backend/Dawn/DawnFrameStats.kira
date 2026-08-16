@@ -16,10 +16,10 @@ import Foundation
 // `QueryPerformanceCounter` and its frequency. A monotonic clock is a platform
 // call — Kira has no clock of its own — and this is Windows', read through the
 // same `LARGE_INTEGER` out-parameter shape the window messages use.
-@FFI.Extern { library: win32; symbol: QueryPerformanceCounter; abi: c; }
+@FFI.Extern { library: kernel32; symbol: QueryPerformanceCounter; abi: c; }
 function performanceCounter(value: RawPtr) -> I32;
 
-@FFI.Extern { library: win32; symbol: QueryPerformanceFrequency; abi: c; }
+@FFI.Extern { library: kernel32; symbol: QueryPerformanceFrequency; abi: c; }
 function performanceFrequency(value: RawPtr) -> I32;
 
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u64_at; abi: c; }
