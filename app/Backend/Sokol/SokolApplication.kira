@@ -166,6 +166,10 @@ function readHarnessKnobs(state: borrow mut GraphicsAppRuntimeState) {
     if scrollScript.count > 0 {
         state.scrollScript = sokolEnvInts(scrollScript)
     }
+    let dragScript = environmentValue("KIRA_UI_DRAG_SCRIPT")
+    if dragScript.count > 0 {
+        state.dragScript = sokolEnvInts(dragScript)
+    }
     state.capturePath = environmentValue("KIRA_GRAPHICS_CAPTURE_FRAME")
     if state.capturePath.count == 0 {
         // No frame is ever numbered 0, so nothing captures.
