@@ -71,6 +71,12 @@ struct GraphicsAppRuntimeState {
     // Drags as (startFrame, x, y, dx, dy, buttonRaw, steps): a press at the
     // point, a run of moves along the delta, a release at the end of it.
     var dragScript: [Int] = []
+    // Keys as (frame, keyCode, downFlag) triples and typed characters as
+    // (frame, codepoint) pairs. A field is driven with both: the characters are
+    // what lands in it, and the keys are what a caret and a commit are made of
+    // — Enter is a key, not a character.
+    var keyScript: [Int] = []
+    var textScript: [Int] = []
     // What the Sokol backend answers `frame.statistics()` with. Here because a
     // frame's counters have to outlive the frame that produced them: a HUD is
     // laid out while the frame it describes is still being built, so what it
