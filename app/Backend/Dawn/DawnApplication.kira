@@ -243,6 +243,8 @@ function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData
         }
         dragIndex = dragIndex + 7
     }
+    // Keys and typed characters, which a click can only get as far as focusing.
+    driveTypingScripts(state, scriptFrame)
 
     let onFrame: (borrow mut RenderFrame) -> Void = state.app.frameHandler
     onFrame(frame)

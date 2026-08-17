@@ -102,6 +102,7 @@ function kiraGraphicsSokolFrame(runtimeUserData: RawPtr): Void {
         }
         clickIndex = clickIndex + 3
     }
+    driveTypingScripts(state, scriptFrame)
     onFrame(frame)
     graphicsSubmitFrame(frame)
     state.frameStats = sokolEndFrameStats(state.frameStats)
@@ -131,6 +132,45 @@ function kiraGraphicsSokolCleanup(runtimeUserData: RawPtr): Void {
     reportFrameCost(state)
     sokolReportLifetime(state.lifetimePeaks)
     sg_shutdown()
+    return
+}
+
+// The typed part of a scripted run: keys as (frame, keyCode, downFlag) triples
+// and characters as (frame, codepoint) pairs, delivered through the same event
+// handler a keyboard reaches.
+//
+// Both backends drive it, because a field is only proven by typing into it: a
+// click can focus one, but what a person then does is type characters and press
+// Enter, and Enter is a KEY (257) while the characters are TEXT. Keys are
+// dispatched before characters within a frame, so a script can select a field's
+// contents and type over them in one step.
+@Native
+function driveTypingScripts(state: borrow mut GraphicsAppRuntimeState, scriptFrame: Int) {
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    var keyIndex = 0
+    while keyIndex + 3 <= state.keyScript.count {
+        if state.keyScript[keyIndex] == scriptFrame {
+            var kind: AppEventKind = .KeyUp
+            if state.keyScript[keyIndex + 2] == 1 {
+                kind = .KeyDown
+            }
+            onEvent(AppEvent {
+                kind: kind
+                keyCode: state.keyScript[keyIndex + 1]
+            })
+        }
+        keyIndex = keyIndex + 3
+    }
+    var textIndex = 0
+    while textIndex + 2 <= state.textScript.count {
+        if state.textScript[textIndex] == scriptFrame {
+            onEvent(AppEvent {
+                kind: .TextInput
+                textCodepoint: state.textScript[textIndex + 1]
+            })
+        }
+        textIndex = textIndex + 2
+    }
     return
 }
 
@@ -169,6 +209,14 @@ function readHarnessKnobs(state: borrow mut GraphicsAppRuntimeState) {
     let dragScript = environmentValue("KIRA_UI_DRAG_SCRIPT")
     if dragScript.count > 0 {
         state.dragScript = sokolEnvInts(dragScript)
+    }
+    let keyScript = environmentValue("KIRA_UI_KEY_SCRIPT")
+    if keyScript.count > 0 {
+        state.keyScript = sokolEnvInts(keyScript)
+    }
+    let textScript = environmentValue("KIRA_UI_TEXT_SCRIPT")
+    if textScript.count > 0 {
+        state.textScript = sokolEnvInts(textScript)
     }
     state.capturePath = environmentValue("KIRA_GRAPHICS_CAPTURE_FRAME")
     if state.capturePath.count == 0 {
