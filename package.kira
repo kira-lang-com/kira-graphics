@@ -87,6 +87,18 @@ Package KiraGraphics {
             ],
         },
         NativeLibrary {
+            // The desktop compositor. A window asks it for the backdrop it keeps
+            // behind the window — the blurred, tinted view of everything under
+            // it that a platform sidebar is made of, and the one thing an
+            // application cannot draw for itself.
+            name: "dwmapi",
+            linkMode: LinkMode.Dynamic,
+            availability: Availability.Optional,
+            nativeTargets: [
+                NativeTarget { triple: "x86_64-windows-msvc", systemLibs: ["dwmapi"] }
+            ],
+        },
+        NativeLibrary {
             // Kira's own runtime archive, already on every native link line.
             // The raw-memory primitives a backend lays its C-shaped context out
             // with live there — and so, now, do shared-library loading and the

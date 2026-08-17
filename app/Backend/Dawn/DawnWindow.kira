@@ -119,6 +119,29 @@ function createWindowHandle(exStyle: U32, className: CString, title: CString, st
 @FFI.Extern { library: user32; symbol: DestroyWindow; abi: c; }
 function destroyWindowHandle(window: RawPtr) -> I32;
 
+// A layered window's composition: `key` is the colour the desktop shows
+// through, `alpha` is how opaque the whole window is composited, and `flags`
+// says which of the two the call is setting.
+@FFI.Extern { library: user32; symbol: SetLayeredWindowAttributes; abi: c; }
+function setLayeredWindowAttributes(window: RawPtr, key: U32, alpha: U8, flags: U32) -> I32;
+
+// The desktop's own backdrop for a window: what the compositor draws BEHIND it,
+// which is the blurred, tinted view of everything underneath. It is the
+// material a platform sidebar is made of, and it is the compositor's to draw —
+// an application cannot see what is under its own window.
+//
+// Asked for by attribute rather than through the undocumented composition call
+// every sample on the internet reaches for: that symbol is not in the import
+// library at all, so a program that names it does not link.
+@FFI.Extern { library: dwmapi; symbol: DwmSetWindowAttribute; abi: c; }
+function setWindowAttribute(window: RawPtr, attribute: U32, value: RawPtr, size: U32) -> I32;
+
+// Extends the window frame — the part the compositor draws — over the client
+// area, which is what puts the backdrop behind everything the application
+// draws rather than behind a title bar it does not have.
+@FFI.Extern { library: dwmapi; symbol: DwmExtendFrameIntoClientArea; abi: c; }
+function extendFrameIntoClientArea(window: RawPtr, margins: RawPtr) -> I32;
+
 @FFI.Extern { library: user32; symbol: ShowWindow; abi: c; }
 function showWindow(window: RawPtr, command: I32) -> I32;
 
@@ -190,6 +213,15 @@ function clipCursor(bounds: WindowRectPointer) -> I32;
 
 // The window styles the three window modes are made of.
 function dawnClipChildrenStyle() -> U32 { return U32(33554432) }
+// `WS_EX_LAYERED`. A layered window is composited by the desktop rather than
+// blitted, which is what lets some of its pixels be missing.
+function dawnLayeredExStyle() -> U32 { return U32(524288) }
+
+// `LWA_COLORKEY` and `LWA_ALPHA` — the desktop shows through the key colour,
+// and the whole window is composited at the alpha.
+function dawnLayeredColorKeyFlag() -> U32 { return U32(1) }
+function dawnLayeredAlphaFlag() -> U32 { return U32(2) }
+
 function dawnWindowedStyle() -> U32 { return U32(13565952) + dawnClipChildrenStyle() }
 function dawnBorderlessStyle() -> U32 { return U32(2147483648) + dawnClipChildrenStyle() }
 function dawnVisibleStyle() -> U32 { return U32(268435456) }
@@ -321,7 +353,20 @@ function dawnPixelsFromPoints(points: Int, scale: Float) -> Int {
 // 125% display asks for a 2400-pixel client area, exactly as sokol-app does,
 // and the two backends then agree on the drawable Windows gives back.
 @Native
-function dawnOpenWindow(instance: RawPtr, className: borrow String, title: borrow String, width: Int, height: Int, mode: borrow WindowMode) -> RawPtr {
+function dawnOpenWindow(
+    instance: RawPtr,
+    className: borrow String,
+    title: borrow String,
+    width: Int,
+    height: Int,
+    mode: borrow WindowMode,
+    // What the desktop does with this window's pixels. `transparent` makes the
+    // key colour a hole the desktop shows through — the application clears to
+    // it and paints only what it wants seen — and `opacity` composites the
+    // whole window at less than full strength.
+    transparent: Bool,
+    opacity: Float,
+) -> RawPtr {
     let style = dawnStyleForMode(mode)
     let scale = dawnSystemScale()
     let clientWidth = dawnPixelsFromPoints(width, scale)
@@ -338,8 +383,12 @@ function dawnOpenWindow(instance: RawPtr, className: borrow String, title: borro
         }
         freeBytes(frame)
     }
+    var exStyle = U32(0)
+    if transparent || opacity < 1.0 {
+        exStyle = dawnLayeredExStyle()
+    }
     let window = createWindowHandle(
-        U32(0),
+        exStyle,
         className,
         title,
         style,
@@ -355,12 +404,90 @@ function dawnOpenWindow(instance: RawPtr, className: borrow String, title: borro
     if pointerIsNull(window) {
         return window
     }
+    dawnApplyWindowComposition(window, transparent, opacity)
+    if transparent {
+        dawnEnableWindowBackdrop(window)
+    }
     showWindow(window, I32(5))
     setForegroundWindow(window)
     if mode == .Fullscreen {
         dawnCoverDisplay(window)
     }
     return window
+}
+
+// Asks the desktop compositor to keep a blurred, tinted view of everything
+// behind the window, and to draw it there.
+//
+// This is what a platform sidebar is made of. The window's own pixels are drawn
+// over it, so the parts an interface leaves as holes (see the key colour) show
+// the blur and the parts it paints stay crisp — which is exactly the material a
+// macOS sidebar has and the one an application cannot produce for itself,
+// because what it needs to blur is not something it can see.
+//
+// `ACCENT_ENABLE_ACRYLICBLURBEHIND` is the accent state that does it; the
+// gradient colour is the tint the compositor mixes over the blur, in
+// `0xAABBGGRR`, and a dark low-alpha tint is what keeps a bright desktop from
+// washing the chrome out.
+@Native
+function dawnEnableWindowBackdrop(window: RawPtr) {
+    // The frame first: the backdrop is drawn where the compositor owns the
+    // window, and -1 on every side is "the whole client area".
+    let margins = allocateBytes(U64(16))
+    writeWord(margins, U64(0), dawnFrameEverywhere())
+    writeWord(margins, U64(4), dawnFrameEverywhere())
+    writeWord(margins, U64(8), dawnFrameEverywhere())
+    writeWord(margins, U64(12), dawnFrameEverywhere())
+    extendFrameIntoClientArea(window, margins)
+    freeBytes(margins)
+    let backdrop = allocateBytes(U64(4))
+    writeWord(backdrop, U64(0), dawnBackdropAcrylic())
+    setWindowAttribute(window, dawnAttributeSystemBackdrop(), backdrop, U32(4))
+    freeBytes(backdrop)
+    return
+}
+
+// `MARGINS` of -1: the frame covers the whole client area.
+function dawnFrameEverywhere() -> U32 { return U32(4294967295) }
+
+// `DWMWA_SYSTEMBACKDROP_TYPE`, and `DWMSBT_TRANSIENTWINDOW` — the acrylic one,
+// which is the material a floating panel and a sidebar are made of. (The other
+// system backdrop, Mica, samples the WALLPAPER rather than the windows under
+// it, which is not what shows through a sidebar.)
+function dawnAttributeSystemBackdrop() -> U32 { return U32(38) }
+function dawnBackdropAcrylic() -> U32 { return U32(3) }
+
+// Tells the desktop how to composite the window it just made.
+//
+// Both attributes go in ONE call, because the flags are what the call reads:
+// setting the key and then the alpha in two calls leaves the window carrying
+// whichever was set last.
+@Native
+function dawnApplyWindowComposition(window: RawPtr, transparent: Bool, opacity: Float) {
+    if transparent == false && opacity >= 1.0 {
+        return
+    }
+    var flags = U32(0)
+    if transparent {
+        flags = flags + dawnLayeredColorKeyFlag()
+    }
+    if opacity < 1.0 {
+        flags = flags + dawnLayeredAlphaFlag()
+    }
+    setLayeredWindowAttributes(window, graphicsTransparentKeyRef(), dawnWindowAlphaByte(opacity), flags)
+    return
+}
+
+// The alpha the desktop composites the window at, as the byte the call takes.
+function dawnWindowAlphaByte(opacity: Float) -> U8 {
+    var clamped = opacity
+    if clamped < 0.0 {
+        clamped = 0.0
+    }
+    if clamped > 1.0 {
+        clamped = 1.0
+    }
+    return U8(Int(clamped * 255.0))
 }
 
 function dawnStyleForMode(mode: borrow WindowMode) -> U32 {

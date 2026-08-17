@@ -26,6 +26,11 @@ function wordAt(ptr: RawPtr, offset: U64) -> U32;
 @FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_f32_at; abi: c; }
 function writeFloat32(ptr: RawPtr, offset: U64, value: F32): Void;
 
+// A pointer written INTO a struct: what a C API asking for a struct-of-struct
+// wants, where the outer struct carries the address of the inner one.
+@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_ptr_at; abi: c; }
+function writePointer(ptr: RawPtr, offset: U64, value: RawPtr): Void;
+
 // The pointer stored at a byte offset. A `CString` member read out of a C-layout
 // struct comes back as the opaque word it is, with no way to spell its text — so
 // text C owns is read as the bytes behind this pointer instead.
