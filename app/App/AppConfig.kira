@@ -29,6 +29,17 @@ struct GraphicsApplication {
     // given; a fullscreen window takes the display's size instead, so a program
     // that starts there reads its viewport back off the frame.
     var windowMode: WindowMode = .Windowed
+    // A window the desktop shows through: every pixel left at
+    // `graphicsTransparentKey()` is a hole rather than a colour, so the
+    // application's own drawing is the window's shape. See
+    // Public/WindowComposition.kira.
+    var transparent: Bool = false
+    // How opaque the WHOLE window is composited, before anything it draws is
+    // considered. One is an ordinary window; a lower value fades the window and
+    // everything on it against what is behind, which is the "sheet of glass"
+    // an overlay wants and not the same thing as a translucent surface inside
+    // an opaque window.
+    var opacity: Float = 1.0
     // Optional fixed frame cadence in nanoseconds. Zero keeps the backend
     // uncapped; a positive value uses absolute deadlines and never emits catch-up
     // bursts after an overrun.

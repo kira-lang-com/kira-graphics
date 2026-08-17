@@ -39,6 +39,8 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
         app.width,
         app.height,
         app.windowMode,
+        app.transparent,
+        app.opacity,
     )
     if pointerIsNull(state.dawn.window) {
         graphicsDiagnostic("Kira Graphics: Windows refused the Dawn backend's window")

@@ -1,0 +1,37 @@
+import Foundation
+
+// A window the desktop shows through.
+//
+// A window is normally a rectangle of pixels the desktop draws as it is given.
+// A TRANSPARENT one is composited instead: the pixels it leaves at the key
+// colour are not drawn at all, so what is behind the window shows through them
+// and the application decides, pixel by pixel, what its window is shaped like.
+// An interface that wants a floating panel over the desktop, a rounded window
+// with no square corners behind it, or a heads-up display over whatever is
+// running underneath asks for this rather than painting an imitation of the
+// desktop behind itself.
+//
+// The key is a COLOUR rather than an alpha channel because that is what the
+// desktop compositor can be told through a window attribute; a swapchain whose
+// alpha the compositor reads needs the composition path, which is a different
+// (and platform-specific) surface. What this gives is exact: a pixel either
+// carries the key and is a hole, or it does not and is drawn.
+//
+// It is full magenta because the key has to survive the trip to the screen
+// EXACTLY: the desktop matches the final 8-bit pixel, and a value between the
+// endpoints comes back a byte or two off once the swapchain encodes it. Zero and
+// one are the two values every encoding agrees on, and no interface draws this
+// colour by accident.
+function graphicsTransparentKey() -> Color {
+    return Color {
+        r: 1.0
+        g: 0.0
+        b: 1.0
+        a: 1.0
+    }
+}
+
+// The same colour as the desktop names it: `0x00BBGGRR`.
+function graphicsTransparentKeyRef() -> U32 {
+    return U32(16711935)
+}
