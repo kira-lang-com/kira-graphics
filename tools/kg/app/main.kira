@@ -1,0 +1,93 @@
+import Foundation
+import ArgumentParser
+
+// `kg` — the Kira Graphics command line. What a graphics run needs from the
+// outside, as typed commands rather than the environment variables these used to
+// be: turn a captured frame into something viewable, and say which backends a
+// build can render with.
+
+@Derive(Parsable)
+struct PngArguments {
+    let input: String
+    let output: String
+}
+
+ParsableCommand PngCommand {
+    let configuration: CommandConfiguration {
+        return CommandConfiguration(
+            name: "png",
+            abstract: "Convert a captured frame (binary PPM) to a PNG"
+        )
+    }
+
+    let arguments: [ArgumentSpec] {
+        return [
+            argument(name: "input", help: "The captured .ppm to read"),
+            argument(name: "output", help: "The .png to write")
+        ]
+    }
+
+    function run(arguments: borrow ParsedArguments) -> Int {
+        let parsed = parse_PngArguments(arguments)
+        if convertPpmToPngReporting(parsed.input, parsed.output) {
+            return 0
+        }
+        return 1
+    }
+}
+
+function convertPpmToPngReporting(input: borrow String, output: borrow String) -> Bool {
+    if convertPpmFileToPng(input, output) {
+        print("wrote " + output)
+        return true
+    }
+    print("could not convert " + input + " to " + output)
+    return false
+}
+
+ParsableCommand BackendsCommand {
+    let configuration: CommandConfiguration {
+        return CommandConfiguration(
+            name: "backends",
+            abstract: "List the render backends a build can select"
+        )
+    }
+
+    let arguments: [ArgumentSpec] {
+        return []
+    }
+
+    function run(arguments: borrow ParsedArguments) -> Int {
+        print("sokol  — GL/D3D/Metal via sokol_gfx, the portable default")
+        print("dawn   — WebGPU (Vulkan/D3D12/Metal) via Dawn")
+        print("metal  — native Metal, macOS only")
+        print("The host picks one unless a run names it.")
+        return 0
+    }
+}
+
+ParsableCommand RootCommand {
+    let configuration: CommandConfiguration {
+        return CommandConfiguration(
+            name: "kg",
+            abstract: "Kira Graphics command line",
+            subcommands: ["png", "backends"]
+        )
+    }
+
+    let arguments: [ArgumentSpec] {
+        return []
+    }
+
+    function run(arguments: borrow ParsedArguments) -> Int {
+        return 0
+    }
+}
+
+@Main
+function main() {
+    let root = RootCommand()
+    let children: [Any ParsableCommand] = [PngCommand(), BackendsCommand()]
+    runCommandRouter(root, children, commandLineArguments())
+    return
+}

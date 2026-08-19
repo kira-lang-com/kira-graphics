@@ -1,0 +1,184 @@
+import Foundation
+
+// Turn a Kira Graphics frame capture (binary PPM, `P6`) into a PNG so it can be
+// looked at. Stored deflate blocks only: this exists to view a capture, not to
+// compress it. Lives here rather than in a throwaway script so every tool that
+// captures a frame shares one encoder.
+
+function crcTable() -> [Int] {
+    var table: [Int] = []
+    var n = 0
+    while n < 256 {
+        var c = n
+        var k = 0
+        while k < 8 {
+            if (c & 1) == 1 {
+                c = 3988292384 ^ (c >> 1)
+            } else {
+                c = c >> 1
+            }
+            k = k + 1
+        }
+        table.append(c)
+        n = n + 1
+    }
+    return table
+}
+
+function crc32(bytes: borrow [U8], table: borrow [Int]) -> Int {
+    var c = 4294967295
+    var i = 0
+    while i < bytes.count {
+        c = table[(c ^ Int(bytes[i])) & 255] ^ (c >> 8)
+        i = i + 1
+    }
+    return c ^ 4294967295
+}
+
+function adler32(bytes: borrow [U8]) -> Int {
+    var a = 1
+    var b = 0
+    var i = 0
+    while i < bytes.count {
+        a = (a + Int(bytes[i])) % 65521
+        b = (b + a) % 65521
+        i = i + 1
+    }
+    return (b * 65536) + a
+}
+
+function pushBigEndian(out: borrow mut [U8], value: Int) {
+    var bytes = out
+    bytes.append(U8((value >> 24) & 255))
+    bytes.append(U8((value >> 16) & 255))
+    bytes.append(U8((value >> 8) & 255))
+    bytes.append(U8(value & 255))
+    return
+}
+
+function chunk(out: borrow mut [U8], kind: borrow [U8], payload: borrow [U8], table: borrow [Int]) {
+    var bytes = out
+    pushBigEndian(bytes, payload.count)
+    var full: [U8] = []
+    var i = 0
+    while i < kind.count {
+        full.append(kind[i])
+        i = i + 1
+    }
+    i = 0
+    while i < payload.count {
+        full.append(payload[i])
+        i = i + 1
+    }
+    i = 0
+    while i < full.count {
+        bytes.append(full[i])
+        i = i + 1
+    }
+    pushBigEndian(bytes, crc32(full, table))
+    return
+}
+
+function deflateStored(raw: borrow [U8]) -> [U8] {
+    var out: [U8] = []
+    out.append(U8(120))
+    out.append(U8(1))
+    var offset = 0
+    while offset < raw.count {
+        var length = raw.count - offset
+        if length > 65535 {
+            length = 65535
+        }
+        let last = offset + length >= raw.count
+        out.append(U8(last ? 1 : 0))
+        out.append(U8(length & 255))
+        out.append(U8((length >> 8) & 255))
+        out.append(U8((65535 - length) & 255))
+        out.append(U8(((65535 - length) >> 8) & 255))
+        var i = 0
+        while i < length {
+            out.append(raw[offset + i])
+            i = i + 1
+        }
+        offset = offset + length
+    }
+    pushBigEndian(out, adler32(raw))
+    return out
+}
+
+// The header of a binary PPM: "P6", width, height, max value, each separated by
+// whitespace. Returns [width, height, pixelOffset].
+function ppmHeader(bytes: borrow [U8]) -> [Int] {
+    var values: [Int] = []
+    var i = 2
+    while values.count < 3 && i < bytes.count {
+        while i < bytes.count && Int(bytes[i]) <= 32 {
+            i = i + 1
+        }
+        var value = 0
+        while i < bytes.count && Int(bytes[i]) > 32 {
+            value = value * 10 + (Int(bytes[i]) - 48)
+            i = i + 1
+        }
+        values.append(value)
+    }
+    return [values[0], values[1], i + 1]
+}
+
+// A PNG (8-bit RGB, no filtering) encoding the pixels of a binary PPM.
+function encodePpmToPng(bytes: borrow [U8]) -> [U8] {
+    let header = ppmHeader(bytes)
+    let width = header[0]
+    let height = header[1]
+    let start = header[2]
+
+    var raw: [U8] = []
+    var y = 0
+    while y < height {
+        raw.append(U8(0))
+        var x = 0
+        while x < width * 3 {
+            raw.append(bytes[start + y * width * 3 + x])
+            x = x + 1
+        }
+        y = y + 1
+    }
+
+    let table = crcTable()
+    var png: [U8] = []
+    png.append(U8(137))
+    png.append(U8(80))
+    png.append(U8(78))
+    png.append(U8(71))
+    png.append(U8(13))
+    png.append(U8(10))
+    png.append(U8(26))
+    png.append(U8(10))
+
+    var ihdr: [U8] = []
+    pushBigEndian(ihdr, width)
+    pushBigEndian(ihdr, height)
+    ihdr.append(U8(8))
+    ihdr.append(U8(2))
+    ihdr.append(U8(0))
+    ihdr.append(U8(0))
+    ihdr.append(U8(0))
+    let ihdrKind: [U8] = [U8(73), U8(72), U8(68), U8(82)]
+    let idatKind: [U8] = [U8(73), U8(68), U8(65), U8(84)]
+    let iendKind: [U8] = [U8(73), U8(69), U8(78), U8(68)]
+    let empty: [U8] = []
+    chunk(png, ihdrKind, ihdr, table)
+    chunk(png, idatKind, deflateStored(raw), table)
+    chunk(png, iendKind, empty, table)
+    return png
+}
+
+// Reads a binary PPM at `source`, writes its PNG to `target`. Returns whether
+// both the read produced pixels and the write succeeded.
+function convertPpmFileToPng(source: borrow String, target: borrow String) -> Bool {
+    let bytes = readFileRange(source, 0, Int(fileSize(source)))
+    if bytes.count == 0 {
+        return false
+    }
+    return writeBytesFile(target, encodePpmToPng(bytes))
+}

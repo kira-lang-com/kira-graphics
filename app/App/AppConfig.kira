@@ -55,6 +55,11 @@ struct GraphicsApplication {
     // program either one drew is the same program.
     var backend: RenderBackendKind = graphicsDefaultBackend()
     var platform: Platform = .Unknown
+    // Launch-time harness settings — capture, quit-after, input scripts — as a
+    // value rather than the environment. Default is unconfigured: the backend
+    // reads the environment as it always has. A caller that provides one drives
+    // the run without any environment variable.
+    var harness: HarnessConfig = HarnessConfig {}
     var initHandler: (Graphics) -> Void = graphicsApplicationDefaultInit
     var frameHandler: (borrow mut RenderFrame) -> Void = graphicsApplicationDefaultFrame
     var eventHandler: (borrow AppEvent) -> Void = graphicsApplicationDefaultEvent
