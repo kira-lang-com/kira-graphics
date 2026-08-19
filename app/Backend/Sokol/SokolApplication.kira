@@ -189,6 +189,13 @@ function driveTypingScripts(state: borrow mut GraphicsAppRuntimeState, scriptFra
 // one per frame puts a scan and a string allocation in the frame callback.
 @Native
 function readHarnessKnobs(state: borrow mut GraphicsAppRuntimeState) {
+    // A run handed a harness value takes its knobs from there and never reads the
+    // environment. Both this backend and Dawn resolve the knobs through here, so
+    // one branch serves every backend the config reaches.
+    if state.app.harness.configured {
+        applyHarnessConfig(state)
+        return
+    }
     state.quitAfterFrames = environmentInt("KIRA_GRAPHICS_QUIT_AFTER_FRAMES", 0)
     // How many points the window's size sweeps by each frame, for measuring the
     // resize path. A resize is the expensive frame — the layout is redone, and
@@ -225,6 +232,36 @@ function readHarnessKnobs(state: borrow mut GraphicsAppRuntimeState) {
         return
     }
     var at = environmentInt("KIRA_GRAPHICS_CAPTURE_AT", 0)
+    if at <= 0 {
+        at = state.quitAfterFrames
+    }
+    if at <= 0 {
+        at = 1
+    }
+    state.captureAtFrame = at
+    return
+}
+
+// Copies a provided harness value into the run state, applying the same
+// capture-at default the environment path does: an unset capture frame with a
+// path takes the last frame drawn, and a path-less harness captures nothing.
+@Native
+function applyHarnessConfig(state: borrow mut GraphicsAppRuntimeState) {
+    let h = state.app.harness
+    state.quitAfterFrames = h.quitAfterFrames
+    state.resizeSweep = h.resizeSweep
+    state.logFps = h.logFps
+    state.clickScript = h.clickScript
+    state.scrollScript = h.scrollScript
+    state.dragScript = h.dragScript
+    state.keyScript = h.keyScript
+    state.textScript = h.textScript
+    state.capturePath = h.capturePath
+    if state.capturePath.count == 0 {
+        state.captureAtFrame = 0
+        return
+    }
+    var at = h.captureAtFrame
     if at <= 0 {
         at = state.quitAfterFrames
     }
