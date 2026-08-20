@@ -47,6 +47,14 @@ construct DawnWindow {
         function scale(window: RawPtr) -> Float
         function resize(window: RawPtr, width: Int, height: Int)
         function close(window: RawPtr)
+        // The WebGPU surface for this window.
+        //
+        // Dawn draws; it does not own a window, and what it takes is whatever
+        // the platform's window system hands out -- an `HWND` here, a
+        // `wl_display` and `wl_surface` there. Only the window knows which, so
+        // only the window can say it, and every other line of this backend is
+        // spared the question.
+        function createSurface(instance: RawPtr, window: RawPtr) -> RawPtr
         // Draining the platform's event queue is NOT here yet. It belongs here
         // -- it is where two window systems are least alike -- but the Windows
         // pump reads and writes `GraphicsAppRuntimeState` directly rather than

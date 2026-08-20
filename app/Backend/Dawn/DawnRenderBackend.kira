@@ -168,7 +168,7 @@ RenderBackend DawnRenderBackend(context: RawPtr) {
         if pointerIsNull(context) {
             return 1.0
         }
-        return dawnWindowScale(nativeRecover<GraphicsAppRuntimeState>(context).dawn.window)
+        return dawnWindowFor(dawnPlatformForHost()).scale(nativeRecover<GraphicsAppRuntimeState>(context).dawn.window)
     }
 
     function contextWidth() -> Int {
@@ -192,7 +192,7 @@ RenderBackend DawnRenderBackend(context: RawPtr) {
             return 0.0
         }
         let state = nativeRecover<GraphicsAppRuntimeState>(context)
-        return Float(state.dawn.surfaceWidth) / dawnWindowScale(state.dawn.window)
+        return Float(state.dawn.surfaceWidth) / dawnWindowFor(dawnPlatformForHost()).scale(state.dawn.window)
     }
 
     function viewportHeight() -> Float {
@@ -200,7 +200,7 @@ RenderBackend DawnRenderBackend(context: RawPtr) {
             return 0.0
         }
         let state = nativeRecover<GraphicsAppRuntimeState>(context)
-        return Float(state.dawn.surfaceHeight) / dawnWindowScale(state.dawn.window)
+        return Float(state.dawn.surfaceHeight) / dawnWindowFor(dawnPlatformForHost()).scale(state.dawn.window)
     }
 
     function windowMode() -> WindowMode {

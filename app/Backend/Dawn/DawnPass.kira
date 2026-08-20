@@ -35,7 +35,7 @@ function dawnAcquireSurfaceTexture(state: borrow mut GraphicsAppRuntimeState) ->
     if !dawnSurfaceStatusIsUsable(block.status) {
         state.dawn.surfaceWidth = 0
         state.dawn.surfaceHeight = 0
-        if !dawnConfigureSurface(state, dawnClientWidth(state.dawn.window), dawnClientHeight(state.dawn.window)) {
+        if !dawnConfigureSurface(state, dawnWindowFor(dawnPlatformForHost()).clientWidth(state.dawn.window), dawnWindowFor(dawnPlatformForHost()).clientHeight(state.dawn.window)) {
             return false
         }
         wgpuSurfaceGetCurrentTexture(state.dawn.surface, block)
