@@ -45,14 +45,18 @@ Package KiraGraphics {
             // `emscripten_webgpu_get_device`, the one declaration in the header
             // that no desktop build of Dawn exports. Binding it would put an
             // unresolved symbol on every Windows link line.
-            headers: Headers { entrypoint: "NativeLibs/Dawn/x86_64-windows-msvc/include/webgpu/webgpu.h", includeDirs: ["NativeLibs/Dawn/x86_64-windows-msvc/include"], defines: ["WGPU_SKIP_PROCS"] },
-            autobind: Autobind { module: "webgpu", headers: ["NativeLibs/Dawn/x86_64-windows-msvc/include/dawn/webgpu.h"], mode: AutobindMode.AllPublic },
+            headers: Headers { entrypoint: "NativeLibs/Dawn/x86_64-linux-gnu/include/webgpu/webgpu.h", includeDirs: ["NativeLibs/Dawn/x86_64-linux-gnu/include"], defines: ["WGPU_SKIP_PROCS"] },
+            autobind: Autobind { module: "webgpu", headers: ["NativeLibs/Dawn/x86_64-linux-gnu/include/dawn/webgpu.h"], mode: AutobindMode.AllPublic },
             nativeTargets: [
                 // `runtimeFiles` is the payload's `bin/`: `webgpu_dawn.dll`
                 // beside the executable so the loader finds it, and
                 // `dxcompiler.dll`/`dxil.dll` beside that because Dawn opens the
                 // first by name when it compiles a shader for D3D12.
-                NativeTarget { triple: "x86_64-windows-msvc", dynamicLib: "NativeLibs/Dawn/x86_64-windows-msvc/lib/webgpu_dawn.lib", runtimeFiles: ["NativeLibs/Dawn/x86_64-windows-msvc/bin"] }
+                NativeTarget { triple: "x86_64-windows-msvc", dynamicLib: "NativeLibs/Dawn/x86_64-windows-msvc/lib/webgpu_dawn.lib", runtimeFiles: ["NativeLibs/Dawn/x86_64-windows-msvc/bin"] },
+                // The Linux slice is one shared object and no loader-name
+                // sidecars: Dawn reaches the GPU through the Vulkan loader,
+                // which the system provides.
+                NativeTarget { triple: "x86_64-linux-gnu", dynamicLib: "NativeLibs/Dawn/x86_64-linux-gnu/lib/libwebgpu_dawn.so", runtimeFiles: ["NativeLibs/Dawn/x86_64-linux-gnu/lib"] }
             ],
         },
         NativeLibrary {
