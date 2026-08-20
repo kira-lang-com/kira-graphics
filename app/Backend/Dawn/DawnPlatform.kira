@@ -1,0 +1,67 @@
+// Which platforms the Dawn backend opens a window on, and the window each one
+// opens.
+//
+// Dawn draws; it does not own a window. WebGPU takes a surface, and a surface is
+// whatever the platform's window system hands out — an `HWND` on Windows, a
+// `wl_surface` on a free desktop. Everything else in
+// this backend is the same code on every one of them, so the platform split is
+// this file and the window declarations it names, and nothing else.
+//
+// `DawnPlatform` IS the contract. `dawnWindowFor` is total over it and `match`
+// has no wildcard arm, so adding a variant here stops the build until that
+// platform has a window. A platform cannot be declared supported and left
+// unimplemented, which is the property this file exists for.
+//
+// macOS is absent because there is no `DawnWindowCocoa` yet, and this enum only
+// ever lists platforms that have a window. Adding the variant back is what will
+// demand the implementation -- which is the point of the list being the contract
+// rather than a comment somewhere.
+//
+// `Platform` is deliberately not reused: it carries `Web` and `Unknown`, which
+// have no Dawn window and never will. Narrowing to the platforms that can have
+// one keeps every arm below a real implementation rather than a dead branch, and
+// puts the one partial step — a host that is none of these — at the single
+// boundary in `dawnPlatformFor` instead of in every match.
+
+enum DawnPlatform {
+    Windows
+    Linux
+}
+
+// The window a Dawn build opens, whatever platform it is opened on.
+//
+// The members are the whole of what the rest of the backend asks a window for.
+// A message pump is not among them on purpose: pumping is where a platform is
+// least alike, and what the application layer actually consumes is `AppEvent`,
+// which is already platform-neutral. So a window translates its own events and
+// the layer above never learns which one it was talking to.
+construct DawnWindow {
+    requires {
+        // The native handle a surface is made from, or a null pointer when the
+        // window did not open.
+        function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr
+        // The size the surface is configured at, in pixels, and the factor
+        // between those pixels and layout points.
+        function clientWidth(window: RawPtr) -> Int
+        function clientHeight(window: RawPtr) -> Int
+        function scale(window: RawPtr) -> Float
+        function resize(window: RawPtr, width: Int, height: Int)
+        function close(window: RawPtr)
+        // Draining the platform's event queue is NOT here yet. It belongs here
+        // -- it is where two window systems are least alike -- but the Windows
+        // pump reads and writes `GraphicsAppRuntimeState` directly rather than
+        // answering with the `AppEvent` the application layer actually consumes.
+        // Until that is turned around, putting `pump` in this family would only
+        // move the entanglement behind a member. It is the next thing to port,
+        // and the first thing a second platform will need.
+    }
+}
+
+// Total over `DawnPlatform`. This is the compile-time check: a new variant
+// breaks here, and there is no arm to hide it in.
+function dawnWindowFor(platform: borrow DawnPlatform) -> Any DawnWindow {
+    match platform {
+        Windows -> return DawnWindowWin32();
+        Linux -> return DawnWindowWayland();
+    }
+}

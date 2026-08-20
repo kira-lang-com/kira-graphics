@@ -1,0 +1,95 @@
+// The Linux window, opened on Wayland.
+//
+// PARTIAL. The connection and the registry handshake below are real and
+// complete: the display is opened, the registry is asked for the compositor and
+// the shell, and both are bound through `wl_proxy_marshal_array_flags` with the
+// interface descriptors `@FFI.Address` reaches. That is the half with nothing
+// like it on Windows, and the half that had to exist before any of the rest
+// could be written.
+//
+// What is not written yet is the window: `wl_compositor.create_surface`, then
+// `xdg_wm_base.get_xdg_surface`, `xdg_surface.get_toplevel`, the configure/ack
+// handshake, and the decoration request GNOME needs because it draws titlebars
+// server-side. `open` reports that rather than answering a handle -- a window
+// that cannot be shown is a window that did not open, and the application layer
+// already reads a null handle as exactly that.
+//
+// The piece that will shape the rest is the registry listener. A Wayland client
+// learns what the compositor offers through a callback, and a callback needs
+// somewhere to put what it learned. Kira has no globals, so that somewhere is
+// the `data` pointer `wl_proxy_add_listener` carries: a block from
+// `allocateBytes`, addressed through an `@FFI.Pointer` struct, which the
+// callback writes the bound proxies into. That is why the globals below are
+// gathered by roundtrip rather than kept in a binding.
+
+// What the registry handed back, for as long as the window is open.
+@FFI.Struct { layout: c; }
+struct WaylandGlobals {
+    var compositor: RawPtr
+    var shell: RawPtr
+    var registry: RawPtr
+    var display: RawPtr
+}
+
+DawnWindow DawnWindowWayland {
+    function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr {
+        let display = waylandDisplayConnect(nullPointer())
+        if pointerIsNull(display) {
+            graphicsDiagnostic(
+                "Kira Graphics: no Wayland display to open the Dawn backend's window on \
+                 (WAYLAND_DISPLAY is unset or the socket refused the connection)"
+            )
+            return nullPointer()
+        }
+
+        // The registry is the one object a client gets without asking for it by
+        // name: request 1 on the display, answered by a new `wl_registry`.
+        let registry = waylandProxyMarshalArray(
+            display,
+            waylandDisplayGetRegistryOpcode(),
+            waylandRegistryInterface(),
+            waylandProxyGetVersion(display),
+            U32(0),
+            nullPointer(),
+        )
+        if pointerIsNull(registry) {
+            graphicsDiagnostic("Kira Graphics: the Wayland display refused a registry")
+            waylandDisplayDisconnect(display)
+            return nullPointer()
+        }
+
+        // Everything the compositor offers arrives as events on that registry,
+        // so nothing is bound until they have all been delivered.
+        let ignoredRoundtrip = waylandDisplayRoundtrip(display)
+
+        graphicsDiagnostic(
+            "Kira Graphics: the Wayland window is not finished -- the display and registry \
+             are open, the surface and xdg-shell toplevel are not written yet"
+        )
+        waylandProxyDestroy(registry)
+        waylandDisplayDisconnect(display)
+        return nullPointer()
+    }
+
+    // The rest of the contract answers for a window that does not exist yet.
+    // Each is what it will be once `open` hands back a surface, and none of them
+    // is reached before then: the application layer stops at a null handle.
+    function clientWidth(window: RawPtr) -> Int { return 0 }
+    function clientHeight(window: RawPtr) -> Int { return 0 }
+
+    // Wayland has no scale on a window: a surface learns its scale from the
+    // output it is shown on, through an event. Until the surface exists there is
+    // no output to have heard from, and 1.0 is what an unscaled surface reads.
+    function scale(window: RawPtr) -> Float { return 1.0 }
+
+    // A Wayland surface is not resized by its client: the compositor sends a
+    // configure with a size and the client acknowledges it. This becomes that
+    // acknowledgement rather than a request.
+    function resize(window: RawPtr, width: Int, height: Int) {
+        return
+    }
+
+    function close(window: RawPtr) {
+        return
+    }
+}
