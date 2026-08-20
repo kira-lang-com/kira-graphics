@@ -24,17 +24,17 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
     // the process at 96 DPI and upscales, every DPI query answers 96, and the
     // window is sized in the logical pixels the application meant — the same
     // split sokol-app makes for the same flag.
-    if app.highDpi {
+    //
+    // Windows only: it is a Win32 call about a Win32 notion. A Wayland surface
+    // is told its scale by the output it appears on and has nothing to declare
+    // in advance.
+    if app.highDpi && hostPlatform() == .Windows {
         markProcessDpiAware()
     }
-    state.dawn.moduleInstance = moduleHandle("")
-    if !dawnRegisterWindowClass(state.dawn.moduleInstance, "KiraGraphicsDawnWindow") {
-        graphicsDiagnostic("Kira Graphics: Windows refused the Dawn backend's window class")
-        return
-    }
-    state.dawn.window = dawnOpenWindow(
-        state.dawn.moduleInstance,
-        "KiraGraphicsDawnWindow",
+    // Which window this is depends on the platform, and nothing below this line
+    // knows which one it got.
+    let window = dawnWindowFor(dawnPlatformForHost())
+    state.dawn.window = window.open(
         app.title,
         app.width,
         app.height,
@@ -43,7 +43,9 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
         app.opacity,
     )
     if pointerIsNull(state.dawn.window) {
-        graphicsDiagnostic("Kira Graphics: Windows refused the Dawn backend's window")
+        // The window said why: registering a class, connecting to a display,
+        // binding a compositor. Repeating it here would name Windows on a host
+        // that is not one.
         return
     }
     state.dawn.messageBlock = allocateBytes(U64(48))

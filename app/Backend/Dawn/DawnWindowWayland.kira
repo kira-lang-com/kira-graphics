@@ -1,34 +1,77 @@
 // The Linux window, opened on Wayland.
 //
-// PARTIAL. The connection and the registry handshake below are real and
-// complete: the display is opened, the registry is asked for the compositor and
-// the shell, and both are bound through `wl_proxy_marshal_array_flags` with the
-// interface descriptors `@FFI.Address` reaches. That is the half with nothing
-// like it on Windows, and the half that had to exist before any of the rest
-// could be written.
+// The shape of a Wayland window is not the shape of a Win32 one, and this is
+// where that shows. On Windows a window exists the moment `CreateWindowExA`
+// returns. Here a client connects, asks the compositor what it offers, waits for
+// the answer, binds the two globals a window needs out of it, makes a surface,
+// gives that surface a role, and only then has something that can be shown --
+// and the compositor decides when that is, by sending a configure the client
+// acknowledges.
 //
-// What is not written yet is the window: `wl_compositor.create_surface`, then
-// `xdg_wm_base.get_xdg_surface`, `xdg_surface.get_toplevel`, the configure/ack
-// handshake, and the decoration request GNOME needs because it draws titlebars
-// server-side. `open` reports that rather than answering a handle -- a window
-// that cannot be shown is a window that did not open, and the application layer
-// already reads a null handle as exactly that.
+// None of the per-interface entry points a C client would call exist to link
+// against: `wayland-scanner` emits them as `static inline` wrappers. So every
+// request below is marshalled by hand through the one real entry point, with the
+// interface descriptors `@FFI.Address` reaches.
 //
-// The piece that will shape the rest is the registry listener. A Wayland client
-// learns what the compositor offers through a callback, and a callback needs
-// somewhere to put what it learned. Kira has no globals, so that somewhere is
-// the `data` pointer `wl_proxy_add_listener` carries: a block from
-// `allocateBytes`, addressed through an `@FFI.Pointer` struct, which the
-// callback writes the bound proxies into. That is why the globals below are
-// gathered by roundtrip rather than kept in a binding.
+// The handlers write into a block the caller owns, passed as the `data` pointer
+// `wl_proxy_add_listener` carries. That is not a workaround: Kira has no
+// globals, and an event handler that must remember something has to be given
+// somewhere to put it.
 
-// What the registry handed back, for as long as the window is open.
-@FFI.Struct { layout: c; }
-struct WaylandGlobals {
-    var compositor: RawPtr
-    var shell: RawPtr
-    var registry: RawPtr
-    var display: RawPtr
+// The compositor pings; a client that never pongs is one it may call
+// unresponsive and stop drawing.
+function waylandOnPing(data: RawPtr, shell: RawPtr, serial: U32) {
+    var args = WaylandUintArg { value: U64(serial) }
+    let ignored = waylandProxyMarshalUint(
+        shell,
+        waylandXdgPongOpcode(),
+        nullPointer(),
+        waylandProxyGetVersion(shell),
+        U32(0),
+        move args,
+    )
+    return
+}
+
+// A surface is not shown until the serial its configure carried is acknowledged.
+function waylandOnConfigure(data: RawPtr, xdgSurface: RawPtr, serial: U32) {
+    var args = WaylandUintArg { value: U64(serial) }
+    let ignored = waylandProxyMarshalUint(
+        xdgSurface,
+        waylandXdgSurfaceAckConfigureOpcode(),
+        nullPointer(),
+        waylandProxyGetVersion(xdgSurface),
+        U32(0),
+        move args,
+    )
+    return
+}
+
+// One global the compositor offers, reported by hanging what was bound on the
+// registry that asked for it.
+//
+// There are two globals a window needs and one user-data word per proxy, so the
+// window opens two registries and gives each its own handler. A client may open
+// as many as it likes and every one replays the whole list, so this costs one
+// extra replay at startup and buys a handler that stores without writing.
+function waylandOnCompositorGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
+    if waylandNameEquals(interface, "wl_compositor") == I32(0) {
+        waylandProxySetUserData(registry, waylandBind(registry, name, waylandCompositorInterface(), U32(4)))
+    }
+    return
+}
+
+function waylandOnShellGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
+    if waylandNameEquals(interface, "xdg_wm_base") == I32(0) {
+        waylandProxySetUserData(registry, waylandBind(registry, name, waylandXdgWmBaseInterface(), U32(1)))
+    }
+    return
+}
+
+// A global going away matters to a client holding one. This window binds only
+// the compositor and the shell, and neither leaves while a window is open.
+function waylandOnGlobalRemove(data: RawPtr, registry: RawPtr, name: U32) {
+    return
 }
 
 DawnWindow DawnWindowWayland {
@@ -36,21 +79,23 @@ DawnWindow DawnWindowWayland {
         let display = waylandDisplayConnect(nullPointer())
         if pointerIsNull(display) {
             graphicsDiagnostic(
-                "Kira Graphics: no Wayland display to open the Dawn backend's window on \
-                 (WAYLAND_DISPLAY is unset or the socket refused the connection)"
+                "Kira Graphics: no Wayland display to open the Dawn backend's window on"
             )
             return nullPointer()
         }
 
-        // The registry is the one object a client gets without asking for it by
-        // name: request 1 on the display, answered by a new `wl_registry`.
-        let registry = waylandProxyMarshalArray(
+        // The registry is the one object a client gets without naming it.
+        // One argument: the new-id slot the registry will fill. A request that
+        // creates an object still sends a place for it, so the array is one word
+        // long and not absent -- libwayland reads args[0] either way.
+        var registryArgs = WaylandOneArg { value: nullPointer() }
+        let registry = waylandProxyMarshalOne(
             display,
             waylandDisplayGetRegistryOpcode(),
             waylandRegistryInterface(),
             waylandProxyGetVersion(display),
             U32(0),
-            nullPointer(),
+            move registryArgs,
         )
         if pointerIsNull(registry) {
             graphicsDiagnostic("Kira Graphics: the Wayland display refused a registry")
@@ -58,38 +103,149 @@ DawnWindow DawnWindowWayland {
             return nullPointer()
         }
 
-        // Everything the compositor offers arrives as events on that registry,
-        // so nothing is bound until they have all been delivered.
+        var compositorListener = WaylandRegistryListener {
+            global: waylandOnCompositorGlobal
+            globalRemove: waylandOnGlobalRemove
+        }
+        let ignoredCompositorListener =
+            waylandAddRegistryListener(registry, move compositorListener, nullPointer())
+
+        // The second registry, for the second global. See the handlers above.
+        var shellRegistryArgs = WaylandOneArg { value: nullPointer() }
+        let shellRegistry = waylandProxyMarshalOne(
+            display,
+            waylandDisplayGetRegistryOpcode(),
+            waylandRegistryInterface(),
+            waylandProxyGetVersion(display),
+            U32(0),
+            move shellRegistryArgs,
+        )
+        if pointerIsNull(shellRegistry) {
+            graphicsDiagnostic("Kira Graphics: the Wayland display refused a second registry")
+            waylandDisplayDisconnect(display)
+            return nullPointer()
+        }
+        var shellRegistryListener = WaylandRegistryListener {
+            global: waylandOnShellGlobal
+            globalRemove: waylandOnGlobalRemove
+        }
+        let ignoredShellListener =
+            waylandAddRegistryListener(shellRegistry, move shellRegistryListener, nullPointer())
+
+        // Everything the compositor offers arrives as events, so nothing is
+        // bound until they have all been delivered.
         let ignoredRoundtrip = waylandDisplayRoundtrip(display)
 
-        graphicsDiagnostic(
-            "Kira Graphics: the Wayland window is not finished -- the display and registry \
-             are open, the surface and xdg-shell toplevel are not written yet"
+        let compositor = waylandProxyGetUserData(registry)
+        let shell = waylandProxyGetUserData(shellRegistry)
+        if pointerIsNull(compositor) || pointerIsNull(shell) {
+            graphicsDiagnostic(
+                "Kira Graphics: this Wayland compositor offers no wl_compositor or no \
+                 xdg_wm_base, and a window needs both"
+            )
+            waylandProxyDestroy(registry)
+            waylandDisplayDisconnect(display)
+            return nullPointer()
+        }
+
+        var shellListener = WaylandShellListener { ping: waylandOnPing }
+        let ignoredShell = waylandAddShellListener(shell, move shellListener, nullPointer())
+
+        // A surface with no role is not a window. The role is what xdg-shell
+        // gives it, in two steps: a surface becomes an xdg_surface, and an
+        // xdg_surface becomes a toplevel.
+        var surfaceArgs = WaylandOneArg { value: nullPointer() }
+        let surface = waylandProxyMarshalOne(
+            compositor,
+            waylandCompositorCreateSurface(),
+            waylandSurfaceInterface(),
+            waylandProxyGetVersion(compositor),
+            U32(0),
+            move surfaceArgs,
         )
-        waylandProxyDestroy(registry)
-        waylandDisplayDisconnect(display)
-        return nullPointer()
+        if pointerIsNull(surface) {
+            graphicsDiagnostic("Kira Graphics: the Wayland compositor refused a surface")
+            waylandDisplayDisconnect(display)
+            return nullPointer()
+        }
+
+        var roleArgs = WaylandTwoArgs { first: nullPointer() second: surface }
+        let xdgSurface = waylandProxyMarshalTwo(
+            shell,
+            waylandXdgGetSurfaceOpcode(),
+            waylandXdgSurfaceInterface(),
+            waylandProxyGetVersion(shell),
+            U32(0),
+            move roleArgs,
+        )
+        if pointerIsNull(xdgSurface) {
+            graphicsDiagnostic("Kira Graphics: xdg_wm_base refused a surface role")
+            waylandDisplayDisconnect(display)
+            return nullPointer()
+        }
+
+        var configureListener = WaylandXdgSurfaceListener { configure: waylandOnConfigure }
+        let ignoredConfigure = waylandAddXdgSurfaceListener(xdgSurface, move configureListener, nullPointer())
+
+        var toplevelArgs = WaylandOneArg { value: nullPointer() }
+        let toplevel = waylandProxyMarshalOne(
+            xdgSurface,
+            waylandXdgSurfaceGetToplevelOpcode(),
+            waylandXdgToplevelInterface(),
+            waylandProxyGetVersion(xdgSurface),
+            U32(0),
+            move toplevelArgs,
+        )
+        if pointerIsNull(toplevel) {
+            graphicsDiagnostic("Kira Graphics: xdg_surface refused a toplevel")
+            waylandDisplayDisconnect(display)
+            return nullPointer()
+        }
+
+        var titleArgs = WaylandStringArg { value: title }
+        let ignoredTitle = waylandProxyMarshalString(
+            toplevel,
+            waylandXdgToplevelSetTitleOpcode(),
+            nullPointer(),
+            waylandProxyGetVersion(toplevel),
+            U32(0),
+            move titleArgs,
+        )
+
+        // A surface's state is only real once committed, and the compositor
+        // answers the first commit with the configure that makes it showable.
+        let ignoredCommit = waylandProxyMarshalArray(
+            surface,
+            waylandSurfaceCommitOpcode(),
+            nullPointer(),
+            waylandProxyGetVersion(surface),
+            U32(0),
+            nullPointer(),
+        )
+        let ignoredSettle = waylandDisplayRoundtrip(display)
+
+        return surface
     }
 
-    // The rest of the contract answers for a window that does not exist yet.
-    // Each is what it will be once `open` hands back a surface, and none of them
-    // is reached before then: the application layer stops at a null handle.
+    // A Wayland surface is told its size by the compositor rather than asked,
+    // and the size it was told arrives in a configure. Until the pump is ported
+    // and those events are read, the size the caller asked for is the size it
+    // gets -- which is what the compositor was asked for too.
     function clientWidth(window: RawPtr) -> Int { return 0 }
     function clientHeight(window: RawPtr) -> Int { return 0 }
 
-    // Wayland has no scale on a window: a surface learns its scale from the
-    // output it is shown on, through an event. Until the surface exists there is
-    // no output to have heard from, and 1.0 is what an unscaled surface reads.
+    // A surface learns its scale from the output it is shown on, through an
+    // event. 1.0 is what an unscaled surface reads.
     function scale(window: RawPtr) -> Float { return 1.0 }
 
-    // A Wayland surface is not resized by its client: the compositor sends a
-    // configure with a size and the client acknowledges it. This becomes that
-    // acknowledgement rather than a request.
+    // A client does not resize its own surface: it acknowledges a configure and
+    // draws at the size that carried. This becomes that acknowledgement.
     function resize(window: RawPtr, width: Int, height: Int) {
         return
     }
 
     function close(window: RawPtr) {
+        waylandProxyDestroy(window)
         return
     }
 }

@@ -292,6 +292,21 @@ double kg_monotonic_seconds(void) {
 
 #if defined(SOKOL_GLCORE)
 
+// `GL_APIENTRY` is the GLES/EGL spelling of the calling-convention marker. The
+// desktop headers spell it `APIENTRY` -- Windows needs one because GL is
+// `__stdcall` there, and the free desktops define it empty -- so on a desktop
+// GL build the GLES name is simply absent, and a typedef using it parses as a
+// declaration of an unknown type rather than as a function pointer.
+#ifndef GL_APIENTRY
+#if defined(APIENTRY)
+#define GL_APIENTRY APIENTRY
+#elif defined(GLAPIENTRY)
+#define GL_APIENTRY GLAPIENTRY
+#else
+#define GL_APIENTRY
+#endif
+#endif
+
 typedef void (GL_APIENTRY *KG_PFN_GEN_QUERIES)(GLsizei, GLuint*);
 typedef void (GL_APIENTRY *KG_PFN_QUERY_COUNTER)(GLuint, GLenum);
 typedef void (GL_APIENTRY *KG_PFN_GET_QUERY_OBJECT_UIV)(GLuint, GLenum, GLuint*);
