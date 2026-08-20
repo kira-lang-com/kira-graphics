@@ -316,3 +316,21 @@ function waylandAddShellListener(proxy: RawPtr, listener: WaylandShellListenerPt
 
 @FFI.Extern { library: waylandprotocols; symbol: wl_proxy_add_listener; abi: c; }
 function waylandAddXdgSurfaceListener(proxy: RawPtr, listener: WaylandXdgSurfaceListenerPtr, data: RawPtr) -> I32;
+
+// --- Decorations -------------------------------------------------------------
+//
+// A Wayland surface arrives undecorated. Whether the compositor draws the frame
+// or the client does is negotiated through xdg-decoration, and GNOME draws it --
+// so a window that never asks gets no titlebar, which is a window a person
+// cannot drag, and no identity for a shell extension to match on.
+
+@FFI.Address { library: waylandprotocols; symbol: zxdg_decoration_manager_v1_interface; }
+function waylandDecorationManagerInterface() -> RawPtr;
+
+@FFI.Address { library: waylandprotocols; symbol: zxdg_toplevel_decoration_v1_interface; }
+function waylandToplevelDecorationInterface() -> RawPtr;
+
+function waylandDecorationGetToplevelOpcode() -> U32 { return U32(1) }
+function waylandDecorationSetModeOpcode() -> U32 { return U32(1) }
+function waylandDecorationServerSide() -> U64 { return U64(2) }
+function waylandXdgToplevelSetAppIdOpcode() -> U32 { return U32(3) }

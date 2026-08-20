@@ -68,6 +68,19 @@ function waylandOnShellGlobal(data: RawPtr, registry: RawPtr, name: U32, interfa
     return
 }
 
+// The decoration manager, on a registry of its own for the same reason the other
+// two have theirs: one user-data word per proxy, and a handler that reports by
+// setting it.
+function waylandOnDecorationGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
+    if waylandNameEquals(interface, "zxdg_decoration_manager_v1") == I32(0) {
+        waylandProxySetUserData(
+            registry,
+            waylandBind(registry, name, waylandDecorationManagerInterface(), U32(1)),
+        )
+    }
+    return
+}
+
 // A global going away matters to a client holding one. This window binds only
 // the compositor and the shell, and neither leaves while a window is open.
 function waylandOnGlobalRemove(data: RawPtr, registry: RawPtr, name: U32) {
@@ -131,6 +144,22 @@ DawnWindow DawnWindowWayland {
         }
         let ignoredShellListener =
             waylandAddRegistryListener(shellRegistry, move shellRegistryListener, nullPointer())
+
+        var decorationRegistryArgs = WaylandOneArg { value: nullPointer() }
+        let decorationRegistry = waylandProxyMarshalOne(
+            display,
+            waylandDisplayGetRegistryOpcode(),
+            waylandRegistryInterface(),
+            waylandProxyGetVersion(display),
+            U32(0),
+            move decorationRegistryArgs,
+        )
+        var decorationRegistryListener = WaylandRegistryListener {
+            global: waylandOnDecorationGlobal
+            globalRemove: waylandOnGlobalRemove
+        }
+        let ignoredDecorationListener =
+            waylandAddRegistryListener(decorationRegistry, move decorationRegistryListener, nullPointer())
 
         // Everything the compositor offers arrives as events, so nothing is
         // bound until they have all been delivered.
@@ -200,6 +229,47 @@ DawnWindow DawnWindowWayland {
             graphicsDiagnostic("Kira Graphics: xdg_surface refused a toplevel")
             waylandDisplayDisconnect(display)
             return nullPointer()
+        }
+
+        // Identity. A window with no app id is a window a shell has nothing to
+        // match on -- no icon, no grouping, and nothing for an extension that
+        // styles windows by who they belong to.
+        var appIdArgs = WaylandStringArg { value: "dev.kira.HarmonyBrowser" }
+        let ignoredAppId = waylandProxyMarshalString(
+            toplevel,
+            waylandXdgToplevelSetAppIdOpcode(),
+            nullPointer(),
+            waylandProxyGetVersion(toplevel),
+            U32(0),
+            move appIdArgs,
+        )
+
+        // Decorations. Undecorated is the default, and undecorated on a desktop
+        // that draws frames server-side is a window with no titlebar -- which is
+        // a window that cannot be dragged, resized by its edges, or closed by
+        // anything but the application itself.
+        let decorationManager = waylandProxyGetUserData(decorationRegistry)
+        if pointerIsNull(decorationManager) == false {
+            var decorationArgs = WaylandTwoArgs { first: nullPointer() second: toplevel }
+            let decoration = waylandProxyMarshalTwo(
+                decorationManager,
+                waylandDecorationGetToplevelOpcode(),
+                waylandToplevelDecorationInterface(),
+                waylandProxyGetVersion(decorationManager),
+                U32(0),
+                move decorationArgs,
+            )
+            if pointerIsNull(decoration) == false {
+                var modeArgs = WaylandUintArg { value: waylandDecorationServerSide() }
+                let ignoredMode = waylandProxyMarshalUint(
+                    decoration,
+                    waylandDecorationSetModeOpcode(),
+                    nullPointer(),
+                    waylandProxyGetVersion(decoration),
+                    U32(0),
+                    move modeArgs,
+                )
+            }
         }
 
         var titleArgs = WaylandStringArg { value: title }
