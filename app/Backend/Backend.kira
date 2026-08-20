@@ -115,8 +115,9 @@ function validateRenderBackend(backend: RenderBackendKind, platform: Platform) -
 // Windows, Vulkan on Linux, Metal on Apple — so nothing about WebGPU limits it
 // to one host. What limits this backend is its WINDOW: it opens one against
 // `user32`, because Dawn draws and does not own a window, and that is the whole
-// of what is Windows-only here. A second platform is a second window
-// implementation beside `DawnWindow.kira` and nothing else.
+// of what was Windows-only here. The second platform is `DawnWindowWayland`,
+// beside `DawnWindow.kira`, and the platform list in `DawnPlatform.kira` is
+// what demands one per platform it names.
 @Native
 function validateDawnBackend(platform: Platform) -> RenderBackendSelection {
     if platform == .Windows {
@@ -129,7 +130,17 @@ function validateDawnBackend(platform: Platform) -> RenderBackendSelection {
             reason: ""
         }
     }
-    return unsupportedBackend(.Dawn, move platform, "Kira Graphics Dawn backend opens its window through Win32 and is only supported on Windows")
+    if platform == .Linux {
+        return RenderBackendSelection {
+            backend: .Dawn
+            platform: platform
+            supported: true
+            loaderName: "dawn"
+            requiredSymbolCount: 0
+            reason: ""
+        }
+    }
+    return unsupportedBackend(.Dawn, move platform, "Kira Graphics Dawn backend opens its window through Win32 on Windows and xdg-shell on Linux, and has no window on this platform")
 }
 
 

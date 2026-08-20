@@ -65,3 +65,17 @@ function dawnWindowFor(platform: borrow DawnPlatform) -> Any DawnWindow {
         Linux -> return DawnWindowWayland();
     }
 }
+
+// The host, narrowed to the platforms a Dawn window exists for.
+//
+// The narrowing is the one partial step, and it is partial only in principle:
+// `validateDawnBackend` refuses every platform this cannot name before a
+// backend is chosen, so a host that reaches here is one of these two. A host
+// that somehow did not would try to open a Win32 window and fail saying so,
+// which is the same answer by a longer road.
+function dawnPlatformForHost() -> DawnPlatform {
+    if hostPlatform() == .Linux {
+        return DawnPlatform.Linux
+    }
+    return DawnPlatform.Windows
+}

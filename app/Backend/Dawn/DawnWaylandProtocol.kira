@@ -96,3 +96,213 @@ function waylandXdgToplevelInterface() -> RawPtr;
 function waylandDisplayGetRegistryOpcode() -> U32 { return U32(1) }
 function waylandRegistryBindOpcode() -> U32 { return U32(0) }
 function waylandCompositorCreateSurfaceOpcode() -> U32 { return U32(0) }
+
+// --- Argument arrays ---------------------------------------------------------
+//
+// `union wl_argument` is one machine word per argument: an `int`, a `uint`, a
+// pointer to a string, an object, or a new-id placeholder, all in the space of
+// the widest. So an argument list is a block of words, and a request builds the
+// one its opcode's signature calls for.
+
+@FFI.Struct { layout: c; }
+struct WaylandBindArgs {
+    var name: U64
+    var interfaceName: CString
+    var version: U64
+    var newId: RawPtr
+}
+
+@FFI.Struct { layout: c; }
+struct WaylandOneArg {
+    var value: RawPtr
+}
+
+@FFI.Pointer { target: WaylandBindArgs; ownership: borrowed; }
+struct WaylandBindArgsPtr {}
+
+@FFI.Pointer { target: WaylandOneArg; ownership: borrowed; }
+struct WaylandOneArgPtr {}
+
+// `struct wl_interface`. Only the first field is read here: a bind request has
+// to send the interface's NAME as a string, beside the descriptor it also
+// carries, and the descriptor is the only place that name exists.
+@FFI.Struct { layout: c; }
+struct WaylandInterface {
+    var name: CString
+    var version: I32
+    var methodCount: I32
+    var methods: RawPtr
+    var eventCount: I32
+    var events: RawPtr
+}
+
+@FFI.Pointer { target: WaylandInterface; ownership: borrowed; }
+struct WaylandInterfacePtr {}
+
+// --- Remaining opcodes -------------------------------------------------------
+
+function waylandCompositorCreateSurface() -> U32 { return U32(0) }
+function waylandSurfaceCommitOpcode() -> U32 { return U32(6) }
+function waylandXdgGetSurfaceOpcode() -> U32 { return U32(2) }
+function waylandXdgPongOpcode() -> U32 { return U32(3) }
+function waylandXdgSurfaceGetToplevelOpcode() -> U32 { return U32(1) }
+function waylandXdgSurfaceAckConfigureOpcode() -> U32 { return U32(4) }
+function waylandXdgToplevelSetTitleOpcode() -> U32 { return U32(2) }
+
+// --- Registry ----------------------------------------------------------------
+//
+// A client learns what the compositor offers through events, and an event
+// handler needs somewhere to put what it learned. Kira has no globals, so that
+// somewhere is the `data` pointer `wl_proxy_add_listener` carries: a block the
+// caller owns, which the handlers below write the bound proxies into.
+
+@FFI.Callback { abi: c; params: [RawPtr, RawPtr, U32, RawPtr, U32]; result: Void; }
+struct WaylandGlobalHandler {}
+
+@FFI.Callback { abi: c; params: [RawPtr, RawPtr, U32]; result: Void; }
+struct WaylandGlobalRemoveHandler {}
+
+@FFI.Struct { layout: c; }
+struct WaylandRegistryListener {
+    var global: WaylandGlobalHandler
+    var globalRemove: WaylandGlobalRemoveHandler
+}
+
+// `strcmp`. A registry event names its interface as a string and the descriptor
+// carries the same name, so binding one is a string comparison -- there is no
+// identity to compare, the event's bytes being the compositor's copy.
+@FFI.Extern { library: waylandprotocols; symbol: strcmp; abi: c; }
+function waylandNameEquals(a: RawPtr, b: CString) -> I32;
+
+// Every proxy carries one user-data word, and that word is how a handler
+// reports what it bound.
+//
+// A Kira value cannot be written THROUGH an `@FFI.Pointer`: that family is how a
+// C-layout struct C filled is read back, and a handler writing into a block of
+// its own would be writing the other way. The word below is C's own storage on
+// C's own object, so setting it is a call rather than a store, and one call is
+// all a handler needs to make.
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_set_user_data; abi: c; }
+function waylandProxySetUserData(proxy: RawPtr, data: RawPtr);
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_get_user_data; abi: c; }
+function waylandProxyGetUserData(proxy: RawPtr) -> RawPtr;
+
+// `wl_proxy_marshal_array_flags` again, for an argument block of a given shape.
+// The symbol is one function; these are the shapes this client sends it, and a
+// second declaration of one symbol is a second call site rather than a clash.
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_marshal_array_flags; abi: c; }
+function waylandProxyMarshalBind(
+    proxy: RawPtr,
+    opcode: U32,
+    interface: RawPtr,
+    version: U32,
+    flags: U32,
+    args: WaylandBindArgsPtr,
+) -> RawPtr;
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_marshal_array_flags; abi: c; }
+function waylandProxyMarshalOne(
+    proxy: RawPtr,
+    opcode: U32,
+    interface: RawPtr,
+    version: U32,
+    flags: U32,
+    args: WaylandOneArgPtr,
+) -> RawPtr;
+
+// One `wl_registry.bind`, spelled out because the entry point that would do it
+// is `static inline` in a header.
+function waylandBind(registry: RawPtr, name: U32, interface: RawPtr, version: U32) -> RawPtr {
+    let descriptor: WaylandInterfacePtr = interface
+    var args = WaylandBindArgs {
+        name: U64(name)
+        interfaceName: descriptor.name
+        version: U64(version)
+        newId: nullPointer()
+    }
+    return waylandProxyMarshalBind(
+        registry,
+        waylandRegistryBindOpcode(),
+        interface,
+        version,
+        U32(0),
+        move args,
+    )
+}
+
+// --- The remaining argument shapes -------------------------------------------
+
+@FFI.Struct { layout: c; }
+struct WaylandTwoArgs {
+    var first: RawPtr
+    var second: RawPtr
+}
+
+@FFI.Struct { layout: c; }
+struct WaylandStringArg {
+    var value: CString
+}
+
+@FFI.Struct { layout: c; }
+struct WaylandUintArg {
+    var value: U64
+}
+
+@FFI.Pointer { target: WaylandTwoArgs; ownership: borrowed; }
+struct WaylandTwoArgsPtr {}
+
+@FFI.Pointer { target: WaylandStringArg; ownership: borrowed; }
+struct WaylandStringArgPtr {}
+
+@FFI.Pointer { target: WaylandUintArg; ownership: borrowed; }
+struct WaylandUintArgPtr {}
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_marshal_array_flags; abi: c; }
+function waylandProxyMarshalTwo(proxy: RawPtr, opcode: U32, interface: RawPtr, version: U32, flags: U32, args: WaylandTwoArgsPtr) -> RawPtr;
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_marshal_array_flags; abi: c; }
+function waylandProxyMarshalString(proxy: RawPtr, opcode: U32, interface: RawPtr, version: U32, flags: U32, args: WaylandStringArgPtr) -> RawPtr;
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_marshal_array_flags; abi: c; }
+function waylandProxyMarshalUint(proxy: RawPtr, opcode: U32, interface: RawPtr, version: U32, flags: U32, args: WaylandUintArgPtr) -> RawPtr;
+
+// --- Listeners ---------------------------------------------------------------
+
+@FFI.Pointer { target: WaylandRegistryListener; ownership: borrowed; }
+struct WaylandRegistryListenerPtr {}
+
+// `xdg_wm_base` pings, and a client that does not pong is one the compositor is
+// entitled to call unresponsive. It is the only event on that object.
+@FFI.Callback { abi: c; params: [RawPtr, RawPtr, U32]; result: Void; }
+struct WaylandPingHandler {}
+
+@FFI.Struct { layout: c; }
+struct WaylandShellListener {
+    var ping: WaylandPingHandler
+}
+
+@FFI.Pointer { target: WaylandShellListener; ownership: borrowed; }
+struct WaylandShellListenerPtr {}
+
+// `xdg_surface.configure` is the compositor saying the surface may now be
+// drawn, and it is not shown until the serial it carries is acknowledged.
+@FFI.Callback { abi: c; params: [RawPtr, RawPtr, U32]; result: Void; }
+struct WaylandConfigureHandler {}
+
+@FFI.Struct { layout: c; }
+struct WaylandXdgSurfaceListener {
+    var configure: WaylandConfigureHandler
+}
+
+@FFI.Pointer { target: WaylandXdgSurfaceListener; ownership: borrowed; }
+struct WaylandXdgSurfaceListenerPtr {}
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_add_listener; abi: c; }
+function waylandAddRegistryListener(proxy: RawPtr, listener: WaylandRegistryListenerPtr, data: RawPtr) -> I32;
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_add_listener; abi: c; }
+function waylandAddShellListener(proxy: RawPtr, listener: WaylandShellListenerPtr, data: RawPtr) -> I32;
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_add_listener; abi: c; }
+function waylandAddXdgSurfaceListener(proxy: RawPtr, listener: WaylandXdgSurfaceListenerPtr, data: RawPtr) -> I32;
