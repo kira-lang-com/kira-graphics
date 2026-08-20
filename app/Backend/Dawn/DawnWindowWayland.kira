@@ -244,8 +244,39 @@ DawnWindow DawnWindowWayland {
         return
     }
 
+    function createSurface(instance: RawPtr, window: RawPtr) -> RawPtr {
+        return wgpuInstanceCreateSurface(instance, WGPUSurfaceDescriptor {
+            nextInChain: WGPUSurfaceSourceWaylandSurface {
+                chain: WGPUChainedStruct { sType: dawnStructureWaylandSurface() }
+                display: waylandProxyGetDisplay(window)
+                surface: window
+            }
+            label: dawnText("kira-graphics-surface")
+        })
+    }
+
     function close(window: RawPtr) {
         waylandProxyDestroy(window)
         return
     }
+}
+
+// One frame's worth of Wayland events.
+//
+// A Wayland client has no message queue to peek: what it has is a socket, and
+// the events on it are delivered to the listeners already installed on each
+// object. So this flushes what the frame queued and dispatches whatever has
+// arrived, without blocking -- a frame that waited for an event would be a
+// frame that stopped when nothing happened.
+function dawnPumpWayland(window: RawPtr) {
+    if pointerIsNull(window) {
+        return
+    }
+    let display = waylandProxyGetDisplay(window)
+    if pointerIsNull(display) {
+        return
+    }
+    let ignoredFlush = waylandDisplayFlush(display)
+    let ignoredDispatch = waylandDisplayDispatchPending(display)
+    return
 }

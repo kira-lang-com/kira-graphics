@@ -24,6 +24,17 @@ DawnWindow DawnWindowWin32 {
         return
     }
 
+    function createSurface(instance: RawPtr, window: RawPtr) -> RawPtr {
+        return wgpuInstanceCreateSurface(instance, WGPUSurfaceDescriptor {
+            nextInChain: WGPUSurfaceSourceWindowsHWND {
+                chain: WGPUChainedStruct { sType: dawnStructureWindowsHwnd() }
+                hinstance: moduleHandle("")
+                hwnd: window
+            }
+            label: dawnText("kira-graphics-surface")
+        })
+    }
+
     function close(window: RawPtr) {
         destroyWindowHandle(window)
         return

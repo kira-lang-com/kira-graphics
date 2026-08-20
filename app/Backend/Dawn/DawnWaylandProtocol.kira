@@ -171,7 +171,10 @@ struct WaylandRegistryListener {
 // `strcmp`. A registry event names its interface as a string and the descriptor
 // carries the same name, so binding one is a string comparison -- there is no
 // identity to compare, the event's bytes being the compositor's copy.
-@FFI.Extern { library: waylandprotocols; symbol: strcmp; abi: c; }
+// Through the host image rather than a library file: the C library is already
+// loaded in this process, and naming it as a library to load would look for a
+// file called `c`.
+@FFI.Extern { library: kira_runtime; symbol: strcmp; abi: c; }
 function waylandNameEquals(a: RawPtr, b: CString) -> I32;
 
 // Every proxy carries one user-data word, and that word is how a handler
@@ -187,6 +190,13 @@ function waylandProxySetUserData(proxy: RawPtr, data: RawPtr);
 
 @FFI.Extern { library: waylandprotocols; symbol: wl_proxy_get_user_data; abi: c; }
 function waylandProxyGetUserData(proxy: RawPtr) -> RawPtr;
+
+// The connection a proxy belongs to. WebGPU wants both halves of a Wayland
+// surface -- the display and the surface -- and a window that handed back only
+// the surface can still name the display it was made on, so it does not have to
+// carry one.
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_get_display; abi: c; }
+function waylandProxyGetDisplay(proxy: RawPtr) -> RawPtr;
 
 // `wl_proxy_marshal_array_flags` again, for an argument block of a given shape.
 // The symbol is one function; these are the shapes this client sends it, and a

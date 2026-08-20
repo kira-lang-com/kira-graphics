@@ -356,17 +356,9 @@ function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, run
 // Creates the surface for the window this run opened, chaining the HWND source
 // onto the descriptor.
 @Native
-function dawnCreateSurface(state: borrow mut GraphicsAppRuntimeState) -> Bool {
-    state.dawn.surface = wgpuInstanceCreateSurface(state.dawn.instance, WGPUSurfaceDescriptor {
-        nextInChain: WGPUSurfaceSourceWindowsHWND {
-            chain: WGPUChainedStruct {
-                sType: dawnStructureWindowsHwnd()
-            }
-            hinstance: state.dawn.moduleInstance
-            hwnd: state.dawn.window
-        }
-        label: dawnText("kira-graphics-surface")
-    })
+function dawnCreateSurface(state: borrow mut GraphicsAppRuntimeState, width: Int, height: Int) -> Bool {
+    let window = dawnWindowFor(dawnPlatformForHost())
+    state.dawn.surface = window.createSurface(state.dawn.instance, state.dawn.window)
     if pointerIsNull(state.dawn.surface) {
         graphicsDiagnostic("Kira Graphics: Dawn could not create a surface for the window")
         return false
@@ -376,7 +368,19 @@ function dawnCreateSurface(state: borrow mut GraphicsAppRuntimeState) -> Bool {
     // the capability list keeps a pipeline's `Swapchain` colour target and the
     // surface in agreement without a query per pipeline.
     state.dawn.surfaceFormat = dawnFormatBgra8Unorm()
-    return dawnConfigureSurface(state, dawnClientWidth(state.dawn.window), dawnClientHeight(state.dawn.window))
+    // A window that measures itself is asked; one that does not is told. Win32
+    // answers a client rectangle the moment the window exists, and its answer
+    // may differ from what was asked for -- a DPI-aware process is given real
+    // pixels. A Wayland surface has no size until the compositor sends one, so
+    // it starts at the size that was requested and takes the compositor's from
+    // the configure that follows.
+    var configuredWidth = window.clientWidth(state.dawn.window)
+    var configuredHeight = window.clientHeight(state.dawn.window)
+    if configuredWidth <= 0 || configuredHeight <= 0 {
+        configuredWidth = width
+        configuredHeight = height
+    }
+    return dawnConfigureSurface(state, configuredWidth, configuredHeight)
 }
 
 // Sizes the surface to the window's client area. Called at startup and again
@@ -384,8 +388,13 @@ function dawnCreateSurface(state: borrow mut GraphicsAppRuntimeState) -> Bool {
 // answers `Outdated` for every texture after it.
 @Native
 function dawnConfigureSurface(state: borrow mut GraphicsAppRuntimeState, width: Int, height: Int) -> Bool {
+    // A window that does not measure itself reports nothing, which means
+    // "unchanged" rather than "failed". Win32 answers a client rectangle
+    // whenever it is asked; a Wayland surface is told its size by a configure
+    // and has none to report between them. Either way a surface already
+    // configured once stays at the size it was given.
     if width <= 0 || height <= 0 {
-        return false
+        return state.dawn.surfaceWidth > 0 && state.dawn.surfaceHeight > 0
     }
     if state.dawn.surfaceWidth == width && state.dawn.surfaceHeight == height {
         return true

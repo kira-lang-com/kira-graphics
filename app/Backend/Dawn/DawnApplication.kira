@@ -50,7 +50,7 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
     }
     state.dawn.messageBlock = allocateBytes(U64(48))
     state.dawn.surfaceTextureBlock = allocateBytes(U64(24))
-    if !dawnCreateDeviceAndQueue(state, runtimeUserData) || !dawnCreateSurface(state) {
+    if !dawnCreateDeviceAndQueue(state, runtimeUserData) || !dawnCreateSurface(state, app.width, app.height) {
         dawnShutdown(state)
         return
     }
@@ -58,7 +58,13 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
     // resize; see `dawnWindowProcedure`. Attached after the device exists, so a
     // `WM_SIZE` that arrives first finds nothing and falls through rather than
     // driving a frame against a surface that is not there.
-    dawnAttachWindowRuntime(state.dawn.window, runtimeUserData)
+    // Windows only. It hangs the runtime on the window so the window PROCEDURE
+    // can draw while Windows owns the loop during a resize -- a Win32 problem
+    // with a Win32 answer. A Wayland client is never called back into like that:
+    // a configure arrives on its own queue and is read by the pump.
+    if hostPlatform() == .Windows {
+        dawnAttachWindowRuntime(state.dawn.window, runtimeUserData)
+    }
     kiraGraphicsLiveBackendInitialized()
 
     let graphics = Graphics {
@@ -113,7 +119,16 @@ function dawnSweepWindowSize(state: borrow mut GraphicsAppRuntimeState) {
 @Native
 function dawnDriveFrames(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
     while !state.dawn.quitRequested {
-        dawnPumpMessages(state, runtimeUserData)
+        // Draining the platform's queue. The two window systems are least
+        // alike here: Windows hands a client a message queue it peeks, and
+        // Wayland hands it a socket whose events are dispatched to the
+        // listeners already installed on each object.
+        if hostPlatform() == .Windows {
+            dawnPumpMessages(state, runtimeUserData)
+        }
+        if hostPlatform() == .Linux {
+            dawnPumpWayland(state.dawn.window)
+        }
         if state.dawn.quitRequested {
             return
         }
@@ -272,8 +287,8 @@ function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData
 // mid-drag costs more than measuring the rectangle once.
 @Native
 function dawnResizeIfNeeded(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
-    let width = dawnClientWidth(state.dawn.window)
-    let height = dawnClientHeight(state.dawn.window)
+    let width = dawnWindowFor(dawnPlatformForHost()).clientWidth(state.dawn.window)
+    let height = dawnWindowFor(dawnPlatformForHost()).clientHeight(state.dawn.window)
     if width <= 0 || height <= 0 {
         return
     }
@@ -281,7 +296,7 @@ function dawnResizeIfNeeded(state: borrow mut GraphicsAppRuntimeState, runtimeUs
         return
     }
     dawnConfigureSurface(state, width, height)
-    let scale = dawnWindowScale(state.dawn.window)
+    let scale = dawnWindowFor(dawnPlatformForHost()).scale(state.dawn.window)
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     onEvent(AppEvent {
         kind: .Resized
@@ -345,7 +360,7 @@ function dawnPumpMessages(state: borrow mut GraphicsAppRuntimeState, runtimeUser
 @Native
 function dawnDeliverMessage(state: borrow mut GraphicsAppRuntimeState, message: U32, wparam: U64, lparam: Int) {
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
-    let scale = dawnWindowScale(state.dawn.window)
+    let scale = dawnWindowFor(dawnPlatformForHost()).scale(state.dawn.window)
     // A pointer message carries its position in the low and high halves of
     // `lParam`, in CLIENT pixels. Layout and hit-testing are in points, so the
     // backing scale divides out here rather than at every caller.

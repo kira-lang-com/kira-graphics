@@ -95,6 +95,7 @@ function dawnText(text: borrow String) -> WGPUStringView {
 // The `sType` of each chained extension this backend uses.
 function dawnStructureWgsl() -> I32 { return I32(2) }
 function dawnStructureWindowsHwnd() -> I32 { return I32(5) }
+function dawnStructureWaylandSurface() -> I32 { return I32(7) }
 
 // --- callback modes ------------------------------------------------------
 // `AllowProcessEvents`: the callback runs inside `wgpuInstanceProcessEvents`,

@@ -61,6 +61,13 @@ function dawnMonotonicNanoseconds() -> U64 {
 // The counter's current tick and the ticks-per-second beside it.
 @Native
 function dawnPerformanceTicks() -> U64 {
+    // A monotonic clock is a platform call, and this is the one the graphics
+    // library already carries on every target it builds for. Windows keeps its
+    // own counter because the frequency beside it is what the frame budget is
+    // expressed in there.
+    if hostPlatform() != .Windows {
+        return U64(kgMonotonicSeconds() * 1000000.0)
+    }
     let block = allocateBytes(U64(8))
     if pointerIsNull(block) {
         return U64(0)
@@ -75,6 +82,10 @@ function dawnPerformanceTicks() -> U64 {
 
 @Native
 function dawnPerformanceTicksPerSecond() -> U64 {
+    // Microseconds, matching the tick above.
+    if hostPlatform() != .Windows {
+        return U64(1000000)
+    }
     let block = allocateBytes(U64(8))
     if pointerIsNull(block) {
         return U64(1)
