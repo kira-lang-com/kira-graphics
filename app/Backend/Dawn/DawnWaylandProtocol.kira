@@ -1,0 +1,98 @@
+// The Wayland client protocol, as Kira sees it.
+//
+// Everything a Wayland client does goes through `wl_proxy`: a request is a
+// marshalled message on one, and an event is a callback into a listener
+// installed on one. The per-interface entry points a C client calls --
+// `wl_registry_bind`, `xdg_surface_get_toplevel` -- do not exist to link
+// against. `wayland-scanner` emits them as `static inline` wrappers in a header,
+// each one a call to `wl_proxy_marshal_flags` carrying the interface descriptor
+// its object belongs to. So this binds the one real entry point underneath them
+// and builds the requests itself.
+//
+// `wl_proxy_marshal_flags` is variadic, which an exact-width seam cannot state.
+// `wl_proxy_marshal_array_flags` is the same call with its arguments as an
+// array, which is what a variadic C function does with them anyway.
+//
+// The interface descriptors are DATA -- `wl_registry_interface` is an object the
+// library reads on every request, not a function -- so each is `@FFI.Address`.
+
+// --- The connection ----------------------------------------------------------
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_display_connect; abi: c; }
+function waylandDisplayConnect(name: RawPtr) -> RawPtr;
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_display_disconnect; abi: c; }
+function waylandDisplayDisconnect(display: RawPtr);
+
+// Sends everything queued and blocks until the compositor has answered all of
+// it. The handshake needs this: a registry's globals arrive as events, and
+// nothing is bound until they have.
+@FFI.Extern { library: waylandprotocols; symbol: wl_display_roundtrip; abi: c; }
+function waylandDisplayRoundtrip(display: RawPtr) -> I32;
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_display_flush; abi: c; }
+function waylandDisplayFlush(display: RawPtr) -> I32;
+
+// Delivers events already read, without blocking -- the pump's half of a frame.
+@FFI.Extern { library: waylandprotocols; symbol: wl_display_dispatch_pending; abi: c; }
+function waylandDisplayDispatchPending(display: RawPtr) -> I32;
+
+// --- Proxies -----------------------------------------------------------------
+
+// One request on one object. `opcode` indexes the interface's request list,
+// `interface` is what a newly created object will be (null when the request
+// makes none), `version` the version to give it, and `args` the argument array.
+//
+// Returns the new proxy when the request creates one, and null otherwise.
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_marshal_array_flags; abi: c; }
+function waylandProxyMarshalArray(
+    proxy: RawPtr,
+    opcode: U32,
+    interface: RawPtr,
+    version: U32,
+    flags: U32,
+    args: RawPtr,
+) -> RawPtr;
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_add_listener; abi: c; }
+function waylandProxyAddListener(proxy: RawPtr, listener: RawPtr, data: RawPtr) -> I32;
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_destroy; abi: c; }
+function waylandProxyDestroy(proxy: RawPtr);
+
+@FFI.Extern { library: waylandprotocols; symbol: wl_proxy_get_version; abi: c; }
+function waylandProxyGetVersion(proxy: RawPtr) -> U32;
+
+// --- Interface descriptors ---------------------------------------------------
+//
+// Data, not functions. Each is the table the library reads to know what a
+// request on that object means.
+
+@FFI.Address { library: waylandprotocols; symbol: wl_registry_interface; }
+function waylandRegistryInterface() -> RawPtr;
+
+@FFI.Address { library: waylandprotocols; symbol: wl_compositor_interface; }
+function waylandCompositorInterface() -> RawPtr;
+
+@FFI.Address { library: waylandprotocols; symbol: wl_surface_interface; }
+function waylandSurfaceInterface() -> RawPtr;
+
+@FFI.Address { library: waylandprotocols; symbol: xdg_wm_base_interface; }
+function waylandXdgWmBaseInterface() -> RawPtr;
+
+@FFI.Address { library: waylandprotocols; symbol: xdg_surface_interface; }
+function waylandXdgSurfaceInterface() -> RawPtr;
+
+@FFI.Address { library: waylandprotocols; symbol: xdg_toplevel_interface; }
+function waylandXdgToplevelInterface() -> RawPtr;
+
+// --- Opcodes -----------------------------------------------------------------
+//
+// A request's position in its interface's request list, which is what the wire
+// carries. They are spelled here rather than read from the descriptor because
+// the descriptor states the argument signature, not the order -- and the order
+// is protocol, fixed for as long as the interface keeps its name.
+
+function waylandDisplayGetRegistryOpcode() -> U32 { return U32(1) }
+function waylandRegistryBindOpcode() -> U32 { return U32(0) }
+function waylandCompositorCreateSurfaceOpcode() -> U32 { return U32(0) }
