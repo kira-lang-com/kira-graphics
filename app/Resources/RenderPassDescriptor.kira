@@ -96,6 +96,40 @@ function swapchainRenderTarget() -> RenderTarget {
 }
 
 @Native
+// The same pass, drawn into a TEXTURE instead of into the window.
+//
+// This is what a program with no window of its own presents through: a component
+// whose pixels are composited by another process renders into shared memory, and
+// the only difference from drawing into a swapchain is which image the colour
+// attachment names. Everything above it -- the batch, the pipelines, the
+// glyph atlas -- is unchanged, which is the property worth having: a view does
+// not know, and cannot know, whether it is being drawn for a window.
+function clearTextureRenderPass(target: borrow GraphicsTexture, clearColor: borrow Color) -> RenderPassDescriptor {
+    let attachment = ColorAttachment {
+        target: RenderTarget {
+            kind: .Texture
+            texture: target
+            mipLevel: 0
+            arrayLayer: 0
+        }
+        loadAction: .Clear
+        storeAction: .Store
+        clearColor: clearColor
+        resolveTarget: emptyRenderTarget()
+        hasResolveTarget: false
+    }
+    return RenderPassDescriptor {
+        label: "surface-pass"
+        colorAttachments: [attachment]
+        primaryColorAttachment: attachment
+        hasPrimaryColorAttachment: true
+        depthAttachment: emptyDepthAttachment()
+        hasDepthAttachment: false
+        stencilAttachment: emptyStencilAttachment()
+        hasStencilAttachment: false
+    }
+}
+
 function clearSwapchainRenderPass(clearColor: borrow Color) -> RenderPassDescriptor {
     return RenderPassDescriptor {
         label: "swapchain-pass"

@@ -331,10 +331,25 @@ function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, run
     // the feature is requested where it can. A machine whose adapter cannot
     // leaves `hasGpuSeconds` false rather than reporting a zero.
     state.dawn.clock.supported = dawnAdapterTimesFrames(state.dawn.adapter)
-    let features: [I32] = [dawnFeatureTimestampQuery()]
+    // Sharing a texture with another process is the same kind of decision: the
+    // adapter is asked whether it can, and the feature is requested where it
+    // can. A machine whose adapter cannot leaves every shared surface invalid,
+    // and a compositor copies pixels instead of failing to start.
+    let sharesTextures = dawnAdapterSharesTextures(state.dawn.adapter)
+    var features: [I32] = []
+    if state.dawn.clock.supported {
+        features.append(dawnFeatureTimestampQuery())
+    }
+    if sharesTextures {
+        features.append(dawnFeatureSharedTextureMemoryDmaBuf())
+        // And the fence that goes with it: ending access exports one, and a
+        // surface whose access cannot be ended is a surface the other side must
+        // not read.
+        features.append(dawnAdapterFenceFeature(state.dawn.adapter))
+    }
     state.dawn.device = dawnCreateDevice(state.dawn.adapter, DawnDeviceDescriptor {
         label: dawnText("kira-graphics-device")
-        requiredFeatureCount: U64(state.dawn.clock.supported ? 1 : 0)
+        requiredFeatureCount: U64(features.count)
         requiredFeatures: features
         deviceLostCallbackInfo: DawnDeviceLostCallbackInfo {
             mode: dawnCallbackOnProcessEvents()
@@ -349,6 +364,19 @@ function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, run
         return false
     }
     dawnReadGpuTimesKnob(state)
+    // The format the `Swapchain` sentinel resolves to, settled with the DEVICE
+    // rather than with a surface.
+    //
+    // BGRA8 is what every Windows swapchain presents and what Dawn's D3D12
+    // backend reports first in its capabilities, so naming it keeps a pipeline's
+    // `Swapchain` colour target and the surface in agreement without a query per
+    // pipeline. Settling it here rather than in `dawnCreateWindowSurface` is what
+    // makes the sentinel mean anything to a device that has NO surface: a
+    // headless device resolved it to Undefined, which Dawn rejects a colour
+    // target for -- so every offscreen pipeline it built was invalid, and every
+    // draw into a shared texture was dropped at validation with the texture left
+    // holding whatever it held.
+    state.dawn.surfaceFormat = dawnFormatBgra8Unorm()
     state.dawn.queue = wgpuDeviceGetQueue(state.dawn.device)
     return !pointerIsNull(state.dawn.queue)
 }
@@ -363,11 +391,6 @@ function dawnCreateSurface(state: borrow mut GraphicsAppRuntimeState, width: Int
         graphicsDiagnostic("Kira Graphics: Dawn could not create a surface for the window")
         return false
     }
-    // BGRA8 is what every Windows swapchain presents and what Dawn's D3D12
-    // backend reports first in its capabilities. Naming it rather than reading
-    // the capability list keeps a pipeline's `Swapchain` colour target and the
-    // surface in agreement without a query per pipeline.
-    state.dawn.surfaceFormat = dawnFormatBgra8Unorm()
     // A window that measures itself is asked; one that does not is told. Win32
     // answers a client rectangle the moment the window exists, and its answer
     // may differ from what was asked for -- a DPI-aware process is given real
@@ -458,7 +481,13 @@ function dawnShutdown(state: borrow mut GraphicsAppRuntimeState) {
         state.dawn.surfaceTextureBlock = nullPointer()
     }
     if !pointerIsNull(state.dawn.window) {
-        destroyWindowHandle(state.dawn.window)
+        // Through the window family, like every other question the backend asks
+        // a window. Calling `DestroyWindow` here directly was a Win32 call on
+        // the teardown path of every platform: on a free desktop that pointer is
+        // a `wl_surface`, and the symbol is not there to call -- so a run that
+        // had drawn perfectly ended by trapping, and every headless capture
+        // exited non-zero for a window it had already finished with.
+        dawnWindowFor(dawnPlatformForHost()).close(state.dawn.window)
         state.dawn.window = nullPointer()
     }
     return

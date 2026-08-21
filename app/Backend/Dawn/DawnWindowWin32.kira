@@ -35,7 +35,7 @@ DawnWindow DawnWindowWin32 {
         })
     }
 
-    function close(window: RawPtr) {
+    function close(window: RawPtr) -> Void {
         destroyWindowHandle(window)
         return
     }
