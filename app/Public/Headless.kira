@@ -1,0 +1,118 @@
+import Foundation
+
+// A graphics device with no window.
+//
+// Every runner in this library opens a window, because almost everything that
+// draws has one. A COMPONENT of a compositor does not: its pixels belong to
+// another process, it renders into shared textures, and a window of its own
+// would be a second empty window on the desktop beside the one its output is
+// actually shown in.
+//
+// What it needs is smaller than a window, not larger. A device is an instance,
+// an adapter and a queue; a swapchain is the only part of the usual path that
+// needs a surface, and a pass into a TEXTURE never touches one. So this is the
+// ordinary device creation with the windowing left out, rather than a window
+// with a flag that hides it -- there is nothing to hide.
+//
+//     var device = openHeadlessGraphics()
+//     let surface = createSharedSurface(width: 1280, height: 800)
+//     let target = importSharedTexture(device.graphics, surface)
+//     ...
+//     var frame = device.frame()
+//     batch.presentBatchIntoTexture(frame, device.graphics, target.texture, ...)
+//     device.submit()
+//
+// The frame is made and submitted by the caller because a component's pace is
+// its own: a browser draws when a page moves and an assistant draws when a token
+// arrives, and neither is a display refresh.
+struct GraphicsHeadless {
+    var context: RawPtr = nullPointer()
+    var graphics: Graphics = Graphics {
+        userData: nullPointer()
+        backend: RenderBackendKind.Dawn
+        backendContext: nullPointer()
+    }
+    var ready: Bool = false
+
+    // A frame to record passes into. Every pass must target a TEXTURE: there is
+    // no swapchain here, and a pass that asked for one would be asking for the
+    // window this deliberately does not have.
+    function frame() -> RenderFrame {
+        return self.graphics.frame()
+    }
+
+    // Hand everything recorded since the last submit to the queue.
+    function submit() {
+        if self.ready == false {
+            return
+        }
+        var state = nativeRecover<GraphicsAppRuntimeState>(self.context)
+        dawnSubmitEncoder(state)
+        return
+    }
+
+    // Let the device make progress on work already submitted.
+    //
+    // A windowed program gets this for free from its run loop, which processes
+    // events every time it presents. A component has no run loop, so it says so
+    // itself -- and a component that never did would submit work the device
+    // never got round to reporting on.
+    function tick() {
+        if self.ready == false {
+            return
+        }
+        var state = nativeRecover<GraphicsAppRuntimeState>(self.context)
+        wgpuInstanceProcessEvents(state.dawn.instance)
+        return
+    }
+
+    function close() {
+        if self.ready == false {
+            return
+        }
+        self.ready = false
+        return
+    }
+}
+
+// Open a device with no window.
+//
+// Answers `ready` false where there is no device to be had -- a machine with no
+// GPU, a backend that has no headless path -- rather than trapping, because a
+// component that cannot draw should say so to the shell that started it and
+// exit, not take the desktop's compositor client down with an abort.
+function openHeadlessGraphics() -> GraphicsHeadless {
+    // Dawn only. Sokol's device is created BY its window, so there is no device
+    // to be had without one; a component on that backend falls back to being
+    // told it cannot share.
+    let application = GraphicsApplication {
+        title: "kira-headless"
+        width: 1
+        height: 1
+        sampleCount: 1
+        windowMode: WindowMode.Windowed
+        transparent: false
+        opacity: 1.0
+        backend: RenderBackendKind.Dawn
+    }
+    var runtimeState = nativeState(GraphicsAppRuntimeState {
+        app: application
+        userData: nullPointer()
+        frameIndex: 0
+    })
+    let context = nativeUserData(runtimeState)
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    if dawnCreateDeviceAndQueue(state, context) == false {
+        graphicsDiagnostic("Kira Graphics: no headless device could be created")
+        return GraphicsHeadless {}
+    }
+    return GraphicsHeadless {
+        context: context
+        graphics: Graphics {
+            userData: context
+            backend: RenderBackendKind.Dawn
+            backendContext: context
+        }
+        ready: true
+    }
+}

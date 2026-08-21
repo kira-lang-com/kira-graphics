@@ -325,7 +325,7 @@ DawnWindow DawnWindowWayland {
         })
     }
 
-    function close(window: RawPtr) {
+    function close(window: RawPtr) -> Void {
         waylandProxyDestroy(window)
         return
     }

@@ -7,6 +7,33 @@ Package KiraGraphics {
     let allowThinFfiShim = true
     let nativeLibraries = [
         NativeLibrary {
+            // Memory two processes can both render from and sample.
+            //
+            // Dawn imports shared memory and cannot allocate any, so the buffer
+            // comes from the platform first -- a dmabuf from GBM on Linux, a
+            // DXGI resource on Windows, an IOSurface on macOS -- and is handed
+            // to Dawn on both sides afterwards.
+            //
+            // Nothing it needs is linked. GBM and Dawn are both opened by name
+            // at first use, so a build runs on a machine that has neither and
+            // answers "cannot share" instead of failing to start.
+            name: "kira_shared_surface",
+            linkMode: LinkMode.Static,
+            headers: Headers { entrypoint: "NativeLibs/SharedSurface/kira_shared_surface.h", includeDirs: ["NativeLibs/SharedSurface", "NativeLibs/Dawn/x86_64-linux-gnu/include"] },
+            sources: [
+                "NativeLibs/SharedSurface/kira_shared_surface.c",
+                "NativeLibs/SharedSurface/kira_shared_texture.c"
+            ],
+            autobind: Autobind { module: "sharedsurface", headers: ["NativeLibs/SharedSurface/kira_shared_surface.h"], mode: AutobindMode.AllPublic },
+            nativeTargets: [
+                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["dl"] },
+                NativeTarget { triple: "aarch64-linux-gnu", systemLibs: ["dl"] },
+                NativeTarget { triple: "x86_64-windows-msvc", systemLibs: ["kernel32"] },
+                NativeTarget { triple: "aarch64-macos-none" },
+                NativeTarget { triple: "x86_64-macos-none" }
+            ]
+        },
+        NativeLibrary {
             name: "sokol",
             linkMode: LinkMode.Static,
             headers: Headers { entrypoint: "NativeLibs/Sokol/sokol_bindings.h", includeDirs: ["NativeLibs/Sokol"], defines: ["SOKOL_NO_ENTRY"] },

@@ -46,7 +46,7 @@ construct DawnWindow {
         function clientHeight(window: RawPtr) -> Int
         function scale(window: RawPtr) -> Float
         function resize(window: RawPtr, width: Int, height: Int)
-        function close(window: RawPtr)
+        function close(window: RawPtr) -> Void
         // The WebGPU surface for this window.
         //
         // Dawn draws; it does not own a window, and what it takes is whatever

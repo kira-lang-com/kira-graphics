@@ -1,0 +1,179 @@
+import Foundation
+
+// Memory two processes both draw into and sample.
+//
+// A compositor and the programs whose pixels it shows do not share an address
+// space, so a texture cannot simply be handed over: what crosses is a HANDLE to
+// the memory behind it, and each side makes its own texture over that memory.
+// Both sides run the same three calls -- adopt or create, import, make a texture
+// -- and neither needs to know which of them allocated.
+//
+//     let surface = createSharedSurface(width: 1280, height: 800)
+//     port.emitHandle(service, method, note, surface.handle)      // producer
+//
+//     let surface = adoptSharedSurface(handle: delivery.handle, ...)  // consumer
+//     let texture = importSharedTexture(graphics, surface)
+//
+// The handle is transferred by the CHANNEL, never described in a message: a
+// number naming GPU memory means nothing in the process that did not allocate
+// it, and a message carrying one would hand the peer a live handle to something
+// else entirely.
+
+// An allocated surface: the memory, and what a peer needs to describe it.
+//
+// The layout travels beside the handle because an importer cannot infer it: a
+// driver pads rows to its own alignment, and a modifier says how the bytes are
+// arranged. Both are reported so a peer imports what was actually allocated
+// rather than what it assumed.
+struct SharedSurface {
+    var id: Int = 0
+    // What the channel transfers. Owned by this surface: transferring it
+    // duplicates it, and releasing this one is what frees this side's.
+    var handle: Int = 0
+    var width: Int = 0
+    var height: Int = 0
+    var stride: Int = 0
+    var modifier: Int = 0
+
+    function isValid() -> Bool {
+        return id > 0
+    }
+
+    function release() {
+        if id > 0 {
+            kira_shared_surface_destroy(I32(id))
+        }
+        return
+    }
+}
+
+// Whether this machine can share a surface at all.
+//
+// Asked once. A machine with no render node, a driver with no export support, a
+// container with no `/dev/dri`: all of them answer false, and a caller copies
+// pixels instead rather than failing to start. Zero-copy is an optimisation over
+// copying, not a requirement to run.
+function sharedSurfacesAvailable() -> Bool {
+    return kira_shared_surface_supported() != I32(0)
+}
+
+// Why sharing is unavailable, when it is. For a person.
+function sharedSurfaceDiagnostic() -> String {
+    return kira_shared_surface_diagnostic()
+}
+
+// Allocate a surface to render into and hand to a peer.
+function createSharedSurface(width: Int, height: Int) -> SharedSurface {
+    let id = Int(kira_shared_surface_create(I32(width), I32(height)))
+    if id == 0 {
+        return SharedSurface {}
+    }
+    return sharedSurfaceAt(id)
+}
+
+// Take up a surface a peer allocated, as its handle arrived over a channel.
+function adoptSharedSurface(handle: Int, width: Int, height: Int, stride: Int, modifier: Int) -> SharedSurface {
+    let id = Int(kira_shared_surface_adopt(handle, I32(width), I32(height), I32(stride), modifier))
+    if id == 0 {
+        return SharedSurface {}
+    }
+    return sharedSurfaceAt(id)
+}
+
+// Read a surface's description back out of the seam, so the two sides of it
+// cannot disagree about what was allocated.
+function sharedSurfaceAt(id: Int) -> SharedSurface {
+    return SharedSurface {
+        id: id
+        handle: kira_shared_surface_handle(I32(id))
+        width: Int(kira_shared_surface_width(I32(id)))
+        height: Int(kira_shared_surface_height(I32(id)))
+        stride: Int(kira_shared_surface_stride(I32(id)))
+        modifier: kira_shared_surface_modifier(I32(id))
+    }
+}
+
+// Make a texture over a surface, on whichever side of the channel holds it.
+//
+// The producer and the consumer call this identically. A backend that does not
+// share answers an invalid texture rather than refusing to run, and the caller
+// falls back to copying the pixels -- which is slower and correct, and is what
+// a machine with no render node gets.
+function importSharedTexture(graphics: borrow Graphics, surface: borrow SharedSurface) -> SharedTexture {
+    if graphics.backend != RenderBackendKind.Dawn {
+        return SharedTexture {}
+    }
+    return dawnImportSharedTexture(graphics.backendContext, surface)
+}
+
+// The same, from inside a frame.
+//
+// A producer imports while it is drawing, because that is when it has a device:
+// a component renders into its surface on the frame hook, and the hook is handed
+// a frame rather than a `Graphics`.
+function importSharedTextureDuringFrame(frame: borrow mut RenderFrame, surface: borrow SharedSurface) -> SharedTexture {
+    if frame.backend != RenderBackendKind.Dawn {
+        return SharedTexture {}
+    }
+    return dawnImportSharedTexture(frame.backendContext, surface)
+}
+
+// A texture over a shared surface, and the memory it was made from.
+//
+// The memory is kept beside the texture because ACCESS is begun and ended on the
+// memory while drawing happens through the texture: shared memory is not shared
+// synchronisation, and a frame that skipped the bracket would let a compositor
+// sample halfway through a producer's paint.
+struct SharedTexture {
+    var texture: GraphicsTexture = emptyGraphicsTexture()
+    var memory: RawPtr = nullPointer()
+    // The device's own texture object, kept beside the id the rest of the
+    // graphics layer uses it by. Access is begun and ended on the OBJECT, and
+    // an id is a table index rather than something the device understands.
+    var object: RawPtr = nullPointer()
+    var surface: SharedSurface = SharedSurface {}
+
+    function isValid() -> Bool {
+        return self.texture.id != U32(0)
+    }
+
+    // Take the surface to draw into, discarding what it held.
+    //
+    // The producer's end of the bracket: every pixel is about to be replaced, so
+    // preserving the old contents would be a transition performed for pixels
+    // nobody will read.
+    function beginWrite() -> Bool {
+        return kira_shared_texture_begin(self.memory, self.object, I32(0)) != I32(0)
+    }
+
+    // Take the surface to READ, keeping what the other side left in it.
+    //
+    // The consumer's end, and the distinction matters more than it looks:
+    // beginning as a writer does not fail, it simply discards the frame this
+    // process came to composite and hands back whatever the memory held.
+    function beginRead() -> Bool {
+        return kira_shared_texture_begin(self.memory, self.object, I32(1)) != I32(0)
+    }
+
+    function endAccess() -> Bool {
+        return kira_shared_texture_end(self.memory, self.object) != I32(0)
+    }
+
+    // Let go of everything this side holds: the device's texture, the memory it
+    // stands over, and this process's handle to the surface underneath.
+    //
+    // Called when a surface is REPLACED rather than at shutdown. A component
+    // whose window changed shape allocates a new surface at the new size, and
+    // the one it was using is a GPU allocation the size of a whole region that
+    // nothing will sample again -- so leaking one per resize leaks as fast as
+    // somebody can drag a window edge.
+    function release() {
+        kira_shared_texture_release(self.memory, self.object)
+        self.memory = nullPointer()
+        self.object = nullPointer()
+        self.texture = emptyGraphicsTexture()
+        self.surface.release()
+        self.surface = SharedSurface {}
+        return
+    }
+}
