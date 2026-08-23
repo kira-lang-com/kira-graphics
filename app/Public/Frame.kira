@@ -216,6 +216,17 @@ class GraphicsFrame {
         return
     }
 
+    // Opt-in Metal readback for a texture produced earlier in this logical frame.
+    // The backend submits the complete command buffer before reading, so a caller
+    // can request a scene target after the swapchain pass and compare both outputs
+    // from the same frame. Other backends deliberately do nothing.
+    function dumpTextureIfRequested(textureId: Int, width: Int, height: Int) {
+        if self.backend == .Metal {
+            metalContextImageDumpTextureIfRequested(self.metalContext, textureId, width, height)
+        }
+        return
+    }
+
     function readStorageU32(bufferId: Int, index: Int) -> U32 {
         if self.backend == .Metal {
             return metalReadStorageBufferU32(self.metalContext, bufferId, index)

@@ -268,3 +268,72 @@ function metalContextImageDump(ctx: RawPtr, width: Int, height: Int, path: RawPt
     metalMemFree(region)
     return
 }
+
+// Opt-in readback of an arbitrary RGBA8 texture registered in the Metal table.
+// The caller invokes this after the final render pass, so submit the whole logical
+// frame first: the scene target and the swapchain image then belong to one capture.
+// The environment value is the raw BGRA8 destination path, matching the swapchain
+// dump format; callers can convert it to PPM without any renderer-side resampling.
+@Native
+function metalContextImageDumpTextureIfRequested(ctx: RawPtr, textureId: Int, width: Int, height: Int) {
+    let path = metalGetEnv("KIRA_METAL_GLASS_SCENE_DUMP")
+    if metalPtrIsNull(path) || textureId <= 0 || width <= 0 || height <= 0 {
+        return
+    }
+    let debug = !metalPtrIsNull(metalGetEnv("KIRA_GLASS_DEBUG"))
+    if debug { print(848484); print(1) }
+    metalContextSubmitActiveFrame(ctx)
+    if debug { print(848484); print(2) }
+    let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
+    if !metalPtrIsNull(pending) {
+        metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+    }
+    if debug { print(848484); print(3) }
+    let texture = metalLookup(ctx, textureId)
+    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
+    if metalPtrIsNull(texture) || metalPtrIsNull(queue) {
+        return
+    }
+    if debug { print(848484); print(4) }
+    let cpuCmd = metalMsgSend(queue, metalSel("commandBuffer"))
+    let blit = metalMsgSend(cpuCmd, metalSel("blitCommandEncoder"))
+    metalMsgSendVoidP(blit, metalSel("optimizeContentsForCPUAccess:"), texture)
+    metalMsgSendVoid(blit, metalSel("endEncoding"))
+    metalMsgSendVoid(cpuCmd, metalSel("commit"))
+    metalMsgSendVoid(cpuCmd, metalSel("waitUntilCompleted"))
+    if debug { print(848484); print(5) }
+
+    let bytesPerRow = width * 4
+    let total = width * height * 4
+    // The scene target is private GPU storage. Reading it with MTLTexture's
+    // getBytes: faults on Apple GPUs once the render target has been tiled or
+    // compressed, so copy it through a shared MTLBuffer with the blit encoder.
+    let device = metalMemReadPtr(ctx, metalOffsetDevice())
+    let buf = metalMsgSendNewBufferLength(device, metalSel("newBufferWithLength:options:"), U64(total), 0)
+    let origin = metalMemAlloc(24)
+    metalMemWriteU64(origin, 0, 0)
+    metalMemWriteU64(origin, 8, 0)
+    metalMemWriteU64(origin, 16, 0)
+    let size = metalMemAlloc(24)
+    metalMemWriteU64(size, 0, U64(width))
+    metalMemWriteU64(size, 8, U64(height))
+    metalMemWriteU64(size, 16, 1)
+    let copyCmd = metalMsgSend(queue, metalSel("commandBuffer"))
+    let copyBlit = metalMsgSend(copyCmd, metalSel("blitCommandEncoder"))
+    metalMsgSendCopyTextureToBuffer(copyBlit, metalSel("copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toBuffer:destinationOffset:destinationBytesPerRow:destinationBytesPerImage:"), texture, 0, 0, origin, size, buf, 0, U64(bytesPerRow), U64(total))
+    metalMsgSendVoid(copyBlit, metalSel("endEncoding"))
+    metalMsgSendVoid(copyCmd, metalSel("commit"))
+    metalMsgSendVoid(copyCmd, metalSel("waitUntilCompleted"))
+    if debug { print(848484); print(6) }
+    let contents = metalMsgSend(buf, metalSel("contents"))
+    let stream = metalFOpen(path, "wb")
+    if !metalPtrIsNull(stream) {
+        let written = metalFWrite(contents, 1, U64(total), stream)
+        let ignored = written + 0
+        metalFClose(stream)
+    }
+    metalMsgSendVoid(buf, metalSel("release"))
+    metalMemFree(origin)
+    metalMemFree(size)
+    return
+}

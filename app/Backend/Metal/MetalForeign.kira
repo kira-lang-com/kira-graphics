@@ -102,6 +102,13 @@ function metalMsgSendVoidRectB(obj: RawPtr, op: RawPtr, x: F64, y: F64, w: F64, 
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendGetBytes(obj: RawPtr, op: RawPtr, bytes: RawPtr, bytesPerRow: U64, region: RawPtr, mipLevel: U64): Void;
 
+// copyFromTexture:sourceSlice:sourceLevel:sourceOrigin:sourceSize:toBuffer:
+// destinationOffset:destinationBytesPerRow:destinationBytesPerImage: — the
+// MTLOrigin and MTLSize values are each 24-byte structs, so they are passed by
+// reference on arm64.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendCopyTextureToBuffer(obj: RawPtr, op: RawPtr, texture: RawPtr, sourceSlice: U64, sourceLevel: U64, sourceOrigin: RawPtr, sourceSize: RawPtr, buffer: RawPtr, destinationOffset: U64, destinationBytesPerRow: U64, destinationBytesPerImage: U64): Void;
+
 // (CString) -> id  — used for +[NSString stringWithUTF8String:]
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendStr(obj: RawPtr, op: RawPtr, s: CString): RawPtr;
