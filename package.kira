@@ -56,27 +56,26 @@ Package KiraGraphics {
             // The xdg-shell and decoration protocols, as `wayland-scanner`
             // emits them from the canonical XML.
             //
-            // This is not a shim. Core Wayland hands out a `wl_surface`, which
-            // cannot be shown by itself -- a window is xdg-shell, whose client
-            // side is generated rather than shipped in `libwayland-client`.
-            // Every Wayland client links this same generated code, in whatever
-            // language it is written; it is vendored the way `sokol_impl.c` is
-            // beside it, and nobody edits either.
-            //
-            // The interfaces it exports are DATA, reached through `@FFI.Address`:
-            // `xdg_wm_base_interface` and its siblings are objects the library
-            // dereferences on every request, never functions to call.
+            // Core Wayland hands out a `wl_surface`, which cannot be shown by
+            // itself -- a window is xdg-shell. The small typed C seam calls the
+            // protocol's generated inline functions; autobind owns the Kira
+            // declarations, including listener callback layouts.
             //
             // Optional: no other target has a row here, and on one this links
             // nothing rather than failing the build.
             name: "waylandprotocols",
             linkMode: LinkMode.Static,
             availability: Availability.Optional,
-            headers: Headers { entrypoint: "NativeLibs/Wayland/xdg-shell-client-protocol.h", includeDirs: ["NativeLibs/Wayland"] },
+            headers: Headers { entrypoint: "NativeLibs/Wayland/kira_wayland.h", includeDirs: ["NativeLibs/Wayland"] },
             sources: [
+                "NativeLibs/Wayland/kira_wayland.c",
                 "NativeLibs/Wayland/xdg-shell-protocol.c",
-                "NativeLibs/Wayland/xdg-decoration-protocol.c"
+                "NativeLibs/Wayland/xdg-decoration-protocol.c",
+                "NativeLibs/Wayland/cursor-shape-v1-protocol.c",
+                "NativeLibs/Wayland/tablet-unstable-v2-protocol.c",
+                "NativeLibs/Wayland/viewporter-protocol.c"
             ],
+            autobind: Autobind { module: "wayland", headers: ["NativeLibs/Wayland/kira_wayland.h"], mode: AutobindMode.AllPublic },
             nativeTargets: [
                 NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["wayland-client"] }
             ],

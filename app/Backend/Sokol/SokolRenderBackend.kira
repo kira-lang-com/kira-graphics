@@ -332,6 +332,9 @@ RenderBackend SokolRenderBackend(context: RawPtr) {
         return
     }
 
+    function minimizeWindow() -> Void { return }
+    function toggleMaximizeWindow() -> Void { return }
+
     // --- the run loop ----------------------------------------------------
     function runApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Void {
         sokolRunApplication(app, runtimeUserData)

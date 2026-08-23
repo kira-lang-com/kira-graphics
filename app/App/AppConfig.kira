@@ -14,6 +14,20 @@ function graphicsApplicationDefaultCleanup(graphics: Graphics) {
     return
 }
 
+function graphicsApplicationNoWindowDragRegion(x: Float, y: Float) -> Bool {
+    return false
+}
+
+// An undecorated window must never become immovable merely because its content
+// did not supply a titlebar. This is an invisible emergency handle, not rendered
+// chrome; richer UI layers replace it with their real toolbar region. The first
+// four points are also the top resize edge on Wayland, so twelve leaves an
+// eight-point move handle instead of the effectively two-point handle a six-
+// point strip produced.
+function graphicsApplicationFallbackWindowDragRegion(x: Float, y: Float) -> Bool {
+    return x >= 0.0 && y >= 0.0 && y < 12.0
+}
+
 struct GraphicsApplication {
     var title: String = "Kira Graphics"
     var width: Int = 640
@@ -64,6 +78,10 @@ struct GraphicsApplication {
     var frameHandler: (borrow mut RenderFrame) -> Void = graphicsApplicationDefaultFrame
     var eventHandler: (borrow AppEvent) -> Void = graphicsApplicationDefaultEvent
     var cleanupHandler: (Graphics) -> Void = graphicsApplicationDefaultCleanup
+    // Client-side window furniture describes the part of its CONTENT that acts
+    // as a titlebar. Raw graphics apps retain a narrow invisible fallback at the
+    // top so an undecorated window cannot become impossible to move.
+    var windowDragRegion: (Float, Float) -> Bool = graphicsApplicationFallbackWindowDragRegion
 
     function onInit(body: (Graphics) -> Void) {
         self.initHandler = body

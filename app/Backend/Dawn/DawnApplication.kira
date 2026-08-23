@@ -65,6 +65,13 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
     if hostPlatform() == .Windows {
         dawnAttachWindowRuntime(state.dawn.window, runtimeUserData)
     }
+    // The seat. A Wayland surface is shown by the compositor and touched
+    // through a seat, and the two are bound separately -- so this is where the
+    // window stops being a picture. Here rather than in `open` because the
+    // handlers are handed the run state, which `open` does not have.
+    if hostPlatform() == .Linux {
+        dawnWaylandAttachInput(state, runtimeUserData)
+    }
     kiraGraphicsLiveBackendInitialized()
 
     let graphics = Graphics {
@@ -520,10 +527,10 @@ function dawnKeyCode(virtualKey: Int) -> Int {
 // scripts on every backend already use.
 function dawnScriptButton(raw: Int) -> PointerButton {
     if raw == 1 {
-        return PointerButton.Right
+        return .Right
     }
     if raw == 2 {
-        return PointerButton.Middle
+        return .Middle
     }
-    return PointerButton.Left
+    return .Left
 }
