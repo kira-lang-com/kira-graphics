@@ -322,6 +322,9 @@ RenderBackend MetalRenderBackend(context: RawPtr) {
         return
     }
 
+    function minimizeWindow() -> Void { return }
+    function toggleMaximizeWindow() -> Void { return }
+
     // --- the run loop ----------------------------------------------------
     function runApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Void {
         metalRunApplication(app, runtimeUserData)

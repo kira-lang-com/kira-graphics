@@ -107,7 +107,7 @@ function dawnImportSharedTexture(context: RawPtr, surface: borrow SharedSurface)
     // A dmabuf in ARGB8888 arrives as BGRA8, which is what the swapchain is in
     // anyway -- so a shared surface composites through the same pipelines a
     // window's own content does, with no conversion pass between them.
-    let format = dawnResolvedFormat(state, TextureFormat.Swapchain)
+    let format = dawnResolvedFormat(state, .Swapchain)
     let id = dawnRegisterObject(state, object, format)
     return SharedTexture {
         texture: dawnTextureWithViews(
@@ -126,7 +126,7 @@ function dawnImportSharedTexture(context: RawPtr, surface: borrow SharedSurface)
             // exist, which does not fail quietly: it takes down the whole pass
             // that named it, so a window compositing one surface loses every
             // other thing it was drawing too.
-            TextureUsage.RenderTargetSampled
+            .RenderTargetSampled
         )
         memory: memory
         object: object

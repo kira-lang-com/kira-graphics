@@ -29,7 +29,7 @@ struct GraphicsHeadless {
     var context: RawPtr = nullPointer()
     var graphics: Graphics = Graphics {
         userData: nullPointer()
-        backend: RenderBackendKind.Dawn
+        backend: .Dawn
         backendContext: nullPointer()
     }
     var ready: Bool = false
@@ -90,10 +90,10 @@ function openHeadlessGraphics() -> GraphicsHeadless {
         width: 1
         height: 1
         sampleCount: 1
-        windowMode: WindowMode.Windowed
+        windowMode: .Windowed
         transparent: false
         opacity: 1.0
-        backend: RenderBackendKind.Dawn
+        backend: .Dawn
     }
     var runtimeState = nativeState(GraphicsAppRuntimeState {
         app: application
@@ -110,7 +110,7 @@ function openHeadlessGraphics() -> GraphicsHeadless {
         context: context
         graphics: Graphics {
             userData: context
-            backend: RenderBackendKind.Dawn
+            backend: .Dawn
             backendContext: context
         }
         ready: true

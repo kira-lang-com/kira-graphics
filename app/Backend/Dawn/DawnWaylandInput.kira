@@ -1,0 +1,408 @@
+import Foundation
+// Pointer input, on Wayland.
+//
+// A window is not an input device here. The surface the compositor shows and the
+// seat it sends events from are separate objects, and a client that binds only
+// `wl_compositor` and `xdg_wm_base` has asked to be SEEN, not to be touched --
+// which is why this window drew perfectly and answered nothing until the seat
+// below was bound.
+//
+// A seat announces what it has rather than being asked, so a pointer cannot be
+// taken at bind time: `wl_seat.capabilities` arrives, and the handler for it is
+// where a `wl_pointer` first exists.
+//
+// Every handler is a plain C function pointer, which cannot close over anything.
+// What they need is the run state, so the run state's own pointer is what is
+// handed to the listener as its `data` -- the same word the Win32 side hangs on
+// the window. Each handler recovers it INLINE: a recovered value returned
+// through a helper is a copy, and a pointer position written to a copy is a
+// pointer position thrown away.
+
+// A pointer arriving over the surface. Its position, in surface-local
+// coordinates, is carried as `wl_fixed_t` here and on motion -- and nowhere
+// else, a button press having none -- so the last one seen is where a press is.
+function waylandOnPointerEnter(data: RawPtr, pointer: RawPtr, serial: U32, surface: RawPtr, sx: I32, sy: I32) {
+    var state = nativeRecover<GraphicsAppRuntimeState>(data)
+    state.dawn.pointerResizeEdge = U32(0)
+    state.dawn.pointerSurfaceOffsetX = 0.0
+    state.dawn.pointerSurfaceOffsetY = 0.0
+    let x = waylandFixedToFloat(sx)
+    let y = waylandFixedToFloat(sy)
+    state.dawn.pointerX = x
+    state.dawn.pointerY = y
+    state.dawn.hasPointer = true
+    state.dawn.pointerEnterSerial = serial
+    // The cursor over this surface is this client's to draw, and an enter is
+    // the only event carrying the serial that authorises setting it. A client
+    // that skips this is a window the pointer vanishes inside.
+    if pointerIsNull(state.dawn.cursorShapeDevice) == false {
+        kira_wayland_cursor_shape_device_set_shape(
+            state.dawn.cursorShapeDevice,
+            serial,
+            state.dawn.pointerResizeEdge == U32(0) ?
+                kira_wayland_cursor_shape_default() :
+                kira_wayland_cursor_shape_for_resize_edge(state.dawn.pointerResizeEdge),
+        )
+    }
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    onEvent(AppEvent {
+        kind: .PointerEntered
+        pointerX: x
+        pointerY: y
+    })
+    return
+}
+
+function waylandOnPointerLeave(data: RawPtr, pointer: RawPtr, serial: U32, surface: RawPtr) {
+    var state = nativeRecover<GraphicsAppRuntimeState>(data)
+    state.dawn.hasPointer = false
+    state.dawn.pointerResizeEdge = U32(0)
+    state.dawn.pointerSurfaceOffsetX = 0.0
+    state.dawn.pointerSurfaceOffsetY = 0.0
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    onEvent(AppEvent {
+        kind: .PointerExited
+        pointerX: state.dawn.pointerX
+        pointerY: state.dawn.pointerY
+    })
+    return
+}
+
+function waylandOnPointerMotion(data: RawPtr, pointer: RawPtr, time: U32, sx: I32, sy: I32) {
+    var state = nativeRecover<GraphicsAppRuntimeState>(data)
+    let x = waylandFixedToFloat(sx)
+    let y = waylandFixedToFloat(sy)
+    var deltaX = 0.0
+    var deltaY = 0.0
+    if state.dawn.hasPointer {
+        deltaX = x - state.dawn.pointerX
+        deltaY = y - state.dawn.pointerY
+    }
+    state.dawn.pointerX = x
+    state.dawn.pointerY = y
+    state.dawn.hasPointer = true
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    onEvent(AppEvent {
+        kind: .PointerMoved
+        pointerX: x
+        pointerY: y
+        pointerDeltaX: deltaX
+        pointerDeltaY: deltaY
+    })
+    return
+}
+
+// A Linux input event code, not a button index: left is 0x110 and the others
+// follow it.
+function waylandPointerButtonOf(code: U32) -> PointerButton {
+    if code == waylandButtonLeft() {
+        return .Left
+    }
+    if code == waylandButtonRight() {
+        return .Right
+    }
+    if code == waylandButtonMiddle() {
+        return .Middle
+    }
+    return .Other
+}
+
+function waylandResizeEdge(state: borrow GraphicsAppRuntimeState, x: Float, y: Float) -> U32 {
+    if state.dawn.pointerResizeEdge != U32(0) {
+        return state.dawn.pointerResizeEdge
+    }
+    // Keep a slim inside fallback for compositors missing one of the optional
+    // protocols used by the transparent outside frame.
+    let grip = 4.0
+    let width = Float(state.dawn.surfaceWidth)
+    let height = Float(state.dawn.surfaceHeight)
+    let left = x >= 0.0 && x < grip
+    let right = x <= width && x >= width - grip
+    let top = y >= 0.0 && y < grip
+    let bottom = y <= height && y >= height - grip
+    if top && left { return kira_wayland_resize_edge_top_left() }
+    if top && right { return kira_wayland_resize_edge_top_right() }
+    if bottom && left { return kira_wayland_resize_edge_bottom_left() }
+    if bottom && right { return kira_wayland_resize_edge_bottom_right() }
+    if top { return kira_wayland_resize_edge_top() }
+    if bottom { return kira_wayland_resize_edge_bottom() }
+    if left { return kira_wayland_resize_edge_left() }
+    if right { return kira_wayland_resize_edge_right() }
+    return U32(0)
+}
+
+function waylandOnPointerButton(data: RawPtr, pointer: RawPtr, serial: U32, time: U32, button: U32, buttonState: U32) {
+    var state = nativeRecover<GraphicsAppRuntimeState>(data)
+    if button == waylandButtonLeft() && buttonState == waylandButtonPressed() &&
+        pointerIsNull(state.dawn.seat) == false && pointerIsNull(state.dawn.toplevel) == false {
+        let edge = waylandResizeEdge(state, state.dawn.pointerX, state.dawn.pointerY)
+        if edge != U32(0) {
+            kira_wayland_toplevel_resize(state.dawn.toplevel, state.dawn.seat, serial, edge)
+            return
+        }
+        let dragRegion: (Float, Float) -> Bool = state.app.windowDragRegion
+        if dragRegion(state.dawn.pointerX, state.dawn.pointerY) {
+            kira_wayland_toplevel_move(state.dawn.toplevel, state.dawn.seat, serial)
+            return
+        }
+    }
+    var kind: AppEventKind = .PointerUp
+    if buttonState == waylandButtonPressed() {
+        kind = .PointerDown
+    }
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    onEvent(AppEvent {
+        kind: kind
+        pointerButton: waylandPointerButtonOf(button)
+        pointerX: state.dawn.pointerX
+        pointerY: state.dawn.pointerY
+    })
+    return
+}
+
+function waylandOnToplevelConfigure(data: RawPtr, toplevel: RawPtr, width: I32, height: I32, states: RawPtr) {
+    var state = nativeRecover<GraphicsAppRuntimeState>(data)
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    state.dawn.maximized = kira_wayland_toplevel_states_contains(
+        states,
+        kira_wayland_toplevel_state_maximized(),
+    ) != I32(0)
+    let focused = kira_wayland_toplevel_states_contains(
+        states,
+        kira_wayland_toplevel_state_activated(),
+    ) != I32(0)
+    if focused != state.dawn.focused {
+        state.dawn.focused = focused
+        if focused {
+            onEvent(AppEvent { kind: .Focused })
+        } else {
+            onEvent(AppEvent { kind: .Unfocused })
+        }
+    }
+    if width <= I32(0) || height <= I32(0) {
+        return
+    }
+    let nextWidth = Int(width)
+    let nextHeight = Int(height)
+    if nextWidth == state.dawn.surfaceWidth && nextHeight == state.dawn.surfaceHeight {
+        return
+    }
+    dawnConfigureSurface(state, nextWidth, nextHeight)
+    onEvent(AppEvent {
+        kind: .Resized
+        windowWidth: nextWidth
+        windowHeight: nextHeight
+        framebufferWidth: nextWidth
+        framebufferHeight: nextHeight
+    })
+    return
+}
+
+// Client-side titlebar actions. xdg-shell keeps the policy in the compositor:
+// these are requests, and configure events above are the authoritative state.
+function dawnWaylandMinimize(state: borrow GraphicsAppRuntimeState) {
+    if pointerIsNull(state.dawn.toplevel) == false {
+        kira_wayland_toplevel_set_minimized(state.dawn.toplevel)
+    }
+    return
+}
+
+function dawnWaylandToggleMaximize(state: borrow GraphicsAppRuntimeState) {
+    if pointerIsNull(state.dawn.toplevel) {
+        return
+    }
+    if state.dawn.maximized {
+        kira_wayland_toplevel_unset_maximized(state.dawn.toplevel)
+        return
+    }
+    kira_wayland_toplevel_set_maximized(state.dawn.toplevel)
+    return
+}
+
+function waylandOnToplevelClose(data: RawPtr, toplevel: RawPtr) {
+    var state = nativeRecover<GraphicsAppRuntimeState>(data)
+    state.dawn.quitRequested = true
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    onEvent(AppEvent { kind: .QuitRequested })
+    return
+}
+
+function waylandOnToplevelConfigureBounds(data: RawPtr, toplevel: RawPtr, width: I32, height: I32) { return }
+function waylandOnToplevelWmCapabilities(data: RawPtr, toplevel: RawPtr, capabilities: RawPtr) { return }
+
+// A wheel turn, as a distance rather than a count of notches: Wayland reports
+// how far the surface should scroll, and one detent is conventionally ten
+// surface units. The sign is the other way round from Win32 -- positive is
+// downward here and away from the person there -- and everything above this
+// seam is written against the Win32 convention.
+function waylandOnPointerAxis(data: RawPtr, pointer: RawPtr, time: U32, axis: U32, value: I32) {
+    var state = nativeRecover<GraphicsAppRuntimeState>(data)
+    let notches = 0.0 - waylandFixedToFloat(value) / 10.0
+    let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
+    if axis == waylandAxisVertical() {
+        onEvent(AppEvent {
+            kind: .Scroll
+            pointerX: state.dawn.pointerX
+            pointerY: state.dawn.pointerY
+            scrollY: notches
+        })
+        return
+    }
+    onEvent(AppEvent {
+        kind: .Scroll
+        pointerX: state.dawn.pointerX
+        pointerY: state.dawn.pointerY
+        scrollX: notches
+    })
+    return
+}
+
+// The four events a version-5 pointer sends that this client has no use for.
+// They are handled rather than left out because a listener is indexed by the
+// event's opcode: a struct with fewer members than the interface has events is
+// read past the first time one of the missing ones arrives.
+function waylandOnPointerFrame(data: RawPtr, pointer: RawPtr) {
+    return
+}
+
+function waylandOnPointerAxisSource(data: RawPtr, pointer: RawPtr, source: U32) {
+    return
+}
+
+function waylandOnPointerAxisStop(data: RawPtr, pointer: RawPtr, time: U32, axis: U32) {
+    return
+}
+
+function waylandOnPointerAxisDiscrete(data: RawPtr, pointer: RawPtr, axis: U32, discrete: I32) {
+    return
+}
+
+// What the seat has. A pointer appears here and not before: the capability is
+// an event, and asking a seat with no mouse behind it for a `wl_pointer` is a
+// protocol error the compositor disconnects for.
+function waylandOnSeatCapabilities(data: RawPtr, seat: RawPtr, capabilities: U32) {
+    if (capabilities & waylandSeatPointerCapability()) == U32(0) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(data)
+    if pointerIsNull(state.dawn.pointer) == false {
+        return
+    }
+    let pointer = kira_wayland_seat_get_pointer(seat)
+    if pointerIsNull(pointer) {
+        return
+    }
+    state.dawn.pointer = pointer
+    let cursorShapeManager = kira_wayland_display_bind_cursor_shape_manager(
+        kira_wayland_proxy_get_display(seat),
+    )
+    if pointerIsNull(cursorShapeManager) == false {
+        state.dawn.cursorShapeManager = cursorShapeManager
+        state.dawn.cursorShapeDevice =
+            kira_wayland_cursor_shape_manager_get_pointer(cursorShapeManager, pointer)
+    }
+    var listener = kira_wayland_pointer_listener {
+        enter: waylandOnPointerEnter
+        leave: waylandOnPointerLeave
+        motion: waylandOnPointerMotion
+        button: waylandOnPointerButton
+        axis: waylandOnPointerAxis
+        frame: waylandOnPointerFrame
+        axis_source: waylandOnPointerAxisSource
+        axis_stop: waylandOnPointerAxisStop
+        axis_discrete: waylandOnPointerAxisDiscrete
+    }
+    let ignored = kira_wayland_pointer_add_listener(pointer, move listener, data)
+    return
+}
+
+function waylandOnSeatName(data: RawPtr, seat: RawPtr, name: RawPtr) {
+    return
+}
+
+// The seat, out of a registry of its own -- for the same reason the compositor
+// and the shell each have one: a handler reports what it bound by setting the
+// registry's single user-data word, and one word holds one global.
+function waylandOnSeatGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
+    if waylandNameEquals(interface, "wl_seat") != I32(0) {
+        return
+    }
+    // Version 5 is what this client speaks: a compositor offering less is asked
+    // for what it has, and one offering more is not asked for events there is
+    // no handler for.
+    var bindVersion = version
+    if bindVersion > U32(5) {
+        bindVersion = U32(5)
+    }
+    let seat = kira_wayland_registry_bind_seat(registry, name, bindVersion)
+    if pointerIsNull(seat) {
+        return
+    }
+    kira_wayland_proxy_set_user_data(registry, seat)
+    var state = nativeRecover<GraphicsAppRuntimeState>(data)
+    state.dawn.seat = seat
+    var listener = kira_wayland_seat_listener {
+        capabilities: waylandOnSeatCapabilities
+        name: waylandOnSeatName
+    }
+    let ignored = kira_wayland_seat_add_listener(seat, move listener, data)
+    return
+}
+
+// Binds the seat this run's window will be touched through.
+//
+// Called once, after the window exists and the run state is in hand -- the run
+// state being what the handlers are given, and what `open` has no way to pass
+// them.
+@Native
+function dawnWaylandAttachInput(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
+    var current = state
+    if pointerIsNull(current.dawn.window) {
+        return
+    }
+    let display = kira_wayland_proxy_get_display(current.dawn.window)
+    if pointerIsNull(display) {
+        return
+    }
+    let toplevel = kira_wayland_proxy_get_user_data(current.dawn.window)
+    if pointerIsNull(toplevel) {
+        graphicsDiagnostic("Kira Graphics: the Wayland surface has no xdg toplevel role")
+        return
+    }
+    current.dawn.toplevel = toplevel
+    var toplevelListener = kira_wayland_toplevel_listener {
+        configure: waylandOnToplevelConfigure
+        close: waylandOnToplevelClose
+        configure_bounds: waylandOnToplevelConfigureBounds
+        wm_capabilities: waylandOnToplevelWmCapabilities
+    }
+    let ignoredToplevel = kira_wayland_toplevel_add_listener(
+        toplevel,
+        move toplevelListener,
+        runtimeUserData
+    )
+    // The initial empty commit requests the first xdg-shell configure. Install
+    // the role listener first so the compositor-selected size is not lost.
+    kira_wayland_surface_commit(current.dawn.window)
+    let ignoredInitialConfigure = kira_wayland_display_roundtrip(display)
+    let registry = kira_wayland_display_get_registry(display)
+    if pointerIsNull(registry) {
+        graphicsDiagnostic("Kira Graphics: the Wayland display refused a registry for the seat")
+        return
+    }
+    var seatRegistryListener = kira_wayland_registry_listener {
+        global: waylandOnSeatGlobal
+        global_remove: waylandOnGlobalRemove
+    }
+    let ignoredListener = kira_wayland_registry_add_listener(registry, move seatRegistryListener, runtimeUserData)
+    // Two round trips, not one: the first delivers the registry's globals and
+    // binds the seat, the second delivers the seat's own `capabilities` event
+    // -- which is what the pointer is taken in. One round trip returns with a
+    // seat bound and no pointer on it.
+    let ignoredGlobals = kira_wayland_display_roundtrip(display)
+    let ignoredCapabilities = kira_wayland_display_roundtrip(display)
+    if pointerIsNull(current.dawn.pointer) {
+        graphicsDiagnostic("Kira Graphics: this Wayland seat offers no pointer, so the window answers no mouse")
+    }
+    return
+}

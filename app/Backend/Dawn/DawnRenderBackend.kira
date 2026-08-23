@@ -219,6 +219,22 @@ RenderBackend DawnRenderBackend(context: RawPtr) {
         return
     }
 
+    function minimizeWindow() -> Void {
+        if pointerIsNull(context) || hostPlatform() != .Linux {
+            return
+        }
+        dawnWaylandMinimize(nativeRecover<GraphicsAppRuntimeState>(context))
+        return
+    }
+
+    function toggleMaximizeWindow() -> Void {
+        if pointerIsNull(context) || hostPlatform() != .Linux {
+            return
+        }
+        dawnWaylandToggleMaximize(nativeRecover<GraphicsAppRuntimeState>(context))
+        return
+    }
+
     // --- compute ---------------------------------------------------------
     function supportsCompute() -> Bool {
         return true

@@ -83,7 +83,7 @@ function dawnWindowFor(platform: borrow DawnPlatform) -> Any DawnWindow {
 // which is the same answer by a longer road.
 function dawnPlatformForHost() -> DawnPlatform {
     if hostPlatform() == .Linux {
-        return DawnPlatform.Linux
+        return .Linux
     }
-    return DawnPlatform.Windows
+    return .Windows
 }

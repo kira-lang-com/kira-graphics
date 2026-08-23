@@ -38,6 +38,22 @@ struct DawnState {
     var pointerX: Float = 0.0
     var pointerY: Float = 0.0
     var hasPointer: Bool = false
+    // The Wayland seat's pointer, once the seat has said it has one. Null on
+    // Windows, and null on a seat with no mouse behind it. See
+    // `DawnWaylandInput.kira`.
+    var pointer: RawPtr
+    var seat: RawPtr
+    var toplevel: RawPtr
+    var cursorShapeManager: RawPtr
+    var cursorShapeDevice: RawPtr
+    var pointerEnterSerial: U32 = 0
+    var cursorShape: U32 = 0
+    var pointerResizeEdge: U32 = 0
+    var pointerSurfaceOffsetX: Float = 0.0
+    var pointerSurfaceOffsetY: Float = 0.0
+    // Reflected from xdg_toplevel.configure, rather than guessed from the last
+    // request: the compositor owns whether a maximize request is accepted.
+    var maximized: Bool = false
 
     // --- the device ------------------------------------------------------
     var instance: RawPtr
@@ -124,6 +140,11 @@ function dawnEmptyState() -> DawnState {
         window: nullPointer()
         messageBlock: nullPointer()
         surfaceTextureBlock: nullPointer()
+        pointer: nullPointer()
+        seat: nullPointer()
+        toplevel: nullPointer()
+        cursorShapeManager: nullPointer()
+        cursorShapeDevice: nullPointer()
         instance: nullPointer()
         adapter: nullPointer()
         device: nullPointer()

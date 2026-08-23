@@ -87,6 +87,16 @@ class RenderFrame {
         return
     }
 
+    function minimizeWindow() -> Void {
+        self.renderBackend().minimizeWindow()
+        return
+    }
+
+    function toggleMaximizeWindow() -> Void {
+        self.renderBackend().toggleMaximizeWindow()
+        return
+    }
+
     // What the frame BEFORE this one cost. An application lays its HUD out
     // while the frame the HUD will appear in is still being built, so the last
     // completed frame is what there is to report.

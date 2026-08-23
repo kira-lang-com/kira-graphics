@@ -100,7 +100,7 @@ function sharedSurfaceAt(id: Int) -> SharedSurface {
 // falls back to copying the pixels -- which is slower and correct, and is what
 // a machine with no render node gets.
 function importSharedTexture(graphics: borrow Graphics, surface: borrow SharedSurface) -> SharedTexture {
-    if graphics.backend != RenderBackendKind.Dawn {
+    if graphics.backend != .Dawn {
         return SharedTexture {}
     }
     return dawnImportSharedTexture(graphics.backendContext, surface)
@@ -112,7 +112,7 @@ function importSharedTexture(graphics: borrow Graphics, surface: borrow SharedSu
 // a component renders into its surface on the frame hook, and the hook is handed
 // a frame rather than a `Graphics`.
 function importSharedTextureDuringFrame(frame: borrow mut RenderFrame, surface: borrow SharedSurface) -> SharedTexture {
-    if frame.backend != RenderBackendKind.Dawn {
+    if frame.backend != .Dawn {
         return SharedTexture {}
     }
     return dawnImportSharedTexture(frame.backendContext, surface)

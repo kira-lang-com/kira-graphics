@@ -58,6 +58,13 @@ function graphicsDefaultBackend() -> RenderBackendKind {
     return graphicsBackendFromEnvironment(.Sokol)
 }
 
+// KiraUI supplies window furniture only for the undecorated Dawn/Wayland
+// window. Cocoa, Win32 and Sokol keep the controls supplied by their native
+// window implementation.
+function graphicsUsesWaylandClientWindowControls() -> Bool {
+    return hostPlatform() == .Linux && graphicsDefaultBackend() == .Dawn
+}
+
 
 // The renderer a run was asked for, or `fallback` when it was not asked.
 //

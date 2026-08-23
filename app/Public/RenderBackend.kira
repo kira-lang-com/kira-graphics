@@ -147,6 +147,11 @@ construct RenderBackend {
     // reads back the one it actually put on screen.
     @Required function windowMode() -> WindowMode
     @Required function setWindowMode(mode: borrow WindowMode) -> Void
+    // Client-side window furniture uses these on platforms where the
+    // compositor does not provide a titlebar. Backends with native furniture
+    // implement them as no-ops because application UI never exposes them.
+    @Required function minimizeWindow() -> Void
+    @Required function toggleMaximizeWindow() -> Void
 
     // --- compute ---------------------------------------------------------
     // Whether this backend can build and encode a compute pipeline at all.
