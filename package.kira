@@ -111,7 +111,15 @@ Package KiraGraphics {
                 // The Linux slice is one shared object and no loader-name
                 // sidecars: Dawn reaches the GPU through the Vulkan loader,
                 // which the system provides.
-                NativeTarget { triple: "x86_64-linux-gnu", dynamicLib: "NativeLibs/Dawn/x86_64-linux-gnu/lib/libwebgpu_dawn.so", runtimeFiles: ["NativeLibs/Dawn/x86_64-linux-gnu/lib"] }
+                NativeTarget { triple: "x86_64-linux-gnu", dynamicLib: "NativeLibs/Dawn/x86_64-linux-gnu/lib/libwebgpu_dawn.so", runtimeFiles: ["NativeLibs/Dawn/x86_64-linux-gnu/lib"] },
+                // Apple publishes Dawn only as a static archive — no dylib in
+                // either the desktop tarball or the xcframework — so the macOS
+                // slice hands the linker `libwebgpu_dawn.a` directly (ld links
+                // an explicit archive statically, and there is nothing to open
+                // at run time). Dawn's Metal backend pulls in the graphics and
+                // surface frameworks below; the C++ runtime it is built against
+                // comes in through `c++`.
+                NativeTarget { triple: "aarch64-macos-none", dynamicLib: "NativeLibs/Dawn/aarch64-macos-none/lib/libwebgpu_dawn.a", frameworks: ["Metal", "QuartzCore", "Foundation", "IOKit", "IOSurface", "CoreFoundation", "CoreGraphics"], systemLibs: ["c++", "objc"] }
             ],
         },
         NativeLibrary {
