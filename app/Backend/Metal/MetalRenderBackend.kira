@@ -10,7 +10,7 @@ import Foundation
 // is the guarantee the family exists to give: an operation this backend has not
 // implemented does not compile, so it can never be discovered as a missing
 // draw.
-RenderBackend MetalRenderBackend(context: RawPtr) {
+construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
     // --- shaders ---------------------------------------------------------
     function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult {
         return shaderResult(metalCreateGraphicsShader(context, descriptor.vertexSource))

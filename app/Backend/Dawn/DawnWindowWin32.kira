@@ -6,7 +6,7 @@
 // is part of opening a window on this platform and no other platform has the step
 // at all -- a caller that had to know about it would be a caller that knows which
 // window it is holding.
-DawnWindow DawnWindowWin32 {
+construct DawnWindowWin32() extends DawnWindow {
     function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr {
         let instance = moduleHandle("")
         if !dawnRegisterWindowClass(instance, "KiraGraphicsDawnWindow") {

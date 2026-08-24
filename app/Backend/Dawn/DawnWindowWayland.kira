@@ -69,7 +69,7 @@ function waylandOnGlobalRemove(data: RawPtr, registry: RawPtr, name: U32) {
     return
 }
 
-DawnWindow DawnWindowWayland {
+construct DawnWindowWayland() extends DawnWindow {
     function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr {
         let display = kira_wayland_display_connect()
         if pointerIsNull(display) {

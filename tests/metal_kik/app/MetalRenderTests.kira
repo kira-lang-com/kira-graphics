@@ -2,47 +2,47 @@ import Foundation
 import KiraGraphics
 // Metal render Tests. Names use the mtk / Mtk prefix.
 
-Test MtkClearRendersExactColor {
+construct MtkClearRendersExactColor() extends Test {
     test { return metalSelfTestClearOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test MtkTriangleRasterizes {
+construct MtkTriangleRasterizes() extends Test {
     test { return metalSelfTestTriangleOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test MtkIndexedQuadRasterizes {
+construct MtkIndexedQuadRasterizes() extends Test {
     test { return metalSelfTestIndexedOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test MtkUniformDrivesFragmentColor {
+construct MtkUniformDrivesFragmentColor() extends Test {
     test { return metalSelfTestUniformOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test MtkDepthOccludesFarSurface {
+construct MtkDepthOccludesFarSurface() extends Test {
     test { return metalSelfTestDepthOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test MtkTextureSampling {
+construct MtkTextureSampling() extends Test {
     test { return metalSelfTestTextureOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test MtkBindGroupBindsUniform {
+construct MtkBindGroupBindsUniform() extends Test {
     test { return metalSelfTestBindGroupOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test MtkVertexUniformTransform {
+construct MtkVertexUniformTransform() extends Test {
     test { return metalSelfTestVertexUniformOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test MtkDynamicBufferContentsDraw {
+construct MtkDynamicBufferContentsDraw() extends Test {
     test { return metalSelfTestDynamicOk() }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }

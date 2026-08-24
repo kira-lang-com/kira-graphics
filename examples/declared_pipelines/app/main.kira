@@ -8,7 +8,7 @@ import KiraGraphics
 // finds all of them without this file registering anything, which is what makes
 // adding a pipeline a matter of writing one.
 
-Pipeline Glyph {
+construct Glyph() extends Pipeline {
     shader { return KslArtifact(shaderName: "UiGlyph", vertexEntry: "UiGlyph__vertex__main") }
     vertices {
         return VertexStream(stride: 24, attributes: [
@@ -18,13 +18,13 @@ Pipeline Glyph {
     }
 }
 
-Pipeline Glow {
+construct Glow() extends Pipeline {
     shader { return KslArtifact(shaderName: "UiGlow", vertexEntry: "UiGlow__vertex__main") }
     vertices { return VertexStream(stride: 16, attributes: [VertexAttributeSpec(location: 0, format: .Float4, offset: 0)]) }
     blending { return Blending(enabled: true, preset: .Additive) }
 }
 
-Pipeline Scene {
+construct Scene() extends Pipeline {
     shader { return KslArtifact(shaderName: "Scene", vertexEntry: "Scene__vertex__main") }
     vertices { return VertexStream(stride: 32, attributes: [VertexAttributeSpec(location: 0, format: .Float3, offset: 0)]) }
     depth { return DepthTest(enabled: true, writes: true, compare: .LessEqual) }

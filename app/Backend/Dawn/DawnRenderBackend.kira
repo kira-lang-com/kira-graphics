@@ -11,7 +11,7 @@ import Foundation
 // the member says in its own body what it does instead. Nothing answers "this
 // backend cannot" — a capability a backend lacks is `KSEM234` at build time in
 // this family, not a `Result` a caller branches on.
-RenderBackend DawnRenderBackend(context: RawPtr) {
+construct DawnRenderBackend(context: RawPtr) extends RenderBackend {
     // --- shaders ---------------------------------------------------------
     function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult {
         return dawnCreateShaderFromSources(context, descriptor)

@@ -10,7 +10,7 @@ import Foundation
 // nothing on this backend (`dynamicBufferFrameStart`, `optimizeTexture`). Each
 // of those says in its own body why, which is the difference between an answer
 // and the silent fallthrough these replaced.
-RenderBackend SokolRenderBackend(context: RawPtr) {
+construct SokolRenderBackend(context: RawPtr) extends RenderBackend {
     // --- shaders ---------------------------------------------------------
     function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult {
         return shaderResult(sokolCreateGraphicsShader(descriptor))

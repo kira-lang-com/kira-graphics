@@ -12,7 +12,7 @@ struct PngArguments {
     let output: String
 }
 
-ParsableCommand PngCommand {
+construct PngCommand() extends ParsableCommand {
     let configuration: CommandConfiguration {
         return CommandConfiguration(
             name: "png",
@@ -45,7 +45,7 @@ function convertPpmToPngReporting(input: borrow String, output: borrow String) -
     return false
 }
 
-ParsableCommand BackendsCommand {
+construct BackendsCommand() extends ParsableCommand {
     let configuration: CommandConfiguration {
         return CommandConfiguration(
             name: "backends",
@@ -66,7 +66,7 @@ ParsableCommand BackendsCommand {
     }
 }
 
-ParsableCommand RootCommand {
+construct RootCommand() extends ParsableCommand {
     let configuration: CommandConfiguration {
         return CommandConfiguration(
             name: "kg",
