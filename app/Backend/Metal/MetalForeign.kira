@@ -131,6 +131,12 @@ struct MetalNSPoint {
 @FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
 function metalMsgSendPoint(obj: RawPtr, op: RawPtr): MetalNSPoint;
 
+// -[NSView hitTest:] — answers the view a window-space point lands in, which
+// is how the event pump learns whether a click landed on a native child (a
+// web view) or on the interface's own surface.
+@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
+function metalMsgSendHitTest(obj: RawPtr, op: RawPtr, x: Float, y: Float): RawPtr;
+
 // (NSPoint, NSInteger) -> NSInteger — +[NSWindow windowNumberAtPoint:
 // belowWindowWithWindowNumber:], which answers which window (of ANY application) the
 // window server has at a screen point. The NSPoint argument is an HFA of two doubles

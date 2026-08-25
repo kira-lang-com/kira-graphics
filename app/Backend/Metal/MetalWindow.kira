@@ -406,6 +406,51 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> AppEve
     }
 }
 
+// Whether two pointers name the same object. RawPtr admits no `==`, so the
+// question goes through memory: write each beside the other, read them back
+// as integers, compare.
+function metalPointersDiffer(a: RawPtr, b: RawPtr) -> Bool {
+    let slot = metalMemAlloc(U64(16))
+    metalMemWritePtr(slot, U64(0), a)
+    metalMemWritePtr(slot, U64(8), b)
+    let differ = metalMemReadU64(slot, U64(0)) != metalMemReadU64(slot, U64(8))
+    metalMemFree(slot)
+    return differ
+}
+
+// Which surface a click belongs to, and what that means for the keyboard.
+//
+// A native child attached over the content view — a web view, chiefly —
+// answers `hitTest:` for every point inside its frame, and a click there is
+// the page's: it takes first responder through AppKit's own dispatch, and the
+// keystrokes that follow are the page's. A click anywhere else lands on the
+// interface's own surface, and the keyboard comes home: the content view is
+// made first responder again, because nothing in a plain surface accepts
+// first responder on click and the child would otherwise hold the keyboard
+// forever. Hit testing is the whole of the decision. Mouse types 1, 2 and 3
+// are left, right and other mouse-down.
+@Native
+function metalClickOwnsSurface(app: RawPtr, view: RawPtr, event: RawPtr) {
+    let etype = Int(metalMsgSendU64(event, metalSel("type")))
+    if etype != 1 && etype != 2 && etype != 3 {
+        return
+    }
+    let loc = metalMsgSendPoint(event, metalSel("locationInWindow"))
+    let hit = metalMsgSendHitTest(view, metalSel("hitTest:"), loc.x, loc.y)
+    if pointerIsNull(hit) || metalPointersDiffer(hit, view) {
+        return
+    }
+    let keyWindow = metalMsgSend(app, metalSel("keyWindow"))
+    if pointerIsNull(keyWindow) {
+        return
+    }
+    let responder = metalMsgSend(keyWindow, metalSel("firstResponder"))
+    if !pointerIsNull(responder) && metalPointersDiffer(responder, view) {
+        metalMsgSendVoidP(keyWindow, metalSel("makeFirstResponder:"), view)
+    }
+    return
+}
+
 // Dispatch every pending NSEvent. Running the bare NSRunLoop only services run-loop
 // SOURCES; it does not dequeue NSApplication's event queue or call -sendEvent:, so
 // without this the window never receives mouse/keyboard/resize events — it never
@@ -429,24 +474,51 @@ function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr) -> [AppEvent] {
         if pointerIsNull(event) {
             draining = false
         } else {
+            let etype = Int(metalMsgSendU64(event, metalSel("type")))
+            // A click decides which surface owns the keyboard from here on:
+            // the page, or the interface. See `metalClickOwnsSurface`.
+            metalClickOwnsSurface(app, view, event)
+            // Whose keyboard is this? A native child the embedder attached to the
+            // content view — a web view, chiefly — becomes first responder when
+            // the pointer enters it, and from then on the keystrokes are ITS
+            // page's: search boxes, forms, find-in-page. Forwarding them through
+            // sendEvent: is the whole of what the responder chain needs, and the
+            // translated KeyDown/TextInput must be SUPPRESSED as well — a page
+            // submit on Enter would otherwise ALSO land in the interface's own
+            // focused field, which answers with a navigation of its own and the
+            // page snaps back to where it was. When the content view itself is
+            // first responder the keys are the interface's, and the swallow
+            // below stands.
+            var nativeChildHasKey = false
+            let keyWindow = metalMsgSend(app, metalSel("keyWindow"))
+            if !pointerIsNull(keyWindow) {
+                let responder = metalMsgSend(keyWindow, metalSel("firstResponder"))
+                nativeChildHasKey = !pointerIsNull(responder) && metalPointersDiffer(responder, view)
+            }
             let translated = metalTranslateEvent(event, view, ctx)
             if translated.kind != .None {
-                out.append(move translated)
+                let keyOwnedByPage = nativeChildHasKey && (translated.kind == .KeyDown || translated.kind == .KeyUp)
+                if keyOwnedByPage == false {
+                    out.append(move translated)
+                }
             }
-            let etype = Int(metalMsgSendU64(event, metalSel("type")))
-            if etype != metalNsKeyDown() {
+            if etype != metalNsKeyDown() || nativeChildHasKey {
                 metalMsgSendVoidP(app, metalSel("sendEvent:"), event)
             }
             // A key-down that produces a character also emits a TextInput event
             // (after the KeyDown), so focused fields receive typed text. Return,
             // Delete etc. carry non-printable characters and are skipped here —
             // they drive submit/backspace through the KeyDown path above.
+            // Skipped entirely while a native child holds the keyboard: the page
+            // already received those characters through sendEvent:, and echoing
+            // them into the interface's own focused field would type every
+            // keystroke twice.
             var cmdDown = false
-            if etype == metalNsKeyDown() {
+            if etype == metalNsKeyDown() && nativeChildHasKey == false {
                 let mflags = Int(metalMsgSendU64(event, metalSel("modifierFlags")))
                 cmdDown = (mflags / 1048576) - ((mflags / 1048576) / 2) * 2 == 1
             }
-            if etype == metalNsKeyDown() && cmdDown == false {
+            if etype == metalNsKeyDown() && cmdDown == false && nativeChildHasKey == false {
                 let chars = metalMsgSend(event, metalSel("characters"))
                 if !pointerIsNull(chars) {
                     if metalMsgSendU64(chars, metalSel("length")) > 0 {
