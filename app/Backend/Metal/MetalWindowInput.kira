@@ -1,0 +1,438 @@
+import Foundation
+
+// What the window's events MEAN.
+//
+// AppKit hands back NSEvents: a type number, a location in window coordinates, a
+// modifier bitfield, a key code in a layout nobody chose. This turns them into
+// the backend's own AppEvent — the vocabulary the rest of Kira Graphics and
+// every UI above it speaks — and pumps the queue between frames.
+//
+// Split from MetalWindow.kira, which owns the window, the cursor, the live
+// resize delegate and the display's pacing.
+
+// All event types (every real NSEvent type is a low bit; this covers bits 0-62, well
+// above the highest NSEventType, standing in for NSEventMaskAny == NSUIntegerMax).
+function metalEventMaskAny() -> U64 { return 9223372036854775807 }
+
+// NSEventType values (AppKit stable ABI).
+function metalNsLeftDown() -> Int { return 1 }
+function metalNsLeftUp() -> Int { return 2 }
+function metalNsRightDown() -> Int { return 3 }
+function metalNsRightUp() -> Int { return 4 }
+function metalNsMoved() -> Int { return 5 }
+function metalNsLeftDragged() -> Int { return 6 }
+function metalNsRightDragged() -> Int { return 7 }
+function metalNsKeyDown() -> Int { return 10 }
+function metalNsKeyUp() -> Int { return 11 }
+function metalNsScroll() -> Int { return 22 }
+
+// macOS virtual keycodes -> the neutral key codes the UI layer expects for the
+// special keys it acts on (GLFW-style, matching the offscreen input scripts):
+// Return / keypad-Enter -> 257 (submit), Delete/Backspace -> 259. Character keys
+// keep their raw code (foundationKeyBit maps those to held-key bits) and ALSO
+// emit a TextInput event carrying the typed codepoint (see metalPumpEvents).
+function metalMapKeyCode(raw: Int) -> Int {
+    if raw == 36 { return 257 }    // Return -> Enter (submit)
+    if raw == 76 { return 257 }    // keypad Enter
+    if raw == 51 { return 259 }    // Delete -> Backspace
+    if raw == 123 { return 263 }   // Left arrow
+    if raw == 124 { return 262 }   // Right arrow
+    if raw == 125 { return 264 }   // Down arrow
+    if raw == 126 { return 265 }   // Up arrow
+    if raw == 115 { return 268 }   // Home
+    if raw == 119 { return 269 }   // End
+    if raw == 117 { return 261 }   // Forward Delete
+    if raw == 53 { return 256 }    // Escape
+    return raw
+}
+function metalNsOtherDown() -> Int { return 25 }
+function metalNsOtherUp() -> Int { return 26 }
+function metalNsOtherDragged() -> Int { return 27 }
+
+// KVC fetch of a geometry/scalar property into a caller buffer: -valueForKey:
+// boxes NSPoint/NSRect/CGFloat as NSValue/NSNumber (a pointer return, which
+// marshals), and -getValue: writes the raw doubles into `buf`. A null boxed
+// value leaves the buffer's first slot zeroed so stale reads decode to 0.
+@Native
+function metalKvcValueInto(obj: RawPtr, key: RawPtr, buf: RawPtr) {
+    metalMemWriteU64(buf, 0, 0)
+    metalMemWriteU64(buf, 8, 0)
+    metalMemWriteU64(buf, 16, 0)
+    metalMemWriteU64(buf, 24, 0)
+    let value = metalMsgSendP(obj, metalSel("valueForKey:"), key)
+    if pointerIsNull(value) {
+        return
+    }
+    metalMsgSendVoidP(value, metalSel("getValue:"), buf)
+    return
+}
+
+// Is our window the one the window server has at the cursor, or is something else
+// on top of it? A hover-driven UI cannot answer this from coordinates alone: an
+// overlay owned by ANOTHER process — Stage Manager's window strip is the everyday
+// case, notification banners another — is drawn over our frame while our window
+// keeps receiving the moves, so the events arrive with perfectly in-bounds
+// locations pointing at elements the user cannot even see.
+//
+// +[NSWindow windowNumberAtPoint:belowWindowWithWindowNumber:] asks the window
+// server what is frontmost at a screen point across every application, so a
+// mismatch against our own -windowNumber means the pointer is over someone else.
+// `mouseLocation` is used rather than the event's own location because the answer
+// has to be in screen space, and it is the current cursor position either way.
+@Native
+function metalWindowIsUnderCursor(app: RawPtr, window: RawPtr) -> Bool {
+    // System-posted moves can carry no window; the key window is the one they
+    // would have been delivered to, so it is what the comparison is against.
+    var ours = window
+    if pointerIsNull(ours) {
+        ours = metalMsgSend(app, metalSel("keyWindow"))
+    }
+    if pointerIsNull(ours) {
+        return true
+    }
+    let cursor = metalMsgSendPoint(metalObjcGetClass("NSEvent"), metalSel("mouseLocation"))
+    let front = metalMsgSendWindowNumberAtPoint(
+        metalObjcGetClass("NSWindow"),
+        metalSel("windowNumberAtPoint:belowWindowWithWindowNumber:"),
+        cursor.x,
+        cursor.y,
+        0
+    )
+    let mine = metalMsgSendU64(ours, metalSel("windowNumber"))
+    // KIRA_HOVER_PROBE=1 prints the pair the gate decides on — 727272, then the
+    // window the server has at the cursor, then ours. Equal numbers mean the
+    // pointer is genuinely on our window; a different front number is an overlay
+    // and the event is dropped; a front of 0 is the desktop.
+    if !pointerIsNull(metalGetEnv("KIRA_HOVER_PROBE")) {
+        print(727272)
+        print(Int(front))
+        print(Int(mine))
+    }
+    // 0 means the server has nothing there (desktop, another space): not ours
+    // either, but nothing is obscuring us, so let the viewport bounds decide.
+    if front == 0 {
+        return true
+    }
+    return front == mine
+}
+
+// Modifier state from -[NSEvent modifierFlags] (bit 17 shift, 18 control,
+// 19 option, 20 command), extracted with div/mod (no bitwise ops needed).
+@Native
+function metalModifiersFromFlags(flags: Int) -> ModifierState {
+    return ModifierState {
+        shift: (flags / 131072) - ((flags / 131072) / 2) * 2 == 1
+        control: (flags / 262144) - ((flags / 262144) / 2) * 2 == 1
+        alt: (flags / 524288) - ((flags / 524288) / 2) * 2 == 1
+        superKey: (flags / 1048576) - ((flags / 1048576) / 2) * 2 == 1
+    }
+}
+
+// Translate one queued NSEvent into a AppEvent (kind None when the event
+// carries nothing for the app). Pointer coordinates convert from window space
+// (bottom-left origin, points) to view-local top-left via the content view's
+// bounds height.
+@Native
+function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> AppEvent {
+    let etype = Int(metalMsgSendU64(event, metalSel("type")))
+    var kind: AppEventKind = .None
+    var button: PointerButton = .None
+    var isPointer = false
+    if etype == metalNsLeftDown() {
+        kind = .PointerDown
+        button = .Left
+        isPointer = true
+    }
+    if etype == metalNsLeftUp() {
+        kind = .PointerUp
+        button = .Left
+        isPointer = true
+    }
+    if etype == metalNsRightDown() {
+        kind = .PointerDown
+        button = .Right
+        isPointer = true
+    }
+    if etype == metalNsRightUp() {
+        kind = .PointerUp
+        button = .Right
+        isPointer = true
+    }
+    if etype == metalNsOtherDown() {
+        kind = .PointerDown
+        button = .Middle
+        isPointer = true
+    }
+    if etype == metalNsOtherUp() {
+        kind = .PointerUp
+        button = .Middle
+        isPointer = true
+    }
+    if etype == metalNsMoved() {
+        kind = .PointerMoved
+        isPointer = true
+    }
+    if etype == metalNsLeftDragged() {
+        kind = .PointerMoved
+        button = .Left
+        isPointer = true
+    }
+    if etype == metalNsRightDragged() {
+        kind = .PointerMoved
+        button = .Right
+        isPointer = true
+    }
+    if etype == metalNsOtherDragged() {
+        kind = .PointerMoved
+        button = .Middle
+        isPointer = true
+    }
+    if etype == metalNsScroll() {
+        kind = .Scroll
+        isPointer = true
+    }
+    let flags = Int(metalMsgSendU64(event, metalSel("modifierFlags")))
+    if isPointer {
+        // Hover and scroll belong to whoever is on top at the cursor; when that is
+        // not us, the pointer has left as far as this app is concerned, however
+        // in-bounds the coordinates look. A DRAG is exempt: the press captured the
+        // pointer, so it may legitimately travel over anything while held.
+        let hoverOnly = etype == metalNsMoved() || etype == metalNsScroll()
+        if hoverOnly {
+            if !metalWindowIsUnderCursor(metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication")), metalMsgSend(event, metalSel("window"))) {
+                return AppEvent {
+                    kind: .PointerExited
+                    modifiers: metalModifiersFromFlags(flags)
+                }
+            }
+        }
+        // Geometry through KVC + NSValue/NSNumber -getValue: into a buffer:
+        // direct CGRect/NSPoint/CGFloat message RETURNS do not marshal across
+        // the FFI (they read back as garbage — the same gap the viewport sync
+        // in MetalContext works around; see metalContextSyncViewportFromView).
+        let buf = metalMemAlloc(32)
+        let locKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "locationInWindow")
+        metalKvcValueInto(event, locKey, buf)
+        let locX = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+        let locY = metalDoubleBitsToFloat(metalMemReadU64(buf, 8))
+        let boundsKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "bounds")
+        metalKvcValueInto(view, boundsKey, buf)
+        let boundsH = metalDoubleBitsToFloat(metalMemReadU64(buf, 24))
+        var sx = 0.0
+        var sy = 0.0
+        if etype == metalNsScroll() {
+            let sxKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "scrollingDeltaX")
+            metalKvcValueInto(event, sxKey, buf)
+            sx = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+            let syKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "scrollingDeltaY")
+            metalKvcValueInto(event, syKey, buf)
+            sy = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+        }
+        // A locked pointer does not move, so `locationInWindow` stops changing
+        // and every consumer that works in positions — which is all of them,
+        // since a drag reports its distance from the press point — sees a
+        // motionless mouse. The movement is still there, in the event's own
+        // deltas, so while the cursor is hidden the position handed onward is a
+        // *virtual* one walked by those deltas: it leaves the window freely,
+        // because nothing draws it, while the real cursor stays put.
+        //
+        // Seeded from the first hidden event's true location, so the virtual
+        // pointer starts where the visible one stopped and a drag's first frame
+        // reports no jump.
+        var px = locX
+        var py = locY
+        if metalCursorIsVisible() {
+            metalMemWriteU64(ctx, metalOffsetLockSeeded(), 0)
+        } else {
+            let dxKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "deltaX")
+            metalKvcValueInto(event, dxKey, buf)
+            let mdx = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+            let dyKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "deltaY")
+            metalKvcValueInto(event, dyKey, buf)
+            let mdy = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+            if metalMemReadU64(ctx, metalOffsetLockSeeded()) == 0 {
+                metalMemWriteU64(ctx, metalOffsetLockSeeded(), 1)
+                metalMemWriteU64(ctx, metalOffsetLockedX(), metalLockCoordStore(locX))
+                metalMemWriteU64(ctx, metalOffsetLockedY(), metalLockCoordStore(locY))
+            }
+            // `deltaY` counts downward and `locationInWindow` counts upward, so
+            // the virtual y walks against it and the top-left flip below stays
+            // the one every other event uses.
+            px = metalLockCoordLoad(metalMemReadU64(ctx, metalOffsetLockedX())) + mdx
+            py = metalLockCoordLoad(metalMemReadU64(ctx, metalOffsetLockedY())) - mdy
+            metalMemWriteU64(ctx, metalOffsetLockedX(), metalLockCoordStore(px))
+            metalMemWriteU64(ctx, metalOffsetLockedY(), metalLockCoordStore(py))
+        }
+        metalMemFree(buf)
+        return AppEvent {
+            kind: kind
+            pointerButton: button
+            pointerX: px
+            pointerY: boundsH - py
+            scrollX: sx
+            scrollY: sy
+            modifiers: metalModifiersFromFlags(flags)
+        }
+    }
+    if etype == metalNsKeyDown() {
+        let rawKey = Int(metalMsgSendU64(event, metalSel("keyCode")))
+        let cmdHeld = (flags / 1048576) - ((flags / 1048576) / 2) * 2 == 1
+        var mappedKey = metalMapKeyCode(rawKey)
+        // Cmd+A ('A' is mac keyCode 0) -> synthetic Select-All (300) so a focused
+        // field selects its whole text instead of inserting 'a' / strafing.
+        if cmdHeld && rawKey == 0 {
+            mappedKey = 300
+        }
+        return AppEvent {
+            kind: .KeyDown
+            keyCode: mappedKey
+            keyRepeat: metalMsgSendBoolEmpty(event, metalSel("isARepeat"))
+            modifiers: metalModifiersFromFlags(flags)
+        }
+    }
+    if etype == metalNsKeyUp() {
+        return AppEvent {
+            kind: .KeyUp
+            keyCode: metalMapKeyCode(Int(metalMsgSendU64(event, metalSel("keyCode"))))
+            modifiers: metalModifiersFromFlags(flags)
+        }
+    }
+    return AppEvent {
+        kind: .None
+    }
+}
+
+// Whether two pointers name the same object. RawPtr admits no `==`, so the
+// question goes through memory: write each beside the other, read them back
+// as integers, compare.
+function metalPointersDiffer(a: RawPtr, b: RawPtr) -> Bool {
+    let slot = metalMemAlloc(U64(16))
+    metalMemWritePtr(slot, U64(0), a)
+    metalMemWritePtr(slot, U64(8), b)
+    let differ = metalMemReadU64(slot, U64(0)) != metalMemReadU64(slot, U64(8))
+    metalMemFree(slot)
+    return differ
+}
+
+// Which surface a click belongs to, and what that means for the keyboard.
+//
+// A native child attached over the content view — a web view, chiefly —
+// answers `hitTest:` for every point inside its frame, and a click there is
+// the page's: it takes first responder through AppKit's own dispatch, and the
+// keystrokes that follow are the page's. A click anywhere else lands on the
+// interface's own surface, and the keyboard comes home: the content view is
+// made first responder again, because nothing in a plain surface accepts
+// first responder on click and the child would otherwise hold the keyboard
+// forever. Hit testing is the whole of the decision. Mouse types 1, 2 and 3
+// are left, right and other mouse-down.
+@Native
+function metalClickOwnsSurface(app: RawPtr, view: RawPtr, event: RawPtr) {
+    let etype = Int(metalMsgSendU64(event, metalSel("type")))
+    if etype != 1 && etype != 2 && etype != 3 {
+        return
+    }
+    let loc = metalMsgSendPoint(event, metalSel("locationInWindow"))
+    let hit = metalMsgSendHitTest(view, metalSel("hitTest:"), loc.x, loc.y)
+    if pointerIsNull(hit) || metalPointersDiffer(hit, view) {
+        return
+    }
+    let keyWindow = metalMsgSend(app, metalSel("keyWindow"))
+    if pointerIsNull(keyWindow) {
+        return
+    }
+    let responder = metalMsgSend(keyWindow, metalSel("firstResponder"))
+    if !pointerIsNull(responder) && metalPointersDiffer(responder, view) {
+        metalMsgSendVoidP(keyWindow, metalSel("makeFirstResponder:"), view)
+    }
+    return
+}
+
+// Dispatch every pending NSEvent. Running the bare NSRunLoop only services run-loop
+// SOURCES; it does not dequeue NSApplication's event queue or call -sendEvent:, so
+// without this the window never receives mouse/keyboard/resize events — it never
+// becomes the active key window (its traffic lights stay greyed) and the resize
+// control does nothing. Each event is ALSO translated into a AppEvent and
+// RETURNED to the caller (pointer, scroll, keys): the caller owns the app's event
+// handler closure, which must be bound exactly once — moving it into this function
+// per frame would free its captured environment after the first pump and later
+// events would dispatch through a dangling capture (observed as an abort inside
+// nativeRecover). The window still gets -sendEvent: for activation/title-bar
+// behavior, except key-downs (kept from the window so the unhandled-key beep
+// never fires).
+@Native
+function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr) -> [AppEvent] {
+    var out: [AppEvent] = []
+    let distantPast = metalMsgSend(metalObjcGetClass("NSDate"), metalSel("distantPast"))
+    let mode = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "kCFRunLoopDefaultMode")
+    var draining = true
+    while draining {
+        let event = metalMsgSendNextEvent(app, metalSel("nextEventMatchingMask:untilDate:inMode:dequeue:"), metalEventMaskAny(), distantPast, mode, true)
+        if pointerIsNull(event) {
+            draining = false
+        } else {
+            let etype = Int(metalMsgSendU64(event, metalSel("type")))
+            // A click decides which surface owns the keyboard from here on:
+            // the page, or the interface. See `metalClickOwnsSurface`.
+            metalClickOwnsSurface(app, view, event)
+            // Whose keyboard is this? A native child the embedder attached to the
+            // content view — a web view, chiefly — becomes first responder when
+            // the pointer enters it, and from then on the keystrokes are ITS
+            // page's: search boxes, forms, find-in-page. Forwarding them through
+            // sendEvent: is the whole of what the responder chain needs, and the
+            // translated KeyDown/TextInput must be SUPPRESSED as well — a page
+            // submit on Enter would otherwise ALSO land in the interface's own
+            // focused field, which answers with a navigation of its own and the
+            // page snaps back to where it was. When the content view itself is
+            // first responder the keys are the interface's, and the swallow
+            // below stands.
+            var nativeChildHasKey = false
+            let keyWindow = metalMsgSend(app, metalSel("keyWindow"))
+            if !pointerIsNull(keyWindow) {
+                let responder = metalMsgSend(keyWindow, metalSel("firstResponder"))
+                nativeChildHasKey = !pointerIsNull(responder) && metalPointersDiffer(responder, view)
+            }
+            let translated = metalTranslateEvent(event, view, ctx)
+            if translated.kind != .None {
+                let keyOwnedByPage = nativeChildHasKey && (translated.kind == .KeyDown || translated.kind == .KeyUp)
+                if keyOwnedByPage == false {
+                    out.append(move translated)
+                }
+            }
+            if etype != metalNsKeyDown() || nativeChildHasKey {
+                metalMsgSendVoidP(app, metalSel("sendEvent:"), event)
+            }
+            // A key-down that produces a character also emits a TextInput event
+            // (after the KeyDown), so focused fields receive typed text. Return,
+            // Delete etc. carry non-printable characters and are skipped here —
+            // they drive submit/backspace through the KeyDown path above.
+            // Skipped entirely while a native child holds the keyboard: the page
+            // already received those characters through sendEvent:, and echoing
+            // them into the interface's own focused field would type every
+            // keystroke twice.
+            var cmdDown = false
+            if etype == metalNsKeyDown() && nativeChildHasKey == false {
+                let mflags = Int(metalMsgSendU64(event, metalSel("modifierFlags")))
+                cmdDown = (mflags / 1048576) - ((mflags / 1048576) / 2) * 2 == 1
+            }
+            if etype == metalNsKeyDown() && cmdDown == false && nativeChildHasKey == false {
+                let chars = metalMsgSend(event, metalSel("characters"))
+                if !pointerIsNull(chars) {
+                    if metalMsgSendU64(chars, metalSel("length")) > 0 {
+                        let utf8 = metalMsgSend(chars, metalSel("UTF8String"))
+                        if !pointerIsNull(utf8) {
+                            let raw8 = metalMemReadU64(utf8, 0)
+                            let b0 = raw8 - (raw8 / 256) * 256
+                            if b0 >= 32 && b0 < 127 {
+                                out.append(AppEvent {
+                                    kind: .TextInput
+                                    textCodepoint: Int(b0)
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return move out
+}

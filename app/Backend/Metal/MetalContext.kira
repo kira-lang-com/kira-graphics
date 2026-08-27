@@ -440,7 +440,7 @@ function metalContextAttachDepth(ctx: RawPtr) {
 // the view layer-backed via setWantsLayer:/setLayer:; on iOS a UIView is already
 // layer-backed and the layer is added as a sublayer by the runner.
 @Native
-function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int, height: Int) {
+function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int, height: Int, readable: Bool) {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let layerClass = metalObjcGetClass("CAMetalLayer")
     let layer = metalMsgSend(metalMsgSend(layerClass, metalSel("alloc")), metalSel("init"))
@@ -453,12 +453,11 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     metalMsgSendVoidU(layer, metalSel("setAutoresizingMask:"), 18)
     // A drawable is write-only by default, which is exactly right for a window and
     // exactly wrong for proving one draws: nothing may read back what was presented.
-    // KIRA_METAL_ONSCREEN_DUMP opts out of that so a headless session can dump the
-    // frame the screen received. Opt-in, because framebufferOnly is a real
-    // optimisation (it lets Core Animation pick a lossless-compressed texture) and
-    // a window nobody is verifying should keep it.
-    let onScreenDumpEnv = metalGetEnv("KIRA_METAL_ONSCREEN_DUMP")
-    if !pointerIsNull(onScreenDumpEnv) {
+    // A run that is going to capture or dump a frame opts out of that; every other
+    // run keeps framebufferOnly, which is a real optimisation (it lets Core
+    // Animation pick a lossless-compressed texture) and costs a window nobody is
+    // verifying nothing.
+    if readable || !pointerIsNull(metalGetEnv("KIRA_METAL_ONSCREEN_DUMP")) {
         metalMsgSendVoidB(layer, metalSel("setFramebufferOnly:"), false)
     }
     // Keep Core Animation's fallback resize behavior correct between delegate

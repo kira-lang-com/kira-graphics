@@ -1,0 +1,165 @@
+import Foundation
+
+// Reading a presented frame back into a file, on Metal.
+//
+// This is the instrument every claim about what a window SHOWED rests on. The
+// sokol and Dawn backends have had it since the harness config existed; Metal —
+// the default backend on every Apple host — had only the raw-bytes dump behind
+// an environment variable, so `--capture` was a flag that did nothing on the one
+// platform the editor is developed on.
+//
+// The texture read is the DRAWABLE the frame was handed, taken after the frame's
+// command buffer completes and before the next one acquires another. A drawable
+// is write-only unless the layer opted out of `framebufferOnly` (see
+// metalContextAttachLayerToView), which a capture run does.
+
+@FFI.Extern { library: kira_metal; symbol: fopen; abi: c; }
+function metalFOpenPath(path: CString, mode: CString): RawPtr;
+
+// What a run was launched to capture, and how long it lasts.
+struct MetalHarnessKnobs {
+    var capturePath: String = ""
+    var captureAtFrame: Int = 0
+    var quitAfterFrames: Int = 0
+}
+
+// The harness value the application carries, or the environment when it carries
+// none — the same resolution, and the same defaults, the sokol and Dawn loops
+// apply: an unset capture frame with a path means the LAST frame drawn, and a
+// path-less harness captures nothing.
+function metalHarnessKnobs(app: borrow GraphicsApplication) -> MetalHarnessKnobs {
+    var knobs = MetalHarnessKnobs {}
+    if app.harness.configured {
+        knobs.capturePath = copy app.harness.capturePath
+        knobs.captureAtFrame = app.harness.captureAtFrame
+        knobs.quitAfterFrames = app.harness.quitAfterFrames
+    } else {
+        knobs.capturePath = environmentValue("KIRA_GRAPHICS_CAPTURE_FRAME")
+        knobs.captureAtFrame = environmentInt("KIRA_GRAPHICS_CAPTURE_AT", 0)
+        knobs.quitAfterFrames = environmentInt("KIRA_GRAPHICS_QUIT_AFTER_FRAMES", 0)
+    }
+    if knobs.capturePath.count == 0 {
+        // No frame is ever numbered 0, so nothing captures.
+        knobs.captureAtFrame = 0
+        return move knobs
+    }
+    if knobs.captureAtFrame <= 0 {
+        knobs.captureAtFrame = knobs.quitAfterFrames
+    }
+    if knobs.captureAtFrame <= 0 {
+        knobs.captureAtFrame = 1
+    }
+    return move knobs
+}
+
+// The texture of the drawable this frame is being rendered into, while the
+// context still holds it: submitting the frame presents it and lets it go.
+@Native
+function metalContextDrawableTexture(ctx: RawPtr) -> RawPtr {
+    let drawable = metalMemReadPtr(ctx, metalOffsetDrawable())
+    if pointerIsNull(drawable) {
+        return nullPointer()
+    }
+    return metalMsgSend(drawable, metalSel("texture"))
+}
+
+// One ASCII byte of a PPM header.
+function metalCaptureWriteByte(buffer: RawPtr, cursor: borrow mut Int, value: Int) {
+    metalMemWriteU8(buffer, U64(cursor), U8(value))
+    cursor = cursor + 1
+    return
+}
+
+function metalCaptureWriteNumber(buffer: RawPtr, cursor: borrow mut Int, value: Int) {
+    if value >= 10 {
+        metalCaptureWriteNumber(buffer, cursor, value / 10)
+    }
+    metalCaptureWriteByte(buffer, cursor, 48 + value - value / 10 * 10)
+    return
+}
+
+// `P6 <width> <height> 255`, the header a binary PPM opens with.
+function metalCaptureWriteHeader(buffer: RawPtr, width: Int, height: Int) -> Int {
+    var cursor = 0
+    metalCaptureWriteByte(buffer, cursor, 80)
+    metalCaptureWriteByte(buffer, cursor, 54)
+    metalCaptureWriteByte(buffer, cursor, 10)
+    metalCaptureWriteNumber(buffer, cursor, width)
+    metalCaptureWriteByte(buffer, cursor, 32)
+    metalCaptureWriteNumber(buffer, cursor, height)
+    metalCaptureWriteByte(buffer, cursor, 10)
+    metalCaptureWriteNumber(buffer, cursor, 255)
+    metalCaptureWriteByte(buffer, cursor, 10)
+    return cursor
+}
+
+// A texture the CPU may read, with everything that wrote it finished.
+function metalCaptureReadableTexture(ctx: RawPtr, texture: RawPtr) -> RawPtr {
+    let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
+    if !pointerIsNull(pending) {
+        metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+    }
+    let queue = metalMemReadPtr(ctx, metalOffsetQueue())
+    if pointerIsNull(texture) || pointerIsNull(queue) {
+        return texture
+    }
+    // `getBytes:` on a lossless-compressed texture faults inside the driver
+    // rather than failing, and a drawable Core Animation handed back is exactly
+    // the kind it compresses. This is the counterpart of the
+    // optimizeContentsForGPUAccess the render paths run.
+    let cmd = metalMsgSend(queue, metalSel("commandBuffer"))
+    let blit = metalMsgSend(cmd, metalSel("blitCommandEncoder"))
+    metalMsgSendVoidP(blit, metalSel("optimizeContentsForCPUAccess:"), texture)
+    metalMsgSendVoid(blit, metalSel("endEncoding"))
+    metalMsgSendVoid(cmd, metalSel("commit"))
+    metalMsgSendVoid(cmd, metalSel("waitUntilCompleted"))
+    return texture
+}
+
+// The frame at `texture`, as a binary PPM at `path`.
+@Native
+function metalCapturePpm(ctx: RawPtr, texture: RawPtr, width: Int, height: Int, path: borrow String) -> Bool {
+    if width <= 0 || height <= 0 {
+        return false
+    }
+    let readable = metalCaptureReadableTexture(ctx, texture)
+    if pointerIsNull(readable) {
+        return false
+    }
+    let bytesPerRow = width * 4
+    let source = metalMemAlloc(U64(bytesPerRow * height))
+    let region = metalMemAlloc(48)
+    metalMemWriteU64(region, 0, 0)
+    metalMemWriteU64(region, 8, 0)
+    metalMemWriteU64(region, 16, 0)
+    metalMemWriteU64(region, 24, width)
+    metalMemWriteU64(region, 32, height)
+    metalMemWriteU64(region, 40, 1)
+    metalMsgSendGetBytes(readable, metalSel("getBytes:bytesPerRow:fromRegion:mipmapLevel:"), source, U64(bytesPerRow), region, 0)
+
+    // Header and pixels in one buffer: a PPM is small beside the frame it holds,
+    // and one write is one syscall.
+    let pixels = width * height * 3
+    let out = metalMemAlloc(U64(pixels + 32))
+    let headerBytes = metalCaptureWriteHeader(out, width, height)
+    var index = 0
+    while index < width * height {
+        let base = U64(index * 4)
+        // The drawable is BGRA; a PPM is RGB.
+        metalMemWriteU8(out, U64(headerBytes + index * 3), metalMemReadU8(source, base + U64(2)))
+        metalMemWriteU8(out, U64(headerBytes + index * 3 + 1), metalMemReadU8(source, base + U64(1)))
+        metalMemWriteU8(out, U64(headerBytes + index * 3 + 2), metalMemReadU8(source, base))
+        index = index + 1
+    }
+    var wrote = false
+    let stream = metalFOpenPath(path, "wb")
+    if !pointerIsNull(stream) {
+        let written = metalFWrite(out, 1, U64(headerBytes + pixels), stream)
+        wrote = written == U64(headerBytes + pixels)
+        metalFClose(stream)
+    }
+    metalMemFree(out)
+    metalMemFree(source)
+    metalMemFree(region)
+    return wrote
+}

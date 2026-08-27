@@ -138,6 +138,14 @@ real frames offscreen and asserts the produced pixels):
 - an on-screen `NSWindow` + `CAMetalLayer` with a live monotonic frame clock (for an
   FPS readout) and per-frame view-bounds tracking, so the drawable and the consuming
   UI layout reflow during an interactive window resize
+- the launch harness (`HarnessConfig`, or the `KIRA_GRAPHICS_CAPTURE_FRAME` /
+  `KIRA_GRAPHICS_CAPTURE_AT` / `KIRA_GRAPHICS_QUIT_AFTER_FRAMES` environment
+  spelling): a run captures the frame the window was handed as a binary PPM and
+  quits after a stated number of frames. The capture reads the DRAWABLE, taken
+  before the frame is submitted and read back after its command buffer completes,
+  so it is what the screen received rather than whatever texture the context
+  happened to end the frame pointing at. A capture run opts the layer out of
+  `framebufferOnly`; every other run keeps it.
 
 Run the suite with:
 

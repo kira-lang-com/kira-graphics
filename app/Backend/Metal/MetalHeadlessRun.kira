@@ -1,0 +1,329 @@
+import Foundation
+
+// The headless Metal run: no window, no drawable, no compositor — the frame
+// handler driven against a fixed offscreen target so a session with no screen
+// can still say what a frame contained. Benchmarks, scripted input, pixel
+// probes, digests, dumps and harness captures all live on this path.
+//
+// Split from MetalApplication.kira, which owns the device, the pool, and the
+// choice between this path and the window.
+@Native
+function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: RawPtr, userData: RawPtr, pool: RawPtr) {
+    metalContextAttachOffscreenFormat(ctxPtr, app.width, app.height, metalPixelFormatForTexture(textureFormatCode(app.colorFormat)))
+    kiraGraphicsLiveBackendInitialized()
+
+    let onInitOffscreen: (Graphics) -> Void = app.initHandler
+    let initGraphicsOffscreen = Graphics {
+        userData: userData
+        backend: .Metal
+        backendContext: ctxPtr
+    }
+    onInitOffscreen(move initGraphicsOffscreen)
+
+    let onFrameOffscreen: (borrow mut RenderFrame) -> Void = app.frameHandler
+
+    // Deterministic frame-time benchmark: KIRA_METAL_BENCH runs the frame handler
+    // many times offscreen and reports average ms + implied FPS, so VM hot-path
+    // optimisation can be measured without the on-screen present/vsync loop.
+    let benchEnv = metalGetEnv("KIRA_METAL_BENCH")
+    if !pointerIsNull(benchEnv) {
+        // 180 frames is a throughput sample. A run that has to expose a periodic
+        // cost — anything on a cadence of its own, like a HUD that refreshes a
+        // few times a second — needs to be long enough to contain several of its
+        // periods, so KIRA_METAL_BENCH_FRAMES sets the count.
+        var benchFrames = 180
+        let benchFramesEnv = metalGetEnv("KIRA_METAL_BENCH_FRAMES")
+        if !pointerIsNull(benchFramesEnv) {
+            let parsedBenchFrames = metalEnvInt(benchFramesEnv)
+            if parsedBenchFrames > 0 {
+                benchFrames = parsedBenchFrames
+            }
+        }
+        // KIRA_METAL_RESIZE_BENCH cycles the offscreen size each frame so the app
+        // sees a changing viewport every frame — exercising the resize/rebuild path
+        // (no damage-skip) instead of the static re-present path. Re-attaching the
+        // offscreen target only allocates a native MTLTexture, so the Kira struct
+        // allocation count still reflects the per-frame rebuild work.
+        let resizeEnv = metalGetEnv("KIRA_METAL_RESIZE_BENCH")
+        let resizeBench = !pointerIsNull(resizeEnv)
+        let detailEnv = metalGetEnv("KIRA_METAL_BENCH_DETAIL")
+        let detailBench = !pointerIsNull(detailEnv)
+        let lockedBench = app.targetFrameDurationNs > 0
+        // Warm up one frame (first-touch caches, retained tree mount) before timing.
+        let warmPool = metalAutoreleasePoolPush()
+        let warmGraphics = Graphics {
+            userData: userData
+            backend: .Metal
+            backendContext: ctxPtr
+        }
+        var warmFrame = warmGraphics.frame()
+        metalContextBeginFrameTiming(ctxPtr)
+        onFrameOffscreen(warmFrame)
+        graphicsSubmitFrame(warmFrame)
+        metalContextEndFrameTiming(ctxPtr)
+        metalAutoreleasePoolPop(warmPool)
+        let startNs = metalClockNs(metalClockUptimeRaw())
+        var nextBenchDeadlineNs = startNs + U64(app.targetFrameDurationNs)
+        var worstFrameNs: U64 = 0
+        var worstCpuNs: U64 = 0
+        var worstGpuNs: U64 = 0
+        var bi = 0
+        while bi < benchFrames {
+            let benchPool = metalAutoreleasePoolPush()
+            if resizeBench {
+                metalContextAttachOffscreen(ctxPtr, app.width + (bi % 120), app.height)
+            }
+            let benchGraphics = Graphics {
+                userData: userData
+                backend: .Metal
+                backendContext: ctxPtr
+            }
+            var benchFrame = benchGraphics.frame()
+            metalContextBeginFrameTiming(ctxPtr)
+            onFrameOffscreen(benchFrame)
+            graphicsSubmitFrame(benchFrame)
+            metalContextEndFrameTiming(ctxPtr)
+            let sampledFrameNs = metalMemReadU64(ctxPtr, metalOffsetFrameDurationNs())
+            let sampledCpuNs = metalMemReadU64(ctxPtr, metalOffsetCpuFrameDurationNs())
+            let sampledGpuNs = metalMemReadU64(ctxPtr, metalOffsetGpuFrameDurationNs())
+            if bi > 1 && sampledFrameNs > worstFrameNs { worstFrameNs = sampledFrameNs }
+            if sampledCpuNs > worstCpuNs { worstCpuNs = sampledCpuNs }
+            if sampledGpuNs > worstGpuNs { worstGpuNs = sampledGpuNs }
+            if detailBench {
+                metalReportBenchFrame(ctxPtr, bi)
+            }
+            metalAutoreleasePoolPop(benchPool)
+            if lockedBench {
+                metalContextWaitUntilNs(ctxPtr, nextBenchDeadlineNs)
+                nextBenchDeadlineNs = metalClockNs(metalClockUptimeRaw()) + U64(app.targetFrameDurationNs)
+            }
+            bi = bi + 1
+        }
+        // The frame budget includes GPU completion, not merely how quickly the
+        // CPU can enqueue 180 frames. Drain the last buffer (the queue orders all
+        // earlier work before it) before stopping the benchmark clock.
+        metalContextWaitForGpu(ctxPtr)
+        let endNs = metalClockNs(metalClockUptimeRaw())
+        metalReportBench(Int(endNs - startNs), benchFrames)
+        metalReportBenchWorst(Int(worstFrameNs), Int(worstCpuNs), Int(worstGpuNs))
+        metalContextFree(ctxPtr)
+        metalAutoreleasePoolPop(pool)
+        return
+    }
+
+    // Deterministic multi-frame offscreen run with scripted input:
+    // KIRA_METAL_OFFSCREEN_FRAMES=N loops the frame handler N times (default 1);
+    // KIRA_UI_CLICK_SCRIPT="f@x,y;..." synthesizes a PointerDown+PointerUp pair
+    // through the app's REAL event handler before rendering frame f — headless
+    // end-to-end click verification (hit test, dispatch, state, render).
+    let framesEnv = metalGetEnv("KIRA_METAL_OFFSCREEN_FRAMES")
+    var totalFrames = 1
+    if !pointerIsNull(framesEnv) {
+        let parsedFrames = metalEnvInt(framesEnv)
+        if parsedFrames > 0 {
+            totalFrames = parsedFrames
+        }
+    }
+    var clicks: [Int] = []
+    let clickEnv = metalGetEnv("KIRA_UI_CLICK_SCRIPT")
+    if !pointerIsNull(clickEnv) {
+        clicks = metalEnvInts(clickEnv)
+    }
+    // Drag script: 7-int tuples (startFrame, x, y, dx, dy, buttonRaw, steps).
+    // PointerDown(button) at (x,y) on startFrame; PointerMoved along the
+    // delta over `steps` frames; PointerUp after. buttonRaw: 0 L, 1 R, 2 M.
+    var drags: [Int] = []
+    let dragEnv = metalGetEnv("KIRA_UI_DRAG_SCRIPT")
+    if !pointerIsNull(dragEnv) {
+        drags = metalEnvInts(dragEnv)
+    }
+    // Key script: 3-int tuples (frame, keyCode, downFlag 1/0).
+    var keyScript: [Int] = []
+    let keyEnv = metalGetEnv("KIRA_UI_KEY_SCRIPT")
+    if !pointerIsNull(keyEnv) {
+        keyScript = metalEnvInts(keyEnv)
+    }
+    // Scroll script: 4-int tuples (frame, x, y, deltaYTenths).
+    var scrolls: [Int] = []
+    let scrollEnv = metalGetEnv("KIRA_UI_SCROLL_SCRIPT")
+    if !pointerIsNull(scrollEnv) {
+        scrolls = metalEnvInts(scrollEnv)
+    }
+    // Text script: 2-int tuples (frame, codepoint) — synthesizes a TextInput
+    // event so headless runs can type into a focused field (inline rename).
+    var textScript: [Int] = []
+    let textEnv = metalGetEnv("KIRA_UI_TEXT_SCRIPT")
+    if !pointerIsNull(textEnv) {
+        textScript = metalEnvInts(textEnv)
+    }
+    let onEventOffscreen: (borrow AppEvent) -> Void = app.eventHandler
+    // Offscreen resize script (frame, w, h triples): re-attaches the offscreen
+    // target at the new size mid-run — the headless equivalent of a live
+    // window resize (drawable size change + layout + engine target follow-up).
+    var offResizes: [Int] = []
+    let offResizeEnv = metalGetEnv("KIRA_UI_RESIZE_SCRIPT")
+    if !pointerIsNull(offResizeEnv) {
+        offResizes = metalEnvInts(offResizeEnv)
+    }
+    var fi = 0
+    while fi < totalFrames {
+        let framePool = metalAutoreleasePoolPush()
+        var ri = 0
+        while ri + 3 <= offResizes.count {
+            if offResizes[ri] == fi {
+                metalContextAttachOffscreenFormat(ctxPtr, offResizes[ri + 1], offResizes[ri + 2], metalPixelFormatForTexture(textureFormatCode(app.colorFormat)))
+            }
+            ri = ri + 3
+        }
+        var ci = 0
+        while ci + 3 <= clicks.count {
+            if clicks[ci] == fi {
+                let px = Float(clicks[ci + 1])
+                let py = Float(clicks[ci + 2])
+                let down = AppEvent {
+                    kind: .PointerDown
+                    pointerX: px
+                    pointerY: py
+                }
+                onEventOffscreen(down)
+                let up = AppEvent {
+                    kind: .PointerUp
+                    pointerX: px
+                    pointerY: py
+                }
+                onEventOffscreen(up)
+            }
+            ci = ci + 3
+        }
+        var di = 0
+        while di + 7 <= drags.count {
+            let start = drags[di]
+            let steps = drags[di + 6]
+            if fi >= start && fi <= start + steps + 1 {
+                let bx = Float(drags[di + 1])
+                let by = Float(drags[di + 2])
+                let button = graphicsPointerButtonFromRaw(drags[di + 5])
+                if fi == start {
+                    let down = AppEvent {
+                        kind: .PointerDown
+                        pointerButton: button
+                        pointerX: bx
+                        pointerY: by
+                    }
+                    onEventOffscreen(down)
+                } else {
+                    let progressed = fi - start
+                    var t = Float(progressed) / Float(steps)
+                    if t > 1.0 {
+                        t = 1.0
+                    }
+                    let mx = bx + Float(drags[di + 3]) * t
+                    let my = by + Float(drags[di + 4]) * t
+                    if fi <= start + steps {
+                        let moved = AppEvent {
+                            kind: .PointerMoved
+                            pointerButton: button
+                            pointerX: mx
+                            pointerY: my
+                        }
+                        onEventOffscreen(moved)
+                    } else {
+                        let up = AppEvent {
+                            kind: .PointerUp
+                            pointerButton: button
+                            pointerX: mx
+                            pointerY: my
+                        }
+                        onEventOffscreen(up)
+                    }
+                }
+            }
+            di = di + 7
+        }
+        var ki = 0
+        while ki + 3 <= keyScript.count {
+            if keyScript[ki] == fi {
+                var keyKind: AppEventKind = .KeyUp
+                if keyScript[ki + 2] == 1 {
+                    keyKind = .KeyDown
+                }
+                let keyEvent = AppEvent {
+                    kind: keyKind
+                    keyCode: keyScript[ki + 1]
+                }
+                onEventOffscreen(keyEvent)
+            }
+            ki = ki + 3
+        }
+        var txi = 0
+        while txi + 2 <= textScript.count {
+            if textScript[txi] == fi {
+                let textEvent = AppEvent {
+                    kind: .TextInput
+                    textCodepoint: textScript[txi + 1]
+                }
+                onEventOffscreen(textEvent)
+            }
+            txi = txi + 2
+        }
+        var si = 0
+        while si + 4 <= scrolls.count {
+            if scrolls[si] == fi {
+                let scrollEvent = AppEvent {
+                    kind: .Scroll
+                    pointerX: Float(scrolls[si + 1])
+                    pointerY: Float(scrolls[si + 2])
+                    scrollY: Float(scrolls[si + 3]) / 10.0
+                }
+                onEventOffscreen(scrollEvent)
+            }
+            si = si + 4
+        }
+        let frameGraphicsOffscreen = Graphics {
+            userData: userData
+            backend: .Metal
+            backendContext: ctxPtr
+        }
+        var frameOffscreen = frameGraphicsOffscreen.frame()
+        metalContextBeginFrameTiming(ctxPtr)
+        onFrameOffscreen(frameOffscreen)
+        graphicsSubmitFrame(frameOffscreen)
+        metalContextEndFrameTiming(ctxPtr)
+        // A headless run captures the target it rendered, on the same frame
+        // number an on-screen run captures its drawable.
+        let offscreenHarness = metalHarnessKnobs(app)
+        if offscreenHarness.capturePath.count > 0 && fi + 1 == offscreenHarness.captureAtFrame {
+            let offscreenScale = metalContextScale(ctxPtr)
+            let offscreenW = Int(Float(metalContextWidth(ctxPtr)) * offscreenScale)
+            let offscreenH = Int(Float(metalContextHeight(ctxPtr)) * offscreenScale)
+            if metalCapturePpm(ctxPtr, metalMemReadPtr(ctxPtr, metalOffsetColorTexture()), offscreenW, offscreenH, offscreenHarness.capturePath) {
+                graphicsDiagnostic("Kira Graphics wrote the rendered frame to " + offscreenHarness.capturePath)
+            }
+        }
+        metalAutoreleasePoolPop(framePool)
+        fi = fi + 1
+    }
+    metalReportCenterPixel(ctxPtr, app.width, app.height)
+    let probeEnv = metalGetEnv("KIRA_METAL_READBACK_POINTS")
+    if !pointerIsNull(probeEnv) {
+        metalReportProbePixels(ctxPtr, app.width, app.height)
+    }
+    let digestEnv = metalGetEnv("KIRA_METAL_IMAGE_DIGEST")
+    if !pointerIsNull(digestEnv) {
+        metalReportImageDigest(ctxPtr, app.width, app.height)
+    }
+    // Full-frame visual dump: the env VALUE is the destination path for the raw
+    // BGRA8 framebuffer bytes (width*height*4, row-major). Uses the context's
+    // CURRENT size in PHYSICAL pixels (a resize script may have re-attached the
+    // target mid-run; an offscreen-scale run has a points-x-scale target).
+    let dumpEnv = metalGetEnv("KIRA_METAL_IMAGE_DUMP")
+    if !pointerIsNull(dumpEnv) {
+        let dumpScale = metalContextScale(ctxPtr)
+        let dumpW = Int(Float(metalContextWidth(ctxPtr)) * dumpScale)
+        let dumpH = Int(Float(metalContextHeight(ctxPtr)) * dumpScale)
+        metalContextImageDump(ctxPtr, dumpW, dumpH, dumpEnv)
+    }
+    metalContextFree(ctxPtr)
+    metalAutoreleasePoolPop(pool)
+    return
+}

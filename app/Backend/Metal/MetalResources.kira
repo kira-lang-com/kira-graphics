@@ -129,13 +129,11 @@ function metalCreateRenderPipelineWithEntries(ctx: RawPtr, shaderId: Int, colorF
     if attrFormats.count > 0 {
         let vd = metalMsgSend(metalObjcGetClass("MTLVertexDescriptor"), metalSel("vertexDescriptor"))
         let attrs = metalMsgSend(vd, metalSel("attributes"))
-        var ai = 0
-        while ai < attrFormats.count {
+        for ai in 0..attrFormats.count {
             let attr = metalMsgSendPU(attrs, metalSel("objectAtIndexedSubscript:"), U64(ai))
             metalMsgSendVoidU(attr, metalSel("setFormat:"), metalVertexFormat(attrFormats[ai]))
             metalMsgSendVoidU(attr, metalSel("setOffset:"), U64(attrOffsets[ai]))
             metalMsgSendVoidU(attr, metalSel("setBufferIndex:"), 0)
-            ai = ai + 1
         }
         let layouts = metalMsgSend(vd, metalSel("layouts"))
         let layout0 = metalMsgSendPU(layouts, metalSel("objectAtIndexedSubscript:"), 0)
