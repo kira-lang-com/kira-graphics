@@ -352,6 +352,10 @@ function makeRenderEncoder() -> RenderEncoder {
 }
 
 function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, sokolRuntime: RawPtr, dawnRuntime: RawPtr) -> RenderEncoder {
+    // The empty slots carry no state box: every read of a slot is gated on its
+    // `has` flag, so a group that was never set needs no storage — and giving
+    // it some, as this once did, allocated four boxes per encoder that nothing
+    // could free once `setBindGroup` overwrote the only token naming them.
     let state = nativeState(RenderEncoderState {
         pipeline: emptyRenderPipeline()
         hasPipeline: false
@@ -365,13 +369,13 @@ function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, s
         indexBufferId: 0
         hasIndexBuffer: false
         indexFormat: .Uint32
-        bindGroup0: emptyBindGroup()
+        bindGroup0: unboundBindGroup()
         hasBindGroup0: false
-        bindGroup1: emptyBindGroup()
+        bindGroup1: unboundBindGroup()
         hasBindGroup1: false
-        bindGroup2: emptyBindGroup()
+        bindGroup2: unboundBindGroup()
         hasBindGroup2: false
-        bindGroup3: emptyBindGroup()
+        bindGroup3: unboundBindGroup()
         hasBindGroup3: false
         vertexCount: 0
         indexCount: 0

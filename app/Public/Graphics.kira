@@ -167,8 +167,15 @@ class Graphics {
         return self.renderBackend().createTextureSamplerBindGroup(label, textureSlot, texture, samplerSlot, sampler)
     }
 
+    // Destroying reclaims BOTH halves: the backend's id, and the state box
+    // holding the entry arrays — the group's whole CPU-side existence. The
+    // group is dead after this; recovering through the held value again is the
+    // use-after-free the box's magic word traps.
     function destroyBindGroup(bindGroup: borrow BindGroup) {
         self.renderBackend().destroyBindGroup(bindGroup)
+        if !pointerIsNull(bindGroup.storage) {
+            nativeStateFree(bindGroup.storage)
+        }
         return
     }
 

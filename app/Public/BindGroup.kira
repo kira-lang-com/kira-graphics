@@ -63,6 +63,19 @@ function emptyBindGroup() -> BindGroup {
     }
 }
 
+// A slot that has never been bound. No state box at all, which is what an
+// unset encoder slot is: every read of one is gated on its `has` flag, so
+// there is nothing behind the token to read — and nothing to free, which is
+// the point. `emptyBindGroup` stays for callers that may still add entries;
+// this is for slots whose emptiness is final.
+@Native
+function unboundBindGroup() -> BindGroup {
+    return BindGroup {
+        storage: nullPointer()
+        id: 0
+    }
+}
+
 // sokol_gfx.h's `SG_MAX_VIEW_BINDSLOTS` / `SG_MAX_SAMPLER_BINDSLOTS`. An
 // entry's *slot* is checked against these before it is kept — Sokol itself
 // would only catch an out-of-range slot at the draw that finally applies it,

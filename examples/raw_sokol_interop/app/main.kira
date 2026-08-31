@@ -77,8 +77,14 @@ function rawSokolCleanup(data: RawPtr) -> Void {
 }
 
 @Main
-@Native
 function main() {
+    rawSokolLifecycle()
+    return
+}
+
+@MainThreadLifecycle
+@Native
+function rawSokolLifecycle() {
     var state = nativeState(RawSokolState {})
     let desc = sapp_desc {
         init_userdata_cb: rawSokolInit
