@@ -48,6 +48,7 @@ Package KiraGraphics {
                 NativeTarget { triple: "aarch64-xros-none", staticLib: "NativeLibs/../generated/native/aarch64-xros/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
                 NativeTarget { triple: "aarch64-xros-simulator", staticLib: "NativeLibs/../generated/native/aarch64-xros-simulator/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
                 NativeTarget { triple: "x86_64-linux-gnu", staticLib: "NativeLibs/../generated/native/x86_64-linux-gnu/libsokol.a", defines: ["SOKOL_GLCORE"], systemLibs: ["X11", "Xi", "Xcursor", "GL", "dl", "pthread", "m"] },
+                NativeTarget { triple: "aarch64-linux-gnu", defines: ["SOKOL_GLCORE"], systemLibs: ["X11", "Xi", "Xcursor", "GL", "dl", "pthread", "m"] },
                 NativeTarget { triple: "x86_64-windows-msvc", staticLib: "NativeLibs/../generated/native/x86_64-windows-msvc/sokol.lib", defines: ["SOKOL_GLCORE"], systemLibs: ["opengl32"] },
                 NativeTarget { triple: "wasm32-emscripten-unknown", staticLib: "NativeLibs/../generated/native/wasm32-emscripten/libsokol.a", compilerFlags: ["--use-port=emdawnwebgpu"], linkerFlags: ["--use-port=emdawnwebgpu"] }
             ],
@@ -77,7 +78,8 @@ Package KiraGraphics {
             ],
             autobind: Autobind { module: "wayland", headers: ["NativeLibs/Wayland/kira_wayland.h"], mode: AutobindMode.AllPublic },
             nativeTargets: [
-                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["wayland-client"] }
+                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["wayland-client"] },
+                NativeTarget { triple: "aarch64-linux-gnu", systemLibs: ["wayland-client"] }
             ],
         },
         NativeLibrary {
@@ -112,6 +114,8 @@ Package KiraGraphics {
                 // sidecars: Dawn reaches the GPU through the Vulkan loader,
                 // which the system provides.
                 NativeTarget { triple: "x86_64-linux-gnu", dynamicLib: "NativeLibs/Dawn/x86_64-linux-gnu/lib/libwebgpu_dawn.so", runtimeFiles: ["NativeLibs/Dawn/x86_64-linux-gnu/lib"] },
+                // The same slice for 64-bit Arm Linux, from the same Dawn release.
+                NativeTarget { triple: "aarch64-linux-gnu", dynamicLib: "NativeLibs/Dawn/aarch64-linux-gnu/lib/libwebgpu_dawn.so", runtimeFiles: ["NativeLibs/Dawn/aarch64-linux-gnu/lib"] },
                 // Apple publishes Dawn only as a static archive — no dylib in
                 // either the desktop tarball or the xcframework — so the macOS
                 // slice hands the linker `libwebgpu_dawn.a` directly (ld links
@@ -183,6 +187,7 @@ Package KiraGraphics {
                 NativeTarget { triple: "aarch64-macos-none", dynamicLib: "" },
                 NativeTarget { triple: "aarch64-ios-none", dynamicLib: "" },
                 NativeTarget { triple: "x86_64-linux-gnu", dynamicLib: "" },
+                NativeTarget { triple: "aarch64-linux-gnu", dynamicLib: "" },
                 NativeTarget { triple: "x86_64-windows-msvc", dynamicLib: "" },
                 NativeTarget { triple: "wasm32-emscripten-unknown", dynamicLib: "" }
             ],
