@@ -266,8 +266,17 @@ function kira_wayland_surface_commit(surface: RawPtr): Void;
 @FFI.Extern { library: waylandprotocols; symbol: kira_wayland_surface_get_toplevel; abi: c; }
 function kira_wayland_surface_get_toplevel(surface: RawPtr): RawPtr;
 
+@FFI.Extern { library: waylandprotocols; symbol: kira_wayland_surface_height; abi: c; }
+function kira_wayland_surface_height(surface: RawPtr): I32;
+
+@FFI.Extern { library: waylandprotocols; symbol: kira_wayland_surface_note_size; abi: c; }
+function kira_wayland_surface_note_size(surface: RawPtr, width: I32, height: I32): Void;
+
 @FFI.Extern { library: waylandprotocols; symbol: kira_wayland_surface_set_window_geometry; abi: c; }
 function kira_wayland_surface_set_window_geometry(xdg_surface: RawPtr, x: I32, y: I32, width: I32, height: I32): Void;
+
+@FFI.Extern { library: waylandprotocols; symbol: kira_wayland_surface_width; abi: c; }
+function kira_wayland_surface_width(surface: RawPtr): I32;
 
 @FFI.Extern { library: waylandprotocols; symbol: kira_wayland_toplevel_add_listener; abi: c; }
 function kira_wayland_toplevel_add_listener(toplevel: RawPtr, listener: kira_wayland_toplevel_listener_ptr, data: RawPtr): I32;

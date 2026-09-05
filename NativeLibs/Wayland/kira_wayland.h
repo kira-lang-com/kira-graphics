@@ -58,6 +58,17 @@ void *kira_wayland_registry_bind_decoration_manager(void *registry, uint32_t nam
 void *kira_wayland_registry_bind_seat(void *registry, uint32_t name, uint32_t version);
 void *kira_wayland_display_bind_cursor_shape_manager(void *display);
 
+// The size a surface was opened at, remembered on the surface's behalf.
+//
+// A wl_surface carries one user-data word and the window already spends it on
+// the toplevel, so the size lives beside the surface rather than on it. The
+// compositor is the authority on how big a surface is and says so in a
+// configure; until that event is read, what a caller asked for is what it got,
+// and reporting that is what lets the client area be a number rather than zero.
+void kira_wayland_surface_note_size(void *surface, int32_t width, int32_t height);
+int32_t kira_wayland_surface_width(void *surface);
+int32_t kira_wayland_surface_height(void *surface);
+
 int32_t kira_wayland_registry_add_listener(void *registry, const struct kira_wayland_registry_listener *listener, void *data);
 int32_t kira_wayland_shell_add_listener(void *shell, const struct kira_wayland_shell_listener *listener, void *data);
 int32_t kira_wayland_surface_add_listener(void *surface, const struct kira_wayland_surface_listener *listener, void *data);

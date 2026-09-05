@@ -164,6 +164,14 @@ construct DawnWindowWayland() extends DawnWindow {
 
         kira_wayland_toplevel_set_title(toplevel, title)
 
+        // The size the compositor was asked for, remembered so the client area
+        // can be reported before any configure has been read. Without it the
+        // window answers zero, `dawnResizeIfNeeded` returns early on every
+        // frame, and Foundation is never told a viewport -- which renders
+        // correctly, because that path takes the swapchain's size, and hit-tests
+        // nothing, because that path takes this one.
+        kira_wayland_surface_note_size(surface, I32(width), I32(height))
+
         // The initial empty commit is deferred to dawnWaylandAttachInput. That
         // is the first point carrying the runtime state the toplevel configure
         // listener needs, and installing it after this commit would miss the
@@ -175,9 +183,10 @@ construct DawnWindowWayland() extends DawnWindow {
     // A Wayland surface is told its size by the compositor rather than asked,
     // and the size it was told arrives in a configure. Until the pump is ported
     // and those events are read, the size the caller asked for is the size it
-    // gets -- which is what the compositor was asked for too.
-    function clientWidth(window: RawPtr) -> Int { return 0 }
-    function clientHeight(window: RawPtr) -> Int { return 0 }
+    // gets -- which is what the compositor was asked for too, and what `open`
+    // noted beside the surface.
+    function clientWidth(window: RawPtr) -> Int { return Int(kira_wayland_surface_width(window)) }
+    function clientHeight(window: RawPtr) -> Int { return Int(kira_wayland_surface_height(window)) }
 
     // A surface learns its scale from the output it is shown on, through an
     // event. 1.0 is what an unscaled surface reads.

@@ -109,23 +109,93 @@ void *kira_wayland_display_bind_cursor_shape_manager(void *display) {
     return bind.manager;
 }
 
+// libwayland keeps the listener POINTER a proxy was given and reads it on every
+// event it dispatches, for as long as that proxy lives. C code satisfies this
+// with a `static const` listener; a caller that passes one by value cannot,
+// because the argument it materialises dies when the call returns and the next
+// dispatch reads freed storage. That is a use-after-free wherever the call comes
+// from, and it stayed invisible only because a just-freed stack slot often still
+// holds what was written there. On aarch64 it does not: the first roundtrip after
+// the registration jumped through a clobbered function pointer and took SIGBUS.
+//
+// So each registration keeps its own copy, at an address libwayland can hold for
+// the proxy's lifetime. The copies are never freed: a listener outlives its proxy
+// by construction, there is one per proxy rather than one per event, and a window
+// binds a handful for as long as it is open.
+static const void *kira_wayland_retain_listener(const void *listener, size_t size) {
+    if (listener == NULL) {
+        return NULL;
+    }
+    void *retained = malloc(size);
+    if (retained == NULL) {
+        return NULL;
+    }
+    memcpy(retained, listener, size);
+    return retained;
+}
+
+// One row per open surface. A process opens windows in ones, and a row is
+// reused when a surface pointer comes back, so this neither grows nor needs a
+// free: a closed surface's row is simply the next one handed out.
+#define KIRA_WAYLAND_MAX_SURFACES 8
+
+static struct {
+    void *surface;
+    int32_t width;
+    int32_t height;
+} kira_wayland_surface_sizes[KIRA_WAYLAND_MAX_SURFACES];
+
+void kira_wayland_surface_note_size(void *surface, int32_t width, int32_t height) {
+    if (surface == NULL) {
+        return;
+    }
+    for (int i = 0; i < KIRA_WAYLAND_MAX_SURFACES; i++) {
+        if (kira_wayland_surface_sizes[i].surface == surface || kira_wayland_surface_sizes[i].surface == NULL) {
+            kira_wayland_surface_sizes[i].surface = surface;
+            kira_wayland_surface_sizes[i].width = width;
+            kira_wayland_surface_sizes[i].height = height;
+            return;
+        }
+    }
+}
+
+// Zero for a surface nothing noted, which is what a caller that cannot answer
+// has always reported and what `dawnResizeIfNeeded` already treats as "not yet".
+int32_t kira_wayland_surface_width(void *surface) {
+    for (int i = 0; i < KIRA_WAYLAND_MAX_SURFACES; i++) {
+        if (kira_wayland_surface_sizes[i].surface == surface) {
+            return kira_wayland_surface_sizes[i].width;
+        }
+    }
+    return 0;
+}
+
+int32_t kira_wayland_surface_height(void *surface) {
+    for (int i = 0; i < KIRA_WAYLAND_MAX_SURFACES; i++) {
+        if (kira_wayland_surface_sizes[i].surface == surface) {
+            return kira_wayland_surface_sizes[i].height;
+        }
+    }
+    return 0;
+}
+
 int32_t kira_wayland_registry_add_listener(void *registry, const struct kira_wayland_registry_listener *listener, void *data) {
-    return wl_registry_add_listener(registry, (const struct wl_registry_listener *)listener, data);
+    return wl_registry_add_listener(registry, kira_wayland_retain_listener(listener, sizeof *listener), data);
 }
 int32_t kira_wayland_shell_add_listener(void *shell, const struct kira_wayland_shell_listener *listener, void *data) {
-    return xdg_wm_base_add_listener(shell, (const struct xdg_wm_base_listener *)listener, data);
+    return xdg_wm_base_add_listener(shell, kira_wayland_retain_listener(listener, sizeof *listener), data);
 }
 int32_t kira_wayland_surface_add_listener(void *surface, const struct kira_wayland_surface_listener *listener, void *data) {
-    return xdg_surface_add_listener(surface, (const struct xdg_surface_listener *)listener, data);
+    return xdg_surface_add_listener(surface, kira_wayland_retain_listener(listener, sizeof *listener), data);
 }
 int32_t kira_wayland_toplevel_add_listener(void *toplevel, const struct kira_wayland_toplevel_listener *listener, void *data) {
-    return xdg_toplevel_add_listener(toplevel, (const struct xdg_toplevel_listener *)listener, data);
+    return xdg_toplevel_add_listener(toplevel, kira_wayland_retain_listener(listener, sizeof *listener), data);
 }
 int32_t kira_wayland_seat_add_listener(void *seat, const struct kira_wayland_seat_listener *listener, void *data) {
-    return wl_seat_add_listener(seat, (const struct wl_seat_listener *)listener, data);
+    return wl_seat_add_listener(seat, kira_wayland_retain_listener(listener, sizeof *listener), data);
 }
 int32_t kira_wayland_pointer_add_listener(void *pointer, const struct kira_wayland_pointer_listener *listener, void *data) {
-    return wl_pointer_add_listener(pointer, (const struct wl_pointer_listener *)listener, data);
+    return wl_pointer_add_listener(pointer, kira_wayland_retain_listener(listener, sizeof *listener), data);
 }
 
 void *kira_wayland_compositor_create_surface(void *compositor) { return wl_compositor_create_surface(compositor); }
