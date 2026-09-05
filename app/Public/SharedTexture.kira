@@ -19,6 +19,18 @@ import Foundation
 // it, and a message carrying one would hand the peer a live handle to something
 // else entirely.
 
+// Which surface the seam's table is holding.
+//
+// A `distinct` type rather than a bare number, because a table index is a name
+// and not a quantity: nothing adds two of them, sorts them, or measures one
+// against a length, and the one thing a caller does with it is hand it back.
+// The old spelling made `id > 0` look like arithmetic on a number; the check is
+// really "is this the id that names nothing", and that is what it now says.
+//
+// Zero-cost: the seam still takes the `I32` it always took, written `id.raw`
+// where the number is genuinely wanted.
+distinct SharedSurfaceId = Int
+
 // An allocated surface: the memory, and what a peer needs to describe it.
 //
 // The layout travels beside the handle because an importer cannot infer it: a
@@ -26,7 +38,7 @@ import Foundation
 // arranged. Both are reported so a peer imports what was actually allocated
 // rather than what it assumed.
 struct SharedSurface {
-    var id: Int = 0
+    var id: SharedSurfaceId = SharedSurfaceId(0)
     // What the channel transfers. Owned by this surface: transferring it
     // duplicates it, and releasing this one is what frees this side's.
     var handle: Int = 0
@@ -36,12 +48,12 @@ struct SharedSurface {
     var modifier: Int = 0
 
     function isValid() -> Bool {
-        return id > 0
+        return id != SharedSurfaceId(0)
     }
 
     function release() {
-        if id > 0 {
-            kira_shared_surface_destroy(I32(id))
+        if id != SharedSurfaceId(0) {
+            kira_shared_surface_destroy(I32(id.raw))
         }
         return
     }
@@ -64,8 +76,8 @@ function sharedSurfaceDiagnostic() -> String {
 
 // Allocate a surface to render into and hand to a peer.
 function createSharedSurface(width: Int, height: Int) -> SharedSurface {
-    let id = Int(kira_shared_surface_create(I32(width), I32(height)))
-    if id == 0 {
+    let id = SharedSurfaceId(Int(kira_shared_surface_create(I32(width), I32(height))))
+    if id == SharedSurfaceId(0) {
         return SharedSurface {}
     }
     return sharedSurfaceAt(id)
@@ -73,8 +85,8 @@ function createSharedSurface(width: Int, height: Int) -> SharedSurface {
 
 // Take up a surface a peer allocated, as its handle arrived over a channel.
 function adoptSharedSurface(handle: Int, width: Int, height: Int, stride: Int, modifier: Int) -> SharedSurface {
-    let id = Int(kira_shared_surface_adopt(handle, I32(width), I32(height), I32(stride), modifier))
-    if id == 0 {
+    let id = SharedSurfaceId(Int(kira_shared_surface_adopt(handle, I32(width), I32(height), I32(stride), modifier)))
+    if id == SharedSurfaceId(0) {
         return SharedSurface {}
     }
     return sharedSurfaceAt(id)
@@ -82,14 +94,15 @@ function adoptSharedSurface(handle: Int, width: Int, height: Int, stride: Int, m
 
 // Read a surface's description back out of the seam, so the two sides of it
 // cannot disagree about what was allocated.
-function sharedSurfaceAt(id: Int) -> SharedSurface {
+function sharedSurfaceAt(id: SharedSurfaceId) -> SharedSurface {
+    let slot = I32(id.raw)
     return SharedSurface {
         id: id
-        handle: kira_shared_surface_handle(I32(id))
-        width: Int(kira_shared_surface_width(I32(id)))
-        height: Int(kira_shared_surface_height(I32(id)))
-        stride: Int(kira_shared_surface_stride(I32(id)))
-        modifier: kira_shared_surface_modifier(I32(id))
+        handle: kira_shared_surface_handle(slot)
+        width: Int(kira_shared_surface_width(slot))
+        height: Int(kira_shared_surface_height(slot))
+        stride: Int(kira_shared_surface_stride(slot))
+        modifier: kira_shared_surface_modifier(slot)
     }
 }
 

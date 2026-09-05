@@ -94,7 +94,7 @@ function dawnImportSharedTexture(context: RawPtr, surface: borrow SharedSurface)
         graphicsDiagnostic("Kira Graphics: this device did not enable shared texture memory")
         return SharedTexture {}
     }
-    let memory = kira_shared_texture_import_memory(state.dawn.device, I32(surface.id))
+    let memory = kira_shared_texture_import_memory(state.dawn.device, I32(surface.id.raw))
     if pointerIsNull(memory) {
         graphicsDiagnostic("Kira Graphics: " + kira_shared_texture_diagnostic())
         return SharedTexture {}
