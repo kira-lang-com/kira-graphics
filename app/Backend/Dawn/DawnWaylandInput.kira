@@ -46,8 +46,8 @@ function waylandOnPointerEnter(data: RawPtr, pointer: RawPtr, serial: U32, surfa
     }
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     onEvent(AppEvent {
-        kind: .PointerEntered
-        pointerX: x
+        kind: .PointerEntered,
+        pointerX: x,
         pointerY: y
     })
     return
@@ -61,8 +61,8 @@ function waylandOnPointerLeave(data: RawPtr, pointer: RawPtr, serial: U32, surfa
     state.dawn.pointerSurfaceOffsetY = 0.0
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     onEvent(AppEvent {
-        kind: .PointerExited
-        pointerX: state.dawn.pointerX
+        kind: .PointerExited,
+        pointerX: state.dawn.pointerX,
         pointerY: state.dawn.pointerY
     })
     return
@@ -83,10 +83,10 @@ function waylandOnPointerMotion(data: RawPtr, pointer: RawPtr, time: U32, sx: I3
     state.dawn.hasPointer = true
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     onEvent(AppEvent {
-        kind: .PointerMoved
-        pointerX: x
-        pointerY: y
-        pointerDeltaX: deltaX
+        kind: .PointerMoved,
+        pointerX: x,
+        pointerY: y,
+        pointerDeltaX: deltaX,
         pointerDeltaY: deltaY
     })
     return
@@ -152,9 +152,9 @@ function waylandOnPointerButton(data: RawPtr, pointer: RawPtr, serial: U32, time
     }
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     onEvent(AppEvent {
-        kind: kind
-        pointerButton: waylandPointerButtonOf(button)
-        pointerX: state.dawn.pointerX
+        kind: kind,
+        pointerButton: waylandPointerButtonOf(button),
+        pointerX: state.dawn.pointerX,
         pointerY: state.dawn.pointerY
     })
     return
@@ -189,10 +189,10 @@ function waylandOnToplevelConfigure(data: RawPtr, toplevel: RawPtr, width: I32, 
     }
     dawnConfigureSurface(state, nextWidth, nextHeight)
     onEvent(AppEvent {
-        kind: .Resized
-        windowWidth: nextWidth
-        windowHeight: nextHeight
-        framebufferWidth: nextWidth
+        kind: .Resized,
+        windowWidth: nextWidth,
+        windowHeight: nextHeight,
+        framebufferWidth: nextWidth,
         framebufferHeight: nextHeight
     })
     return
@@ -241,17 +241,17 @@ function waylandOnPointerAxis(data: RawPtr, pointer: RawPtr, time: U32, axis: U3
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     if axis == waylandAxisVertical() {
         onEvent(AppEvent {
-            kind: .Scroll
-            pointerX: state.dawn.pointerX
-            pointerY: state.dawn.pointerY
+            kind: .Scroll,
+            pointerX: state.dawn.pointerX,
+            pointerY: state.dawn.pointerY,
             scrollY: notches
         })
         return
     }
     onEvent(AppEvent {
-        kind: .Scroll
-        pointerX: state.dawn.pointerX
-        pointerY: state.dawn.pointerY
+        kind: .Scroll,
+        pointerX: state.dawn.pointerX,
+        pointerY: state.dawn.pointerY,
         scrollX: notches
     })
     return
@@ -302,14 +302,14 @@ function waylandOnSeatCapabilities(data: RawPtr, seat: RawPtr, capabilities: U32
             kira_wayland_cursor_shape_manager_get_pointer(cursorShapeManager, pointer)
     }
     var listener = kira_wayland_pointer_listener {
-        enter: waylandOnPointerEnter
-        leave: waylandOnPointerLeave
-        motion: waylandOnPointerMotion
-        button: waylandOnPointerButton
-        axis: waylandOnPointerAxis
-        frame: waylandOnPointerFrame
-        axis_source: waylandOnPointerAxisSource
-        axis_stop: waylandOnPointerAxisStop
+        enter: waylandOnPointerEnter,
+        leave: waylandOnPointerLeave,
+        motion: waylandOnPointerMotion,
+        button: waylandOnPointerButton,
+        axis: waylandOnPointerAxis,
+        frame: waylandOnPointerFrame,
+        axis_source: waylandOnPointerAxisSource,
+        axis_stop: waylandOnPointerAxisStop,
         axis_discrete: waylandOnPointerAxisDiscrete
     }
     let ignored = kira_wayland_pointer_add_listener(pointer, move listener, data)
@@ -342,7 +342,7 @@ function waylandOnSeatGlobal(data: RawPtr, registry: RawPtr, name: U32, interfac
     var state = nativeRecover<GraphicsAppRuntimeState>(data)
     state.dawn.seat = seat
     var listener = kira_wayland_seat_listener {
-        capabilities: waylandOnSeatCapabilities
+        capabilities: waylandOnSeatCapabilities,
         name: waylandOnSeatName
     }
     let ignored = kira_wayland_seat_add_listener(seat, move listener, data)
@@ -371,9 +371,9 @@ function dawnWaylandAttachInput(state: borrow mut GraphicsAppRuntimeState, runti
     }
     current.dawn.toplevel = toplevel
     var toplevelListener = kira_wayland_toplevel_listener {
-        configure: waylandOnToplevelConfigure
-        close: waylandOnToplevelClose
-        configure_bounds: waylandOnToplevelConfigureBounds
+        configure: waylandOnToplevelConfigure,
+        close: waylandOnToplevelClose,
+        configure_bounds: waylandOnToplevelConfigureBounds,
         wm_capabilities: waylandOnToplevelWmCapabilities
     }
     let ignoredToplevel = kira_wayland_toplevel_add_listener(
@@ -391,7 +391,7 @@ function dawnWaylandAttachInput(state: borrow mut GraphicsAppRuntimeState, runti
         return
     }
     var seatRegistryListener = kira_wayland_registry_listener {
-        global: waylandOnSeatGlobal
+        global: waylandOnSeatGlobal,
         global_remove: waylandOnGlobalRemove
     }
     let ignoredListener = kira_wayland_registry_add_listener(registry, move seatRegistryListener, runtimeUserData)

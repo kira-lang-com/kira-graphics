@@ -1,5 +1,5 @@
-@FFI.Extern { library: sokol; symbol: kira_live_emit_log_line; abi: c; }
-function kiraLiveEmitLogLine(line: CString): Void;
+@FFI.Extern { library: sokol, symbol: kira_live_emit_log_line, abi: c }
+function kiraLiveEmitLogLine(line: CString): Void
 
 // The runner's first-frame hook (kira_live_install_first_frame_hook) fires the
 // `live.frame.presented` health marker the live supervisor blocks on. sokol
@@ -7,11 +7,11 @@ function kiraLiveEmitLogLine(line: CString): Void;
 // it after its first real on-screen drawable present so a macOS live session
 // reaches `live.session.ready` instead of timing out (KCL038). Standalone
 // `kira run` installs no hook, so this is a no-op there.
-@FFI.Extern { library: sokol; symbol: kira_live_emit_first_frame; abi: c; }
-function kiraLiveEmitFirstFrame(): Void;
+@FFI.Extern { library: sokol, symbol: kira_live_emit_first_frame, abi: c }
+function kiraLiveEmitFirstFrame(): Void
 
-@FFI.Extern { library: sokol; symbol: kira_live_take_reload; abi: c; }
-function kiraLiveTakeReload(): Bool;
+@FFI.Extern { library: sokol, symbol: kira_live_take_reload, abi: c }
+function kiraLiveTakeReload(): Bool
 
 // The live VM swaps bytecode while the native window stays alive. Retained UI
 // hosts consume this marker at the next frame so their cached tree is rebuilt
@@ -30,8 +30,8 @@ function kiraGraphicsLiveFramePresented(): Void {
     return
 }
 
-@FFI.Extern { library: sokol; symbol: kg_sapp_log; abi: c; }
-function kgSappLog(tag: CString, level: U32, itemId: U32, message: CString, lineNr: U32, filename: CString, userData: RawPtr): Void;
+@FFI.Extern { library: sokol, symbol: kg_sapp_log, abi: c }
+function kgSappLog(tag: CString, level: U32, itemId: U32, message: CString, lineNr: U32, filename: CString, userData: RawPtr): Void
 
 @Native
 function kiraGraphicsLiveUiFoundationAppStarted(): Void {
@@ -83,52 +83,52 @@ function kiraGraphicsLiveBackendInitialized(): Void {
     return
 }
 
-@FFI.Extern { library: sokol; symbol: kg_setup; abi: c; }
-function kgSetup(): Void;
+@FFI.Extern { library: sokol, symbol: kg_setup, abi: c }
+function kgSetup(): Void
 
-@FFI.Extern { library: sokol; symbol: kg_destroy_buffer_id; abi: c; }
-function kgDestroyBufferId(bufferId: U32): Void;
+@FFI.Extern { library: sokol, symbol: kg_destroy_buffer_id, abi: c }
+function kgDestroyBufferId(bufferId: U32): Void
 
 // Seconds on a monotonic clock, and the GPU's own measurement of the frame
 // before last. Neither has an expression in Kira: reading a clock is a platform
 // call, and a GL timestamp query needs entry points sokol does not load.
-@FFI.Extern { library: sokol; symbol: kg_monotonic_seconds; abi: c; }
-function kgMonotonicSeconds(): Float;
+@FFI.Extern { library: sokol, symbol: kg_monotonic_seconds, abi: c }
+function kgMonotonicSeconds(): Float
 
-@FFI.Extern { library: sokol; symbol: kg_gpu_timer_supported; abi: c; }
-function kgGpuTimerSupported(): Bool;
+@FFI.Extern { library: sokol, symbol: kg_gpu_timer_supported, abi: c }
+function kgGpuTimerSupported(): Bool
 
-@FFI.Extern { library: sokol; symbol: kg_gpu_timer_begin; abi: c; }
-function kgGpuTimerBegin(): Void;
+@FFI.Extern { library: sokol, symbol: kg_gpu_timer_begin, abi: c }
+function kgGpuTimerBegin(): Void
 
-@FFI.Extern { library: sokol; symbol: kg_gpu_timer_end; abi: c; }
-function kgGpuTimerEnd(): Void;
+@FFI.Extern { library: sokol, symbol: kg_gpu_timer_end, abi: c }
+function kgGpuTimerEnd(): Void
 
-@FFI.Extern { library: sokol; symbol: kg_gpu_frame_seconds; abi: c; }
-function kgGpuFrameSeconds(): Float;
+@FFI.Extern { library: sokol, symbol: kg_gpu_frame_seconds, abi: c }
+function kgGpuFrameSeconds(): Float
 
-@FFI.Extern { library: sokol; symbol: kg_create_sampler_id; abi: c; }
-function kgCreateSamplerId(label: CString, minFilter: Int, magFilter: Int, addressModeU: Int, addressModeV: Int): U32;
+@FFI.Extern { library: sokol, symbol: kg_create_sampler_id, abi: c }
+function kgCreateSamplerId(label: CString, minFilter: Int, magFilter: Int, addressModeU: Int, addressModeV: Int): U32
 
-@FFI.Extern { library: sokol; symbol: kg_destroy_sampler_id; abi: c; }
-function kgDestroySamplerId(samplerId: U32): Void;
+@FFI.Extern { library: sokol, symbol: kg_destroy_sampler_id, abi: c }
+function kgDestroySamplerId(samplerId: U32): Void
 
 // Prints the lifetime report, gated behind the same env vars the old
 // table-reading version was. Kira is the one sampling now (see
 // `SokolApplication.kira`'s `kiraGraphicsSokolFrame`) — it owns the running
 // peaks and reads `sg_query_stats` itself through the generated bindings — so
 // this is pure output formatting over the two values it hands over.
-@FFI.Extern { library: sokol; symbol: kg_report_lifetime; abi: c; }
-function kgReportLifetime(stats: sg_stats, peaks: KgLifetimePeaks): Void;
+@FFI.Extern { library: sokol, symbol: kg_report_lifetime, abi: c }
+function kgReportLifetime(stats: sg_stats, peaks: KgLifetimePeaks): Void
 
-@FFI.Extern { library: sokol; symbol: kg_run_lifetime_stress; abi: c; }
-function kgRunLifetimeStress(iterations: Int, shaderDirectory: CString, shaderAsset: CString): U32;
+@FFI.Extern { library: sokol, symbol: kg_run_lifetime_stress, abi: c }
+function kgRunLifetimeStress(iterations: Int, shaderDirectory: CString, shaderAsset: CString): U32
 
-@FFI.Extern { library: sokol; symbol: kg_destroy_shader_id; abi: c; }
-function kgDestroyShaderId(shaderId: U32): Void;
+@FFI.Extern { library: sokol, symbol: kg_destroy_shader_id, abi: c }
+function kgDestroyShaderId(shaderId: U32): Void
 
 // Read the presented framebuffer back into a binary PPM. sokol_gfx has no
 // readback of any kind, so this is the only thing that can say what a frame on
 // this backend actually contains — see `kg_capture_swapchain_ppm`.
-@FFI.Extern { library: sokol; symbol: kg_capture_swapchain_ppm; abi: c; }
-function kgCaptureSwapchainPpm(path: CString): Bool;
+@FFI.Extern { library: sokol, symbol: kg_capture_swapchain_ppm, abi: c }
+function kgCaptureSwapchainPpm(path: CString): Bool

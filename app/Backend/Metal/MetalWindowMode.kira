@@ -22,19 +22,19 @@ function metalWindowStyleFullScreenBit() -> U64 { return 16384 }
 
 function metalWindowStyleMaskFor(mode: borrow WindowMode) -> U64 {
     match mode {
-        Windowed -> return metalWindowStyleMask();
-        WindowedBorderless -> return metalWindowStyleBorderless();
+        Windowed -> return metalWindowStyleMask()
+        WindowedBorderless -> return metalWindowStyleBorderless()
         // A fullscreen window is opened decorated and then toggled: AppKit will
         // not move an untitled window into a fullscreen space at all.
-        Fullscreen -> return metalWindowStyleMask();
+        Fullscreen -> return metalWindowStyleMask()
     }
 }
 
 function metalWindowWantsFullScreen(mode: borrow WindowMode) -> Bool {
     match mode {
-        Windowed -> return false;
-        WindowedBorderless -> return false;
-        Fullscreen -> return true;
+        Windowed -> return false
+        WindowedBorderless -> return false
+        Fullscreen -> return true
     }
 }
 
@@ -47,7 +47,7 @@ function metalWindowStyleBitSet(mask: U64, bit: U64) -> Bool {
 
 @Native
 function metalWindowIsFullScreen(window: RawPtr) -> Bool {
-    return metalWindowStyleBitSet(metalMsgSendU64(window, metalSel("styleMask")), metalWindowStyleFullScreenBit())
+    return metalWindowStyleBitSet(metalMsgSend(window, metalSel("styleMask")), metalWindowStyleFullScreenBit())
 }
 
 // Put a freshly created window into the mode the application asked for. The
@@ -56,20 +56,20 @@ function metalWindowIsFullScreen(window: RawPtr) -> Bool {
 @Native
 function metalWindowApplyStartMode(window: RawPtr, mode: borrow WindowMode): Void {
     if metalWindowWantsFullScreen(mode) {
-        metalMsgSendVoidP(window, metalSel("toggleFullScreen:"), nullPointer())
+        metalMsgSend(window, metalSel("toggleFullScreen:"), nullPointer())
         return
     }
-    metalMsgSendVoidU(window, metalSel("setStyleMask:"), metalWindowStyleMaskFor(mode))
+    metalMsgSend(window, metalSel("setStyleMask:"), metalWindowStyleMaskFor(mode))
     return
 }
 
 @Native
 function metalViewWindowMode(view: RawPtr) -> WindowMode {
-    let window = metalMsgSend(view, metalSel("window"))
+    let window: RawPtr = metalMsgSend(view, metalSel("window"))
     if pointerIsNull(window) {
         return .Windowed
     }
-    let mask = metalMsgSendU64(window, metalSel("styleMask"))
+    let mask: U64 = metalMsgSend(window, metalSel("styleMask"))
     if metalWindowStyleBitSet(mask, metalWindowStyleFullScreenBit()) {
         return .Fullscreen
     }
@@ -81,7 +81,7 @@ function metalViewWindowMode(view: RawPtr) -> WindowMode {
 
 @Native
 function metalViewSetWindowMode(view: RawPtr, mode: borrow WindowMode): Void {
-    let window = metalMsgSend(view, metalSel("window"))
+    let window: RawPtr = metalMsgSend(view, metalSel("window"))
     if pointerIsNull(window) {
         return
     }
@@ -90,13 +90,13 @@ function metalViewSetWindowMode(view: RawPtr, mode: borrow WindowMode): Void {
         // Restore the decoration before the toggle in either direction: AppKit
         // refuses to enter a fullscreen space from an untitled window, and a
         // window that left one untitled has no titlebar to come back to.
-        metalMsgSendVoidU(window, metalSel("setStyleMask:"), metalWindowStyleMask())
-        metalMsgSendVoidP(window, metalSel("toggleFullScreen:"), nullPointer())
+        metalMsgSend(window, metalSel("setStyleMask:"), metalWindowStyleMask())
+        metalMsgSend(window, metalSel("toggleFullScreen:"), nullPointer())
     }
     if wantsFullScreen {
         return
     }
-    metalMsgSendVoidU(window, metalSel("setStyleMask:"), metalWindowStyleMaskFor(mode))
-    metalMsgSendVoidP(window, metalSel("makeKeyAndOrderFront:"), nullPointer())
+    metalMsgSend(window, metalSel("setStyleMask:"), metalWindowStyleMaskFor(mode))
+    metalMsgSend(window, metalSel("makeKeyAndOrderFront:"), nullPointer())
     return
 }

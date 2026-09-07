@@ -53,8 +53,8 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
 
     let onInit: (Graphics) -> Void = app.initHandler
     let initGraphics = Graphics {
-        userData: userData
-        backend: .Metal
+        userData: userData,
+        backend: .Metal,
         backendContext: ctxPtr
     }
     onInit(move initGraphics)
@@ -63,13 +63,13 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     // modal resize-tracking loop inside -sendEvent:, so this main loop cannot
     // update layout until the delegate re-enters the frame handler.
     let liveStorage = nativeState(MetalLiveState {
-        ctx: ctxPtr
-        userData: userData
-        runtimeUserData: runtimeUserData
+        ctx: ctxPtr,
+        userData: userData,
+        runtimeUserData: runtimeUserData,
         closed: false
     })
     let liveHandle = nativeUserData(liveStorage)
-    let hostWindow = metalMsgSend(view, metalSel("window"))
+    let hostWindow: RawPtr = metalMsgSend(view, metalSel("window"))
     var resizeDelegate = nullPointer()
     if !pointerIsNull(hostWindow) {
         resizeDelegate = metalInstallResizeDelegate(hostWindow, liveHandle)
@@ -182,14 +182,14 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                 let opx = Float(onClicks[oci + 1])
                 let opy = Float(onClicks[oci + 2])
                 let odown = AppEvent {
-                    kind: .PointerDown
-                    pointerX: opx
+                    kind: .PointerDown,
+                    pointerX: opx,
                     pointerY: opy
                 }
                 onWindowEvent(odown)
                 let oup = AppEvent {
-                    kind: .PointerUp
-                    pointerX: opx
+                    kind: .PointerUp,
+                    pointerX: opx,
                     pointerY: opy
                 }
                 onWindowEvent(oup)
@@ -209,9 +209,9 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                 let obutton = graphicsPointerButtonFromRaw(onDrags[odi + 5])
                 if onFrameIndex == dragStart {
                     onWindowEvent(AppEvent {
-                        kind: .PointerDown
-                        pointerButton: obutton
-                        pointerX: obx
+                        kind: .PointerDown,
+                        pointerButton: obutton,
+                        pointerX: obx,
                         pointerY: oby
                     })
                 } else {
@@ -224,16 +224,16 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                     let omy = oby + Float(onDrags[odi + 4]) * ot
                     if onFrameIndex <= dragStart + dragSteps {
                         onWindowEvent(AppEvent {
-                            kind: .PointerMoved
-                            pointerButton: obutton
-                            pointerX: omx
+                            kind: .PointerMoved,
+                            pointerButton: obutton,
+                            pointerX: omx,
                             pointerY: omy
                         })
                     } else {
                         onWindowEvent(AppEvent {
-                            kind: .PointerUp
-                            pointerButton: obutton
-                            pointerX: omx
+                            kind: .PointerUp,
+                            pointerButton: obutton,
+                            pointerX: omx,
                             pointerY: omy
                         })
                     }
@@ -245,7 +245,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         while ori + 3 <= onResizes.count {
             if onResizes[ori] == onFrameIndex {
                 if !pointerIsNull(hostWindow) {
-                    metalMsgSendVoidRectB(hostWindow, metalSel("setFrame:display:"), 60.0, 60.0, Float(onResizes[ori + 1]), Float(onResizes[ori + 2]), true)
+                    metalMsgSend(hostWindow, metalSel("setFrame:display:"), 60.0, 60.0, Float(onResizes[ori + 1]), Float(onResizes[ori + 2]), true)
                 }
             }
             ori = ori + 3
@@ -265,8 +265,8 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         metalContextBeginFrameTiming(ctxPtr)
         metalContextSyncViewportFromView(ctxPtr)
         let frameGraphics = Graphics {
-            userData: userData
-            backend: .Metal
+            userData: userData,
+            backend: .Metal,
             backendContext: ctxPtr
         }
         var frame = frameGraphics.frame()
@@ -356,8 +356,8 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     nativeStateFree(liveStorage)
     let onCleanup: (Graphics) -> Void = app.cleanupHandler
     let cleanupGraphics = Graphics {
-        userData: userData
-        backend: .Metal
+        userData: userData,
+        backend: .Metal,
         backendContext: ctxPtr
     }
     onCleanup(move cleanupGraphics)

@@ -18,26 +18,26 @@ function metalActivationPolicyRegular() -> U64 { return 0 }
 // Idempotent — sharedApplication is a singleton.
 @Native
 function metalActivateApp(): Void {
-    let app = metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication"))
-    metalMsgSendVoidU(app, metalSel("setActivationPolicy:"), metalActivationPolicyRegular())
-    metalMsgSendVoidB(app, metalSel("activateIgnoringOtherApps:"), true)
-    metalMsgSendVoid(app, metalSel("finishLaunching"))
+    let app: RawPtr = metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication"))
+    metalMsgSend(app, metalSel("setActivationPolicy:"), metalActivationPolicyRegular())
+    metalMsgSend(app, metalSel("activateIgnoringOtherApps:"), true)
+    metalMsgSend(app, metalSel("finishLaunching"))
     return
 }
 
 // Create the application + window and return the content view to render into.
 @Native
 function metalCreateWindow(width: Int, height: Int, title: borrow String, mode: borrow WindowMode) -> RawPtr {
-    let app = metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication"))
-    metalMsgSendVoidU(app, metalSel("setActivationPolicy:"), metalActivationPolicyRegular())
-    metalMsgSendVoidB(app, metalSel("activateIgnoringOtherApps:"), true)
-    metalMsgSendVoid(app, metalSel("finishLaunching"))
+    let app: RawPtr = metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication"))
+    metalMsgSend(app, metalSel("setActivationPolicy:"), metalActivationPolicyRegular())
+    metalMsgSend(app, metalSel("activateIgnoringOtherApps:"), true)
+    metalMsgSend(app, metalSel("finishLaunching"))
 
-    let windowAlloc = metalMsgSend(metalObjcGetClass("NSWindow"), metalSel("alloc"))
-    let window = metalMsgSendInitWindow(windowAlloc, metalSel("initWithContentRect:styleMask:backing:defer:"), 120.0, 120.0, Float(width), Float(height), metalWindowStyleMask(), metalWindowBackingBuffered(), false)
-    let nsTitle = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), title)
-    metalMsgSendVoidP(window, metalSel("setTitle:"), nsTitle)
-    metalMsgSendVoidP(window, metalSel("makeKeyAndOrderFront:"), metalObjcGetClass("NSObject"))
+    let windowAlloc: RawPtr = metalMsgSend(metalObjcGetClass("NSWindow"), metalSel("alloc"))
+    let window: RawPtr = metalMsgSend(windowAlloc, metalSel("initWithContentRect:styleMask:backing:defer:"), 120.0, 120.0, Float(width), Float(height), metalWindowStyleMask(), metalWindowBackingBuffered(), false)
+    let nsTitle: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), title)
+    metalMsgSend(window, metalSel("setTitle:"), nsTitle)
+    metalMsgSend(window, metalSel("makeKeyAndOrderFront:"), metalObjcGetClass("NSObject"))
     metalWindowApplyStartMode(window, mode)
     return metalMsgSend(window, metalSel("contentView"))
 }
@@ -45,9 +45,9 @@ function metalCreateWindow(width: Int, height: Int, title: borrow String, mode: 
 // Pump the main run loop for `seconds` so Core Animation / timers run between frames.
 @Native
 function metalSpinRunLoop(seconds: Float) {
-    let runloop = metalMsgSend(metalObjcGetClass("NSRunLoop"), metalSel("currentRunLoop"))
-    let until = metalMsgSendDateInterval(metalObjcGetClass("NSDate"), metalSel("dateWithTimeIntervalSinceNow:"), seconds)
-    metalMsgSendVoidP(runloop, metalSel("runUntilDate:"), until)
+    let runloop: RawPtr = metalMsgSend(metalObjcGetClass("NSRunLoop"), metalSel("currentRunLoop"))
+    let until: RawPtr = metalMsgSend(metalObjcGetClass("NSDate"), metalSel("dateWithTimeIntervalSinceNow:"), seconds)
+    metalMsgSend(runloop, metalSel("runUntilDate:"), until)
     return
 }
 
@@ -64,18 +64,18 @@ function metalSharedApp() -> RawPtr {
 function metalSetCursorHidden(hidden: Bool) {
     let cls = metalObjcGetClass("NSCursor")
     if hidden {
-        metalMsgSendVoid(cls, metalSel("hide"))
+        metalMsgSend(cls, metalSel("hide"))
     } else {
-        metalMsgSendVoid(cls, metalSel("unhide"))
+        metalMsgSend(cls, metalSel("unhide"))
         // Manual hide/unhide leaves the window's AUTOMATIC cursor rectangles
         // stale, so AppKit stops re-asserting the edge resize cursors (the frame
         // just shows the arrow). Invalidating them forces a rebuild on the next
         // pointer move, restoring the resize arrows at the window border.
         let app = metalSharedApp()
-        let window = metalMsgSend(app, metalSel("keyWindow"))
+        let window: RawPtr = metalMsgSend(app, metalSel("keyWindow"))
         if pointerIsNull(window) == false {
-            let view = metalMsgSend(window, metalSel("contentView"))
-            metalMsgSendVoidP(window, metalSel("invalidateCursorRectsForView:"), view)
+            let view: RawPtr = metalMsgSend(window, metalSel("contentView"))
+            metalMsgSend(window, metalSel("invalidateCursorRectsForView:"), view)
         }
     }
     return
@@ -132,8 +132,8 @@ function metalRenderLiveFrame(ctx: RawPtr, userData: RawPtr, runtimeUserData: Ra
     metalContextBeginFrameTiming(ctx)
     metalContextSyncViewportFromView(ctx)
     let graphics = Graphics {
-        userData: userData
-        backend: .Metal
+        userData: userData,
+        backend: .Metal,
         backendContext: ctx
     }
     var frame = graphics.frame()
@@ -156,7 +156,7 @@ function metalResizeImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr): Voi
     if pointerIsNull(value) {
         return
     }
-    let statePtr = metalMsgSend(value, metalSel("pointerValue"))
+    let statePtr: RawPtr = metalMsgSend(value, metalSel("pointerValue"))
     if pointerIsNull(statePtr) {
         return
     }
@@ -173,7 +173,7 @@ function metalWindowCloseImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr)
     if pointerIsNull(value) {
         return
     }
-    let statePtr = metalMsgSend(value, metalSel("pointerValue"))
+    let statePtr: RawPtr = metalMsgSend(value, metalSel("pointerValue"))
     if pointerIsNull(statePtr) {
         return
     }
@@ -203,10 +203,10 @@ function metalInstallResizeDelegate(window: RawPtr, statePtr: RawPtr) -> RawPtr 
         let closeIgnored = closeAdded
         metalObjcRegisterClassPair(cls)
     }
-    let delegate = metalMsgSend(metalMsgSend(cls, metalSel("alloc")), metalSel("init"))
-    let value = metalMsgSendP(metalObjcGetClass("NSValue"), metalSel("valueWithPointer:"), statePtr)
+    let delegate: RawPtr = metalMsgSend(metalMsgSend(cls, metalSel("alloc")), metalSel("init"))
+    let value: RawPtr = metalMsgSend(metalObjcGetClass("NSValue"), metalSel("valueWithPointer:"), statePtr)
     metalObjcSetAssociatedObject(delegate, metalSel("kiraLiveState"), value, 1)
-    metalMsgSendVoidP(window, metalSel("setDelegate:"), delegate)
+    metalMsgSend(window, metalSel("setDelegate:"), delegate)
     return delegate
 }
 
@@ -218,20 +218,20 @@ function metalRemoveResizeDelegate(window: RawPtr, delegate: RawPtr) {
     if pointerIsNull(delegate) {
         return
     }
-    metalMsgSendVoidP(window, metalSel("setDelegate:"), nullPointer())
+    metalMsgSend(window, metalSel("setDelegate:"), nullPointer())
     metalObjcSetAssociatedObject(delegate, metalSel("kiraLiveState"), nullPointer(), 1)
-    metalMsgSendVoid(delegate, metalSel("release"))
+    metalMsgSend(delegate, metalSel("release"))
     return
 }
 
 // Whether the content view's window is still on screen (false once closed).
 @Native
 function metalViewWindowVisible(view: RawPtr) -> Bool {
-    let window = metalMsgSend(view, metalSel("window"))
+    let window: RawPtr = metalMsgSend(view, metalSel("window"))
     if pointerIsNull(window) {
         return false
     }
-    return metalMsgSendBoolEmpty(window, metalSel("isVisible"))
+    return metalMsgSend(window, metalSel("isVisible"))
 }
 
 // 1 = focused and visible, 2 = unfocused but still visible/unoccluded,
@@ -239,18 +239,18 @@ function metalViewWindowVisible(view: RawPtr) -> Bool {
 // cadence; only state 3 is throttled.
 @Native
 function metalViewWindowState(view: RawPtr) -> Int {
-    let window = metalMsgSend(view, metalSel("window"))
+    let window: RawPtr = metalMsgSend(view, metalSel("window"))
     if pointerIsNull(window) {
         return 3
     }
-    let visible = metalMsgSendBoolEmpty(window, metalSel("isVisible"))
-    let miniaturized = metalMsgSendBoolEmpty(window, metalSel("isMiniaturized"))
-    let occlusion = metalMsgSendU64(window, metalSel("occlusionState"))
+    let visible: Bool = metalMsgSend(window, metalSel("isVisible"))
+    let miniaturized: Bool = metalMsgSend(window, metalSel("isMiniaturized"))
+    let occlusion: U64 = metalMsgSend(window, metalSel("occlusionState"))
     let occlusionVisible = (occlusion / U64(2)) - ((occlusion / U64(2)) / U64(2)) * U64(2) == U64(1)
     if !visible || miniaturized || !occlusionVisible {
         return 3
     }
-    if metalMsgSendBoolEmpty(window, metalSel("isKeyWindow")) {
+    if metalMsgSend(window, metalSel("isKeyWindow")) {
         return 1
     }
     return 2
@@ -258,15 +258,15 @@ function metalViewWindowState(view: RawPtr) -> Int {
 
 @Native
 function metalViewMaximumFramesPerSecond(view: RawPtr) -> Int {
-    let window = metalMsgSend(view, metalSel("window"))
+    let window: RawPtr = metalMsgSend(view, metalSel("window"))
     if pointerIsNull(window) {
         return 60
     }
-    let screen = metalMsgSend(window, metalSel("screen"))
+    let screen: RawPtr = metalMsgSend(window, metalSel("screen"))
     if pointerIsNull(screen) {
         return 60
     }
-    let refresh = Int(metalMsgSendU64(screen, metalSel("maximumFramesPerSecond")))
+    let refresh = Int(metalMsgSendCount(screen, metalSel("maximumFramesPerSecond")))
     if refresh > 0 {
         return refresh
     }

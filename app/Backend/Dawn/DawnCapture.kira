@@ -28,8 +28,8 @@ function dawnCaptureFrame(context: RawPtr, path: borrow String) {
     let bytesPerRow = (width * 4 + dawnCopyRowAlignment() - 1) / dawnCopyRowAlignment() * dawnCopyRowAlignment()
     let byteCount = bytesPerRow * height
     let readback = wgpuDeviceCreateBuffer(state.dawn.device, WGPUBufferDescriptor {
-        label: dawnText("kira-frame-capture")
-        usage: dawnBufferUsageMapRead() | dawnBufferUsageCopyDestination()
+        label: dawnText("kira-frame-capture"),
+        usage: dawnBufferUsageMapRead() | dawnBufferUsageCopyDestination(),
         size: U64(byteCount)
     })
     if pointerIsNull(readback) {
@@ -42,21 +42,21 @@ function dawnCaptureFrame(context: RawPtr, path: borrow String) {
     wgpuCommandEncoderCopyTextureToBuffer(
         encoder,
         WGPUTexelCopyTextureInfo {
-            texture: state.dawn.frameTexture
-            mipLevel: U32(0)
+            texture: state.dawn.frameTexture,
+            mipLevel: U32(0),
             aspect: dawnTextureAspectAll()
         },
         WGPUTexelCopyBufferInfo {
             layout: WGPUTexelCopyBufferLayout {
-                offset: U64(0)
-                bytesPerRow: U32(bytesPerRow)
+                offset: U64(0),
+                bytesPerRow: U32(bytesPerRow),
                 rowsPerImage: U32(height)
-            }
+            },
             buffer: readback
         },
         WGPUExtent3D {
-            width: U32(width)
-            height: U32(height)
+            width: U32(width),
+            height: U32(height),
             depthOrArrayLayers: U32(1)
         },
     )
@@ -69,8 +69,8 @@ function dawnCaptureFrame(context: RawPtr, path: borrow String) {
     state.dawn.mapResolved = false
     state.dawn.mapSucceeded = false
     wgpuBufferMapAsync(readback, dawnMapModeRead(), U64(0), U64(byteCount), WGPUBufferMapCallbackInfo {
-        mode: dawnCallbackOnProcessEvents()
-        callback: dawnBufferMapped
+        mode: dawnCallbackOnProcessEvents(),
+        callback: dawnBufferMapped,
         userdata1: context
     })
     var spins = 0

@@ -9,17 +9,17 @@ function sokolRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         return
     }
     let desc = sapp_desc {
-        init_userdata_cb: kiraGraphicsSokolInit
-        frame_userdata_cb: kiraGraphicsSokolFrame
-        cleanup_userdata_cb: kiraGraphicsSokolCleanup
-        event_userdata_cb: kiraGraphicsSokolEvent
-        user_data: runtimeUserData
-        width: app.width
-        height: app.height
-        sample_count: app.sampleCount
-        window_title: app.title
-        high_dpi: app.highDpi
-        fullscreen: sokolWindowIsCovering(app.windowMode)
+        init_userdata_cb: kiraGraphicsSokolInit,
+        frame_userdata_cb: kiraGraphicsSokolFrame,
+        cleanup_userdata_cb: kiraGraphicsSokolCleanup,
+        event_userdata_cb: kiraGraphicsSokolEvent,
+        user_data: runtimeUserData,
+        width: app.width,
+        height: app.height,
+        sample_count: app.sampleCount,
+        window_title: app.title,
+        high_dpi: app.highDpi,
+        fullscreen: sokolWindowIsCovering(app.windowMode),
         logger: sapp_logger {
             func: kiraGraphicsSokolLog
         }
@@ -44,8 +44,8 @@ function kiraGraphicsSokolInit(runtimeUserData: RawPtr): Void {
     readHarnessKnobs(state)
     let onInit: (Graphics) -> Void = state.app.initHandler
     let graphics = Graphics {
-        userData: state.userData
-        backend: .Sokol
+        userData: state.userData,
+        backend: .Sokol,
         backendContext: runtimeUserData
     }
     onInit(move graphics)
@@ -68,8 +68,8 @@ function kiraGraphicsSokolFrame(runtimeUserData: RawPtr): Void {
     let onFrame: (borrow mut RenderFrame) -> Void = state.app.frameHandler
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     let graphics = Graphics {
-        userData: state.userData
-        backend: .Sokol
+        userData: state.userData,
+        backend: .Sokol,
         backendContext: runtimeUserData
     }
     var frame = graphics.frame()
@@ -86,16 +86,16 @@ function kiraGraphicsSokolFrame(runtimeUserData: RawPtr): Void {
             let px = Float(state.clickScript[clickIndex + 1])
             let py = Float(state.clickScript[clickIndex + 2])
             let down = AppEvent {
-                kind: .PointerDown
-                pointerButton: .Left
-                pointerX: px
+                kind: .PointerDown,
+                pointerButton: .Left,
+                pointerX: px,
                 pointerY: py
             }
             onEvent(down)
             let up = AppEvent {
-                kind: .PointerUp
-                pointerButton: .Left
-                pointerX: px
+                kind: .PointerUp,
+                pointerButton: .Left,
+                pointerX: px,
                 pointerY: py
             }
             onEvent(up)
@@ -122,8 +122,8 @@ function kiraGraphicsSokolCleanup(runtimeUserData: RawPtr): Void {
     var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
     let onCleanup: (Graphics) -> Void = state.app.cleanupHandler
     let graphics = Graphics {
-        userData: state.userData
-        backend: .Sokol
+        userData: state.userData,
+        backend: .Sokol,
         backendContext: runtimeUserData
     }
 
@@ -155,7 +155,7 @@ function driveTypingScripts(state: borrow mut GraphicsAppRuntimeState, scriptFra
                 kind = .KeyDown
             }
             onEvent(AppEvent {
-                kind: kind
+                kind: kind,
                 keyCode: state.keyScript[keyIndex + 1]
             })
         }
@@ -165,7 +165,7 @@ function driveTypingScripts(state: borrow mut GraphicsAppRuntimeState, scriptFra
     while textIndex + 2 <= state.textScript.count {
         if state.textScript[textIndex] == scriptFrame {
             onEvent(AppEvent {
-                kind: .TextInput
+                kind: .TextInput,
                 textCodepoint: state.textScript[textIndex + 1]
             })
         }

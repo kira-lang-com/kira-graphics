@@ -32,9 +32,9 @@ function metalRegistryKindFree() -> U8 { return 0 }
 function metalStashCommandBuffer(ctx: RawPtr, commandBuffer: RawPtr) {
     let previous = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
     if !pointerIsNull(previous) {
-        metalMsgSendVoid(previous, metalSel("release"))
+        metalMsgSend(previous, metalSel("release"))
     }
-    metalMsgSendVoid(commandBuffer, metalSel("retain"))
+    metalMsgSend(commandBuffer, metalSel("retain"))
     metalMemWritePtr(ctx, metalOffsetCommandBuffer(), commandBuffer)
     return
 }
@@ -188,7 +188,7 @@ function metalUnregister(ctx: RawPtr, id: Int) {
         if kind == metalRegistryKindRawBlock() {
             metalMemFree(entry)
         } else {
-            metalMsgSendVoid(entry, metalSel("release"))
+            metalMsgSend(entry, metalSel("release"))
         }
     }
     // The slot's pointer word becomes the link to the next free id, which is why

@@ -125,12 +125,12 @@ function sokolNoteAllocation(backendContext: RawPtr, bytes: U64, freed: Bool) {
 @Native
 function sokolFrameStatistics(backendContext: RawPtr) -> FrameStatistics {
     var stats = FrameStatistics {
-        drawableWidth: sokolDrawableWidth()
-        drawableHeight: sokolDrawableHeight()
-        frameSeconds: rootSokolFrameDuration()
-        resourceCount: sokolAliveResourceCount()
-        framesInFlight: 1
-        frameSerial: Int(sapp_frame_count())
+        drawableWidth: sokolDrawableWidth(),
+        drawableHeight: sokolDrawableHeight(),
+        frameSeconds: rootSokolFrameDuration(),
+        resourceCount: sokolAliveResourceCount(),
+        framesInFlight: 1,
+        frameSerial: Int(sapp_frame_count()),
         hasGpuSeconds: kgGpuTimerSupported()
     }
     if pointerIsNull(backendContext) {
@@ -162,30 +162,30 @@ function rootSokolFrameDuration() -> Float {
 @Native
 function sokolTrackWindowState(state: borrow mut GraphicsAppRuntimeState, kind: AppEventKind) {
     match kind {
-        Focused -> state.frameStats.windowState = 1;
-        Unfocused -> state.frameStats.windowState = 2;
-        Iconified -> state.frameStats.windowState = 3;
-        Suspended -> state.frameStats.windowState = 3;
-        Restored -> state.frameStats.windowState = 1;
-        Resumed -> state.frameStats.windowState = 1;
-        None -> return;
-        KeyDown -> return;
-        KeyUp -> return;
-        TextInput -> return;
-        PointerDown -> return;
-        PointerUp -> return;
-        PointerMoved -> return;
-        PointerEntered -> return;
-        PointerExited -> return;
-        Scroll -> return;
-        TouchesBegan -> return;
-        TouchesMoved -> return;
-        TouchesEnded -> return;
-        TouchesCancelled -> return;
-        Resized -> return;
-        QuitRequested -> return;
-        ClipboardPasted -> return;
-        FilesDropped -> return;
+        Focused -> state.frameStats.windowState = 1
+        Unfocused -> state.frameStats.windowState = 2
+        Iconified -> state.frameStats.windowState = 3
+        Suspended -> state.frameStats.windowState = 3
+        Restored -> state.frameStats.windowState = 1
+        Resumed -> state.frameStats.windowState = 1
+        None -> { return }
+        KeyDown -> { return }
+        KeyUp -> { return }
+        TextInput -> { return }
+        PointerDown -> { return }
+        PointerUp -> { return }
+        PointerMoved -> { return }
+        PointerEntered -> { return }
+        PointerExited -> { return }
+        Scroll -> { return }
+        TouchesBegan -> { return }
+        TouchesMoved -> { return }
+        TouchesEnded -> { return }
+        TouchesCancelled -> { return }
+        Resized -> { return }
+        QuitRequested -> { return }
+        ClipboardPasted -> { return }
+        FilesDropped -> { return }
     }
     return
 }

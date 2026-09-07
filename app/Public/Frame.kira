@@ -114,11 +114,11 @@ class RenderFrame {
             }
         }
         self.attachments = PassAttachments {
-            hasColor: hasColor
-            color: move colorAttachment
-            hasDepth: descriptor.hasDepthAttachment
-            depth: descriptor.depthAttachment
-            hasStencil: descriptor.hasStencilAttachment
+            hasColor: hasColor,
+            color: move colorAttachment,
+            hasDepth: descriptor.hasDepthAttachment,
+            depth: descriptor.depthAttachment,
+            hasStencil: descriptor.hasStencilAttachment,
             stencil: descriptor.stencilAttachment
         }
         self.hasRenderPass = true

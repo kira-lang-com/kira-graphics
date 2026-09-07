@@ -97,11 +97,11 @@ function adoptSharedSurface(handle: Int, width: Int, height: Int, stride: Int, m
 function sharedSurfaceAt(id: SharedSurfaceId) -> SharedSurface {
     let slot = I32(id.raw)
     return SharedSurface {
-        id: id
-        handle: kira_shared_surface_handle(slot)
-        width: Int(kira_shared_surface_width(slot))
-        height: Int(kira_shared_surface_height(slot))
-        stride: Int(kira_shared_surface_stride(slot))
+        id: id,
+        handle: kira_shared_surface_handle(slot),
+        width: Int(kira_shared_surface_width(slot)),
+        height: Int(kira_shared_surface_height(slot)),
+        stride: Int(kira_shared_surface_stride(slot)),
         modifier: kira_shared_surface_modifier(slot)
     }
 }

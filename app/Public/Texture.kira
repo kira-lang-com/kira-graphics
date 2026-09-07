@@ -40,7 +40,7 @@ struct GraphicsTexture {
 @Native
 function sampledTextureFromViewId(viewId: U32) -> GraphicsTexture {
     return GraphicsTexture {
-        id: viewId
+        id: viewId,
         viewId: viewId
     }
 }

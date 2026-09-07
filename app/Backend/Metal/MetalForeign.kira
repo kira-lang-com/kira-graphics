@@ -27,215 +27,219 @@
 // Whether the cursor is currently drawn. The look-drag path hides and locks
 // together, so this doubles as "is the pointer locked" without a flag of our
 // own to keep in step with the OS.
-@FFI.Extern { library: kira_metal; symbol: CGCursorIsVisible; abi: c; }
-function metalCursorIsVisible(): Bool;
+@FFI.Extern { library: kira_metal, symbol: CGCursorIsVisible, abi: c }
+function metalCursorIsVisible(): Bool
 
-@FFI.Extern { library: kira_metal; symbol: CGAssociateMouseAndMouseCursorPosition; abi: c; }
-function metalAssociateMouseAndCursor(connected: Bool): I32;
+@FFI.Extern { library: kira_metal, symbol: CGAssociateMouseAndMouseCursorPosition, abi: c }
+function metalAssociateMouseAndCursor(connected: Bool): I32
 
-@FFI.Extern { library: kira_metal; symbol: objc_getClass; abi: c; }
-function metalObjcGetClass(name: CString): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_getClass, abi: c }
+function metalObjcGetClass(name: CString): RawPtr
 
-@FFI.Extern { library: kira_metal; symbol: sel_registerName; abi: c; }
-function metalSel(name: CString): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: sel_registerName, abi: c }
+function metalSel(name: CString): RawPtr
 
 // Writes a C string and a newline to stdout. The one way to surface text the
 // Objective-C runtime hands back as `char*` — an `NSError`'s description, say —
 // without a round trip through a Kira `String` this seam has no conversion for.
-@FFI.Extern { library: kira_metal; symbol: puts; abi: c; }
-function metalPutsRaw(text: RawPtr): Void;
+@FFI.Extern { library: kira_metal, symbol: puts, abi: c }
+function metalPutsRaw(text: RawPtr): Void
+
+// A message answering a count, named because a conversion cannot say which
+// shape it wants.
+//
+// `Int(send(event, type))` gives the resolver nothing to go on — a conversion
+// takes several numeric types, so the position states no one of them — and this
+// says it once instead of at nine call sites.
+function metalMsgSendCount(object: RawPtr, selector: RawPtr) -> U64 {
+    let value: U64 = metalMsgSend(object, selector)
+    return value
+}
 
 // ---------------------------------------------------------------------------
-// objc_msgSend, one typed alias per call shape
+// objc_msgSend, one name carrying every shape it is called at
 // ---------------------------------------------------------------------------
 
 // () -> id / void
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSend(obj: RawPtr, op: RawPtr): RawPtr;
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoid(obj: RawPtr, op: RawPtr): Void;
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendU64(obj: RawPtr, op: RawPtr): U64;
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendBoolEmpty(obj: RawPtr, op: RawPtr): Bool;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr): RawPtr
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr): Void
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr): U64
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr): Bool
 
 // (id) -> id / void
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendP(obj: RawPtr, op: RawPtr, a: RawPtr): RawPtr;
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoidP(obj: RawPtr, op: RawPtr, a: RawPtr): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, a: RawPtr): RawPtr
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, a: RawPtr): Void
 
 // (NSUInteger) -> id / void
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendPU(obj: RawPtr, op: RawPtr, a: U64): RawPtr;
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoidU(obj: RawPtr, op: RawPtr, a: U64): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, a: U64): RawPtr
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, a: U64): Void
 
 // MTLTextureDescriptor texture2DDescriptorWithPixelFormat:width:height:mipmapped:
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendTexDesc(cls: RawPtr, op: RawPtr, pixelFormat: U64, width: U64, height: U64, mipmapped: Bool): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(cls: RawPtr, op: RawPtr, pixelFormat: U64, width: U64, height: U64, mipmapped: Bool): RawPtr
 
 // (BOOL) -> void  (e.g. CAMetalLayer setFramebufferOnly:)
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoidB(obj: RawPtr, op: RawPtr, a: Bool): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, a: Bool): Void
 
 // setDrawableSize: — CGSize is a two-double HFA, passed as two Float scalars.
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoid2F(obj: RawPtr, op: RawPtr, w: Float, h: Float): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, w: Float, h: Float): Void
 
 // (double) -> void  (e.g. MTLRenderPassDepthAttachmentDescriptor setClearDepth:)
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoidF(obj: RawPtr, op: RawPtr, value: Float): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, value: Float): Void
 
 // setClearColor: — MTLClearColor is an HFA of four doubles, passed as four Float
 // scalars (same v0-v3 registers on arm64), so no by-value struct is needed.
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoid4F(obj: RawPtr, op: RawPtr, r: Float, g: Float, b: Float, a: Float): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, r: Float, g: Float, b: Float, a: Float): Void
 
 // (NSRect, BOOL) -> void — e.g. -[NSWindow setFrame:display:]. The rect is an
 // HFA of four doubles in v0-v3, the BOOL rides in w2.
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoidRectB(obj: RawPtr, op: RawPtr, x: Float, y: Float, w: Float, h: Float, display: Bool): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, x: Float, y: Float, w: Float, h: Float, display: Bool): Void
 
 // getBytes:bytesPerRow:fromRegion:mipmapLevel: — MTLRegion (>16 bytes, not an HFA)
 // is passed by reference per AAPCS64, so `region` is a pointer to a 48-byte buffer.
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendGetBytes(obj: RawPtr, op: RawPtr, bytes: RawPtr, bytesPerRow: U64, region: RawPtr, mipLevel: U64): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, bytes: RawPtr, bytesPerRow: U64, region: RawPtr, mipLevel: U64): Void
 
 // (CString) -> id  — used for +[NSString stringWithUTF8String:]
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendStr(obj: RawPtr, op: RawPtr, s: CString): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, s: CString): RawPtr
 
 // () -> CGRect  — e.g. -[NSView bounds]. CGRect is an HFA of four doubles (origin.x,
 // origin.y, size.width, size.height), returned in v0-v3 per AAPCS64, so it maps to a
 // four-Float struct return (no objc_msgSend_stret on arm64 for HFAs).
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct MetalCGRect {
     var x: Float
     var y: Float
     var width: Float
     var height: Float
 }
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendCGRect(obj: RawPtr, op: RawPtr): MetalCGRect;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr): MetalCGRect
 
 // () -> NSPoint — e.g. -[NSEvent locationInWindow]. Two-double HFA returned in
 // v0/v1. ALSO used for scalar CGFloat returns (-scrollingDeltaY,
 // -backingScaleFactor): the callee returns the scalar in v0, so `.x` is the
 // value and `.y` is register garbage — the FFI has no scalar-double return.
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct MetalNSPoint {
     var x: Float
     var y: Float
 }
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendPoint(obj: RawPtr, op: RawPtr): MetalNSPoint;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr): MetalNSPoint
 
 // -[NSView hitTest:] — answers the view a window-space point lands in, which
 // is how the event pump learns whether a click landed on a native child (a
 // web view) or on the interface's own surface.
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendHitTest(obj: RawPtr, op: RawPtr, x: Float, y: Float): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, x: Float, y: Float): RawPtr
 
 // (NSPoint, NSInteger) -> NSInteger — +[NSWindow windowNumberAtPoint:
 // belowWindowWithWindowNumber:], which answers which window (of ANY application) the
 // window server has at a screen point. The NSPoint argument is an HFA of two doubles
 // passed as two Float scalars, exactly like the CGRect argument below.
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendWindowNumberAtPoint(cls: RawPtr, op: RawPtr, x: Float, y: Float, below: U64): U64;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(cls: RawPtr, op: RawPtr, x: Float, y: Float, below: U64): U64
 
 // (CGRect) -> CGRect  — e.g. -[NSView convertRectToBacking:]. The argument CGRect is
 // an HFA-of-4-doubles passed as four Float scalars (v0-v3, like setClearColor:), and the
 // result is the same four-Float struct. Used to get physical (backing) pixel sizes
 // without a scalar-double return (which the FFI does not marshal).
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendRectToBacking(obj: RawPtr, op: RawPtr, x: Float, y: Float, w: Float, h: Float): MetalCGRect;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, x: Float, y: Float, w: Float, h: Float): MetalCGRect
 
 // (id, id) -> id  — e.g. newRenderPipelineStateWithDescriptor:error:
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendPP(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr): RawPtr
 
 // (id, id, id) -> id  — e.g. newLibraryWithSource:options:error:
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendPPP(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr, c: RawPtr): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr, c: RawPtr): RawPtr
 
 // (id, id) -> void — e.g. dispatchThreadgroups:threadsPerThreadgroup:, where each
 // MTLSize (3x NSUInteger = 24 bytes > 16) is passed indirectly (by pointer) per the
 // arm64 AAPCS, so a caller-built MTLSize in memory is passed as a plain pointer arg.
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoidPP(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, a: RawPtr, b: RawPtr): Void
 
 // newBufferWithBytes:length:options: -> id
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendNewBuffer(obj: RawPtr, op: RawPtr, bytes: RawPtr, length: U64, options: U64): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, bytes: RawPtr, length: U64, options: U64): RawPtr
 
 // newBufferWithLength:options: -> id
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendNewBufferLength(obj: RawPtr, op: RawPtr, length: U64, options: U64): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, length: U64, options: U64): RawPtr
 
 // setFragmentBuffer:offset:atIndex:
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendSetFragmentBuffer(obj: RawPtr, op: RawPtr, buffer: RawPtr, offset: U64, index: U64): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, buffer: RawPtr, offset: U64, index: U64): Void
 
 // setBytes:length:atIndex: — a small uniform written straight into the encoder's
 // argument buffer. Same call shape as setFragmentBuffer:offset:atIndex: but a
 // different method, and a caller that confused the two would pass a pointer
 // where an offset belongs, so it gets its own name.
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendSetBytes(obj: RawPtr, op: RawPtr, bytes: RawPtr, length: U64, index: U64): Void;
 
 // (id, NSUInteger) -> void  (setFragmentTexture:atIndex: / setFragmentSamplerState:atIndex:)
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendVoidPU(obj: RawPtr, op: RawPtr, a: RawPtr, index: U64): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, a: RawPtr, index: U64): Void
 
 // replaceRegion:mipmapLevel:withBytes:bytesPerRow: — MTLRegion passed by reference.
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendReplaceRegion(obj: RawPtr, op: RawPtr, region: RawPtr, mipLevel: U64, bytes: RawPtr, bytesPerRow: U64): Void;
 
 // setVertexBuffer:offset:atIndex:
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendSetVertexBuffer(obj: RawPtr, op: RawPtr, buffer: RawPtr, offset: U64, index: U64): Void;
-
 // drawPrimitives:vertexStart:vertexCount:
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendDrawPrimitives(obj: RawPtr, op: RawPtr, primitiveType: U64, vertexStart: U64, vertexCount: U64): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, primitiveType: U64, vertexStart: U64, vertexCount: U64): Void
 
 // drawPrimitives:vertexStart:vertexCount:instanceCount:
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendDrawPrimitivesInstanced(obj: RawPtr, op: RawPtr, primitiveType: U64, vertexStart: U64, vertexCount: U64, instanceCount: U64): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, primitiveType: U64, vertexStart: U64, vertexCount: U64, instanceCount: U64): Void
 
 // drawPrimitives:indirectBuffer:indirectBufferOffset: — the argument buffer holds
 // MTLDrawPrimitivesIndirectArguments {vertexCount, instanceCount, vertexStart,
 // baseInstance} (4x u32), written by a compute pass (GPU-driven draws).
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendDrawPrimitivesIndirect(obj: RawPtr, op: RawPtr, primitiveType: U64, indirectBuffer: RawPtr, indirectOffset: U64): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, primitiveType: U64, indirectBuffer: RawPtr, indirectOffset: U64): Void
 
 // drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendDrawIndexed(obj: RawPtr, op: RawPtr, primitiveType: U64, indexCount: U64, indexType: U64, indexBuffer: RawPtr, indexBufferOffset: U64): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, primitiveType: U64, indexCount: U64, indexType: U64, indexBuffer: RawPtr, indexBufferOffset: U64): Void
 
 // NSWindow initWithContentRect:styleMask:backing:defer: — the content rect is a
 // CGRect (HFA of four doubles -> four Float scalars), then NSUInteger style/backing
 // and a BOOL defer flag.
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendInitWindow(obj: RawPtr, op: RawPtr, x: Float, y: Float, w: Float, h: Float, style: U64, backing: U64, deferCreation: Bool): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, x: Float, y: Float, w: Float, h: Float, style: U64, backing: U64, deferCreation: Bool): RawPtr
 
 // (double) -> id  (e.g. +[NSDate dateWithTimeIntervalSinceNow:])
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendDateInterval(obj: RawPtr, op: RawPtr, seconds: Float): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, seconds: Float): RawPtr
 
 // -[NSApplication nextEventMatchingMask:untilDate:inMode:dequeue:] -> NSEvent*
 // (NSEventMask is unsigned long long; the mode is an NSRunLoopMode NSString).
-@FFI.Extern { library: kira_metal; symbol: objc_msgSend; abi: c; }
-function metalMsgSendNextEvent(obj: RawPtr, op: RawPtr, mask: U64, untilDate: RawPtr, mode: RawPtr, dequeue: Bool): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(obj: RawPtr, op: RawPtr, mask: U64, untilDate: RawPtr, mode: RawPtr, dequeue: Bool): RawPtr
 
 // Objective-C autorelease pool (C functions in libobjc). The Metal shader compiler
 // and NSString helpers create many autoreleased temporaries; without a pool that is
 // undefined behaviour, so resource creation runs inside push/pop.
-@FFI.Extern { library: kira_metal; symbol: objc_autoreleasePoolPush; abi: c; }
-function metalAutoreleasePoolPush(): RawPtr;
-@FFI.Extern { library: kira_metal; symbol: objc_autoreleasePoolPop; abi: c; }
-function metalAutoreleasePoolPop(token: RawPtr): Void;
+@FFI.Extern { library: kira_metal, symbol: objc_autoreleasePoolPush, abi: c }
+function metalAutoreleasePoolPush(): RawPtr
+@FFI.Extern { library: kira_metal, symbol: objc_autoreleasePoolPop, abi: c }
+function metalAutoreleasePoolPop(token: RawPtr): Void
 
 // ---------------------------------------------------------------------------
 // Objective-C runtime class construction — used to build an NSWindowDelegate whose
@@ -244,86 +248,86 @@ function metalAutoreleasePoolPop(token: RawPtr): Void;
 // loop, where the manual Kira frame loop is otherwise blocked.
 // ---------------------------------------------------------------------------
 
-@FFI.Extern { library: kira_metal; symbol: objc_allocateClassPair; abi: c; }
-function metalObjcAllocateClassPair(superclass: RawPtr, name: CString, extraBytes: U64): RawPtr;
-@FFI.Extern { library: kira_metal; symbol: objc_registerClassPair; abi: c; }
-function metalObjcRegisterClassPair(cls: RawPtr): Void;
-@FFI.Extern { library: kira_metal; symbol: objc_setAssociatedObject; abi: c; }
-function metalObjcSetAssociatedObject(obj: RawPtr, key: RawPtr, value: RawPtr, policy: U64): Void;
-@FFI.Extern { library: kira_metal; symbol: objc_getAssociatedObject; abi: c; }
-function metalObjcGetAssociatedObject(obj: RawPtr, key: RawPtr): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: objc_allocateClassPair, abi: c }
+function metalObjcAllocateClassPair(superclass: RawPtr, name: CString, extraBytes: U64): RawPtr
+@FFI.Extern { library: kira_metal, symbol: objc_registerClassPair, abi: c }
+function metalObjcRegisterClassPair(cls: RawPtr): Void
+@FFI.Extern { library: kira_metal, symbol: objc_setAssociatedObject, abi: c }
+function metalObjcSetAssociatedObject(obj: RawPtr, key: RawPtr, value: RawPtr, policy: U64): Void
+@FFI.Extern { library: kira_metal, symbol: objc_getAssociatedObject, abi: c }
+function metalObjcGetAssociatedObject(obj: RawPtr, key: RawPtr): RawPtr
 
 // The IMP signature for -windowDidResize: is void(id self, SEL _cmd, NSNotification*).
-@FFI.Callback { abi: c; params: [RawPtr, RawPtr, RawPtr]; result: Void; }
+@FFI.Callback { abi: c, params: [RawPtr, RawPtr, RawPtr], result: Void }
 struct metalImpCallback {}
 
-@FFI.Extern { library: kira_metal; symbol: class_addMethod; abi: c; }
-function metalClassAddMethod(cls: RawPtr, name: RawPtr, imp: metalImpCallback, types: CString): Bool;
+@FFI.Extern { library: kira_metal, symbol: class_addMethod, abi: c }
+function metalClassAddMethod(cls: RawPtr, name: RawPtr, imp: metalImpCallback, types: CString): Bool
 
 // ---------------------------------------------------------------------------
 // Metal C entry point (the only non-Objective-C Metal symbol)
 // ---------------------------------------------------------------------------
 
-@FFI.Extern { library: kira_metal; symbol: MTLCreateSystemDefaultDevice; abi: c; }
-function metalCreateSystemDefaultDevice(): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: MTLCreateSystemDefaultDevice, abi: c }
+function metalCreateSystemDefaultDevice(): RawPtr
 
 // libc getenv — used to select the headless offscreen path for verification.
-@FFI.Extern { library: kira_metal; symbol: getenv; abi: c; }
-function metalGetEnv(name: CString): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: getenv, abi: c }
+function metalGetEnv(name: CString): RawPtr
 
 // libc file I/O — full-framebuffer dump for visual verification
 // (KIRA_METAL_IMAGE_DUMP). `fopen`'s path arrives as the RawPtr getenv returned,
 // so no CString round-trip is needed; fclose's int result is ignored (Void keeps
 // the FFI boundary to pointer/U64 marshalling only).
-@FFI.Extern { library: kira_metal; symbol: fopen; abi: c; }
-function metalFOpen(path: RawPtr, mode: CString): RawPtr;
-@FFI.Extern { library: kira_metal; symbol: fwrite; abi: c; }
-function metalFWrite(ptr: RawPtr, size: U64, count: U64, stream: RawPtr): U64;
-@FFI.Extern { library: kira_metal; symbol: fclose; abi: c; }
-function metalFClose(stream: RawPtr): Void;
+@FFI.Extern { library: kira_metal, symbol: fopen, abi: c }
+function metalFOpen(path: RawPtr, mode: CString): RawPtr
+@FFI.Extern { library: kira_metal, symbol: fwrite, abi: c }
+function metalFWrite(ptr: RawPtr, size: U64, count: U64, stream: RawPtr): U64
+@FFI.Extern { library: kira_metal, symbol: fclose, abi: c }
+function metalFClose(stream: RawPtr): Void
 
 // clock_gettime_nsec_np — monotonic time in nanoseconds as a uint64_t, the
 // frame-timing clock for the on-screen run loop (drives the live FPS readout). An
 // INTEGER-return clock is used deliberately: a C function returning `double` hands the
 // value back in a floating-point register, which the FFI boundary does not marshal, so
 // CACurrentMediaTime-style seconds would read back as 0. CLOCK_UPTIME_RAW == 8.
-@FFI.Extern { library: kira_metal; symbol: clock_gettime_nsec_np; abi: c; }
-function metalClockNs(clockId: U32): U64;
+@FFI.Extern { library: kira_metal, symbol: clock_gettime_nsec_np, abi: c }
+function metalClockNs(clockId: U32): U64
 function metalClockUptimeRaw() -> U32 { return 8 }
 
-@FFI.Extern { library: kira_metal; symbol: mach_absolute_time; abi: c; }
-function metalMachAbsoluteTime(): U64;
-@FFI.Extern { library: kira_metal; symbol: mach_wait_until; abi: c; }
-function metalMachWaitUntil(deadline: U64): U32;
-@FFI.Extern { library: kira_metal; symbol: mach_timebase_info; abi: c; }
-function metalMachTimebaseInfo(info: RawPtr): U32;
+@FFI.Extern { library: kira_metal, symbol: mach_absolute_time, abi: c }
+function metalMachAbsoluteTime(): U64
+@FFI.Extern { library: kira_metal, symbol: mach_wait_until, abi: c }
+function metalMachWaitUntil(deadline: U64): U32
+@FFI.Extern { library: kira_metal, symbol: mach_timebase_info, abi: c }
+function metalMachTimebaseInfo(info: RawPtr): U32
 
 // ---------------------------------------------------------------------------
 // kira_runtime raw memory helpers (build by-reference structs, read pixels)
 // ---------------------------------------------------------------------------
 
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
-function metalMemAlloc(size: U64): RawPtr;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_free; abi: c; }
-function metalMemFree(ptr: RawPtr): Void;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u64_at; abi: c; }
-function metalMemWriteU64(ptr: RawPtr, offset: U64, value: U64): Void;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_ptr_at; abi: c; }
-function metalMemWritePtr(ptr: RawPtr, offset: U64, value: RawPtr): Void;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_ptr_at; abi: c; }
-function metalMemReadPtr(ptr: RawPtr, offset: U64): RawPtr;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u8_at; abi: c; }
-function metalMemReadU8(ptr: RawPtr, offset: U64): U8;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u32_at; abi: c; }
-function metalMemReadU32(ptr: RawPtr, offset: U64): U32;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u64_at; abi: c; }
-function metalMemReadU64(ptr: RawPtr, offset: U64): U64;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_f32_at; abi: c; }
-function metalMemWriteF32(ptr: RawPtr, offset: U64, value: F32): Void;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u32_at; abi: c; }
-function metalMemWriteU32(ptr: RawPtr, offset: U64, value: U32): Void;
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u8_at; abi: c; }
-function metalMemWriteU8(ptr: RawPtr, offset: U64, value: U8): Void;
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_alloc, abi: c }
+function metalMemAlloc(size: U64): RawPtr
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_free, abi: c }
+function metalMemFree(ptr: RawPtr): Void
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_write_u64_at, abi: c }
+function metalMemWriteU64(ptr: RawPtr, offset: U64, value: U64): Void
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_write_ptr_at, abi: c }
+function metalMemWritePtr(ptr: RawPtr, offset: U64, value: RawPtr): Void
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_ptr_at, abi: c }
+function metalMemReadPtr(ptr: RawPtr, offset: U64): RawPtr
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u8_at, abi: c }
+function metalMemReadU8(ptr: RawPtr, offset: U64): U8
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u32_at, abi: c }
+function metalMemReadU32(ptr: RawPtr, offset: U64): U32
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u64_at, abi: c }
+function metalMemReadU64(ptr: RawPtr, offset: U64): U64
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_write_f32_at, abi: c }
+function metalMemWriteF32(ptr: RawPtr, offset: U64, value: F32): Void
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_write_u32_at, abi: c }
+function metalMemWriteU32(ptr: RawPtr, offset: U64, value: U32): Void
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_write_u8_at, abi: c }
+function metalMemWriteU8(ptr: RawPtr, offset: U64, value: U8): Void
 // `nullPointer` and `pointerIsNull` used to sit here under `metal*` names, which
 // they never earned: both bind `kira_runtime`, both are used by the sokol path,
 // and ui-foundation re-declared its own pair of wrappers around them. They are in

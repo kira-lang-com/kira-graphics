@@ -9,10 +9,10 @@
 @Native
 function sokolBufferUsage(usage: borrow BufferUsage) -> sg_buffer_usage {
     match usage {
-        Vertex -> return sg_buffer_usage { vertex_buffer: true, immutable: true };
-        Index -> return sg_buffer_usage { index_buffer: true, immutable: true };
-        Uniform -> return sg_buffer_usage { vertex_buffer: true, immutable: true };
-        Storage -> return sg_buffer_usage { storage_buffer: true, immutable: true };
+        Vertex -> return sg_buffer_usage { vertex_buffer: true, immutable: true }
+        Index -> return sg_buffer_usage { index_buffer: true, immutable: true }
+        Uniform -> return sg_buffer_usage { vertex_buffer: true, immutable: true }
+        Storage -> return sg_buffer_usage { storage_buffer: true, immutable: true }
     }
 }
 
@@ -20,9 +20,9 @@ function sokolBufferUsage(usage: borrow BufferUsage) -> sg_buffer_usage {
 function sokolMakeFloatBuffer(label: borrow String, usage: BufferUsage, values: borrow [F32]) -> U32 {
     let byteCount = U64(values.count * 4)
     let buffer = sg_make_buffer(move sg_buffer_desc {
-        label: label
-        usage: sokolBufferUsage(usage)
-        size: byteCount
+        label: label,
+        usage: sokolBufferUsage(usage),
+        size: byteCount,
         data: sg_range { ptr: values, size: byteCount }
     })
     return buffer.id
@@ -32,9 +32,9 @@ function sokolMakeFloatBuffer(label: borrow String, usage: BufferUsage, values: 
 function sokolMakeIndexBuffer(label: borrow String, values: borrow [U32]) -> U32 {
     let byteCount = U64(values.count * 4)
     let buffer = sg_make_buffer(move sg_buffer_desc {
-        label: label
-        usage: sokolBufferUsage(.Index)
-        size: byteCount
+        label: label,
+        usage: sokolBufferUsage(.Index),
+        size: byteCount,
         data: sg_range { ptr: values, size: byteCount }
     })
     return buffer.id
@@ -47,9 +47,9 @@ function sokolMakeIndexBuffer(label: borrow String, values: borrow [U32]) -> U32
 function sokolMakeWordBuffer(label: borrow String, values: borrow [U32]) -> U32 {
     let byteCount = U64(values.count * 4)
     let buffer = sg_make_buffer(move sg_buffer_desc {
-        label: label
-        usage: sokolBufferUsage(.Storage)
-        size: byteCount
+        label: label,
+        usage: sokolBufferUsage(.Storage),
+        size: byteCount,
         data: sg_range { ptr: values, size: byteCount }
     })
     return buffer.id

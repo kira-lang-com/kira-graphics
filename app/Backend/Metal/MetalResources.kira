@@ -15,14 +15,14 @@ function metalIndexTypeUInt32() -> U64 { return 1 }
 @Native
 function metalCreateShader(ctx: RawPtr, source: borrow String) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
-    let nsstr = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), source)
-    let opts = metalMsgSend(metalMsgSend(metalObjcGetClass("MTLCompileOptions"), metalSel("alloc")), metalSel("init"))
+    let nsstr: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), source)
+    let opts: RawPtr = metalMsgSend(metalMsgSend(metalObjcGetClass("MTLCompileOptions"), metalSel("alloc")), metalSel("init"))
     let errSlot = metalMemAlloc(8)
     metalMemWriteU64(errSlot, 0, 0)
-    let library = metalMsgSendPPP(device, metalSel("newLibraryWithSource:options:error:"), nsstr, opts, errSlot)
+    let library: RawPtr = metalMsgSend(device, metalSel("newLibraryWithSource:options:error:"), nsstr, opts, errSlot)
     // MTLCompileOptions is a +1-owned alloc/init temporary; the compiled library keeps
     // no reference to it, so release it here rather than leaking one per shader.
-    metalMsgSendVoid(opts, metalSel("release"))
+    metalMsgSend(opts, metalSel("release"))
     // A shader that does not compile leaves a nil library and an NSError nobody
     // was reading. The next thing to fail is the pipeline, reporting only that
     // its vertex function is nil — which says nothing about why. Say why.
@@ -30,9 +30,9 @@ function metalCreateShader(ctx: RawPtr, source: borrow String) -> Int {
         graphicsDiagnostic("kira-graphics: Metal rejected a shader library")
         let err = metalMemReadPtr(errSlot, 0)
         if !pointerIsNull(err) {
-            let described = metalMsgSend(err, metalSel("localizedDescription"))
+            let described: RawPtr = metalMsgSend(err, metalSel("localizedDescription"))
             if !pointerIsNull(described) {
-                let utf8 = metalMsgSend(described, metalSel("UTF8String"))
+                let utf8: RawPtr = metalMsgSend(described, metalSel("UTF8String"))
                 if !pointerIsNull(utf8) {
                     metalPutsRaw(utf8)
                 }
@@ -55,7 +55,7 @@ function metalCreateVertexBuffer(ctx: RawPtr, data: borrow [F32]) -> Int {
         metalMemWriteF32(bytes, i * 4, data[i])
         i = i + 1
     }
-    let buffer = metalMsgSendNewBuffer(device, metalSel("newBufferWithBytes:length:options:"), bytes, count * 4, 0)
+    let buffer: RawPtr = metalMsgSend(device, metalSel("newBufferWithBytes:length:options:"), bytes, count * 4, 0)
     let id = metalRegister(ctx, buffer)
     metalMemFree(bytes)
     return id
@@ -72,7 +72,7 @@ function metalCreateIndexBuffer(ctx: RawPtr, data: borrow [U32]) -> Int {
         metalMemWriteU32(bytes, i * 4, data[i])
         i = i + 1
     }
-    let buffer = metalMsgSendNewBuffer(device, metalSel("newBufferWithBytes:length:options:"), bytes, count * 4, 0)
+    let buffer: RawPtr = metalMsgSend(device, metalSel("newBufferWithBytes:length:options:"), bytes, count * 4, 0)
     let id = metalRegister(ctx, buffer)
     metalMemFree(bytes)
     return id
@@ -116,56 +116,56 @@ function metalVertexFormat(kiraFormat: Int) -> U64 {
 function metalCreateRenderPipelineWithEntries(ctx: RawPtr, shaderId: Int, colorFormat: U64, depthEnabled: Bool, blendEnabled: Bool, vertexEntry: borrow String, fragmentEntry: borrow String, stride: Int, attrFormats: borrow [Int], attrOffsets: borrow [Int]) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let library = metalLookup(ctx, shaderId)
-    let vname = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), vertexEntry)
-    let fname = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), fragmentEntry)
-    let vfn = metalMsgSendP(library, metalSel("newFunctionWithName:"), vname)
-    let ffn = metalMsgSendP(library, metalSel("newFunctionWithName:"), fname)
+    let vname: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), vertexEntry)
+    let fname: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), fragmentEntry)
+    let vfn: RawPtr = metalMsgSend(library, metalSel("newFunctionWithName:"), vname)
+    let ffn: RawPtr = metalMsgSend(library, metalSel("newFunctionWithName:"), fname)
 
-    let desc = metalMsgSend(metalMsgSend(metalObjcGetClass("MTLRenderPipelineDescriptor"), metalSel("alloc")), metalSel("init"))
-    metalMsgSendVoidP(desc, metalSel("setVertexFunction:"), vfn)
-    metalMsgSendVoidP(desc, metalSel("setFragmentFunction:"), ffn)
+    let desc: RawPtr = metalMsgSend(metalMsgSend(metalObjcGetClass("MTLRenderPipelineDescriptor"), metalSel("alloc")), metalSel("init"))
+    metalMsgSend(desc, metalSel("setVertexFunction:"), vfn)
+    metalMsgSend(desc, metalSel("setFragmentFunction:"), ffn)
 
     // Build an MTLVertexDescriptor for [[stage_in]] shaders.
     if attrFormats.count > 0 {
-        let vd = metalMsgSend(metalObjcGetClass("MTLVertexDescriptor"), metalSel("vertexDescriptor"))
-        let attrs = metalMsgSend(vd, metalSel("attributes"))
+        let vd: RawPtr = metalMsgSend(metalObjcGetClass("MTLVertexDescriptor"), metalSel("vertexDescriptor"))
+        let attrs: RawPtr = metalMsgSend(vd, metalSel("attributes"))
         for ai in 0..attrFormats.count {
-            let attr = metalMsgSendPU(attrs, metalSel("objectAtIndexedSubscript:"), U64(ai))
-            metalMsgSendVoidU(attr, metalSel("setFormat:"), metalVertexFormat(attrFormats[ai]))
-            metalMsgSendVoidU(attr, metalSel("setOffset:"), U64(attrOffsets[ai]))
-            metalMsgSendVoidU(attr, metalSel("setBufferIndex:"), 0)
+            let attr: RawPtr = metalMsgSend(attrs, metalSel("objectAtIndexedSubscript:"), U64(ai))
+            metalMsgSend(attr, metalSel("setFormat:"), metalVertexFormat(attrFormats[ai]))
+            metalMsgSend(attr, metalSel("setOffset:"), U64(attrOffsets[ai]))
+            metalMsgSend(attr, metalSel("setBufferIndex:"), 0)
         }
-        let layouts = metalMsgSend(vd, metalSel("layouts"))
-        let layout0 = metalMsgSendPU(layouts, metalSel("objectAtIndexedSubscript:"), 0)
-        metalMsgSendVoidU(layout0, metalSel("setStride:"), U64(stride))
-        metalMsgSendVoidU(layout0, metalSel("setStepFunction:"), 1)   // MTLVertexStepFunctionPerVertex
-        metalMsgSendVoidP(desc, metalSel("setVertexDescriptor:"), vd)
+        let layouts: RawPtr = metalMsgSend(vd, metalSel("layouts"))
+        let layout0: RawPtr = metalMsgSend(layouts, metalSel("objectAtIndexedSubscript:"), 0)
+        metalMsgSend(layout0, metalSel("setStride:"), U64(stride))
+        metalMsgSend(layout0, metalSel("setStepFunction:"), 1)   // MTLVertexStepFunctionPerVertex
+        metalMsgSend(desc, metalSel("setVertexDescriptor:"), vd)
     }
 
-    let colorAttachment = metalMsgSendPU(metalMsgSend(desc, metalSel("colorAttachments")), metalSel("objectAtIndexedSubscript:"), 0)
-    metalMsgSendVoidU(colorAttachment, metalSel("setPixelFormat:"), colorFormat)
+    let colorAttachment: RawPtr = metalMsgSend(metalMsgSend(desc, metalSel("colorAttachments")), metalSel("objectAtIndexedSubscript:"), 0)
+    metalMsgSend(colorAttachment, metalSel("setPixelFormat:"), colorFormat)
     if blendEnabled {
-        metalMsgSendVoidB(colorAttachment, metalSel("setBlendingEnabled:"), true)
-        metalMsgSendVoidU(colorAttachment, metalSel("setRgbBlendOperation:"), metalBlendOperationAdd())
-        metalMsgSendVoidU(colorAttachment, metalSel("setAlphaBlendOperation:"), metalBlendOperationAdd())
-        metalMsgSendVoidU(colorAttachment, metalSel("setSourceRGBBlendFactor:"), metalBlendFactorOne())
-        metalMsgSendVoidU(colorAttachment, metalSel("setSourceAlphaBlendFactor:"), metalBlendFactorOne())
-        metalMsgSendVoidU(colorAttachment, metalSel("setDestinationRGBBlendFactor:"), metalBlendFactorOneMinusSourceAlpha())
-        metalMsgSendVoidU(colorAttachment, metalSel("setDestinationAlphaBlendFactor:"), metalBlendFactorOneMinusSourceAlpha())
+        metalMsgSend(colorAttachment, metalSel("setBlendingEnabled:"), true)
+        metalMsgSend(colorAttachment, metalSel("setRgbBlendOperation:"), metalBlendOperationAdd())
+        metalMsgSend(colorAttachment, metalSel("setAlphaBlendOperation:"), metalBlendOperationAdd())
+        metalMsgSend(colorAttachment, metalSel("setSourceRGBBlendFactor:"), metalBlendFactorOne())
+        metalMsgSend(colorAttachment, metalSel("setSourceAlphaBlendFactor:"), metalBlendFactorOne())
+        metalMsgSend(colorAttachment, metalSel("setDestinationRGBBlendFactor:"), metalBlendFactorOneMinusSourceAlpha())
+        metalMsgSend(colorAttachment, metalSel("setDestinationAlphaBlendFactor:"), metalBlendFactorOneMinusSourceAlpha())
     }
     if depthEnabled {
-        metalMsgSendVoidU(desc, metalSel("setDepthAttachmentPixelFormat:"), metalPixelFormatDepth32Float())
+        metalMsgSend(desc, metalSel("setDepthAttachmentPixelFormat:"), metalPixelFormatDepth32Float())
     }
 
     let errSlot = metalMemAlloc(8)
     metalMemWriteU64(errSlot, 0, 0)
-    let pipeline = metalMsgSendPP(device, metalSel("newRenderPipelineStateWithDescriptor:error:"), desc, errSlot)
+    let pipeline: RawPtr = metalMsgSend(device, metalSel("newRenderPipelineStateWithDescriptor:error:"), desc, errSlot)
     // vfn/ffn (newFunctionWithName:) and desc (alloc/init) are +1-owned transients: the
     // compiled pipeline state retains what it needs, so release them here to avoid
     // leaking one MTLFunction pair and one MTLRenderPipelineDescriptor per pipeline.
-    metalMsgSendVoid(vfn, metalSel("release"))
-    metalMsgSendVoid(ffn, metalSel("release"))
-    metalMsgSendVoid(desc, metalSel("release"))
+    metalMsgSend(vfn, metalSel("release"))
+    metalMsgSend(ffn, metalSel("release"))
+    metalMsgSend(desc, metalSel("release"))
     let id = metalRegister(ctx, pipeline)
     metalMemFree(errSlot)
     return id
@@ -181,7 +181,7 @@ function metalCreateRenderPipelineWithEntries(ctx: RawPtr, shaderId: Int, colorF
 function metalCreateDynamicBuffer(ctx: RawPtr, floatCount: Int) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let byteCount = U64(floatCount) * U64(4)
-    let buffer = metalMsgSendNewBufferLength(device, metalSel("newBufferWithLength:options:"), metalRingBytes(byteCount), 0)
+    let buffer: RawPtr = metalMsgSend(device, metalSel("newBufferWithLength:options:"), metalRingBytes(byteCount), 0)
     let id = metalRegister(ctx, buffer)
     metalRingInit(ctx, U64(id), metalRingSlotStride(byteCount))
     return id
@@ -214,7 +214,7 @@ function metalDynamicBufferFrameStart(ctx: RawPtr, bufferId: Int) -> Int {
 function metalCreateUniform(ctx: RawPtr, floatCount: Int) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let byteCount = U64(floatCount) * U64(4)
-    let buffer = metalMsgSendNewBufferLength(device, metalSel("newBufferWithLength:options:"), metalRingBytes(byteCount), 0)
+    let buffer: RawPtr = metalMsgSend(device, metalSel("newBufferWithLength:options:"), metalRingBytes(byteCount), 0)
     let id = metalRegister(ctx, buffer)
     metalRingInit(ctx, U64(id), metalRingSlotStride(byteCount))
     return id
@@ -228,7 +228,7 @@ function metalCreateUniform(ctx: RawPtr, floatCount: Int) -> Int {
 function metalUpdateUniform(ctx: RawPtr, uniformId: Int, data: borrow [F32]) {
     metalRaceProbeUniformWrite(ctx)
     let buffer = metalLookup(ctx, uniformId)
-    let contents = metalMsgSend(buffer, metalSel("contents"))
+    let contents: RawPtr = metalMsgSend(buffer, metalSel("contents"))
     let base = Int(metalRingAdvance(ctx, U64(uniformId)))
         for i in 0..data.count {
         metalMemWriteF32(contents, base + i * 4, data[i])
@@ -243,7 +243,7 @@ function metalEncoderBindFragmentUniform(ctx: RawPtr, uniformId: Int, index: Int
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let buffer = metalLookup(ctx, uniformId)
     let offset = metalRingOffset(ctx, U64(uniformId))
-    metalMsgSendSetFragmentBuffer(encoder, metalSel("setFragmentBuffer:offset:atIndex:"), buffer, offset, index)
+    metalMsgSend(encoder, metalSel("setFragmentBuffer:offset:atIndex:"), buffer, offset, index)
     return
 }
 
@@ -253,17 +253,17 @@ function metalEncoderBindFragmentUniform(ctx: RawPtr, uniformId: Int, index: Int
 function metalEncoderDraw(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, hasVertexBuffer: Bool, vertexCount: Int, instanceCount: Int) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let pipeline = metalLookup(ctx, pipelineId)
-    metalMsgSendVoidP(encoder, metalSel("setRenderPipelineState:"), pipeline)
+    metalMsgSend(encoder, metalSel("setRenderPipelineState:"), pipeline)
     if hasVertexBuffer {
         let buffer = metalLookup(ctx, vertexBufferId)
-        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
+        metalMsgSend(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
     }
     metalContextCountDraw(ctx, (vertexCount / 3) * instanceCount)
     if instanceCount > 1 {
-        metalMsgSendDrawPrimitivesInstanced(encoder, metalSel("drawPrimitives:vertexStart:vertexCount:instanceCount:"), metalPrimitiveTriangle(), 0, vertexCount, instanceCount)
+        metalMsgSend(encoder, metalSel("drawPrimitives:vertexStart:vertexCount:instanceCount:"), metalPrimitiveTriangle(), 0, vertexCount, instanceCount)
         return
     }
-    metalMsgSendDrawPrimitives(encoder, metalSel("drawPrimitives:vertexStart:vertexCount:"), metalPrimitiveTriangle(), 0, vertexCount)
+    metalMsgSend(encoder, metalSel("drawPrimitives:vertexStart:vertexCount:"), metalPrimitiveTriangle(), 0, vertexCount)
     return
 }
 
@@ -274,14 +274,14 @@ function metalEncoderDraw(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, has
 function metalEncoderDrawIndirect(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, hasVertexBuffer: Bool, indirectBufferId: Int) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let pipeline = metalLookup(ctx, pipelineId)
-    metalMsgSendVoidP(encoder, metalSel("setRenderPipelineState:"), pipeline)
+    metalMsgSend(encoder, metalSel("setRenderPipelineState:"), pipeline)
     if hasVertexBuffer {
         let buffer = metalLookup(ctx, vertexBufferId)
-        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
+        metalMsgSend(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
     }
     let indirect = metalLookup(ctx, indirectBufferId)
     metalContextCountDraw(ctx, 0)
-    metalMsgSendDrawPrimitivesIndirect(encoder, metalSel("drawPrimitives:indirectBuffer:indirectBufferOffset:"), metalPrimitiveTriangle(), indirect, 0)
+    metalMsgSend(encoder, metalSel("drawPrimitives:indirectBuffer:indirectBufferOffset:"), metalPrimitiveTriangle(), indirect, 0)
     return
 }
 
@@ -297,14 +297,14 @@ function metalEncoderDrawIndexed(ctx: RawPtr, pipelineId: Int, vertexBufferId: I
 function metalEncoderDrawIndexedRange(ctx: RawPtr, pipelineId: Int, vertexBufferId: Int, hasVertexBuffer: Bool, indexBufferId: Int, indexCount: Int, instanceCount: Int, firstIndex: Int) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let pipeline = metalLookup(ctx, pipelineId)
-    metalMsgSendVoidP(encoder, metalSel("setRenderPipelineState:"), pipeline)
+    metalMsgSend(encoder, metalSel("setRenderPipelineState:"), pipeline)
     if hasVertexBuffer {
         let buffer = metalLookup(ctx, vertexBufferId)
-        metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
+        metalMsgSend(encoder, metalSel("setVertexBuffer:offset:atIndex:"), buffer, metalRingOffset(ctx, U64(vertexBufferId)), 0)
     }
     let indexBuffer = metalLookup(ctx, indexBufferId)
     metalContextCountDraw(ctx, (indexCount / 3) * instanceCount)
-    metalMsgSendDrawIndexed(encoder, metalSel("drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:"), metalPrimitiveTriangle(), indexCount, metalIndexTypeUInt32(), indexBuffer, firstIndex * 4)
+    metalMsgSend(encoder, metalSel("drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:"), metalPrimitiveTriangle(), indexCount, metalIndexTypeUInt32(), indexBuffer, firstIndex * 4)
     return
 }
 
@@ -321,7 +321,7 @@ function metalEncoderSetScissorRect(ctx: RawPtr, x: Int, y: Int, width: Int, hei
     metalMemWriteU64(rect, 8, y)
     metalMemWriteU64(rect, 16, width)
     metalMemWriteU64(rect, 24, height)
-    metalMsgSendVoidP(encoder, metalSel("setScissorRect:"), rect)
+    metalMsgSend(encoder, metalSel("setScissorRect:"), rect)
     metalMemFree(rect)
     return
 }

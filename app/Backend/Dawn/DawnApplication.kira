@@ -75,8 +75,8 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
     kiraGraphicsLiveBackendInitialized()
 
     let graphics = Graphics {
-        userData: state.userData
-        backend: .Dawn
+        userData: state.userData,
+        backend: .Dawn,
         backendContext: runtimeUserData
     }
     let onInit: (Graphics) -> Void = state.app.initHandler
@@ -85,8 +85,8 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
     dawnDriveFrames(state, runtimeUserData)
 
     let cleanupGraphics = Graphics {
-        userData: state.userData
-        backend: .Dawn
+        userData: state.userData,
+        backend: .Dawn,
         backendContext: runtimeUserData
     }
     let onCleanup: (Graphics) -> Void = state.app.cleanupHandler
@@ -161,8 +161,8 @@ function dawnDriveFrames(state: borrow mut GraphicsAppRuntimeState, runtimeUserD
 @Native
 function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
     let graphics = Graphics {
-        userData: state.userData
-        backend: .Dawn
+        userData: state.userData,
+        backend: .Dawn,
         backendContext: runtimeUserData
     }
     var frame = graphics.frame()
@@ -189,15 +189,15 @@ function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData
             let px = Float(state.clickScript[clickIndex + 1])
             let py = Float(state.clickScript[clickIndex + 2])
             onEvent(AppEvent {
-                kind: .PointerDown
-                pointerButton: .Left
-                pointerX: px
+                kind: .PointerDown,
+                pointerButton: .Left,
+                pointerX: px,
                 pointerY: py
             })
             onEvent(AppEvent {
-                kind: .PointerUp
-                pointerButton: .Left
-                pointerX: px
+                kind: .PointerUp,
+                pointerButton: .Left,
+                pointerX: px,
                 pointerY: py
             })
         }
@@ -211,14 +211,14 @@ function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData
             let px = Float(state.scrollScript[scrollIndex + 1])
             let py = Float(state.scrollScript[scrollIndex + 2])
             onEvent(AppEvent {
-                kind: .PointerMoved
-                pointerX: px
+                kind: .PointerMoved,
+                pointerX: px,
                 pointerY: py
             })
             onEvent(AppEvent {
-                kind: .Scroll
-                pointerX: px
-                pointerY: py
+                kind: .Scroll,
+                pointerX: px,
+                pointerY: py,
                 scrollY: Float(state.scrollScript[scrollIndex + 3]) / 10.0
             })
         }
@@ -238,30 +238,30 @@ function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData
         let dy = Float(state.dragScript[dragIndex + 4])
         if scriptFrame == startFrame {
             onEvent(AppEvent {
-                kind: .PointerMoved
-                pointerX: px
+                kind: .PointerMoved,
+                pointerX: px,
                 pointerY: py
             })
             onEvent(AppEvent {
-                kind: .PointerDown
-                pointerButton: dawnScriptButton(state.dragScript[dragIndex + 5])
-                pointerX: px
+                kind: .PointerDown,
+                pointerButton: dawnScriptButton(state.dragScript[dragIndex + 5]),
+                pointerX: px,
                 pointerY: py
             })
         }
         if steps > 0 && scriptFrame > startFrame && scriptFrame <= startFrame + steps {
             let step = Float(scriptFrame - startFrame) / Float(steps)
             onEvent(AppEvent {
-                kind: .PointerMoved
-                pointerX: px + dx * step
+                kind: .PointerMoved,
+                pointerX: px + dx * step,
                 pointerY: py + dy * step
             })
         }
         if scriptFrame == startFrame + steps + 1 {
             onEvent(AppEvent {
-                kind: .PointerUp
-                pointerButton: dawnScriptButton(state.dragScript[dragIndex + 5])
-                pointerX: px + dx
+                kind: .PointerUp,
+                pointerButton: dawnScriptButton(state.dragScript[dragIndex + 5]),
+                pointerX: px + dx,
                 pointerY: py + dy
             })
         }
@@ -306,11 +306,11 @@ function dawnResizeIfNeeded(state: borrow mut GraphicsAppRuntimeState, runtimeUs
     let scale = dawnWindowFor(dawnPlatformForHost()).scale(state.dawn.window)
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     onEvent(AppEvent {
-        kind: .Resized
-        modifiers: dawnModifierState()
-        windowWidth: Int(Float(width) / scale)
-        windowHeight: Int(Float(height) / scale)
-        framebufferWidth: width
+        kind: .Resized,
+        modifiers: dawnModifierState(),
+        windowWidth: Int(Float(width) / scale),
+        windowHeight: Int(Float(height) / scale),
+        framebufferWidth: width,
         framebufferHeight: height
     })
     return
@@ -350,7 +350,7 @@ function dawnPumpMessages(state: borrow mut GraphicsAppRuntimeState, runtimeUser
         if message == dawnMessageQuit() {
             state.dawn.quitRequested = true
             onEvent(AppEvent {
-                kind: .QuitRequested
+                kind: .QuitRequested,
                 modifiers: dawnModifierState()
             })
             return
@@ -382,11 +382,11 @@ function dawnDeliverMessage(state: borrow mut GraphicsAppRuntimeState, message: 
         state.dawn.pointerY = y
         state.dawn.hasPointer = true
         onEvent(AppEvent {
-            kind: .PointerMoved
-            modifiers: dawnModifierState()
-            pointerX: x
-            pointerY: y
-            pointerDeltaX: deltaX
+            kind: .PointerMoved,
+            modifiers: dawnModifierState(),
+            pointerX: x,
+            pointerY: y,
+            pointerDeltaX: deltaX,
             pointerDeltaY: deltaY
         })
         return
@@ -396,10 +396,10 @@ function dawnDeliverMessage(state: borrow mut GraphicsAppRuntimeState, message: 
         state.dawn.pointerY = y
         state.dawn.hasPointer = true
         onEvent(AppEvent {
-            kind: dawnMessageIsPointerDown(message) ? .PointerDown : .PointerUp
-            modifiers: dawnModifierState()
-            pointerButton: dawnPointerButton(message)
-            pointerX: x
+            kind: dawnMessageIsPointerDown(message) ? .PointerDown : .PointerUp,
+            modifiers: dawnModifierState(),
+            pointerButton: dawnPointerButton(message),
+            pointerX: x,
             pointerY: y
         })
         return
@@ -408,19 +408,19 @@ function dawnDeliverMessage(state: borrow mut GraphicsAppRuntimeState, message: 
         // The wheel reports its position in SCREEN pixels and its notches in
         // the high half of `wParam`, signed, in units of 120.
         onEvent(AppEvent {
-            kind: .Scroll
-            modifiers: dawnModifierState()
-            pointerX: state.dawn.pointerX
-            pointerY: state.dawn.pointerY
+            kind: .Scroll,
+            modifiers: dawnModifierState(),
+            pointerX: state.dawn.pointerX,
+            pointerY: state.dawn.pointerY,
             scrollY: Float(dawnWheelNotches(wparam)) / 120.0
         })
         return
     }
     if message == dawnMessageKeyDown() || message == dawnMessageSystemKeyDown() {
         onEvent(AppEvent {
-            kind: .KeyDown
-            modifiers: dawnModifierState()
-            keyCode: dawnKeyCode(Int(wparam))
+            kind: .KeyDown,
+            modifiers: dawnModifierState(),
+            keyCode: dawnKeyCode(Int(wparam)),
             // Bit 30 of `lParam` is "the key was already down", which is what a
             // repeat is.
             keyRepeat: ((lparam >> 30) & 1) == 1
@@ -429,8 +429,8 @@ function dawnDeliverMessage(state: borrow mut GraphicsAppRuntimeState, message: 
     }
     if message == dawnMessageKeyUp() || message == dawnMessageSystemKeyUp() {
         onEvent(AppEvent {
-            kind: .KeyUp
-            modifiers: dawnModifierState()
+            kind: .KeyUp,
+            modifiers: dawnModifierState(),
             keyCode: dawnKeyCode(Int(wparam))
         })
         return
@@ -440,8 +440,8 @@ function dawnDeliverMessage(state: borrow mut GraphicsAppRuntimeState, message: 
         // Surrogates and the control range are not text a field should insert.
         if codepoint >= 32 && (codepoint < 55296 || codepoint > 57343) {
             onEvent(AppEvent {
-                kind: .TextInput
-                modifiers: dawnModifierState()
+                kind: .TextInput,
+                modifiers: dawnModifierState(),
                 textCodepoint: codepoint
             })
         }

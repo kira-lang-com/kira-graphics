@@ -107,8 +107,8 @@ extend Graphics {
         while index < plan.vertices.attributes.count {
             let attribute = plan.vertices.attributes[index]
             attributes.append(VertexAttribute {
-                location: attribute.location
-                format: attribute.format
+                location: attribute.location,
+                format: attribute.format,
                 offset: attribute.offset
             })
             index = index + 1
@@ -116,33 +116,33 @@ extend Graphics {
         attempt {
         let shader = try self.createShaderFromKslArtifact(plan.label, plan.shader)
         return self.createRenderPipeline(RenderPipelineDescriptor {
-            label: plan.label
-            shader: shader
+            label: plan.label,
+            shader: shader,
             vertexLayout: VertexLayout {
-                stride: plan.vertices.stride
+                stride: plan.vertices.stride,
                 attributes: move attributes
-            }
+            },
             colorTargets: [ColorTargetDescriptor {
-                format: plan.colorFormat
+                format: plan.colorFormat,
                 blend: BlendState {
-                    enabled: plan.blending.enabled
+                    enabled: plan.blending.enabled,
                     preset: plan.blending.preset
                 }
-            }]
+            }],
             depthStencil: DepthStencilDescriptor {
-                depthEnabled: plan.depth.enabled
-                depthWriteEnabled: plan.depth.writes
-                depthCompare: plan.depth.compare
+                depthEnabled: plan.depth.enabled,
+                depthWriteEnabled: plan.depth.writes,
+                depthCompare: plan.depth.compare,
                 format: plan.depth.format
-            }
+            },
             rasterization: RasterizationDescriptor {
-                cullMode: plan.raster.cull
+                cullMode: plan.raster.cull,
                 frontFace: plan.raster.front
-            }
+            },
             primitive: PrimitiveDescriptor {
                 topology: plan.raster.topology
-            }
-            vertexEntry: plan.shader.vertexEntry
+            },
+            vertexEntry: plan.shader.vertexEntry,
             fragmentEntry: plan.shader.fragmentEntry
         })
         } handle {

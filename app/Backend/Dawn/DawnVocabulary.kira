@@ -29,25 +29,25 @@ import Foundation
 // declared a second time against it. The symbol is the same one; the Kira name
 // is different because the shape is.
 
-@FFI.Pointer { target: WGPUStringView; ownership: borrowed; }
+@FFI.Pointer { target: WGPUStringView, ownership: borrowed }
 struct WGPUStringViewPointer {}
 
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
-function allocateSurfaceTexture(size: U64) -> WGPUSurfaceTexture_ptr;
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_alloc, abi: c }
+function allocateSurfaceTexture(size: U64) -> WGPUSurfaceTexture_ptr
 
 // `WGPUDeviceLostCallback`: `(WGPUDevice const *device, WGPUDeviceLostReason,
 // WGPUStringView message, void *userdata1, void *userdata2)`. The first is a
 // pointer to a handle, which is a pointer word; the message is a struct C passes
 // by value, and the seam hands it over as a pointer to it.
-@FFI.Callback { abi: c; params: [RawPtr, I32, WGPUStringView, RawPtr, RawPtr]; result: Void; }
+@FFI.Callback { abi: c, params: [RawPtr, I32, WGPUStringView, RawPtr, RawPtr], result: Void }
 struct DawnDeviceLostCallback {}
 
 // `WGPUUncapturedErrorCallback`: the same shape with an error type in place of
 // the loss reason, and no callback mode beside it.
-@FFI.Callback { abi: c; params: [RawPtr, I32, WGPUStringView, RawPtr, RawPtr]; result: Void; }
+@FFI.Callback { abi: c, params: [RawPtr, I32, WGPUStringView, RawPtr, RawPtr], result: Void }
 struct DawnUncapturedErrorCallback {}
 
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct DawnDeviceLostCallbackInfo {
     var nextInChain: WGPUChainedStruct_ptr
     var mode: I32 = 0
@@ -56,7 +56,7 @@ struct DawnDeviceLostCallbackInfo {
     var userdata2: RawPtr
 }
 
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct DawnUncapturedErrorCallbackInfo {
     var nextInChain: WGPUChainedStruct_ptr
     var callback: DawnUncapturedErrorCallback
@@ -64,7 +64,7 @@ struct DawnUncapturedErrorCallbackInfo {
     var userdata2: RawPtr
 }
 
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct DawnDeviceDescriptor {
     var nextInChain: WGPUChainedStruct_ptr
     var label: WGPUStringView
@@ -76,17 +76,17 @@ struct DawnDeviceDescriptor {
     var uncapturedErrorCallbackInfo: DawnUncapturedErrorCallbackInfo
 }
 
-@FFI.Pointer { target: DawnDeviceDescriptor; ownership: borrowed; }
+@FFI.Pointer { target: DawnDeviceDescriptor, ownership: borrowed }
 struct DawnDeviceDescriptorPointer {}
 
-@FFI.Extern { library: dawn; symbol: wgpuAdapterCreateDevice; abi: c; }
-function dawnCreateDevice(adapter: WGPUAdapterImpl_ptr, descriptor: DawnDeviceDescriptorPointer) -> WGPUDeviceImpl_ptr;
+@FFI.Extern { library: dawn, symbol: wgpuAdapterCreateDevice, abi: c }
+function dawnCreateDevice(adapter: WGPUAdapterImpl_ptr, descriptor: DawnDeviceDescriptorPointer) -> WGPUDeviceImpl_ptr
 
 // A `WGPUStringView` over Kira text. The length is the byte count rather than
 // `WGPU_STRLEN`, so a label carrying an interior NUL still measures right.
 function dawnText(text: borrow String) -> WGPUStringView {
     return WGPUStringView {
-        data: text
+        data: text,
         length: U64(text.count)
     }
 }
@@ -209,104 +209,104 @@ function dawnErrorText(kind: I32) -> String {
 // has the state resolves it before asking.
 function dawnTextureFormat(format: borrow TextureFormat) -> I32 {
     match format {
-        Rgba8Unorm -> return dawnFormatRgba8Unorm();
-        Rgba16Float -> return dawnFormatRgba16Float();
-        Depth24Stencil8 -> return dawnFormatDepth24PlusStencil8();
-        R32Uint -> return dawnFormatR32Uint();
-        Swapchain -> return dawnFormatUndefined();
-        None -> return dawnFormatUndefined();
+        Rgba8Unorm -> return dawnFormatRgba8Unorm()
+        Rgba16Float -> return dawnFormatRgba16Float()
+        Depth24Stencil8 -> return dawnFormatDepth24PlusStencil8()
+        R32Uint -> return dawnFormatR32Uint()
+        Swapchain -> return dawnFormatUndefined()
+        None -> return dawnFormatUndefined()
     }
 }
 
 function dawnVertexFormat(format: borrow VertexFormat) -> I32 {
     match format {
-        Float -> return I32(28);
-        Float2 -> return I32(29);
-        Float3 -> return I32(30);
-        Float4 -> return I32(31);
+        Float -> return I32(28)
+        Float2 -> return I32(29)
+        Float3 -> return I32(30)
+        Float4 -> return I32(31)
     }
 }
 
 function dawnVertexFormatBytes(format: borrow VertexFormat) -> Int {
     match format {
-        Float -> return 4;
-        Float2 -> return 8;
-        Float3 -> return 12;
-        Float4 -> return 16;
+        Float -> return 4
+        Float2 -> return 8
+        Float3 -> return 12
+        Float4 -> return 16
     }
 }
 
 function dawnCompareFunction(compare: borrow CompareFunction) -> I32 {
     match compare {
-        Never -> return I32(1);
-        Less -> return I32(2);
-        LessEqual -> return I32(4);
-        Equal -> return I32(3);
-        GreaterEqual -> return I32(7);
-        Greater -> return I32(5);
-        Always -> return I32(8);
+        Never -> return I32(1)
+        Less -> return I32(2)
+        LessEqual -> return I32(4)
+        Equal -> return I32(3)
+        GreaterEqual -> return I32(7)
+        Greater -> return I32(5)
+        Always -> return I32(8)
     }
 }
 
 function dawnCullMode(mode: borrow CullMode) -> I32 {
     match mode {
-        None -> return I32(1);
-        Front -> return I32(2);
-        Back -> return I32(3);
+        None -> return I32(1)
+        Front -> return I32(2)
+        Back -> return I32(3)
     }
 }
 
 function dawnFrontFace(face: borrow FrontFace) -> I32 {
     match face {
-        CounterClockwise -> return I32(1);
-        Clockwise -> return I32(2);
+        CounterClockwise -> return I32(1)
+        Clockwise -> return I32(2)
     }
 }
 
 function dawnPrimitiveTopology(topology: borrow PrimitiveTopology) -> I32 {
     match topology {
-        TriangleList -> return I32(4);
-        TriangleStrip -> return I32(5);
-        LineList -> return I32(2);
+        TriangleList -> return I32(4)
+        TriangleStrip -> return I32(5)
+        LineList -> return I32(2)
     }
 }
 
 function dawnIndexFormat(format: borrow IndexFormat) -> I32 {
     match format {
-        Uint16 -> return dawnIndexFormatUint16();
-        Uint32 -> return dawnIndexFormatUint32();
+        Uint16 -> return dawnIndexFormatUint16()
+        Uint32 -> return dawnIndexFormatUint32()
     }
 }
 
 function dawnLoadAction(action: borrow LoadAction) -> I32 {
     match action {
-        Clear -> return dawnLoadOpClear();
-        Load -> return dawnLoadOpLoad();
+        Clear -> return dawnLoadOpClear()
+        Load -> return dawnLoadOpLoad()
         // WebGPU has no "don't care" load: an attachment is either preserved or
         // cleared, and clearing is the one of the two that cannot read back
         // whatever the last pass left in the texture.
-        DontCare -> return dawnLoadOpClear();
+        DontCare -> return dawnLoadOpClear()
     }
 }
 
 function dawnStoreAction(action: borrow StoreAction) -> I32 {
     match action {
-        Store -> return dawnStoreOpStore();
-        DontCare -> return dawnStoreOpDiscard();
+        Store -> return dawnStoreOpStore()
+        DontCare -> return dawnStoreOpDiscard()
     }
 }
 
 function dawnFilterMode(filter: borrow TextureFilter) -> I32 {
     match filter {
-        Nearest -> return I32(1);
-        Linear -> return I32(2);
+        Nearest -> return I32(1)
+        Linear -> return I32(2)
     }
 }
 
 function dawnAddressMode(mode: borrow AddressMode) -> I32 {
     match mode {
-        ClampToEdge -> return I32(1);
-        Repeat -> return I32(2);
+        ClampToEdge -> return I32(1)
+        Repeat -> return I32(2)
     }
 }
 
@@ -314,23 +314,23 @@ function dawnAddressMode(mode: borrow AddressMode) -> I32 {
 // operation in every one of them; what differs is the pair of factors.
 function dawnBlendState(preset: borrow BlendPreset) -> WGPUBlendState {
     match preset {
-        Replace -> return dawnBlendPair(I32(2), I32(1), I32(2), I32(1));
-        Alpha -> return dawnBlendPair(I32(5), I32(6), I32(2), I32(6));
-        PremultipliedAlpha -> return dawnBlendPair(I32(2), I32(6), I32(2), I32(6));
-        Additive -> return dawnBlendPair(I32(5), I32(2), I32(2), I32(2));
+        Replace -> return dawnBlendPair(I32(2), I32(1), I32(2), I32(1))
+        Alpha -> return dawnBlendPair(I32(5), I32(6), I32(2), I32(6))
+        PremultipliedAlpha -> return dawnBlendPair(I32(2), I32(6), I32(2), I32(6))
+        Additive -> return dawnBlendPair(I32(5), I32(2), I32(2), I32(2))
     }
 }
 
 function dawnBlendPair(colorSource: I32, colorDestination: I32, alphaSource: I32, alphaDestination: I32) -> WGPUBlendState {
     return WGPUBlendState {
         color: WGPUBlendComponent {
-            operation: I32(1)
-            srcFactor: colorSource
+            operation: I32(1),
+            srcFactor: colorSource,
             dstFactor: colorDestination
-        }
+        },
         alpha: WGPUBlendComponent {
-            operation: I32(1)
-            srcFactor: alphaSource
+            operation: I32(1),
+            srcFactor: alphaSource,
             dstFactor: alphaDestination
         }
     }
@@ -344,23 +344,23 @@ function dawnBlendPair(colorSource: I32, colorDestination: I32, alphaSource: I32
 function dawnTextureUsage(usage: borrow TextureUsage) -> U64 {
     let shared = dawnTextureUsageCopyDestination() | dawnTextureUsageCopySource()
     match usage {
-        Sampled -> return shared | dawnTextureUsageBinding();
-        SampledStreaming -> return shared | dawnTextureUsageBinding();
-        RenderTarget -> return shared | dawnTextureUsageRenderAttachment();
-        RenderTargetSampled -> return shared | dawnTextureUsageRenderAttachment() | dawnTextureUsageBinding();
-        DepthStencil -> return shared | dawnTextureUsageRenderAttachment();
+        Sampled -> return shared | dawnTextureUsageBinding()
+        SampledStreaming -> return shared | dawnTextureUsageBinding()
+        RenderTarget -> return shared | dawnTextureUsageRenderAttachment()
+        RenderTargetSampled -> return shared | dawnTextureUsageRenderAttachment() | dawnTextureUsageBinding()
+        DepthStencil -> return shared | dawnTextureUsageRenderAttachment()
         SampledStorage -> return shared
             | dawnTextureUsageBinding()
-            | dawnTextureUsageStorageBinding();
+            | dawnTextureUsageStorageBinding()
     }
 }
 
 function dawnBufferUsage(usage: borrow BufferUsage) -> U64 {
     let shared = dawnBufferUsageCopyDestination() | dawnBufferUsageCopySource()
     match usage {
-        Vertex -> return shared | dawnBufferUsageVertex();
-        Index -> return shared | dawnBufferUsageIndex();
-        Uniform -> return shared | dawnBufferUsageUniform();
-        Storage -> return shared | dawnBufferUsageStorage();
+        Vertex -> return shared | dawnBufferUsageVertex()
+        Index -> return shared | dawnBufferUsageIndex()
+        Uniform -> return shared | dawnBufferUsageUniform()
+        Storage -> return shared | dawnBufferUsageStorage()
     }
 }

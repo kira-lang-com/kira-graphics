@@ -75,10 +75,10 @@ function sokolPixelFormat(format: TextureFormat) -> I32 {
 function sokolImageUsage(descriptor: borrow TextureDescriptor) -> sg_image_usage {
     let usage = descriptor.usage
     return sg_image_usage {
-        immutable: usage != .SampledStreaming
-        stream_update: usage == .SampledStreaming
-        color_attachment: sokolUsageIsColorTarget(usage)
-        depth_stencil_attachment: usage == .DepthStencil
+        immutable: usage != .SampledStreaming,
+        stream_update: usage == .SampledStreaming,
+        color_attachment: sokolUsageIsColorTarget(usage),
+        depth_stencil_attachment: usage == .DepthStencil,
         storage_image: sokolNeedsStorageImage(descriptor)
     }
 }
@@ -136,16 +136,16 @@ function sokolStagePixels(pixels: borrow [U8]) -> RawPtr {
 function sokolMakeTextureViews(image: sg_image, descriptor: borrow TextureDescriptor) -> GraphicsTexture {
     let label = descriptor.label
     var texture = GraphicsTexture {
-        id: image.id
-        width: descriptor.width
-        height: descriptor.height
+        id: image.id,
+        width: descriptor.width,
+        height: descriptor.height,
         sampleCount: sokolSampleCount(descriptor.sampleCount)
     }
     if sokolUsageIsColorTarget(descriptor.usage) {
         let colorView = sg_make_view(move sg_view_desc {
             color_attachment: sg_image_view_desc {
                 image: sg_image { id: image.id }
-            }
+            },
             label: label
         })
         texture.colorViewId = colorView.id
@@ -154,7 +154,7 @@ function sokolMakeTextureViews(image: sg_image, descriptor: borrow TextureDescri
         let depthView = sg_make_view(move sg_view_desc {
             depth_stencil_attachment: sg_image_view_desc {
                 image: sg_image { id: image.id }
-            }
+            },
             label: label
         })
         texture.depthViewId = depthView.id
@@ -163,7 +163,7 @@ function sokolMakeTextureViews(image: sg_image, descriptor: borrow TextureDescri
         let sampledView = sg_make_view(move sg_view_desc {
             texture: sg_texture_view_desc {
                 image: sg_image { id: image.id }
-            }
+            },
             label: label
         })
         texture.viewId = sampledView.id
@@ -172,7 +172,7 @@ function sokolMakeTextureViews(image: sg_image, descriptor: borrow TextureDescri
         let storageView = sg_make_view(move sg_view_desc {
             storage_image: sg_image_view_desc {
                 image: sg_image { id: image.id }
-            }
+            },
             label: label
         })
         texture.storageViewId = storageView.id
@@ -184,14 +184,14 @@ function sokolMakeTextureViews(image: sg_image, descriptor: borrow TextureDescri
 @Native
 function sokolCreateTexture(descriptor: borrow TextureDescriptor) -> TextureResult {
     let image = sg_make_image(move sg_image_desc {
-        type_value: sokolImageType2d()
-        usage: sokolImageUsage(descriptor)
-        width: I32(descriptor.width)
-        height: I32(descriptor.height)
-        num_slices: 1
-        num_mipmaps: 1
-        pixel_format: sokolPixelFormat(descriptor.format)
-        sample_count: I32(sokolSampleCount(descriptor.sampleCount))
+        type_value: sokolImageType2d(),
+        usage: sokolImageUsage(descriptor),
+        width: I32(descriptor.width),
+        height: I32(descriptor.height),
+        num_slices: 1,
+        num_mipmaps: 1,
+        pixel_format: sokolPixelFormat(descriptor.format),
+        sample_count: I32(sokolSampleCount(descriptor.sampleCount)),
         label: descriptor.label
     })
     if image.id == 0 {
@@ -209,19 +209,19 @@ function sokolCreateTexture(descriptor: borrow TextureDescriptor) -> TextureResu
 function sokolCreateTextureFromPixels(descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
     let bytes = sokolStagePixels(pixels)
     let image = sg_make_image(move sg_image_desc {
-        type_value: sokolImageType2d()
-        usage: sokolImageUsage(descriptor)
-        width: I32(descriptor.width)
-        height: I32(descriptor.height)
-        num_slices: 1
-        num_mipmaps: 1
-        pixel_format: sokolPixelFormat(descriptor.format)
-        sample_count: I32(sokolSampleCount(descriptor.sampleCount))
+        type_value: sokolImageType2d(),
+        usage: sokolImageUsage(descriptor),
+        width: I32(descriptor.width),
+        height: I32(descriptor.height),
+        num_slices: 1,
+        num_mipmaps: 1,
+        pixel_format: sokolPixelFormat(descriptor.format),
+        sample_count: I32(sokolSampleCount(descriptor.sampleCount)),
         data: sg_image_data {
             mip_levels: sg_range_array_16 {
                 elements: [sg_range { ptr: bytes, size: U64(pixels.count) }]
             }
-        }
+        },
         label: descriptor.label
     })
     freeBytes(bytes)

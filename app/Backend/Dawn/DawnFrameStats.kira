@@ -16,17 +16,17 @@ import Foundation
 // `QueryPerformanceCounter` and its frequency. A monotonic clock is a platform
 // call — Kira has no clock of its own — and this is Windows', read through the
 // same `LARGE_INTEGER` out-parameter shape the window messages use.
-@FFI.Extern { library: kernel32; symbol: QueryPerformanceCounter; abi: c; }
-function performanceCounter(value: RawPtr) -> I32;
+@FFI.Extern { library: kernel32, symbol: QueryPerformanceCounter, abi: c }
+function performanceCounter(value: RawPtr) -> I32
 
-@FFI.Extern { library: kernel32; symbol: QueryPerformanceFrequency; abi: c; }
-function performanceFrequency(value: RawPtr) -> I32;
+@FFI.Extern { library: kernel32, symbol: QueryPerformanceFrequency, abi: c }
+function performanceFrequency(value: RawPtr) -> I32
 
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_read_u64_at; abi: c; }
-function readDoubleWord(ptr: RawPtr, offset: U64) -> U64;
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u64_at, abi: c }
+function readDoubleWord(ptr: RawPtr, offset: U64) -> U64
 
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_write_u64_at; abi: c; }
-function writeDoubleWord(ptr: RawPtr, offset: U64, value: U64) -> Void;
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_write_u64_at, abi: c }
+function writeDoubleWord(ptr: RawPtr, offset: U64, value: U64) -> Void
 
 struct DawnFrameStats {
     // The frame being recorded.
@@ -132,20 +132,20 @@ function dawnFrameStatistics(context: RawPtr) -> FrameStatistics {
     }
     let state = nativeRecover<GraphicsAppRuntimeState>(context)
     return FrameStatistics {
-        frameSeconds: state.dawn.stats.lastFrameSeconds
-        cpuSeconds: state.dawn.stats.lastFrameSeconds
-        gpuSeconds: state.dawn.clock.frameMilliseconds / 1000.0
-        hasGpuSeconds: state.dawn.clock.measured
-        drawableWidth: state.dawn.surfaceWidth
-        drawableHeight: state.dawn.surfaceHeight
-        allocatedBytes: state.dawn.allocatedBytes
-        hasAllocatedBytes: true
-        resourceCount: state.dawn.resourceCount
-        passCount: state.dawn.stats.lastPassCount
-        drawCount: state.dawn.stats.lastDrawCount
-        triangleCount: state.dawn.stats.lastTriangleCount
-        framesInFlight: 2
-        frameSerial: state.dawn.stats.frameSerial
+        frameSeconds: state.dawn.stats.lastFrameSeconds,
+        cpuSeconds: state.dawn.stats.lastFrameSeconds,
+        gpuSeconds: state.dawn.clock.frameMilliseconds / 1000.0,
+        hasGpuSeconds: state.dawn.clock.measured,
+        drawableWidth: state.dawn.surfaceWidth,
+        drawableHeight: state.dawn.surfaceHeight,
+        allocatedBytes: state.dawn.allocatedBytes,
+        hasAllocatedBytes: true,
+        resourceCount: state.dawn.resourceCount,
+        passCount: state.dawn.stats.lastPassCount,
+        drawCount: state.dawn.stats.lastDrawCount,
+        triangleCount: state.dawn.stats.lastTriangleCount,
+        framesInFlight: 2,
+        frameSerial: state.dawn.stats.frameSerial,
         windowState: state.dawn.focused ? 1 : 2
     }
 }

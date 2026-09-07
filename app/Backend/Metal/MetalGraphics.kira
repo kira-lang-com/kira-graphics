@@ -48,7 +48,7 @@ function metalCreateGraphicsDynamicBuffer(ctx: RawPtr, floatCapacity: Int) -> Dy
         return .Error(.DeviceRefused)
     }
     return .Ok(DynamicBuffer {
-        buffer: metalGraphicsBuffer(id)
+        buffer: metalGraphicsBuffer(id),
         contents: metalDynamicBufferContents(ctx, id)
     })
 }
@@ -79,7 +79,7 @@ function metalMakeUniform(ctx: RawPtr, descriptor: borrow UniformDescriptor) -> 
     let id = metalCreateUniform(ctx, descriptor.expectedFloatCount)
     metalUpdateUniform(ctx, id, descriptor.data)
     return Uniform {
-        storage: nativeUserData(nativeState(UniformState {}))
+        storage: nativeUserData(nativeState(UniformState {})),
         id: id
     }
 }
@@ -90,7 +90,7 @@ function metalMakeUniform(ctx: RawPtr, descriptor: borrow UniformDescriptor) -> 
 @Native
 function metalGraphicsBindGroup(id: Int) -> BindGroup {
     return BindGroup {
-        storage: nativeUserData(nativeState(BindGroupState {}))
+        storage: nativeUserData(nativeState(BindGroupState {})),
         id: id
     }
 }

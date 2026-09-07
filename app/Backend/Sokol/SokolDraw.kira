@@ -267,17 +267,17 @@ function sokolDrawWithBindings(
     sg_apply_bindings(move sg_bindings {
         vertex_buffers: sg_buffer_array_8 {
             elements: vertexBuffers
-        }
+        },
         // `wantsIndexed`, not `hasIndexBuffer`: the pipeline chosen above is the
         // non-indexed one whenever this draw has no indices, and sokol refuses an
         // index buffer against it (VALIDATE_ABND_EXPECTED_NO_IBUF). An encoder
         // that set an index buffer for an earlier draw and then issued a
         // vertex-count draw — the glass copy and blur passes do exactly that —
         // otherwise aborted the process at the validation layer.
-        index_buffer: wantsIndexed ? sg_buffer { id: indexBufferId } : sg_buffer { id: 0 }
+        index_buffer: wantsIndexed ? sg_buffer { id: indexBufferId } : sg_buffer { id: 0 },
         views: sg_view_array_32 {
             elements: views
-        }
+        },
         samplers: sg_sampler_array_12 {
             elements: samplers
         }

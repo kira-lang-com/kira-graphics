@@ -69,8 +69,8 @@ construct DawnWindow {
 // breaks here, and there is no arm to hide it in.
 function dawnWindowFor(platform: borrow DawnPlatform) -> Any DawnWindow {
     match platform {
-        Windows -> return DawnWindowWin32();
-        Linux -> return DawnWindowWayland();
+        Windows -> return DawnWindowWin32()
+        Linux -> return DawnWindowWayland()
     }
 }
 

@@ -23,7 +23,7 @@ struct LifetimePeaks {
     var pipelines: U32 = 0
 }
 
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct KgLifetimePeaks {
     var buffers: U32
     var images: U32
@@ -71,11 +71,11 @@ function sokolReportLifetime(peaks: borrow LifetimePeaks) {
         return
     }
     kgReportLifetime(sg_query_stats(), KgLifetimePeaks {
-        buffers: peaks.buffers
-        images: peaks.images
-        samplers: peaks.samplers
-        views: peaks.views
-        shaders: peaks.shaders
+        buffers: peaks.buffers,
+        images: peaks.images,
+        samplers: peaks.samplers,
+        views: peaks.views,
+        shaders: peaks.shaders,
         pipelines: peaks.pipelines
     })
     return

@@ -9,14 +9,14 @@
 function metalCreateComputePipeline(ctx: RawPtr, shaderId: Int, entryName: borrow String) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let library = metalLookup(ctx, shaderId)
-    let fnName = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), entryName)
-    let fn = metalMsgSendP(library, metalSel("newFunctionWithName:"), fnName)
+    let fnName: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), entryName)
+    let fn: RawPtr = metalMsgSend(library, metalSel("newFunctionWithName:"), fnName)
     let errSlot = metalMemAlloc(8)
     metalMemWriteU64(errSlot, 0, 0)
-    let pipeline = metalMsgSendPP(device, metalSel("newComputePipelineStateWithFunction:error:"), fn, errSlot)
+    let pipeline: RawPtr = metalMsgSend(device, metalSel("newComputePipelineStateWithFunction:error:"), fn, errSlot)
     // fn (newFunctionWithName:) is a +1-owned transient; the compute pipeline state
     // retains what it needs, so release it here rather than leaking one per pipeline.
-    metalMsgSendVoid(fn, metalSel("release"))
+    metalMsgSend(fn, metalSel("release"))
     metalMemFree(errSlot)
     return metalRegister(ctx, pipeline)
 }
@@ -77,27 +77,27 @@ function metalDispatchTextureComputePair(
     metalMemWriteU64(tgSize, 8, 16)
     metalMemWriteU64(tgSize, 16, 1)
 
-    let horizontal = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
-    metalMsgSendVoidP(horizontal, metalSel("setComputePipelineState:"), metalLookup(ctx, horizontalPipelineId))
-    metalMsgSendSetBytes(horizontal, metalSel("setBytes:length:atIndex:"), extent, 16, 0)
-    metalMsgSendVoidPU(horizontal, metalSel("setSamplerState:atIndex:"), sampler, 1)
-    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), source, 2)
-    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), secondSource, 3)
-    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempNear, 4)
-    metalMsgSendVoidPU(horizontal, metalSel("setTexture:atIndex:"), tempFar, 5)
-    metalMsgSendVoidPP(horizontal, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
-    metalMsgSendVoid(horizontal, metalSel("endEncoding"))
+    let horizontal: RawPtr = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
+    metalMsgSend(horizontal, metalSel("setComputePipelineState:"), metalLookup(ctx, horizontalPipelineId))
+    metalMsgSend(horizontal, metalSel("setBytes:length:atIndex:"), extent, 16, 0)
+    metalMsgSend(horizontal, metalSel("setSamplerState:atIndex:"), sampler, 1)
+    metalMsgSend(horizontal, metalSel("setTexture:atIndex:"), source, 2)
+    metalMsgSend(horizontal, metalSel("setTexture:atIndex:"), secondSource, 3)
+    metalMsgSend(horizontal, metalSel("setTexture:atIndex:"), tempNear, 4)
+    metalMsgSend(horizontal, metalSel("setTexture:atIndex:"), tempFar, 5)
+    metalMsgSend(horizontal, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
+    metalMsgSend(horizontal, metalSel("endEncoding"))
 
-    let vertical = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
-    metalMsgSendVoidP(vertical, metalSel("setComputePipelineState:"), metalLookup(ctx, verticalPipelineId))
-    metalMsgSendSetBytes(vertical, metalSel("setBytes:length:atIndex:"), extent, 16, 0)
-    metalMsgSendVoidPU(vertical, metalSel("setSamplerState:atIndex:"), sampler, 1)
-    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), tempNear, 2)
-    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), tempFar, 3)
-    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), outputNear, 4)
-    metalMsgSendVoidPU(vertical, metalSel("setTexture:atIndex:"), outputFar, 5)
-    metalMsgSendVoidPP(vertical, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
-    metalMsgSendVoid(vertical, metalSel("endEncoding"))
+    let vertical: RawPtr = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
+    metalMsgSend(vertical, metalSel("setComputePipelineState:"), metalLookup(ctx, verticalPipelineId))
+    metalMsgSend(vertical, metalSel("setBytes:length:atIndex:"), extent, 16, 0)
+    metalMsgSend(vertical, metalSel("setSamplerState:atIndex:"), sampler, 1)
+    metalMsgSend(vertical, metalSel("setTexture:atIndex:"), tempNear, 2)
+    metalMsgSend(vertical, metalSel("setTexture:atIndex:"), tempFar, 3)
+    metalMsgSend(vertical, metalSel("setTexture:atIndex:"), outputNear, 4)
+    metalMsgSend(vertical, metalSel("setTexture:atIndex:"), outputFar, 5)
+    metalMsgSend(vertical, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
+    metalMsgSend(vertical, metalSel("endEncoding"))
 
     // `setBytes:` copies into the encoder's own storage, so the extent may go
     // back as soon as both encoders have taken it.
@@ -121,7 +121,7 @@ function metalReadBufferU32(ctx: RawPtr, bufferId: Int, index: Int) -> U32 {
     if pointerIsNull(buffer) {
         return U32(0)
     }
-    let contents = metalMsgSend(buffer, metalSel("contents"))
+    let contents: RawPtr = metalMsgSend(buffer, metalSel("contents"))
     if pointerIsNull(contents) {
         return U32(0)
     }
@@ -147,12 +147,12 @@ function metalDispatchTextureBufferCompute(
         return
     }
     let commandBuffer = metalContextActiveCommandBuffer(ctx)
-    let encoder = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
-    metalMsgSendVoidP(encoder, metalSel("setComputePipelineState:"), metalLookup(ctx, pipelineId))
-    metalMsgSendVoidPU(encoder, metalSel("setTexture:atIndex:"), metalLookup(ctx, textureId), 0)
+    let encoder: RawPtr = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
+    metalMsgSend(encoder, metalSel("setComputePipelineState:"), metalLookup(ctx, pipelineId))
+    metalMsgSend(encoder, metalSel("setTexture:atIndex:"), metalLookup(ctx, textureId), 0)
     for slot in 0..bufferIds.count {
         let buffer = metalLookup(ctx, Int(bufferIds[slot]))
-        metalMsgSendSetVertexBuffer(encoder, metalSel("setBuffer:offset:atIndex:"), buffer, 0, U64(slot))
+        metalMsgSend(encoder, metalSel("setBuffer:offset:atIndex:"), buffer, 0, U64(slot))
     }
     let gridSize = metalMemAlloc(24)
     metalMemWriteU64(gridSize, 0, threadCount)
@@ -162,8 +162,8 @@ function metalDispatchTextureBufferCompute(
     metalMemWriteU64(tgSize, 0, threadsPerGroup)
     metalMemWriteU64(tgSize, 8, 1)
     metalMemWriteU64(tgSize, 16, 1)
-    metalMsgSendVoidPP(encoder, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
-    metalMsgSendVoid(encoder, metalSel("endEncoding"))
+    metalMsgSend(encoder, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
+    metalMsgSend(encoder, metalSel("endEncoding"))
     metalMemFree(gridSize)
     metalMemFree(tgSize)
     return
@@ -191,11 +191,11 @@ function metalDispatchComputeBuffers(
         return
     }
     let commandBuffer = metalContextActiveCommandBuffer(ctx)
-    let encoder = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
-    metalMsgSendVoidP(encoder, metalSel("setComputePipelineState:"), metalLookup(ctx, pipelineId))
+    let encoder: RawPtr = metalMsgSend(commandBuffer, metalSel("computeCommandEncoder"))
+    metalMsgSend(encoder, metalSel("setComputePipelineState:"), metalLookup(ctx, pipelineId))
     for slot in 0..bufferIds.count {
         let buffer = metalLookup(ctx, Int(bufferIds[slot]))
-        metalMsgSendSetVertexBuffer(encoder, metalSel("setBuffer:offset:atIndex:"), buffer, 0, U64(slot))
+        metalMsgSend(encoder, metalSel("setBuffer:offset:atIndex:"), buffer, 0, U64(slot))
     }
     let gridSize = metalMemAlloc(24)
     metalMemWriteU64(gridSize, 0, threadCount)
@@ -205,8 +205,8 @@ function metalDispatchComputeBuffers(
     metalMemWriteU64(tgSize, 0, threadsPerGroup)
     metalMemWriteU64(tgSize, 8, 1)
     metalMemWriteU64(tgSize, 16, 1)
-    metalMsgSendVoidPP(encoder, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
-    metalMsgSendVoid(encoder, metalSel("endEncoding"))
+    metalMsgSend(encoder, metalSel("dispatchThreads:threadsPerThreadgroup:"), gridSize, tgSize)
+    metalMsgSend(encoder, metalSel("endEncoding"))
     metalMemFree(gridSize)
     metalMemFree(tgSize)
     return

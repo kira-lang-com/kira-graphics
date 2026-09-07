@@ -24,9 +24,9 @@ import Foundation
 // colour by accident.
 function graphicsTransparentKey() -> Color {
     return Color {
-        r: 1.0
-        g: 0.0
-        b: 1.0
+        r: 1.0,
+        g: 0.0,
+        b: 1.0,
         a: 1.0
     }
 }

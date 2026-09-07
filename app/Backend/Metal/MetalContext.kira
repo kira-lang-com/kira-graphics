@@ -128,7 +128,7 @@ function metalOffsetMachTimeDenom() -> U64 { return 384 }
 function metalContextAlloc() -> RawPtr {
     let ctx = metalMemAlloc(metalContextSize())
     let device = metalCreateSystemDefaultDevice()
-    let queue = metalMsgSend(device, metalSel("newCommandQueue"))
+    let queue: RawPtr = metalMsgSend(device, metalSel("newCommandQueue"))
     metalMemWritePtr(ctx, metalOffsetDevice(), device)
     metalMemWritePtr(ctx, metalOffsetQueue(), queue)
     // Null the surface/depth slots so offscreen mode (no layer/drawable) and the
@@ -200,13 +200,13 @@ function metalContextAlloc() -> RawPtr {
 function metalContextAttachLayer(ctx: RawPtr, width: Int, height: Int) {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let layerClass = metalObjcGetClass("CAMetalLayer")
-    let layerAlloc = metalMsgSend(layerClass, metalSel("alloc"))
-    let layer = metalMsgSend(layerAlloc, metalSel("init"))
-    metalMsgSendVoidP(layer, metalSel("setDevice:"), device)
-    metalMsgSendVoidU(layer, metalSel("setPixelFormat:"), metalPixelFormatBGRA8Unorm())
-    metalMsgSendVoidB(layer, metalSel("setFramebufferOnly:"), false)
-    metalMsgSendVoidB(layer, metalSel("setDisplaySyncEnabled:"), false)
-    metalMsgSendVoid2F(layer, metalSel("setDrawableSize:"), Float(width), Float(height))
+    let layerAlloc: RawPtr = metalMsgSend(layerClass, metalSel("alloc"))
+    let layer: RawPtr = metalMsgSend(layerAlloc, metalSel("init"))
+    metalMsgSend(layer, metalSel("setDevice:"), device)
+    metalMsgSend(layer, metalSel("setPixelFormat:"), metalPixelFormatBGRA8Unorm())
+    metalMsgSend(layer, metalSel("setFramebufferOnly:"), false)
+    metalMsgSend(layer, metalSel("setDisplaySyncEnabled:"), false)
+    metalMsgSend(layer, metalSel("setDrawableSize:"), Float(width), Float(height))
     metalMemWritePtr(ctx, metalOffsetLayer(), layer)
     metalMemWriteU64(ctx, metalOffsetWidth(), width)
     metalMemWriteU64(ctx, metalOffsetHeight(), height)
@@ -228,7 +228,7 @@ function metalContextFree(ctx: RawPtr) {
     // Release the last command buffer we retained for the deferred readback wait.
     let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
     if !pointerIsNull(pending) {
-        metalMsgSendVoid(pending, metalSel("release"))
+        metalMsgSend(pending, metalSel("release"))
     }
     // Release/free every registered resource (ids 1..nextId-1; id 0 is the reserved
     // sentinel), then free the registry and its parallel kinds table. Object entries
@@ -249,7 +249,7 @@ function metalContextFree(ctx: RawPtr) {
                 if kind == metalRegistryKindRawBlock() {
                     metalMemFree(entry)
                 } else {
-                    metalMsgSendVoid(entry, metalSel("release"))
+                    metalMsgSend(entry, metalSel("release"))
                 }
             }
             id = id + 1
@@ -262,11 +262,11 @@ function metalContextFree(ctx: RawPtr) {
     // Release the context-owned depth target/state (null unless depth was attached).
     let depthState = metalMemReadPtr(ctx, metalOffsetDepthState())
     if !pointerIsNull(depthState) {
-        metalMsgSendVoid(depthState, metalSel("release"))
+        metalMsgSend(depthState, metalSel("release"))
     }
     let depthTexture = metalMemReadPtr(ctx, metalOffsetDepthTexture())
     if !pointerIsNull(depthTexture) {
-        metalMsgSendVoid(depthTexture, metalSel("release"))
+        metalMsgSend(depthTexture, metalSel("release"))
     }
     // The color target is +1-owned ONLY in offscreen mode (newTextureWithDescriptor:).
     // In layer mode it is the drawable's texture, which we do not own — releasing it
@@ -275,16 +275,16 @@ function metalContextFree(ctx: RawPtr) {
     if pointerIsNull(layer) {
         let colorTexture = metalMemReadPtr(ctx, metalOffsetColorTexture())
         if !pointerIsNull(colorTexture) {
-            metalMsgSendVoid(colorTexture, metalSel("release"))
+            metalMsgSend(colorTexture, metalSel("release"))
         }
     } else {
         // The CAMetalLayer is a +1-owned alloc/init we created for the on-screen path.
-        metalMsgSendVoid(layer, metalSel("release"))
+        metalMsgSend(layer, metalSel("release"))
     }
     // Release the command queue, breaking its dispatch-source retain cycles.
     let queue = metalMemReadPtr(ctx, metalOffsetQueue())
     if !pointerIsNull(queue) {
-        metalMsgSendVoid(queue, metalSel("release"))
+        metalMsgSend(queue, metalSel("release"))
     }
     // The device is NOT released: MTLCreateSystemDefaultDevice returns a cached
     // process-lifetime singleton (the same object every call), which Metal retains
@@ -330,16 +330,16 @@ function metalContextAttachOffscreenFormat(ctx: RawPtr, width: Int, height: Int,
     }
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
-    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), pixelFormat, width * scaleFactor, height * scaleFactor, false)
-    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget())
+    let desc: RawPtr = metalMsgSend(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), pixelFormat, width * scaleFactor, height * scaleFactor, false)
+    metalMsgSend(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget())
     // Benchmark the same GPU-only storage used by an on-screen CAMetalLayer
     // drawable. Verification/dump modes stay shared because the CPU reads them.
     var targetStorageMode = metalStorageModeShared()
     if !pointerIsNull(metalGetEnv("KIRA_METAL_BENCH")) {
         targetStorageMode = metalStorageModePrivate()
     }
-    metalMsgSendVoidU(desc, metalSel("setStorageMode:"), targetStorageMode)
-    let texture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
+    metalMsgSend(desc, metalSel("setStorageMode:"), targetStorageMode)
+    let texture: RawPtr = metalMsgSend(device, metalSel("newTextureWithDescriptor:"), desc)
     metalMemWritePtr(ctx, metalOffsetColorTexture(), texture)
     metalMemWriteU64(ctx, metalOffsetWidth(), width)
     metalMemWriteU64(ctx, metalOffsetHeight(), height)
@@ -355,17 +355,17 @@ function metalContextAttachOffscreenFormat(ctx: RawPtr, width: Int, height: Int,
 function metalCreateColorTargetTexture(ctx: RawPtr, width: Int, height: Int, pixelFormat: U64, storage: Int) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
-    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), pixelFormat, width, height, false)
+    let desc: RawPtr = metalMsgSend(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), pixelFormat, width, height, false)
     // Render targets may also be consumed by a compute effect (Liquid Glass uses
     // private, GPU-only ping-pong textures). ShaderWrite is harmless for ordinary
     // targets and avoids allocating a second texture class just for that fast path.
-    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget() + 1 + 2)   // RenderTarget(4) | ShaderRead(1) | ShaderWrite(2)
+    metalMsgSend(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget() + 1 + 2)   // RenderTarget(4) | ShaderRead(1) | ShaderWrite(2)
     var nativeStorageMode = metalStorageModeShared()
     if storage == 2 {
         nativeStorageMode = metalStorageModePrivate()
     }
-    metalMsgSendVoidU(desc, metalSel("setStorageMode:"), nativeStorageMode)
-    let texture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
+    metalMsgSend(desc, metalSel("setStorageMode:"), nativeStorageMode)
+    let texture: RawPtr = metalMsgSend(device, metalSel("newTextureWithDescriptor:"), desc)
     return metalRegister(ctx, texture)
 }
 
@@ -378,30 +378,30 @@ function metalContextBeginClearTarget(ctx: RawPtr, textureId: Int, loadAction: U
     metalContextCountPass(ctx)
     let texture = metalLookup(ctx, textureId)
     let rpClass = metalObjcGetClass("MTLRenderPassDescriptor")
-    let rp = metalMsgSend(rpClass, metalSel("renderPassDescriptor"))
-    let colorAttachments = metalMsgSend(rp, metalSel("colorAttachments"))
-    let ca0 = metalMsgSendPU(colorAttachments, metalSel("objectAtIndexedSubscript:"), 0)
-    metalMsgSendVoidP(ca0, metalSel("setTexture:"), texture)
-    metalMsgSendVoidU(ca0, metalSel("setLoadAction:"), loadAction)
-    metalMsgSendVoidU(ca0, metalSel("setStoreAction:"), metalStoreActionStore())
-    metalMsgSendVoid4F(ca0, metalSel("setClearColor:"), r, g, b, a)
+    let rp: RawPtr = metalMsgSend(rpClass, metalSel("renderPassDescriptor"))
+    let colorAttachments: RawPtr = metalMsgSend(rp, metalSel("colorAttachments"))
+    let ca0: RawPtr = metalMsgSend(colorAttachments, metalSel("objectAtIndexedSubscript:"), 0)
+    metalMsgSend(ca0, metalSel("setTexture:"), texture)
+    metalMsgSend(ca0, metalSel("setLoadAction:"), loadAction)
+    metalMsgSend(ca0, metalSel("setStoreAction:"), metalStoreActionStore())
+    metalMsgSend(ca0, metalSel("setClearColor:"), r, g, b, a)
     if depthEnabled {
         let depthTexture = metalMemReadPtr(ctx, metalOffsetDepthTexture())
-        let depthAtt = metalMsgSend(rp, metalSel("depthAttachment"))
-        metalMsgSendVoidP(depthAtt, metalSel("setTexture:"), depthTexture)
-        metalMsgSendVoidU(depthAtt, metalSel("setLoadAction:"), metalLoadActionClear())
+        let depthAtt: RawPtr = metalMsgSend(rp, metalSel("depthAttachment"))
+        metalMsgSend(depthAtt, metalSel("setTexture:"), depthTexture)
+        metalMsgSend(depthAtt, metalSel("setLoadAction:"), metalLoadActionClear())
         // Depth is cleared at the start of every pass and read by nothing after
         // it, so storing it writes the whole target back for bytes no one loads
         // — 33 MB a pass at 4K. Discarding it lets a tile-based GPU keep depth in
         // tile memory and never touch system memory with it at all.
-        metalMsgSendVoidU(depthAtt, metalSel("setStoreAction:"), metalStoreActionDontCare())
-        metalMsgSendVoidF(depthAtt, metalSel("setClearDepth:"), 1.0)
+        metalMsgSend(depthAtt, metalSel("setStoreAction:"), metalStoreActionDontCare())
+        metalMsgSend(depthAtt, metalSel("setClearDepth:"), 1.0)
     }
     let commandBuffer = metalContextActiveCommandBuffer(ctx)
-    let encoder = metalMsgSendP(commandBuffer, metalSel("renderCommandEncoderWithDescriptor:"), rp)
+    let encoder: RawPtr = metalMsgSend(commandBuffer, metalSel("renderCommandEncoderWithDescriptor:"), rp)
     if depthEnabled {
         let depthState = metalMemReadPtr(ctx, metalOffsetDepthState())
-        metalMsgSendVoidP(encoder, metalSel("setDepthStencilState:"), depthState)
+        metalMsgSend(encoder, metalSel("setDepthStencilState:"), depthState)
     }
     metalMemWritePtr(ctx, metalOffsetEncoder(), encoder)
     return
@@ -415,20 +415,20 @@ function metalContextAttachDepth(ctx: RawPtr) {
     let width = metalMemReadU64(ctx, metalOffsetWidth())
     let height = metalMemReadU64(ctx, metalOffsetHeight())
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
-    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatDepth32Float(), width, height, false)
-    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget() + metalTextureUsageShaderRead())
-    metalMsgSendVoidU(desc, metalSel("setStorageMode:"), metalStorageModePrivate())
-    let depthTexture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
+    let desc: RawPtr = metalMsgSend(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatDepth32Float(), width, height, false)
+    metalMsgSend(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget() + metalTextureUsageShaderRead())
+    metalMsgSend(desc, metalSel("setStorageMode:"), metalStorageModePrivate())
+    let depthTexture: RawPtr = metalMsgSend(device, metalSel("newTextureWithDescriptor:"), desc)
     metalMemWritePtr(ctx, metalOffsetDepthTexture(), depthTexture)
 
     let dsDescClass = metalObjcGetClass("MTLDepthStencilDescriptor")
-    let dsDesc = metalMsgSend(metalMsgSend(dsDescClass, metalSel("alloc")), metalSel("init"))
-    metalMsgSendVoidU(dsDesc, metalSel("setDepthCompareFunction:"), metalCompareFunctionLess())
-    metalMsgSendVoidB(dsDesc, metalSel("setDepthWriteEnabled:"), true)
-    let depthState = metalMsgSendP(device, metalSel("newDepthStencilStateWithDescriptor:"), dsDesc)
+    let dsDesc: RawPtr = metalMsgSend(metalMsgSend(dsDescClass, metalSel("alloc")), metalSel("init"))
+    metalMsgSend(dsDesc, metalSel("setDepthCompareFunction:"), metalCompareFunctionLess())
+    metalMsgSend(dsDesc, metalSel("setDepthWriteEnabled:"), true)
+    let depthState: RawPtr = metalMsgSend(device, metalSel("newDepthStencilStateWithDescriptor:"), dsDesc)
     // The descriptor is a +1-owned alloc/init temporary; the depth-stencil state does
     // not retain it, so release it here rather than leaking one per attach.
-    metalMsgSendVoid(dsDesc, metalSel("release"))
+    metalMsgSend(dsDesc, metalSel("release"))
     metalMemWritePtr(ctx, metalOffsetDepthState(), depthState)
     return
 }
@@ -443,14 +443,14 @@ function metalContextAttachDepth(ctx: RawPtr) {
 function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int, height: Int, readable: Bool) {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let layerClass = metalObjcGetClass("CAMetalLayer")
-    let layer = metalMsgSend(metalMsgSend(layerClass, metalSel("alloc")), metalSel("init"))
-    metalMsgSendVoidP(layer, metalSel("setDevice:"), device)
-    metalMsgSendVoidU(layer, metalSel("setPixelFormat:"), metalPixelFormatBGRA8Unorm())
+    let layer: RawPtr = metalMsgSend(metalMsgSend(layerClass, metalSel("alloc")), metalSel("init"))
+    metalMsgSend(layer, metalSel("setDevice:"), device)
+    metalMsgSend(layer, metalSel("setPixelFormat:"), metalPixelFormatBGRA8Unorm())
     // Let Core Animation resize the layer (and thus its auto-sized drawable) with the
     // view: kCALayerWidthSizable|kCALayerHeightSizable = 2|16. We do NOT pin
     // drawableSize, so CAMetalLayer keeps it at bounds x contentsScale and updates it
     // on resize; the actual pixel size is read back from the drawable's texture.
-    metalMsgSendVoidU(layer, metalSel("setAutoresizingMask:"), 18)
+    metalMsgSend(layer, metalSel("setAutoresizingMask:"), 18)
     // A drawable is write-only by default, which is exactly right for a window and
     // exactly wrong for proving one draws: nothing may read back what was presented.
     // A run that is going to capture or dump a frame opts out of that; every other
@@ -458,14 +458,14 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     // Animation pick a lossless-compressed texture) and costs a window nobody is
     // verifying nothing.
     if readable || !pointerIsNull(metalGetEnv("KIRA_METAL_ONSCREEN_DUMP")) {
-        metalMsgSendVoidB(layer, metalSel("setFramebufferOnly:"), false)
+        metalMsgSend(layer, metalSel("setFramebufferOnly:"), false)
     }
     // Keep Core Animation's fallback resize behavior correct between delegate
     // callbacks. The live-resize delegate submits newly laid-out frames during
     // AppKit's modal tracking loop; contentsGravity covers only the brief interval
     // between those submissions.
-    let gravity = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "resize")
-    metalMsgSendVoidP(layer, metalSel("setContentsGravity:"), gravity)
+    let gravity: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "resize")
+    metalMsgSend(layer, metalSel("setContentsGravity:"), gravity)
     // How many drawables the layer will hand out before `nextDrawable` blocks.
     // An uncapped loop is paced by exactly this: a drawable comes back only once
     // the compositor has finished with it, so the pool depth times the display's
@@ -474,7 +474,7 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     // is how a presentation-bound frame rate gets mistaken for a slow renderer.
     if !pointerIsNull(metalGetEnv("KIRA_METAL_POOL_PROBE")) {
         print(717171)
-        print(Int(metalMsgSendU64(layer, metalSel("maximumDrawableCount"))))
+        print(Int(metalMsgSendCount(layer, metalSel("maximumDrawableCount"))))
     }
     // Visible windows are uncapped by default: do not make CAMetalLayer wait for
     // the display beam. KIRA_METAL_VSYNC=1 remains available to hosts that prefer
@@ -483,13 +483,13 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     if !pointerIsNull(metalGetEnv("KIRA_METAL_VSYNC")) {
         displaySync = true
     }
-    metalMsgSendVoidB(layer, metalSel("setDisplaySyncEnabled:"), displaySync)
+    metalMsgSend(layer, metalSel("setDisplaySyncEnabled:"), displaySync)
     // Order matters: assign the layer FIRST, then turn on wantsLayer. This makes the
     // view layer-HOSTING (the CAMetalLayer is ours to drive) rather than layer-backed
     // (where AppKit owns the layer and would draw the view's opaque background over our
     // rendered content on every display pass, blanking the frame).
-    metalMsgSendVoidP(viewPtr, metalSel("setLayer:"), layer)
-    metalMsgSendVoidB(viewPtr, metalSel("setWantsLayer:"), true)
+    metalMsgSend(viewPtr, metalSel("setLayer:"), layer)
+    metalMsgSend(viewPtr, metalSel("setWantsLayer:"), true)
     metalMemWritePtr(ctx, metalOffsetLayer(), layer)
     metalMemWritePtr(ctx, metalOffsetHostView(), viewPtr)
     metalMemWriteU64(ctx, metalOffsetWidth(), width)
@@ -518,14 +518,14 @@ function metalContextHiddenTarget(ctx: RawPtr) -> RawPtr {
         return texture
     }
     if !pointerIsNull(texture) {
-        metalMsgSendVoid(texture, metalSel("release"))
+        metalMsgSend(texture, metalSel("release"))
     }
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
-    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatBGRA8Unorm(), width, height, false)
-    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget())
-    metalMsgSendVoidU(desc, metalSel("setStorageMode:"), metalStorageModePrivate())
-    texture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
+    let desc: RawPtr = metalMsgSend(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatBGRA8Unorm(), width, height, false)
+    metalMsgSend(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget())
+    metalMsgSend(desc, metalSel("setStorageMode:"), metalStorageModePrivate())
+    texture = metalMsgSend(device, metalSel("newTextureWithDescriptor:"), desc)
     metalMemWritePtr(ctx, metalOffsetHiddenTexture(), texture)
     metalMemWriteU64(ctx, metalOffsetHiddenTextureWidth(), width)
     metalMemWriteU64(ctx, metalOffsetHiddenTextureHeight(), height)
@@ -536,7 +536,7 @@ function metalContextHiddenTarget(ctx: RawPtr) -> RawPtr {
 function metalContextReleaseHiddenTarget(ctx: RawPtr) {
     let texture = metalMemReadPtr(ctx, metalOffsetHiddenTexture())
     if !pointerIsNull(texture) {
-        metalMsgSendVoid(texture, metalSel("release"))
+        metalMsgSend(texture, metalSel("release"))
         metalMemWritePtr(ctx, metalOffsetHiddenTexture(), nullPointer())
         metalMemWriteU64(ctx, metalOffsetHiddenTextureWidth(), 0)
         metalMemWriteU64(ctx, metalOffsetHiddenTextureHeight(), 0)

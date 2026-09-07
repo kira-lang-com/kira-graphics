@@ -13,8 +13,8 @@ import Foundation
 // is write-only unless the layer opted out of `framebufferOnly` (see
 // metalContextAttachLayerToView), which a capture run does.
 
-@FFI.Extern { library: kira_metal; symbol: fopen; abi: c; }
-function metalFOpenPath(path: CString, mode: CString): RawPtr;
+@FFI.Extern { library: kira_metal, symbol: fopen, abi: c }
+function metalFOpen(path: CString, mode: CString): RawPtr
 
 // What a run was launched to capture, and how long it lasts.
 struct MetalHarnessKnobs {
@@ -97,7 +97,7 @@ function metalCaptureWriteHeader(buffer: RawPtr, width: Int, height: Int) -> Int
 function metalCaptureReadableTexture(ctx: RawPtr, texture: RawPtr) -> RawPtr {
     let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
     if !pointerIsNull(pending) {
-        metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+        metalMsgSend(pending, metalSel("waitUntilCompleted"))
     }
     let queue = metalMemReadPtr(ctx, metalOffsetQueue())
     if pointerIsNull(texture) || pointerIsNull(queue) {
@@ -107,12 +107,12 @@ function metalCaptureReadableTexture(ctx: RawPtr, texture: RawPtr) -> RawPtr {
     // rather than failing, and a drawable Core Animation handed back is exactly
     // the kind it compresses. This is the counterpart of the
     // optimizeContentsForGPUAccess the render paths run.
-    let cmd = metalMsgSend(queue, metalSel("commandBuffer"))
-    let blit = metalMsgSend(cmd, metalSel("blitCommandEncoder"))
-    metalMsgSendVoidP(blit, metalSel("optimizeContentsForCPUAccess:"), texture)
-    metalMsgSendVoid(blit, metalSel("endEncoding"))
-    metalMsgSendVoid(cmd, metalSel("commit"))
-    metalMsgSendVoid(cmd, metalSel("waitUntilCompleted"))
+    let cmd: RawPtr = metalMsgSend(queue, metalSel("commandBuffer"))
+    let blit: RawPtr = metalMsgSend(cmd, metalSel("blitCommandEncoder"))
+    metalMsgSend(blit, metalSel("optimizeContentsForCPUAccess:"), texture)
+    metalMsgSend(blit, metalSel("endEncoding"))
+    metalMsgSend(cmd, metalSel("commit"))
+    metalMsgSend(cmd, metalSel("waitUntilCompleted"))
     return texture
 }
 
@@ -135,7 +135,7 @@ function metalCapturePpm(ctx: RawPtr, texture: RawPtr, width: Int, height: Int, 
     metalMemWriteU64(region, 24, width)
     metalMemWriteU64(region, 32, height)
     metalMemWriteU64(region, 40, 1)
-    metalMsgSendGetBytes(readable, metalSel("getBytes:bytesPerRow:fromRegion:mipmapLevel:"), source, U64(bytesPerRow), region, 0)
+    metalMsgSend(readable, metalSel("getBytes:bytesPerRow:fromRegion:mipmapLevel:"), source, U64(bytesPerRow), region, 0)
 
     // Header and pixels in one buffer: a PPM is small beside the frame it holds,
     // and one write is one syscall.
@@ -152,7 +152,7 @@ function metalCapturePpm(ctx: RawPtr, texture: RawPtr, width: Int, height: Int, 
         index = index + 1
     }
     var wrote = false
-    let stream = metalFOpenPath(path, "wb")
+    let stream = metalFOpen(path, "wb")
     if !pointerIsNull(stream) {
         let written = metalFWrite(out, 1, U64(headerBytes + pixels), stream)
         wrote = written == U64(headerBytes + pixels)

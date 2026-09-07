@@ -21,15 +21,15 @@ function sokolCreateDynamicBuffer(label: borrow String, floatCapacity: Int) -> D
     }
     let byteCount = U64(floatCapacity * 4)
     let buffer = sg_make_buffer(move sg_buffer_desc {
-        label: label
+        label: label,
         usage: sg_buffer_usage {
             // Dynamic streams are shared by the UI's storage-buffer vertex
             // pull path and editor overlays that use the same bytes as a
             // conventional vertex stream.
-            vertex_buffer: true
-            storage_buffer: true
+            vertex_buffer: true,
+            storage_buffer: true,
             stream_update: true
-        }
+        },
         size: byteCount
     })
     if buffer.id == 0 {
@@ -42,9 +42,9 @@ function sokolCreateDynamicBuffer(label: borrow String, floatCapacity: Int) -> D
     }
     return .Ok(DynamicBuffer {
         buffer: GraphicsBuffer {
-            id: buffer.id
+            id: buffer.id,
             byteSize: Int(byteCount)
-        }
+        },
         contents: contents
     })
 }
@@ -57,7 +57,7 @@ function sokolCommitDynamicBuffer(buffer: borrow GraphicsBuffer, contents: RawPt
         return
     }
     sg_update_buffer(sg_buffer { id: buffer.id }, move sg_range {
-        ptr: contents
+        ptr: contents,
         size: U64(floatCount * 4)
     })
     return
@@ -74,7 +74,7 @@ function sokolCreateStorageBufferBindGroup(label: borrow String, slot: Int, buff
     let view = sg_make_view(move sg_view_desc {
         storage_buffer: sg_buffer_view_desc {
             buffer: sg_buffer { id: bufferId }
-        }
+        },
         label: label
     })
     if view.id == 0 {

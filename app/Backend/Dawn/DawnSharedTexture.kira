@@ -127,9 +127,9 @@ function dawnImportSharedTexture(context: RawPtr, surface: borrow SharedSurface)
             // that named it, so a window compositing one surface loses every
             // other thing it was drawing too.
             .RenderTargetSampled
-        )
-        memory: memory
-        object: object
+        ),
+        memory: memory,
+        object: object,
         surface: surface
     }
 }

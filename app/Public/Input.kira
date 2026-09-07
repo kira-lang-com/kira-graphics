@@ -162,12 +162,12 @@ function graphicsModifierStateFromRaw(raw: Int) -> ModifierState {
     let rightPointerButton = (raw / 512) % 2 == 1
     let middlePointerButton = (raw / 1024) % 2 == 1
     return ModifierState {
-        shift: shift
-        control: control
-        alt: alt
-        superKey: superKey
-        leftPointerButton: leftPointerButton
-        rightPointerButton: rightPointerButton
+        shift: shift,
+        control: control,
+        alt: alt,
+        superKey: superKey,
+        leftPointerButton: leftPointerButton,
+        rightPointerButton: rightPointerButton,
         middlePointerButton: middlePointerButton
     }
 }
@@ -230,23 +230,23 @@ function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> AppEvent {
     let pointerX = (isTouch ? primaryTouch.pos_x : eventPtr.mouse_x) / dpiScale
     let pointerY = (isTouch ? primaryTouch.pos_y : eventPtr.mouse_y) / dpiScale
     return AppEvent {
-        kind: graphicsEventKindFromRaw(rawKind)
-        frameCount: eventPtr.frame_count
-        keyCode: eventPtr.key_code
-        textCodepoint: eventPtr.char_code
-        keyRepeat: eventPtr.key_repeat
-        modifiers: graphicsModifierStateFromRaw(eventPtr.modifiers)
-        pointerButton: graphicsPointerButtonFromRaw(eventPtr.mouse_button)
-        pointerX: pointerX
-        pointerY: pointerY
-        pointerDeltaX: eventPtr.mouse_dx / dpiScale
-        pointerDeltaY: eventPtr.mouse_dy / dpiScale
-        scrollX: eventPtr.scroll_x
-        scrollY: eventPtr.scroll_y
-        touchCount: touchCount
-        windowWidth: eventPtr.window_width
-        windowHeight: eventPtr.window_height
-        framebufferWidth: eventPtr.framebuffer_width
+        kind: graphicsEventKindFromRaw(rawKind),
+        frameCount: eventPtr.frame_count,
+        keyCode: eventPtr.key_code,
+        textCodepoint: eventPtr.char_code,
+        keyRepeat: eventPtr.key_repeat,
+        modifiers: graphicsModifierStateFromRaw(eventPtr.modifiers),
+        pointerButton: graphicsPointerButtonFromRaw(eventPtr.mouse_button),
+        pointerX: pointerX,
+        pointerY: pointerY,
+        pointerDeltaX: eventPtr.mouse_dx / dpiScale,
+        pointerDeltaY: eventPtr.mouse_dy / dpiScale,
+        scrollX: eventPtr.scroll_x,
+        scrollY: eventPtr.scroll_y,
+        touchCount: touchCount,
+        windowWidth: eventPtr.window_width,
+        windowHeight: eventPtr.window_height,
+        framebufferWidth: eventPtr.framebuffer_width,
         framebufferHeight: eventPtr.framebuffer_height
     }
 }

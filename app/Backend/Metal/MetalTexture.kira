@@ -13,10 +13,10 @@ function metalSamplerAddressClampToEdge() -> U64 { return 0 }
 function metalCreateTexture(ctx: RawPtr, width: Int, height: Int) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
-    let desc = metalMsgSendTexDesc(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatRGBA8Unorm(), width, height, false)
-    metalMsgSendVoidU(desc, metalSel("setUsage:"), metalTextureUsageShaderRead())
-    metalMsgSendVoidU(desc, metalSel("setStorageMode:"), metalStorageModeShared())
-    let texture = metalMsgSendP(device, metalSel("newTextureWithDescriptor:"), desc)
+    let desc: RawPtr = metalMsgSend(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatRGBA8Unorm(), width, height, false)
+    metalMsgSend(desc, metalSel("setUsage:"), metalTextureUsageShaderRead())
+    metalMsgSend(desc, metalSel("setStorageMode:"), metalStorageModeShared())
+    let texture: RawPtr = metalMsgSend(device, metalSel("newTextureWithDescriptor:"), desc)
     return metalRegister(ctx, texture)
 }
 
@@ -28,10 +28,10 @@ function metalCreateTexture(ctx: RawPtr, width: Int, height: Int) -> Int {
 function metalGraphicsTexture(textureId: Int) -> GraphicsTexture {
     let id = U32(textureId)
     return GraphicsTexture {
-        id: id
-        viewId: id
-        colorViewId: id
-        depthViewId: id
+        id: id,
+        viewId: id,
+        colorViewId: id,
+        depthViewId: id,
         storageViewId: id
     }
 }
@@ -115,7 +115,7 @@ function metalUpdateTexture(ctx: RawPtr, textureId: Int, width: Int, height: Int
     metalMemWriteU64(region, 24, width)
     metalMemWriteU64(region, 32, height)
     metalMemWriteU64(region, 40, 1)
-    metalMsgSendReplaceRegion(texture, metalSel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), region, 0, bytes, width * 4)
+    metalMsgSend(texture, metalSel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), region, 0, bytes, width * 4)
     metalMemFree(bytes)
     metalMemFree(region)
     return
@@ -142,7 +142,7 @@ function metalUpdateTextureBytes(ctx: RawPtr, textureId: Int, width: Int, height
     metalMemWriteU64(region, 24, width)
     metalMemWriteU64(region, 32, height)
     metalMemWriteU64(region, 40, 1)
-    metalMsgSendReplaceRegion(texture, metalSel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), region, 0, bytes, width * 4)
+    metalMsgSend(texture, metalSel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), region, 0, bytes, width * 4)
     metalMemFree(region)
     return
 }
@@ -158,12 +158,12 @@ function metalUpdateTextureBytes(ctx: RawPtr, textureId: Int, width: Int, height
 function metalOptimizeTextureForGpu(ctx: RawPtr, textureId: Int) {
     let texture = metalLookup(ctx, textureId)
     let queue = metalMemReadPtr(ctx, metalOffsetQueue())
-    let commandBuffer = metalMsgSend(queue, metalSel("commandBuffer"))
-    let blit = metalMsgSend(commandBuffer, metalSel("blitCommandEncoder"))
-    metalMsgSendVoidP(blit, metalSel("optimizeContentsForGPUAccess:"), texture)
-    metalMsgSendVoid(blit, metalSel("endEncoding"))
-    metalMsgSendVoid(commandBuffer, metalSel("commit"))
-    metalMsgSendVoid(commandBuffer, metalSel("waitUntilCompleted"))
+    let commandBuffer: RawPtr = metalMsgSend(queue, metalSel("commandBuffer"))
+    let blit: RawPtr = metalMsgSend(commandBuffer, metalSel("blitCommandEncoder"))
+    metalMsgSend(blit, metalSel("optimizeContentsForGPUAccess:"), texture)
+    metalMsgSend(blit, metalSel("endEncoding"))
+    metalMsgSend(commandBuffer, metalSel("commit"))
+    metalMsgSend(commandBuffer, metalSel("waitUntilCompleted"))
     return
 }
 
@@ -174,9 +174,9 @@ function metalOptimizeTextureForGpu(ctx: RawPtr, textureId: Int) {
 @Native
 function metalContextOptimizeTextureInFrame(ctx: RawPtr, textureId: Int) {
     let commandBuffer = metalContextActiveCommandBuffer(ctx)
-    let blit = metalMsgSend(commandBuffer, metalSel("blitCommandEncoder"))
-    metalMsgSendVoidP(blit, metalSel("optimizeContentsForGPUAccess:"), metalLookup(ctx, textureId))
-    metalMsgSendVoid(blit, metalSel("endEncoding"))
+    let blit: RawPtr = metalMsgSend(commandBuffer, metalSel("blitCommandEncoder"))
+    metalMsgSend(blit, metalSel("optimizeContentsForGPUAccess:"), metalLookup(ctx, textureId))
+    metalMsgSend(blit, metalSel("endEncoding"))
     return
 }
 
@@ -185,15 +185,15 @@ function metalContextOptimizeTextureInFrame(ctx: RawPtr, textureId: Int) {
 function metalCreateSampler(ctx: RawPtr, minFilter: U64, magFilter: U64, addressMode: U64) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let descClass = metalObjcGetClass("MTLSamplerDescriptor")
-    let desc = metalMsgSend(metalMsgSend(descClass, metalSel("alloc")), metalSel("init"))
-    metalMsgSendVoidU(desc, metalSel("setMinFilter:"), minFilter)
-    metalMsgSendVoidU(desc, metalSel("setMagFilter:"), magFilter)
-    metalMsgSendVoidU(desc, metalSel("setSAddressMode:"), addressMode)
-    metalMsgSendVoidU(desc, metalSel("setTAddressMode:"), addressMode)
-    let sampler = metalMsgSendP(device, metalSel("newSamplerStateWithDescriptor:"), desc)
+    let desc: RawPtr = metalMsgSend(metalMsgSend(descClass, metalSel("alloc")), metalSel("init"))
+    metalMsgSend(desc, metalSel("setMinFilter:"), minFilter)
+    metalMsgSend(desc, metalSel("setMagFilter:"), magFilter)
+    metalMsgSend(desc, metalSel("setSAddressMode:"), addressMode)
+    metalMsgSend(desc, metalSel("setTAddressMode:"), addressMode)
+    let sampler: RawPtr = metalMsgSend(device, metalSel("newSamplerStateWithDescriptor:"), desc)
     // The descriptor is a +1-owned alloc/init temporary; the sampler state does not
     // retain it, so release it here rather than leaking one per sampler.
-    metalMsgSendVoid(desc, metalSel("release"))
+    metalMsgSend(desc, metalSel("release"))
     return metalRegister(ctx, sampler)
 }
 
@@ -202,7 +202,7 @@ function metalCreateSampler(ctx: RawPtr, minFilter: U64, magFilter: U64, address
 function metalEncoderBindFragmentTexture(ctx: RawPtr, textureId: Int, index: Int) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let texture = metalLookup(ctx, textureId)
-    metalMsgSendVoidPU(encoder, metalSel("setFragmentTexture:atIndex:"), texture, index)
+    metalMsgSend(encoder, metalSel("setFragmentTexture:atIndex:"), texture, index)
     return
 }
 
@@ -210,6 +210,6 @@ function metalEncoderBindFragmentTexture(ctx: RawPtr, textureId: Int, index: Int
 function metalEncoderBindFragmentSampler(ctx: RawPtr, samplerId: Int, index: Int) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let sampler = metalLookup(ctx, samplerId)
-    metalMsgSendVoidPU(encoder, metalSel("setFragmentSamplerState:atIndex:"), sampler, index)
+    metalMsgSend(encoder, metalSel("setFragmentSamplerState:atIndex:"), sampler, index)
     return
 }

@@ -61,7 +61,7 @@ function sokolDispatchComputeBuffers(
         let view = sg_make_view(move sg_view_desc {
             storage_buffer: sg_buffer_view_desc {
                 buffer: sg_buffer { id: bufferIds[slot] }
-            }
+            },
             label: "kira-graphics-compute-buffer"
         })
         if view.id == 0 {
@@ -77,7 +77,7 @@ function sokolDispatchComputeBuffers(
         slot = slot + 1
     }
     sg_begin_pass(move sg_pass {
-        compute: true
+        compute: true,
         label: "kira-graphics-buffer-compute"
     })
     sg_apply_pipeline(sg_pipeline { id: U32(pipelineId) })
@@ -108,7 +108,7 @@ function sokolDispatchBlurHalf(
     blend: Float,
 ) {
     sg_begin_pass(move sg_pass {
-        compute: true
+        compute: true,
         label: "kira-graphics-blur-compute"
     })
     sg_apply_pipeline(sg_pipeline { id: U32(pipelineId) })
@@ -128,7 +128,7 @@ function sokolDispatchBlurHalf(
     sg_apply_bindings(move sg_bindings {
         views: sg_view_array_32 {
             elements: views
-        }
+        },
         samplers: sg_sampler_array_12 {
             elements: [sg_sampler { id: 0 }, sg_sampler { id: sampler.id }]
         }
@@ -136,7 +136,7 @@ function sokolDispatchBlurHalf(
 
     let extent = sokolBlurExtentWords(width, height, blend)
     sg_apply_uniforms(0, move sg_range {
-        ptr: extent
+        ptr: extent,
         size: U64(extent.count * 4)
     })
     sg_dispatch(sokolDispatchGroupCount(width), sokolDispatchGroupCount(height), 1)

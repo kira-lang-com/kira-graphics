@@ -136,23 +136,23 @@ struct DawnState {
 @Native
 function dawnEmptyState() -> DawnState {
     return DawnState {
-        moduleInstance: nullPointer()
-        window: nullPointer()
-        messageBlock: nullPointer()
-        surfaceTextureBlock: nullPointer()
-        pointer: nullPointer()
-        seat: nullPointer()
-        toplevel: nullPointer()
-        cursorShapeManager: nullPointer()
-        cursorShapeDevice: nullPointer()
-        instance: nullPointer()
-        adapter: nullPointer()
-        device: nullPointer()
-        queue: nullPointer()
-        surface: nullPointer()
-        frameTexture: nullPointer()
-        frameView: nullPointer()
-        encoder: nullPointer()
+        moduleInstance: nullPointer(),
+        window: nullPointer(),
+        messageBlock: nullPointer(),
+        surfaceTextureBlock: nullPointer(),
+        pointer: nullPointer(),
+        seat: nullPointer(),
+        toplevel: nullPointer(),
+        cursorShapeManager: nullPointer(),
+        cursorShapeDevice: nullPointer(),
+        instance: nullPointer(),
+        adapter: nullPointer(),
+        device: nullPointer(),
+        queue: nullPointer(),
+        surface: nullPointer(),
+        frameTexture: nullPointer(),
+        frameView: nullPointer(),
+        encoder: nullPointer(),
         passEncoder: nullPointer()
     }
 }
@@ -328,11 +328,11 @@ function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, run
     }
     state.dawn.adapterResolved = false
     wgpuInstanceRequestAdapter(state.dawn.instance, WGPURequestAdapterOptions {
-        featureLevel: dawnFeatureLevelCore()
+        featureLevel: dawnFeatureLevelCore(),
         powerPreference: dawnPowerPreferenceHighPerformance()
     }, WGPURequestAdapterCallbackInfo {
-        mode: dawnCallbackOnProcessEvents()
-        callback: dawnAdapterReady
+        mode: dawnCallbackOnProcessEvents(),
+        callback: dawnAdapterReady,
         userdata1: runtimeUserData
     })
     // Bounded rather than open: an adapter request that never completes is a
@@ -369,13 +369,13 @@ function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, run
         features.append(dawnAdapterFenceFeature(state.dawn.adapter))
     }
     state.dawn.device = dawnCreateDevice(state.dawn.adapter, DawnDeviceDescriptor {
-        label: dawnText("kira-graphics-device")
-        requiredFeatureCount: U64(features.count)
-        requiredFeatures: features
+        label: dawnText("kira-graphics-device"),
+        requiredFeatureCount: U64(features.count),
+        requiredFeatures: features,
         deviceLostCallbackInfo: DawnDeviceLostCallbackInfo {
-            mode: dawnCallbackOnProcessEvents()
+            mode: dawnCallbackOnProcessEvents(),
             callback: dawnDeviceLost
-        }
+        },
         uncapturedErrorCallbackInfo: DawnUncapturedErrorCallbackInfo {
             callback: dawnUncapturedError
         }
@@ -444,16 +444,16 @@ function dawnConfigureSurface(state: borrow mut GraphicsAppRuntimeState, width: 
         return true
     }
     wgpuSurfaceConfigure(state.dawn.surface, WGPUSurfaceConfiguration {
-        device: state.dawn.device
-        format: state.dawn.surfaceFormat
+        device: state.dawn.device,
+        format: state.dawn.surfaceFormat,
         // `CopySrc` beside the attachment bit, so a presented frame can be read
         // back into a capture. That readback is what proves a frame contains
         // anything; every other signal a run can emit is equally true of a
         // frame that came out blank.
-        usage: dawnTextureUsageRenderAttachment() | dawnTextureUsageCopySource()
-        width: U32(width)
-        height: U32(height)
-        alphaMode: dawnCompositeAlphaAuto()
+        usage: dawnTextureUsageRenderAttachment() | dawnTextureUsageCopySource(),
+        width: U32(width),
+        height: U32(height),
+        alphaMode: dawnCompositeAlphaAuto(),
         presentMode: dawnPresentModeFromEnvironment()
     })
     state.dawn.surfaceWidth = width

@@ -5,8 +5,8 @@
 // A registry event names its interface as a string. The descriptor names and
 // the compositor's event bytes have no identity to compare, so use libc's
 // value comparison through the runtime already loaded in every process.
-@FFI.Extern { library: kira_runtime; symbol: strcmp; abi: c; }
-function waylandNameEquals(a: RawPtr, b: CString) -> I32;
+@FFI.Extern { library: kira_runtime, symbol: strcmp, abi: c }
+function waylandNameEquals(a: RawPtr, b: CString) -> I32
 
 // `wl_seat.capabilities`: pointer is bit 0, keyboard bit 1, touch bit 2.
 function waylandSeatPointerCapability() -> U32 { return U32(1) }

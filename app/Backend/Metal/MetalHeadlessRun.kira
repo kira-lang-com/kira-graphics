@@ -14,8 +14,8 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
 
     let onInitOffscreen: (Graphics) -> Void = app.initHandler
     let initGraphicsOffscreen = Graphics {
-        userData: userData
-        backend: .Metal
+        userData: userData,
+        backend: .Metal,
         backendContext: ctxPtr
     }
     onInitOffscreen(move initGraphicsOffscreen)
@@ -52,8 +52,8 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
         // Warm up one frame (first-touch caches, retained tree mount) before timing.
         let warmPool = metalAutoreleasePoolPush()
         let warmGraphics = Graphics {
-            userData: userData
-            backend: .Metal
+            userData: userData,
+            backend: .Metal,
             backendContext: ctxPtr
         }
         var warmFrame = warmGraphics.frame()
@@ -74,8 +74,8 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
                 metalContextAttachOffscreen(ctxPtr, app.width + (bi % 120), app.height)
             }
             let benchGraphics = Graphics {
-                userData: userData
-                backend: .Metal
+                userData: userData,
+                backend: .Metal,
                 backendContext: ctxPtr
             }
             var benchFrame = benchGraphics.frame()
@@ -181,14 +181,14 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
                 let px = Float(clicks[ci + 1])
                 let py = Float(clicks[ci + 2])
                 let down = AppEvent {
-                    kind: .PointerDown
-                    pointerX: px
+                    kind: .PointerDown,
+                    pointerX: px,
                     pointerY: py
                 }
                 onEventOffscreen(down)
                 let up = AppEvent {
-                    kind: .PointerUp
-                    pointerX: px
+                    kind: .PointerUp,
+                    pointerX: px,
                     pointerY: py
                 }
                 onEventOffscreen(up)
@@ -205,9 +205,9 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
                 let button = graphicsPointerButtonFromRaw(drags[di + 5])
                 if fi == start {
                     let down = AppEvent {
-                        kind: .PointerDown
-                        pointerButton: button
-                        pointerX: bx
+                        kind: .PointerDown,
+                        pointerButton: button,
+                        pointerX: bx,
                         pointerY: by
                     }
                     onEventOffscreen(down)
@@ -221,17 +221,17 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
                     let my = by + Float(drags[di + 4]) * t
                     if fi <= start + steps {
                         let moved = AppEvent {
-                            kind: .PointerMoved
-                            pointerButton: button
-                            pointerX: mx
+                            kind: .PointerMoved,
+                            pointerButton: button,
+                            pointerX: mx,
                             pointerY: my
                         }
                         onEventOffscreen(moved)
                     } else {
                         let up = AppEvent {
-                            kind: .PointerUp
-                            pointerButton: button
-                            pointerX: mx
+                            kind: .PointerUp,
+                            pointerButton: button,
+                            pointerX: mx,
                             pointerY: my
                         }
                         onEventOffscreen(up)
@@ -248,7 +248,7 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
                     keyKind = .KeyDown
                 }
                 let keyEvent = AppEvent {
-                    kind: keyKind
+                    kind: keyKind,
                     keyCode: keyScript[ki + 1]
                 }
                 onEventOffscreen(keyEvent)
@@ -259,7 +259,7 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
         while txi + 2 <= textScript.count {
             if textScript[txi] == fi {
                 let textEvent = AppEvent {
-                    kind: .TextInput
+                    kind: .TextInput,
                     textCodepoint: textScript[txi + 1]
                 }
                 onEventOffscreen(textEvent)
@@ -270,9 +270,9 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
         while si + 4 <= scrolls.count {
             if scrolls[si] == fi {
                 let scrollEvent = AppEvent {
-                    kind: .Scroll
-                    pointerX: Float(scrolls[si + 1])
-                    pointerY: Float(scrolls[si + 2])
+                    kind: .Scroll,
+                    pointerX: Float(scrolls[si + 1]),
+                    pointerY: Float(scrolls[si + 2]),
                     scrollY: Float(scrolls[si + 3]) / 10.0
                 }
                 onEventOffscreen(scrollEvent)
@@ -280,8 +280,8 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
             si = si + 4
         }
         let frameGraphicsOffscreen = Graphics {
-            userData: userData
-            backend: .Metal
+            userData: userData,
+            backend: .Metal,
             backendContext: ctxPtr
         }
         var frameOffscreen = frameGraphicsOffscreen.frame()

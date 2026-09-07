@@ -122,8 +122,13 @@ function metalPacingCollectGpuTime(ctx: RawPtr, commandBuffer: RawPtr, serial: U
     if serial == 0 {
         return
     }
-    let started = metalMsgSendPoint(commandBuffer, metalSel("GPUStartTime")).x
-    let ended = metalMsgSendPoint(commandBuffer, metalSel("GPUEndTime")).x
+    // The shape is named by the value it lands in, and the field is read from
+    // that: a `.x` on the call itself would leave the message with nothing to
+    // say which of `objc_msgSend`'s shapes it meant.
+    let startedPoint: MetalNSPoint = metalMsgSend(commandBuffer, metalSel("GPUStartTime"))
+    let endedPoint: MetalNSPoint = metalMsgSend(commandBuffer, metalSel("GPUEndTime"))
+    let started = startedPoint.x
+    let ended = endedPoint.x
     if ended <= started {
         return
     }
@@ -155,9 +160,9 @@ function metalPacingBeginPass(ctx: RawPtr) {
     if pointerIsNull(pending) {
         return
     }
-    metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+    metalMsgSend(pending, metalSel("waitUntilCompleted"))
     metalPacingCollectGpuTime(ctx, pending, metalMemReadU64(ring, slot * 16 + 8))
-    metalMsgSendVoid(pending, metalSel("release"))
+    metalMsgSend(pending, metalSel("release"))
     metalMemWritePtr(ring, slot * 16, nullPointer())
     metalMemWriteU64(ring, slot * 16 + 8, 0)
     return
@@ -173,7 +178,7 @@ function metalPacingEndPass(ctx: RawPtr, commandBuffer: RawPtr) {
         return
     }
     let index = metalMemReadU64(ctx, metalOffsetFrameIndex())
-    metalMsgSendVoid(commandBuffer, metalSel("retain"))
+    metalMsgSend(commandBuffer, metalSel("retain"))
     let slot = (index % metalFramesInFlight()) * 16
     metalMemWritePtr(ring, slot, commandBuffer)
     metalMemWriteU64(ring, slot + 8, metalMemReadU64(ctx, metalOffsetLogicalFrameSerial()))
@@ -192,9 +197,9 @@ function metalPacingFree(ctx: RawPtr) {
         while slot < metalFramesInFlight() {
             let pending = metalMemReadPtr(ring, slot * 16)
             if !pointerIsNull(pending) {
-                metalMsgSendVoid(pending, metalSel("waitUntilCompleted"))
+                metalMsgSend(pending, metalSel("waitUntilCompleted"))
                 metalPacingCollectGpuTime(ctx, pending, metalMemReadU64(ring, slot * 16 + 8))
-                metalMsgSendVoid(pending, metalSel("release"))
+                metalMsgSend(pending, metalSel("release"))
             }
             slot = slot + U64(1)
         }
@@ -228,7 +233,7 @@ function metalRaceProbeUniformWrite(ctx: RawPtr) {
     }
     // The stash holds the last COMMITTED buffer — the frame before this one — and
     // retains it, so this status is safe to ask for right up until it is replaced.
-    if metalMsgSendU64(commandBuffer, metalSel("status")) < metalCommandBufferStatusCompleted() {
+    if metalMsgSend(commandBuffer, metalSel("status")) < metalCommandBufferStatusCompleted() {
         metalMemWriteU64(ctx, metalOffsetRaceOverlaps(), metalMemReadU64(ctx, metalOffsetRaceOverlaps()) + U64(1))
     }
     return

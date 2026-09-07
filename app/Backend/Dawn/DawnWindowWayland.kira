@@ -87,7 +87,7 @@ construct DawnWindowWayland() extends DawnWindow {
         }
 
         var compositorListener = kira_wayland_registry_listener {
-            global: waylandOnCompositorGlobal
+            global: waylandOnCompositorGlobal,
             global_remove: waylandOnGlobalRemove
         }
         let ignoredCompositorListener =
@@ -101,7 +101,7 @@ construct DawnWindowWayland() extends DawnWindow {
             return nullPointer()
         }
         var shellRegistryListener = kira_wayland_registry_listener {
-            global: waylandOnShellGlobal
+            global: waylandOnShellGlobal,
             global_remove: waylandOnGlobalRemove
         }
         let ignoredShellListener =
@@ -201,10 +201,10 @@ construct DawnWindowWayland() extends DawnWindow {
     function createSurface(instance: RawPtr, window: RawPtr) -> RawPtr {
         return wgpuInstanceCreateSurface(instance, WGPUSurfaceDescriptor {
             nextInChain: WGPUSurfaceSourceWaylandSurface {
-                chain: WGPUChainedStruct { sType: dawnStructureWaylandSurface() }
-                display: kira_wayland_proxy_get_display(window)
+                chain: WGPUChainedStruct { sType: dawnStructureWaylandSurface() },
+                display: kira_wayland_proxy_get_display(window),
                 surface: window
-            }
+            },
             label: dawnText("kira-graphics-surface")
         })
     }

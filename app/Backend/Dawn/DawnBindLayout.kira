@@ -185,8 +185,8 @@ function dawnRecordPipelineBindings(state: borrow mut GraphicsAppRuntimeState, p
         groups.append(entry.group)
     }
     state.dawn.pipelineBindings.append(DawnPipelineBindings {
-        pipelineId: pipelineId
-        bindings: move bindings
+        pipelineId: pipelineId,
+        bindings: move bindings,
         groups: move groups
     })
     return
@@ -293,14 +293,14 @@ function dawnBindMergedGroup(
         return true
     }
     var key = DawnMergedBindGroup {
-        pipelineId: pipelineId
-        identity0: dawnGroupIdentity(state, group0, has0)
-        identity1: dawnGroupIdentity(state, group1, has1)
-        identity2: dawnGroupIdentity(state, group2, has2)
-        identity3: dawnGroupIdentity(state, group3, has3)
-        revision0: dawnGroupRevision(group0, has0)
-        revision1: dawnGroupRevision(group1, has1)
-        revision2: dawnGroupRevision(group2, has2)
+        pipelineId: pipelineId,
+        identity0: dawnGroupIdentity(state, group0, has0),
+        identity1: dawnGroupIdentity(state, group1, has1),
+        identity2: dawnGroupIdentity(state, group2, has2),
+        identity3: dawnGroupIdentity(state, group3, has3),
+        revision0: dawnGroupRevision(group0, has0),
+        revision1: dawnGroupRevision(group1, has1),
+        revision2: dawnGroupRevision(group2, has2),
         revision3: dawnGroupRevision(group3, has3)
     }
     let cached = dawnCachedMergedGroup(state, key)
@@ -322,9 +322,9 @@ function dawnBindMergedGroup(
         return false
     }
     let handle = wgpuDeviceCreateBindGroup(state.dawn.device, WGPUBindGroupDescriptor {
-        label: dawnText("kira-merged-bindings")
-        layout: layout
-        entryCount: U64(collected.count)
+        label: dawnText("kira-merged-bindings"),
+        layout: layout,
+        entryCount: U64(collected.count),
         entries: WGPUBindGroupEntryArray16 { elements: collected }
     })
     wgpuBindGroupLayoutRelease(layout)
@@ -408,9 +408,9 @@ function dawnBindOneGroup(
         return false
     }
     let handle = wgpuDeviceCreateBindGroup(state.dawn.device, WGPUBindGroupDescriptor {
-        label: dawnText("kira-group-bindings")
-        layout: layout
-        entryCount: U64(collected.count)
+        label: dawnText("kira-group-bindings"),
+        layout: layout,
+        entryCount: U64(collected.count),
         entries: WGPUBindGroupEntryArray16 { elements: collected }
     })
     wgpuBindGroupLayoutRelease(layout)
@@ -424,7 +424,7 @@ function dawnBindOneGroup(
         dawnReleaseMergedGroups(state)
     }
     state.dawn.mergedGroups.append(DawnMergedBindGroup {
-        pipelineId: pipelineId
+        pipelineId: pipelineId,
         groupId: dawnRegisterObject(state, handle, dawnFormatUndefined())
     })
     wgpuRenderPassEncoderSetBindGroup(state.dawn.passEncoder, U32(index), handle, U64(0), nullPointer())

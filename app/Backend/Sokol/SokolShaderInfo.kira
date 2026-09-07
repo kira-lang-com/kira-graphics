@@ -10,7 +10,7 @@
 // exactly, since `@FFI.Struct { layout: c }` maps one to the other byte for
 // byte.
 
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct KgUniformBlockSlot {
     var binding: I32
     var size: U32
@@ -18,10 +18,10 @@ struct KgUniformBlockSlot {
     var fragment_block_slot: I32
 }
 
-@FFI.Array { element: KgUniformBlockSlot; count: 4; }
+@FFI.Array { element: KgUniformBlockSlot, count: 4 }
 struct KgUniformBlockSlotArray4 {}
 
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct KgShaderInfo {
     var id: U32
     var has_position_attribute: I32
@@ -32,7 +32,7 @@ struct KgShaderInfo {
     var blocks: KgUniformBlockSlotArray4
 }
 
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct KgPipelineInfo {
     var draw_pipeline_id: U32
     var indexed_pipeline_id: U32
@@ -43,26 +43,26 @@ struct KgPipelineInfo {
     var blocks: KgUniformBlockSlotArray4
 }
 
-@FFI.Extern { library: sokol; symbol: kg_make_shader; abi: c; }
-function kgMakeShader(label: CString, vertexSource: CString, fragmentSource: CString, vertexPath: CString, fragmentPath: CString): KgShaderInfo;
+@FFI.Extern { library: sokol, symbol: kg_make_shader, abi: c }
+function kgMakeShader(label: CString, vertexSource: CString, fragmentSource: CString, vertexPath: CString, fragmentPath: CString): KgShaderInfo
 
-@FFI.Extern { library: sokol; symbol: kg_make_ksl_shader; abi: c; }
-function kgMakeKslShader(label: CString, asset: CString, directory: CString): KgShaderInfo;
+@FFI.Extern { library: sokol, symbol: kg_make_ksl_shader, abi: c }
+function kgMakeKslShader(label: CString, asset: CString, directory: CString): KgShaderInfo
 
-@FFI.Extern { library: sokol; symbol: kg_make_shader_ksl_inline; abi: c; }
-function kgMakeShaderKslInline(label: CString, vertexWgsl: CString, fragmentWgsl: CString, vertexGlsl: CString, fragmentGlsl: CString, vertexEntry: CString, fragmentEntry: CString, resourceReflection: CString): KgShaderInfo;
+@FFI.Extern { library: sokol, symbol: kg_make_shader_ksl_inline, abi: c }
+function kgMakeShaderKslInline(label: CString, vertexWgsl: CString, fragmentWgsl: CString, vertexGlsl: CString, fragmentGlsl: CString, vertexEntry: CString, fragmentEntry: CString, resourceReflection: CString): KgShaderInfo
 
 // The four block arrays are parallel and `blockCount` long — Kira projects
 // them out of a `GraphicsShader`'s `uniformBlocks` once here rather than at
 // every call site.
-@FFI.Extern { library: sokol; symbol: kg_make_pipeline_detailed; abi: c; }
-function kgMakePipelineDetailed(shaderId: U32, label: CString, vertexStride: Int, attributeCount: Int, attr0Location: Int, attr0Format: Int, attr0Offset: Int, attr1Location: Int, attr1Format: Int, attr1Offset: Int, attr2Location: Int, attr2Format: Int, attr2Offset: Int, attr3Location: Int, attr3Format: Int, attr3Offset: Int, colorTargetCount: Int, colorFormat: Int, blendEnabled: Int, blendPreset: Int, depthEnabled: Int, depthWriteEnabled: Int, depthCompare: Int, depthFormat: Int, cullMode: Int, frontFace: Int, topology: Int, shaderHasPositionAttribute: Int, shaderHasNormalAttribute: Int, shaderRequiredUniformMask: U32, shaderAvailableUniformMask: U32, blockCount: Int, blockBindings: RawPtr, blockSizes: RawPtr, blockVertexSlots: RawPtr, blockFragmentSlots: RawPtr): KgPipelineInfo;
+@FFI.Extern { library: sokol, symbol: kg_make_pipeline_detailed, abi: c }
+function kgMakePipelineDetailed(shaderId: U32, label: CString, vertexStride: Int, attributeCount: Int, attr0Location: Int, attr0Format: Int, attr0Offset: Int, attr1Location: Int, attr1Format: Int, attr1Offset: Int, attr2Location: Int, attr2Format: Int, attr2Offset: Int, attr3Location: Int, attr3Format: Int, attr3Offset: Int, colorTargetCount: Int, colorFormat: Int, blendEnabled: Int, blendPreset: Int, depthEnabled: Int, depthWriteEnabled: Int, depthCompare: Int, depthFormat: Int, cullMode: Int, frontFace: Int, topology: Int, shaderHasPositionAttribute: Int, shaderHasNormalAttribute: Int, shaderRequiredUniformMask: U32, shaderAvailableUniformMask: U32, blockCount: Int, blockBindings: RawPtr, blockSizes: RawPtr, blockVertexSlots: RawPtr, blockFragmentSlots: RawPtr): KgPipelineInfo
 
 // Both Sokol pipeline objects `kg_make_pipeline_detailed` built, since Kira
 // holds both ids on the `RenderPipeline` it is destroying — there is no
 // `kg_pipeline_records` table left to resolve one public id into the pair.
-@FFI.Extern { library: sokol; symbol: kg_destroy_pipeline_id; abi: c; }
-function kgDestroyPipelineId(drawPipelineId: U32, indexedPipelineId: U32): Void;
+@FFI.Extern { library: sokol, symbol: kg_destroy_pipeline_id, abi: c }
+function kgDestroyPipelineId(drawPipelineId: U32, indexedPipelineId: U32): Void
 
 // The four block-descriptor arrays `kgMakePipelineDetailed` needs, projected
 // out of a shader's `uniformBlocks` in the shapes that cross the C seam as
@@ -116,9 +116,9 @@ function sokolUniformBlocksFromSlots(blocks: borrow KgUniformBlockSlotArray4, co
     while i < count {
         let slot = blocks.elements[i]
         descriptors.append(UniformBlockDescriptor {
-            binding: Int(slot.binding)
-            size: Int(slot.size)
-            vertexBlockSlot: Int(slot.vertex_block_slot)
+            binding: Int(slot.binding),
+            size: Int(slot.size),
+            vertexBlockSlot: Int(slot.vertex_block_slot),
             fragmentBlockSlot: Int(slot.fragment_block_slot)
         })
         i = i + 1

@@ -55,14 +55,14 @@ function metalEncoderApplyBindGroup(ctx: RawPtr, bindGroupId: Int) {
             // slot per frame in flight so the CPU can write the next frame's values
             // without touching the bytes this draw is about to read (MetalPacing.kira).
             let offset = metalRingOffset(ctx, resourceId)
-            metalMsgSendSetVertexBuffer(encoder, metalSel("setVertexBuffer:offset:atIndex:"), resource, offset, slot + 1)
-            metalMsgSendSetFragmentBuffer(encoder, metalSel("setFragmentBuffer:offset:atIndex:"), resource, offset, slot)
+            metalMsgSend(encoder, metalSel("setVertexBuffer:offset:atIndex:"), resource, offset, slot + 1)
+            metalMsgSend(encoder, metalSel("setFragmentBuffer:offset:atIndex:"), resource, offset, slot)
         }
         if kind == metalBindEntryKindTexture() {
-            metalMsgSendVoidPU(encoder, metalSel("setFragmentTexture:atIndex:"), resource, slot)
+            metalMsgSend(encoder, metalSel("setFragmentTexture:atIndex:"), resource, slot)
         }
         if kind == metalBindEntryKindSampler() {
-            metalMsgSendVoidPU(encoder, metalSel("setFragmentSamplerState:atIndex:"), resource, slot)
+            metalMsgSend(encoder, metalSel("setFragmentSamplerState:atIndex:"), resource, slot)
         }
         i = i + 1
     }

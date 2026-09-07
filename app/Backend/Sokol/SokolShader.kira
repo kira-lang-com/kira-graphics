@@ -10,11 +10,11 @@
 @Native
 function sokolShaderFromInfo(info: borrow KgShaderInfo) -> GraphicsShader {
     return GraphicsShader {
-        id: info.id
-        hasPositionAttribute: info.has_position_attribute != 0
-        hasNormalAttribute: info.has_normal_attribute != 0
-        requiredUniformMask: Int(info.required_uniform_mask)
-        availableUniformMask: Int(info.available_uniform_mask)
+        id: info.id,
+        hasPositionAttribute: info.has_position_attribute != 0,
+        hasNormalAttribute: info.has_normal_attribute != 0,
+        requiredUniformMask: Int(info.required_uniform_mask),
+        availableUniformMask: Int(info.available_uniform_mask),
         uniformBlocks: sokolUniformBlocksFromSlots(info.blocks, Int(info.uniform_desc_count))
     }
 }

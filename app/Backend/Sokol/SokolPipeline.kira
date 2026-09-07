@@ -8,12 +8,12 @@
 @Native
 function sokolPipelineFromInfo(info: borrow KgPipelineInfo) -> RenderPipeline {
     return RenderPipeline {
-        id: info.draw_pipeline_id
-        drawPipelineId: info.draw_pipeline_id
-        indexedPipelineId: info.indexed_pipeline_id
-        hasPositionAttribute: info.has_position_attribute != 0
-        requiredUniformMask: Int(info.required_uniform_mask)
-        availableUniformMask: Int(info.available_uniform_mask)
+        id: info.draw_pipeline_id,
+        drawPipelineId: info.draw_pipeline_id,
+        indexedPipelineId: info.indexed_pipeline_id,
+        hasPositionAttribute: info.has_position_attribute != 0,
+        requiredUniformMask: Int(info.required_uniform_mask),
+        availableUniformMask: Int(info.available_uniform_mask),
         uniformBlocks: sokolUniformBlocksFromSlots(info.blocks, Int(info.uniform_desc_count))
     }
 }

@@ -67,17 +67,17 @@ function sokolResourceStateValid() -> I32 {
 @Native
 function sokolLoadAction(action: LoadAction) -> I32 {
     match action {
-        Clear -> return 1;
-        Load -> return 2;
-        DontCare -> return 3;
+        Clear -> return 1
+        Load -> return 2
+        DontCare -> return 3
     }
 }
 
 @Native
 function sokolStoreAction(action: StoreAction) -> I32 {
     match action {
-        Store -> return 1;
-        DontCare -> return 2;
+        Store -> return 1
+        DontCare -> return 2
     }
 }
 
@@ -117,16 +117,16 @@ function sokolEnsureOffscreenDepth(state: borrow mut GraphicsAppRuntimeState, wi
     // rather than assumed: a depth-enabled pipeline bakes that format in, and a
     // managed buffer in another one would fail the pass/pipeline match.
     let image = sg_make_image(move sg_image_desc {
-        type_value: sokolImageType2d()
+        type_value: sokolImageType2d(),
         usage: sg_image_usage {
             depth_stencil_attachment: true
-        }
-        width: I32(width)
-        height: I32(height)
-        num_slices: 1
-        num_mipmaps: 1
-        pixel_format: sg_query_desc().environment.defaults.depth_format
-        sample_count: I32(samples)
+        },
+        width: I32(width),
+        height: I32(height),
+        num_slices: 1,
+        num_mipmaps: 1,
+        pixel_format: sg_query_desc().environment.defaults.depth_format,
+        sample_count: I32(samples),
         label: "kira-offscreen-managed-depth"
     })
     if image.id == 0 {
@@ -135,7 +135,7 @@ function sokolEnsureOffscreenDepth(state: borrow mut GraphicsAppRuntimeState, wi
     let view = sg_make_view(move sg_view_desc {
         depth_stencil_attachment: sg_image_view_desc {
             image: sg_image { id: image.id }
-        }
+        },
         label: "kira-offscreen-managed-depth-view"
     })
     if view.id == 0 {
@@ -157,12 +157,12 @@ function sokolPassAction(frame: borrow RenderFrame) -> sg_pass_action {
         colors: sg_color_attachment_action_array_8 {
             elements: [
                 sg_color_attachment_action {
-                    load_action: sokolLoadAction(frame.attachments.color.loadAction)
-                    store_action: sokolStoreAction(frame.attachments.color.storeAction)
+                    load_action: sokolLoadAction(frame.attachments.color.loadAction),
+                    store_action: sokolStoreAction(frame.attachments.color.storeAction),
                     clear_value: sg_color {
-                        r: F32(frame.attachments.color.clearColor.r)
-                        g: F32(frame.attachments.color.clearColor.g)
-                        b: F32(frame.attachments.color.clearColor.b)
+                        r: F32(frame.attachments.color.clearColor.r),
+                        g: F32(frame.attachments.color.clearColor.g),
+                        b: F32(frame.attachments.color.clearColor.b),
                         a: F32(frame.attachments.color.clearColor.a)
                     }
                 }
@@ -171,15 +171,15 @@ function sokolPassAction(frame: borrow RenderFrame) -> sg_pass_action {
     }
     if frame.attachments.hasDepth {
         action.depth = sg_depth_attachment_action {
-            load_action: sokolLoadAction(frame.attachments.depth.loadAction)
-            store_action: sokolStoreAction(frame.attachments.depth.storeAction)
+            load_action: sokolLoadAction(frame.attachments.depth.loadAction),
+            store_action: sokolStoreAction(frame.attachments.depth.storeAction),
             clear_value: F32(frame.attachments.depth.clearDepth)
         }
     }
     if frame.attachments.hasStencil {
         action.stencil = sg_stencil_attachment_action {
-            load_action: sokolLoadAction(frame.attachments.stencil.loadAction)
-            store_action: sokolStoreAction(frame.attachments.stencil.storeAction)
+            load_action: sokolLoadAction(frame.attachments.stencil.loadAction),
+            store_action: sokolStoreAction(frame.attachments.stencil.storeAction),
             clear_value: U8(frame.attachments.stencil.clearStencil)
         }
     }
@@ -226,8 +226,8 @@ function sokolBeginSwapchainPass(state: borrow mut GraphicsAppRuntimeState, fram
     state.pass.width = Int(swapchain.width)
     state.pass.height = Int(swapchain.height)
     sg_begin_pass(move sg_pass {
-        action: sokolPassAction(frame)
-        swapchain: move swapchain
+        action: sokolPassAction(frame),
+        swapchain: move swapchain,
         label: "kira-swapchain-pass"
     })
     return true
@@ -278,8 +278,8 @@ function sokolBeginOffscreenPass(state: borrow mut GraphicsAppRuntimeState, fram
     state.pass.width = frame.attachments.colorWidth()
     state.pass.height = frame.attachments.colorHeight()
     sg_begin_pass(move sg_pass {
-        action: sokolPassAction(frame)
-        attachments: move attachments
+        action: sokolPassAction(frame),
+        attachments: move attachments,
         label: "kira-offscreen-pass"
     })
     return true
@@ -299,8 +299,8 @@ function sokolBeginPass(frame: borrow RenderFrame) -> Bool {
     state.pass.height = 0
     var began = false
     match frame.attachments.color.target.kind {
-        Swapchain -> began = sokolBeginSwapchainPass(state, frame);
-        Texture -> began = sokolBeginOffscreenPass(state, frame);
+        Swapchain -> began = sokolBeginSwapchainPass(state, frame)
+        Texture -> began = sokolBeginOffscreenPass(state, frame)
     }
     if !began {
         state.pass.width = 0

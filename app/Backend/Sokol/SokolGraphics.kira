@@ -41,7 +41,7 @@ function sokolCreateGraphicsShaderFromKslArtifact(label: borrow String, artifact
 @Native
 function sokolGraphicsBuffer(id: U32, byteSize: Int = 0) -> GraphicsBuffer {
     return GraphicsBuffer {
-        id: id
+        id: id,
         byteSize: byteSize
     }
 }

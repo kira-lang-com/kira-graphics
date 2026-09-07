@@ -261,12 +261,12 @@ class Graphics {
         match decodeImageFile(path) {
             Ok(image) -> {
                 return self.createTextureFromPixels(TextureDescriptor {
-                    label: label
-                    width: image.width
-                    height: image.height
-                    format: .Rgba8Unorm
-                    usage: .Sampled
-                    sampleCount: 1
+                    label: label,
+                    width: image.width,
+                    height: image.height,
+                    format: .Rgba8Unorm,
+                    usage: .Sampled,
+                    sampleCount: 1,
                     storage: .Persistent
                 }, image.pixels)
             }
@@ -297,20 +297,20 @@ class Graphics {
         return RenderFrame {
             attachments: PassAttachments {
                 color: ColorAttachment {
-                    target: swapchainRenderTarget()
-                    clearColor: Color {}
+                    target: swapchainRenderTarget(),
+                    clearColor: Color {},
                     resolveTarget: emptyRenderTarget()
-                }
-                depth: emptyDepthAttachment()
+                },
+                depth: emptyDepthAttachment(),
                 stencil: emptyStencilAttachment()
-            }
-            hasRenderPass: false
-            renderPassActive: false
-            currentEncoder: makeRenderEncoder()
-            passSubmitted: false
-            shouldQuit: false
-            userData: self.userData
-            backend: self.backend
+            },
+            hasRenderPass: false,
+            renderPassActive: false,
+            currentEncoder: makeRenderEncoder(),
+            passSubmitted: false,
+            shouldQuit: false,
+            userData: self.userData,
+            backend: self.backend,
             backendContext: self.backendContext
         }
     }

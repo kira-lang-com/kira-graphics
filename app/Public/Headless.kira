@@ -28,8 +28,8 @@ import Foundation
 struct GraphicsHeadless {
     var context: RawPtr = nullPointer()
     var graphics: Graphics = Graphics {
-        userData: nullPointer()
-        backend: .Dawn
+        userData: nullPointer(),
+        backend: .Dawn,
         backendContext: nullPointer()
     }
     var ready: Bool = false
@@ -86,18 +86,18 @@ function openHeadlessGraphics() -> GraphicsHeadless {
     // to be had without one; a component on that backend falls back to being
     // told it cannot share.
     let application = GraphicsApplication {
-        title: "kira-headless"
-        width: 1
-        height: 1
-        sampleCount: 1
-        windowMode: .Windowed
-        transparent: false
-        opacity: 1.0
+        title: "kira-headless",
+        width: 1,
+        height: 1,
+        sampleCount: 1,
+        windowMode: .Windowed,
+        transparent: false,
+        opacity: 1.0,
         backend: .Dawn
     }
     var runtimeState = nativeState(GraphicsAppRuntimeState {
-        app: application
-        userData: nullPointer()
+        app: application,
+        userData: nullPointer(),
         frameIndex: 0
     })
     let context = nativeUserData(runtimeState)
@@ -107,12 +107,12 @@ function openHeadlessGraphics() -> GraphicsHeadless {
         return GraphicsHeadless {}
     }
     return GraphicsHeadless {
-        context: context
+        context: context,
         graphics: Graphics {
-            userData: context
-            backend: .Dawn
+            userData: context,
+            backend: .Dawn,
             backendContext: context
-        }
+        },
         ready: true
     }
 }

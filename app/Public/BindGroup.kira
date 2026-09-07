@@ -58,7 +58,7 @@ class BindGroup {
 @Native
 function emptyBindGroup() -> BindGroup {
     return BindGroup {
-        storage: nativeUserData(nativeState(BindGroupState {}))
+        storage: nativeUserData(nativeState(BindGroupState {})),
         id: 0
     }
 }
@@ -71,7 +71,7 @@ function emptyBindGroup() -> BindGroup {
 @Native
 function unboundBindGroup() -> BindGroup {
     return BindGroup {
-        storage: nullPointer()
+        storage: nullPointer(),
         id: 0
     }
 }
@@ -99,7 +99,7 @@ function sokolCreateBindGroupId(label: borrow String) -> BindGroup {
     return BindGroup {
         storage: nativeUserData(nativeState(BindGroupState {
             label: label
-        }))
+        })),
         id: 1
     }
 }
@@ -118,7 +118,7 @@ function sokolBindGroupAddUniform(group: borrow BindGroup, uniformSlot: Int, uni
         return
     }
     state.uniformEntries.append(UniformBindEntry {
-        uniformSlot: uniformSlot
+        uniformSlot: uniformSlot,
         uniform: uniform
     })
     return
@@ -136,7 +136,7 @@ function sokolBindGroupAddTexture(group: borrow BindGroup, textureSlot: Int, tex
         return
     }
     state.textureEntries.append(TextureBindEntry {
-        textureSlot: textureSlot
+        textureSlot: textureSlot,
         texture: texture
     })
     return
@@ -154,7 +154,7 @@ function sokolBindGroupAddSampler(group: borrow BindGroup, samplerSlot: Int, sam
         return
     }
     state.samplerEntries.append(SamplerBindEntry {
-        samplerSlot: samplerSlot
+        samplerSlot: samplerSlot,
         sampler: sampler
     })
     return
@@ -172,7 +172,7 @@ function sokolBindGroupAddStorageBuffer(group: borrow BindGroup, storageSlot: In
         return
     }
     state.storageEntries.append(StorageBindEntry {
-        storageSlot: storageSlot
+        storageSlot: storageSlot,
         viewId: viewId
     })
     return

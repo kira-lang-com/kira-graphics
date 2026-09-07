@@ -28,6 +28,8 @@
 // A member's size says how wide it is and nothing about how it is written: a
 // `float` and an `int` are both four bytes, and GL reaches them through
 // different calls. The digest names the kind for exactly that reason.
+import Foundation
+
 @Derive(Equatable, Clone)
 enum UniformScalarKind {
     Floating
@@ -129,7 +131,7 @@ function kslDigestField(fields: borrow [String], index: Int) -> String {
 function kslParseUniformMember(text: borrow String, kind: borrow String) -> KslUniformMember {
     let atSplit = text.split("@")
     var member = KslUniformMember {
-        name: kslDigestField(atSplit, 0)
+        name: kslDigestField(atSplit, 0),
         kind: kslUniformScalarKind(kind)
     }
     let hashSplit = kslDigestField(atSplit, 1).split("#")
@@ -161,10 +163,10 @@ function kslKindLetter(kinds: borrow String, index: Int) -> String {
 @Native
 function kslParseUniformBlock(fields: borrow [String]) -> KslUniformBlock {
     var block = KslUniformBlock {
-        name: kslDigestField(fields, 0)
-        binding: kslDigestInt(kslDigestField(fields, 1))
-        size: kslDigestInt(kslDigestField(fields, 2))
-        stageMask: kslDigestInt(kslDigestField(fields, 3))
+        name: kslDigestField(fields, 0),
+        binding: kslDigestInt(kslDigestField(fields, 1)),
+        size: kslDigestInt(kslDigestField(fields, 2)),
+        stageMask: kslDigestInt(kslDigestField(fields, 3)),
         group: kslDigestInt(kslDigestField(fields, 7))
     }
     let memberCount = kslDigestInt(kslDigestField(fields, 4))
@@ -194,36 +196,36 @@ function kslParseResourceReflection(digest: borrow String) -> KslResourceReflect
             reflection.uniforms.append(kslParseUniformBlock(fields))
         } else if record.startsWith("m|") {
             reflection.samplers.append(KslSamplerBinding {
-                name: kslDigestField(fields, 0)
-                binding: kslDigestInt(kslDigestField(fields, 1))
-                stageMask: kslDigestInt(kslDigestField(fields, 2))
+                name: kslDigestField(fields, 0),
+                binding: kslDigestInt(kslDigestField(fields, 1)),
+                stageMask: kslDigestInt(kslDigestField(fields, 2)),
                 group: kslDigestInt(kslDigestField(fields, 3))
             })
         } else if record.startsWith("t|") {
             reflection.textures.append(KslTextureBinding {
-                name: kslDigestField(fields, 0)
-                binding: kslDigestInt(kslDigestField(fields, 1))
-                stageMask: kslDigestInt(kslDigestField(fields, 2))
-                samplerBinding: kslDigestInt(kslDigestField(fields, 3))
-                glslName: kslDigestField(fields, 4)
+                name: kslDigestField(fields, 0),
+                binding: kslDigestInt(kslDigestField(fields, 1)),
+                stageMask: kslDigestInt(kslDigestField(fields, 2)),
+                samplerBinding: kslDigestInt(kslDigestField(fields, 3)),
+                glslName: kslDigestField(fields, 4),
                 group: kslDigestInt(kslDigestField(fields, 5))
             })
         } else if record.startsWith("i|") {
             reflection.images.append(KslStorageImage {
-                name: kslDigestField(fields, 0)
-                binding: kslDigestInt(kslDigestField(fields, 1))
-                stageMask: kslDigestInt(kslDigestField(fields, 2))
-                glslBinding: kslDigestInt(kslDigestField(fields, 3))
-                writeOnly: kslDigestInt(kslDigestField(fields, 4)) != 0
+                name: kslDigestField(fields, 0),
+                binding: kslDigestInt(kslDigestField(fields, 1)),
+                stageMask: kslDigestInt(kslDigestField(fields, 2)),
+                glslBinding: kslDigestInt(kslDigestField(fields, 3)),
+                writeOnly: kslDigestInt(kslDigestField(fields, 4)) != 0,
                 group: kslDigestInt(kslDigestField(fields, 5))
             })
         } else if record.startsWith("s|") {
             reflection.storageBuffers.append(KslStorageBuffer {
-                name: kslDigestField(fields, 0)
-                binding: kslDigestInt(kslDigestField(fields, 1))
-                stageMask: kslDigestInt(kslDigestField(fields, 2))
-                glslBinding: kslDigestInt(kslDigestField(fields, 3))
-                readOnly: kslDigestInt(kslDigestField(fields, 4)) != 0
+                name: kslDigestField(fields, 0),
+                binding: kslDigestInt(kslDigestField(fields, 1)),
+                stageMask: kslDigestInt(kslDigestField(fields, 2)),
+                glslBinding: kslDigestInt(kslDigestField(fields, 3)),
+                readOnly: kslDigestInt(kslDigestField(fields, 4)) != 0,
                 group: kslDigestInt(kslDigestField(fields, 5))
             })
         }

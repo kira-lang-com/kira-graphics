@@ -29,9 +29,9 @@ struct HarnessConfig {
 // the run quits after — so a settle-then-shoot needs only a frame count and a path.
 function harnessCapture(path: String, atFrame: Int, quitAfterFrames: Int) -> HarnessConfig {
     return HarnessConfig {
-        configured: true
-        capturePath: path
-        captureAtFrame: atFrame
+        configured: true,
+        capturePath: path,
+        captureAtFrame: atFrame,
         quitAfterFrames: quitAfterFrames
     }
 }

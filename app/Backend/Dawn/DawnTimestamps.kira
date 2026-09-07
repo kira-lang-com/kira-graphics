@@ -105,8 +105,8 @@ function dawnClockEnsure(state: borrow mut GraphicsAppRuntimeState) {
         return
     }
     let querySet = wgpuDeviceCreateQuerySet(state.dawn.device, WGPUQuerySetDescriptor {
-        label: dawnText("kira-gpu-clock")
-        type_value: dawnQueryTypeTimestamp()
+        label: dawnText("kira-gpu-clock"),
+        type_value: dawnQueryTypeTimestamp(),
         count: U32(dawnMaxTimestamps())
     })
     if pointerIsNull(querySet) {
@@ -189,8 +189,8 @@ function dawnClockOpenPair(state: borrow mut GraphicsAppRuntimeState, composite:
 @Native
 function dawnClockWrites(state: borrow GraphicsAppRuntimeState, first: Int) -> WGPUPassTimestampWrites {
     return WGPUPassTimestampWrites {
-        querySet: dawnObject(state, state.dawn.clock.querySetId)
-        beginningOfPassWriteIndex: U32(first)
+        querySet: dawnObject(state, state.dawn.clock.querySetId),
+        beginningOfPassWriteIndex: U32(first),
         endOfPassWriteIndex: U32(first + 1)
     }
 }
@@ -248,9 +248,9 @@ function dawnClockRequest(state: borrow mut GraphicsAppRuntimeState, context: Ra
         return
     }
     wgpuBufferMapAsync(readback, dawnMapModeRead(), U64(0), U64(state.dawn.clock.readbackUsed[slot] * 8), WGPUBufferMapCallbackInfo {
-        mode: dawnCallbackOnProcessEvents()
-        callback: dawnClockMapped
-        userdata1: context
+        mode: dawnCallbackOnProcessEvents(),
+        callback: dawnClockMapped,
+        userdata1: context,
         userdata2: state.dawn.clock.slotBlocks[slot]
     })
     return

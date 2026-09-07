@@ -59,9 +59,9 @@ function sokolUniformTypeInt() -> I32 {
 function sokolUniformMemberType(member: borrow KslUniformMember) -> I32 {
     var family = sokolUniformTypeFloat()
     match member.kind {
-        Floating -> family = sokolUniformTypeFloat();
-        Signed -> family = sokolUniformTypeInt();
-        Unsigned -> family = sokolUniformTypeInt();
+        Floating -> family = sokolUniformTypeFloat()
+        Signed -> family = sokolUniformTypeInt()
+        Unsigned -> family = sokolUniformTypeInt()
     }
     if member.size == 8 {
         return family + 1
@@ -114,20 +114,20 @@ function sokolComputeUniformBlocks(reflection: borrow KslResourceReflection) -> 
         while memberIndex < block.members.count {
             let member = block.members[memberIndex]
             members.append(sg_glsl_shader_uniform {
-                type_value: sokolUniformMemberType(member)
-                array_count: U16(1)
+                type_value: sokolUniformMemberType(member),
+                array_count: U16(1),
                 glsl_name: sokolUniformMemberName(block, member)
             })
             memberIndex = memberIndex + 1
         }
         blocks[block.binding] = sg_shader_uniform_block {
-            stage: sokolShaderStageCompute()
-            size: U32(block.size)
-            layout: sokolUniformLayoutStd140()
-            wgsl_group0_binding_n: U8(block.binding)
-            msl_buffer_n: U8(block.binding)
-            hlsl_register_b_n: U8(block.binding)
-            spirv_set0_binding_n: U8(block.binding)
+            stage: sokolShaderStageCompute(),
+            size: U32(block.size),
+            layout: sokolUniformLayoutStd140(),
+            wgsl_group0_binding_n: U8(block.binding),
+            msl_buffer_n: U8(block.binding),
+            hlsl_register_b_n: U8(block.binding),
+            spirv_set0_binding_n: U8(block.binding),
             glsl_uniforms: sg_glsl_shader_uniform_array_16 {
                 elements: members
             }
@@ -149,11 +149,11 @@ function sokolComputeSamplers(reflection: borrow KslResourceReflection) -> [sg_s
             })
         }
         samplers[sampler.binding] = sg_shader_sampler {
-            stage: sokolShaderStageCompute()
-            sampler_type: sokolSamplerTypeFiltering()
-            hlsl_register_s_n: U8(sampler.binding)
-            msl_sampler_n: U8(sampler.binding)
-            wgsl_group1_binding_n: U8(sampler.binding)
+            stage: sokolShaderStageCompute(),
+            sampler_type: sokolSamplerTypeFiltering(),
+            hlsl_register_s_n: U8(sampler.binding),
+            msl_sampler_n: U8(sampler.binding),
+            wgsl_group1_binding_n: U8(sampler.binding),
             spirv_set1_binding_n: U8(sampler.binding)
         }
         index = index + 1
@@ -176,12 +176,12 @@ function sokolComputeViews(reflection: borrow KslResourceReflection) -> [sg_shad
         }
         views[texture.binding] = sg_shader_view {
             texture: sg_shader_texture_view {
-                stage: sokolShaderStageCompute()
-                image_type: sokolImageType2d()
-                sample_type: sokolImageSampleTypeFloat()
-                hlsl_register_t_n: U8(texture.binding)
-                msl_texture_n: U8(texture.binding)
-                wgsl_group1_binding_n: U8(texture.binding)
+                stage: sokolShaderStageCompute(),
+                image_type: sokolImageType2d(),
+                sample_type: sokolImageSampleTypeFloat(),
+                hlsl_register_t_n: U8(texture.binding),
+                msl_texture_n: U8(texture.binding),
+                wgsl_group1_binding_n: U8(texture.binding),
                 spirv_set1_binding_n: U8(texture.binding)
             }
         }
@@ -195,16 +195,16 @@ function sokolComputeViews(reflection: borrow KslResourceReflection) -> [sg_shad
         }
         views[buffer.binding] = sg_shader_view {
             storage_buffer: sg_shader_storage_buffer_view {
-                stage: sokolShaderStageCompute()
-                readonly: buffer.readOnly
+                stage: sokolShaderStageCompute(),
+                readonly: buffer.readOnly,
                 // HLSL gives read-only and read/write storage buffers separate
                 // register spaces. Sokol selects the one matching `readonly`.
-                hlsl_register_t_n: U8(index)
-                hlsl_register_u_n: U8(index)
+                hlsl_register_t_n: U8(index),
+                hlsl_register_u_n: U8(index),
                 // Sokol reserves buffer slots 0..7 for uniform blocks.
-                msl_buffer_n: U8(8 + index)
-                wgsl_group1_binding_n: U8(buffer.binding)
-                spirv_set1_binding_n: U8(buffer.binding)
+                msl_buffer_n: U8(8 + index),
+                wgsl_group1_binding_n: U8(buffer.binding),
+                spirv_set1_binding_n: U8(buffer.binding),
                 glsl_binding_n: U8(buffer.glslBinding)
             }
         }
@@ -218,18 +218,18 @@ function sokolComputeViews(reflection: borrow KslResourceReflection) -> [sg_shad
         }
         views[image.binding] = sg_shader_view {
             storage_image: sg_shader_storage_image_view {
-                stage: sokolShaderStageCompute()
-                image_type: sokolImageType2d()
+                stage: sokolShaderStageCompute(),
+                image_type: sokolImageType2d(),
                 // The format the emitted `layout(binding = n, rgba8)` names. It
                 // is spelled in the shader because GLSL resolves an
                 // `imageStore`'s texel conversion from it, and GL wants the same
                 // format at `glBindImageTexture`.
-                access_format: sokolPixelFormatRgba8()
-                writeonly: image.writeOnly
-                glsl_binding_n: U8(image.glslBinding)
-                hlsl_register_u_n: U8(image.binding)
-                msl_texture_n: U8(image.binding)
-                wgsl_group1_binding_n: U8(image.binding)
+                access_format: sokolPixelFormatRgba8(),
+                writeonly: image.writeOnly,
+                glsl_binding_n: U8(image.glslBinding),
+                hlsl_register_u_n: U8(image.binding),
+                msl_texture_n: U8(image.binding),
+                wgsl_group1_binding_n: U8(image.binding),
                 spirv_set1_binding_n: U8(image.binding)
             }
         }
@@ -249,9 +249,9 @@ function sokolComputeTextureSamplerPairs(reflection: borrow KslResourceReflectio
         let texture = reflection.textures[index]
         if texture.samplerBinding < 12 {
             pairs.append(sg_shader_texture_sampler_pair {
-                stage: sokolShaderStageCompute()
-                view_slot: U8(texture.binding)
-                sampler_slot: U8(texture.samplerBinding)
+                stage: sokolShaderStageCompute(),
+                view_slot: U8(texture.binding),
+                sampler_slot: U8(texture.samplerBinding),
                 glsl_name: texture.glslName
             })
         }
@@ -290,21 +290,21 @@ function sokolCreateComputeShader(label: borrow String, artifact: borrow KslArti
     let reflection = kslParseResourceReflection(artifact.resourceReflection)
     let shader = sg_make_shader(move sg_shader_desc {
         compute_func: sg_shader_function {
-            source: source
+            source: source,
             entry: entry
-        }
+        },
         uniform_blocks: sg_shader_uniform_block_array_8 {
             elements: sokolComputeUniformBlocks(reflection)
-        }
+        },
         views: sg_shader_view_array_32 {
             elements: sokolComputeViews(reflection)
-        }
+        },
         samplers: sg_shader_sampler_array_12 {
             elements: sokolComputeSamplers(reflection)
-        }
+        },
         texture_sampler_pairs: sg_shader_texture_sampler_pair_array_32 {
             elements: sokolComputeTextureSamplerPairs(reflection)
-        }
+        },
         label: label
     })
     if shader.id == 0 {
@@ -323,8 +323,8 @@ function sokolCreateComputePipelineId(label: borrow String, shader: borrow Graph
         return 0
     }
     let pipeline = sg_make_pipeline(move sg_pipeline_desc {
-        compute: true
-        shader: sg_shader { id: shader.id }
+        compute: true,
+        shader: sg_shader { id: shader.id },
         label: label
     })
     return Int(pipeline.id)

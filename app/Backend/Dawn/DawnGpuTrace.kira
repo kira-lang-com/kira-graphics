@@ -59,8 +59,8 @@ function dawnDrainQueue(context: RawPtr, state: borrow mut GraphicsAppRuntimeSta
     dawnSubmitEncoder(state)
     state.dawn.trace.workDone = false
     wgpuQueueOnSubmittedWorkDone(state.dawn.queue, WGPUQueueWorkDoneCallbackInfo {
-        mode: dawnCallbackOnProcessEvents()
-        callback: dawnWorkDone
+        mode: dawnCallbackOnProcessEvents(),
+        callback: dawnWorkDone,
         userdata1: context
     })
     var spins = 0

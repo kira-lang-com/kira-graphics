@@ -20,7 +20,7 @@ import Foundation
 // entries change. That is what `BindGroupState`'s `deviceGroupId`,
 // `devicePipeline`, `deviceSlot` and `deviceRevision` are for.
 
-@FFI.Array { element: WGPUBindGroupEntry; count: 16; }
+@FFI.Array { element: WGPUBindGroupEntry, count: 16 }
 struct WGPUBindGroupEntryArray16 {}
 
 function dawnMaxBindGroupEntries() -> Int { return 16 }
@@ -56,10 +56,10 @@ function dawnCreateUniform(context: RawPtr, descriptor: borrow UniformDescriptor
     wgpuQueueWriteBuffer(state.dawn.queue, dawnObject(state, id), U64(0), descriptor.data, U64(descriptor.data.count * 4))
     return .Ok(Uniform {
         storage: nativeUserData(nativeState(UniformState {
-            label: descriptor.label
-            expectedFloatCount: descriptor.expectedFloatCount
+            label: descriptor.label,
+            expectedFloatCount: descriptor.expectedFloatCount,
             values: descriptor.data
-        }))
+        })),
         id: id
     })
 }
@@ -99,7 +99,7 @@ function dawnBeginBindGroup(label: borrow String) -> BindGroupResult {
     return .Ok(BindGroup {
         storage: nativeUserData(nativeState(BindGroupState {
             label: label
-        }))
+        })),
         id: 1
     })
 }
@@ -112,7 +112,7 @@ function dawnBindGroupAddUniform(group: borrow BindGroup, slot: Int, uniform: bo
         return
     }
     state.uniformEntries.append(UniformBindEntry {
-        uniformSlot: slot
+        uniformSlot: slot,
         uniform: uniform
     })
     state.revision = state.revision + 1
@@ -127,7 +127,7 @@ function dawnBindGroupAddTexture(group: borrow BindGroup, slot: Int, texture: bo
         return
     }
     state.textureEntries.append(TextureBindEntry {
-        textureSlot: slot
+        textureSlot: slot,
         texture: texture
     })
     state.revision = state.revision + 1
@@ -142,7 +142,7 @@ function dawnBindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: bo
         return
     }
     state.samplerEntries.append(SamplerBindEntry {
-        samplerSlot: slot
+        samplerSlot: slot,
         sampler: sampler
     })
     state.revision = state.revision + 1
@@ -157,8 +157,8 @@ function dawnBindGroupAddStorageBuffer(group: borrow BindGroup, slot: Int, buffe
         return
     }
     state.storageEntries.append(StorageBindEntry {
-        storageSlot: slot
-        viewId: bufferId
+        storageSlot: slot,
+        viewId: bufferId,
         byteSize: byteSize
     })
     state.revision = state.revision + 1
@@ -168,7 +168,7 @@ function dawnBindGroupAddStorageBuffer(group: borrow BindGroup, slot: Int, buffe
 @Native
 function dawnCreateBindGroup(context: RawPtr, descriptor: borrow BindGroupDescriptor) -> BindGroupResult {
     match dawnBeginBindGroup(descriptor.label) {
-        Error(reason) -> return .Error(reason);
+        Error(reason) -> return .Error(reason)
         Ok(group) -> {
             for entry in descriptor.uniformEntries {
                 dawnBindGroupAddUniform(group, entry.uniformSlot, entry.uniform)
@@ -187,7 +187,7 @@ function dawnCreateBindGroup(context: RawPtr, descriptor: borrow BindGroupDescri
 @Native
 function dawnCreateUniformBindGroup(context: RawPtr, label: borrow String, uniformSlot: Int, uniform: borrow Uniform) -> BindGroupResult {
     match dawnBeginBindGroup(label) {
-        Error(reason) -> return .Error(reason);
+        Error(reason) -> return .Error(reason)
         Ok(group) -> {
             dawnBindGroupAddUniform(group, uniformSlot, uniform)
             return .Ok(group)
@@ -198,7 +198,7 @@ function dawnCreateUniformBindGroup(context: RawPtr, label: borrow String, unifo
 @Native
 function dawnCreateTextureSamplerBindGroup(context: RawPtr, label: borrow String, textureSlot: Int, texture: borrow GraphicsTexture, samplerSlot: Int, sampler: borrow GraphicsSampler) -> BindGroupResult {
     match dawnBeginBindGroup(label) {
-        Error(reason) -> return .Error(reason);
+        Error(reason) -> return .Error(reason)
         Ok(group) -> {
             dawnBindGroupAddTexture(group, textureSlot, texture)
             dawnBindGroupAddSampler(group, samplerSlot, sampler)
@@ -218,7 +218,7 @@ function dawnCreateStorageBufferBindGroup(context: RawPtr, label: borrow String,
         return .Error(.DeviceRefused)
     }
     match dawnBeginBindGroup(label) {
-        Error(reason) -> return .Error(reason);
+        Error(reason) -> return .Error(reason)
         Ok(group) -> {
             dawnBindGroupAddStorageBuffer(group, slot, bufferId, Int(wgpuBufferGetSize(buffer)))
             return .Ok(group)
@@ -268,9 +268,9 @@ function dawnBindGroupEntries(runtime: borrow GraphicsAppRuntimeState, state: bo
             continue
         }
         entries.append(WGPUBindGroupEntry {
-            binding: U32(entry.uniformSlot)
-            buffer: buffer
-            offset: U64(0)
+            binding: U32(entry.uniformSlot),
+            buffer: buffer,
+            offset: U64(0),
             size: U64(dawnUniformByteSize(nativeRecover<UniformState>(entry.uniform.storage).expectedFloatCount))
         })
     }
@@ -280,9 +280,9 @@ function dawnBindGroupEntries(runtime: borrow GraphicsAppRuntimeState, state: bo
             continue
         }
         entries.append(WGPUBindGroupEntry {
-            binding: U32(entry.storageSlot)
-            buffer: buffer
-            offset: U64(0)
+            binding: U32(entry.storageSlot),
+            buffer: buffer,
+            offset: U64(0),
             size: U64(entry.byteSize > 0 ? entry.byteSize : Int(wgpuBufferGetSize(buffer)))
         })
     }
@@ -292,7 +292,7 @@ function dawnBindGroupEntries(runtime: borrow GraphicsAppRuntimeState, state: bo
             continue
         }
         entries.append(WGPUBindGroupEntry {
-            binding: U32(entry.textureSlot)
+            binding: U32(entry.textureSlot),
             textureView: view
         })
     }
@@ -302,7 +302,7 @@ function dawnBindGroupEntries(runtime: borrow GraphicsAppRuntimeState, state: bo
             continue
         }
         entries.append(WGPUBindGroupEntry {
-            binding: U32(entry.samplerSlot)
+            binding: U32(entry.samplerSlot),
             sampler: sampler
         })
     }
@@ -327,9 +327,9 @@ function dawnDeviceBindGroup(runtime: borrow mut GraphicsAppRuntimeState, group:
         return nullPointer()
     }
     let handle = wgpuDeviceCreateBindGroup(runtime.dawn.device, WGPUBindGroupDescriptor {
-        label: dawnText(state.label)
-        layout: layout
-        entryCount: U64(entries.count)
+        label: dawnText(state.label),
+        layout: layout,
+        entryCount: U64(entries.count),
         entries: WGPUBindGroupEntryArray16 { elements: entries }
     })
     if pointerIsNull(handle) {

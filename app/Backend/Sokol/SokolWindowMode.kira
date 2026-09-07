@@ -17,9 +17,9 @@ import Foundation
 // request would say yes either way.
 function sokolWindowIsCovering(mode: borrow WindowMode) -> Bool {
     match mode {
-        Windowed -> return false;
-        WindowedBorderless -> return true;
-        Fullscreen -> return true;
+        Windowed -> return false
+        WindowedBorderless -> return true
+        Fullscreen -> return true
     }
 }
 

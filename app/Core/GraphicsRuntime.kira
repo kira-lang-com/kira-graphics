@@ -133,8 +133,8 @@ function graphicsPercentile(sorted: borrow [Float], percent: Int) -> Float {
 @Native
 function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
     var runtimeState = nativeState(GraphicsAppRuntimeState {
-        app: app
-        userData: userData
+        app: app,
+        userData: userData,
         frameIndex: 0
     })
 

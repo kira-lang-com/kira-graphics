@@ -152,7 +152,7 @@ function metalContextFrameSerial(ctx: RawPtr) -> Int {
 @Native
 function metalContextAllocatedBytes(ctx: RawPtr) -> U64 {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
-    return metalMsgSendU64(device, metalSel("currentAllocatedSize"))
+    return metalMsgSend(device, metalSel("currentAllocatedSize"))
 }
 
 @Native
@@ -275,13 +275,13 @@ function metalContextSyncViewportFromView(ctx: RawPtr) {
     if pointerIsNull(view) {
         return
     }
-    let boundsKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "bounds")
-    let value = metalMsgSendP(view, metalSel("valueForKey:"), boundsKey)
+    let boundsKey: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "bounds")
+    let value: RawPtr = metalMsgSend(view, metalSel("valueForKey:"), boundsKey)
     if pointerIsNull(value) {
         return
     }
     let buf = metalMemAlloc(32)
-    metalMsgSendVoidP(value, metalSel("getValue:"), buf)
+    metalMsgSend(value, metalSel("getValue:"), buf)
     let w = metalDoubleBitsToInt(metalMemReadU64(buf, 16))
     let h = metalDoubleBitsToInt(metalMemReadU64(buf, 24))
     metalMemFree(buf)
@@ -290,12 +290,12 @@ function metalContextSyncViewportFromView(ctx: RawPtr) {
     }
 
     var scale = 1
-    let window = metalMsgSend(view, metalSel("window"))
+    let window: RawPtr = metalMsgSend(view, metalSel("window"))
     if !pointerIsNull(window) {
-        let scaleKey = metalMsgSendStr(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "backingScaleFactor")
-        let scaleNum = metalMsgSendP(window, metalSel("valueForKey:"), scaleKey)
+        let scaleKey: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "backingScaleFactor")
+        let scaleNum: RawPtr = metalMsgSend(window, metalSel("valueForKey:"), scaleKey)
         if !pointerIsNull(scaleNum) {
-            let s = metalU64ToInt(metalMsgSendU64(scaleNum, metalSel("integerValue")))
+            let s = metalU64ToInt(metalMsgSendCount(scaleNum, metalSel("integerValue")))
             if s >= 1 && s <= 4 {
                 scale = s
             }
@@ -339,16 +339,16 @@ function metalContextSyncViewportFromView(ctx: RawPtr) {
     //
     // Including `pw` also covers a window moving between displays of different
     // scale, which is the same event arriving later.
-    if w == curW && h == curH && pw == curPhysical && curPhysical != 0 {
+    if w == Int(curW) && h == Int(curH) && pw == Int(curPhysical) && curPhysical != U64(0) {
         return
     }
     let layer = metalMemReadPtr(ctx, metalOffsetLayer())
     if !pointerIsNull(layer) {
         // Layer frame in points (so the content tracks the window), drawable in physical
         // pixels and contentsScale the backing factor (so it is crisp at native res).
-        metalMsgSendVoid4F(layer, metalSel("setFrame:"), 0.0, 0.0, Float(w), Float(h))
-        metalMsgSendVoid2F(layer, metalSel("setDrawableSize:"), Float(pw), Float(ph))
-        metalMsgSendVoidF(layer, metalSel("setContentsScale:"), Float(scale))
+        metalMsgSend(layer, metalSel("setFrame:"), 0.0, 0.0, Float(w), Float(h))
+        metalMsgSend(layer, metalSel("setDrawableSize:"), Float(pw), Float(ph))
+        metalMsgSend(layer, metalSel("setContentsScale:"), Float(scale))
     }
     metalMemWriteU64(ctx, metalOffsetWidth(), w)
     metalMemWriteU64(ctx, metalOffsetHeight(), h)
@@ -388,20 +388,20 @@ function metalFrameStatistics(ctx: RawPtr, framesInFlight: Int) -> FrameStatisti
         return FrameStatistics {}
     }
     return FrameStatistics {
-        frameSeconds: metalContextFrameDuration(ctx)
-        cpuSeconds: metalContextCpuDuration(ctx)
-        gpuSeconds: metalContextGpuDuration(ctx)
-        hasGpuSeconds: true
-        drawableWidth: metalContextPhysicalWidth(ctx)
-        drawableHeight: metalContextPhysicalHeight(ctx)
-        allocatedBytes: metalContextAllocatedBytes(ctx)
-        hasAllocatedBytes: true
-        resourceCount: metalContextResourceCount(ctx)
-        passCount: metalContextPassCount(ctx)
-        drawCount: metalContextDrawCount(ctx)
-        triangleCount: metalContextTriangleCount(ctx)
-        framesInFlight: framesInFlight
-        frameSerial: metalContextFrameSerial(ctx)
+        frameSeconds: metalContextFrameDuration(ctx),
+        cpuSeconds: metalContextCpuDuration(ctx),
+        gpuSeconds: metalContextGpuDuration(ctx),
+        hasGpuSeconds: true,
+        drawableWidth: metalContextPhysicalWidth(ctx),
+        drawableHeight: metalContextPhysicalHeight(ctx),
+        allocatedBytes: metalContextAllocatedBytes(ctx),
+        hasAllocatedBytes: true,
+        resourceCount: metalContextResourceCount(ctx),
+        passCount: metalContextPassCount(ctx),
+        drawCount: metalContextDrawCount(ctx),
+        triangleCount: metalContextTriangleCount(ctx),
+        framesInFlight: framesInFlight,
+        frameSerial: metalContextFrameSerial(ctx),
         windowState: metalContextWindowState(ctx)
     }
 }

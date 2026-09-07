@@ -45,9 +45,9 @@ struct RenderPassDescriptor {
 @Native
 function emptyRenderTarget() -> RenderTarget {
     return RenderTarget {
-        kind: .Swapchain
-        texture: emptyGraphicsTexture()
-        mipLevel: 0
+        kind: .Swapchain,
+        texture: emptyGraphicsTexture(),
+        mipLevel: 0,
         arrayLayer: 0
     }
 }
@@ -55,10 +55,10 @@ function emptyRenderTarget() -> RenderTarget {
 @Native
 function emptyDepthAttachment() -> DepthAttachment {
     return DepthAttachment {
-        texture: emptyGraphicsTexture()
-        loadAction: .Clear
-        storeAction: .Store
-        clearDepth: 1.0
+        texture: emptyGraphicsTexture(),
+        loadAction: .Clear,
+        storeAction: .Store,
+        clearDepth: 1.0,
         readOnly: false
     }
 }
@@ -66,10 +66,10 @@ function emptyDepthAttachment() -> DepthAttachment {
 @Native
 function swapchainDepthAttachment() -> DepthAttachment {
     return DepthAttachment {
-        texture: emptyGraphicsTexture()
-        loadAction: .Clear
-        storeAction: .DontCare
-        clearDepth: 1.0
+        texture: emptyGraphicsTexture(),
+        loadAction: .Clear,
+        storeAction: .DontCare,
+        clearDepth: 1.0,
         readOnly: false
     }
 }
@@ -77,10 +77,10 @@ function swapchainDepthAttachment() -> DepthAttachment {
 @Native
 function emptyStencilAttachment() -> StencilAttachment {
     return StencilAttachment {
-        texture: emptyGraphicsTexture()
-        loadAction: .Clear
-        storeAction: .Store
-        clearStencil: 0
+        texture: emptyGraphicsTexture(),
+        loadAction: .Clear,
+        storeAction: .Store,
+        clearStencil: 0,
         readOnly: false
     }
 }
@@ -88,9 +88,9 @@ function emptyStencilAttachment() -> StencilAttachment {
 @Native
 function swapchainRenderTarget() -> RenderTarget {
     return RenderTarget {
-        kind: .Swapchain
-        texture: emptyGraphicsTexture()
-        mipLevel: 0
+        kind: .Swapchain,
+        texture: emptyGraphicsTexture(),
+        mipLevel: 0,
         arrayLayer: 0
     }
 }
@@ -107,54 +107,54 @@ function swapchainRenderTarget() -> RenderTarget {
 function clearTextureRenderPass(target: borrow GraphicsTexture, clearColor: borrow Color) -> RenderPassDescriptor {
     let attachment = ColorAttachment {
         target: RenderTarget {
-            kind: .Texture
-            texture: target
-            mipLevel: 0
+            kind: .Texture,
+            texture: target,
+            mipLevel: 0,
             arrayLayer: 0
-        }
-        loadAction: .Clear
-        storeAction: .Store
-        clearColor: clearColor
-        resolveTarget: emptyRenderTarget()
+        },
+        loadAction: .Clear,
+        storeAction: .Store,
+        clearColor: clearColor,
+        resolveTarget: emptyRenderTarget(),
         hasResolveTarget: false
     }
     return RenderPassDescriptor {
-        label: "surface-pass"
-        colorAttachments: [attachment]
-        primaryColorAttachment: attachment
-        hasPrimaryColorAttachment: true
-        depthAttachment: emptyDepthAttachment()
-        hasDepthAttachment: false
-        stencilAttachment: emptyStencilAttachment()
+        label: "surface-pass",
+        colorAttachments: [attachment],
+        primaryColorAttachment: attachment,
+        hasPrimaryColorAttachment: true,
+        depthAttachment: emptyDepthAttachment(),
+        hasDepthAttachment: false,
+        stencilAttachment: emptyStencilAttachment(),
         hasStencilAttachment: false
     }
 }
 
 function clearSwapchainRenderPass(clearColor: borrow Color) -> RenderPassDescriptor {
     return RenderPassDescriptor {
-        label: "swapchain-pass"
+        label: "swapchain-pass",
         colorAttachments: [
             ColorAttachment {
-                target: swapchainRenderTarget()
-                loadAction: .Clear
-                storeAction: .Store
-                clearColor: clearColor
-                resolveTarget: emptyRenderTarget()
+                target: swapchainRenderTarget(),
+                loadAction: .Clear,
+                storeAction: .Store,
+                clearColor: clearColor,
+                resolveTarget: emptyRenderTarget(),
                 hasResolveTarget: false
             }
-        ]
+        ],
         primaryColorAttachment: ColorAttachment {
-            target: swapchainRenderTarget()
-            loadAction: .Clear
-            storeAction: .Store
-            clearColor: clearColor
-            resolveTarget: emptyRenderTarget()
+            target: swapchainRenderTarget(),
+            loadAction: .Clear,
+            storeAction: .Store,
+            clearColor: clearColor,
+            resolveTarget: emptyRenderTarget(),
             hasResolveTarget: false
-        }
-        hasPrimaryColorAttachment: true
-        depthAttachment: emptyDepthAttachment()
-        hasDepthAttachment: false
-        stencilAttachment: emptyStencilAttachment()
+        },
+        hasPrimaryColorAttachment: true,
+        depthAttachment: emptyDepthAttachment(),
+        hasDepthAttachment: false,
+        stencilAttachment: emptyStencilAttachment(),
         hasStencilAttachment: false
     }
 }

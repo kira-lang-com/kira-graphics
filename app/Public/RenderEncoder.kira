@@ -357,28 +357,28 @@ function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, s
     // it some, as this once did, allocated four boxes per encoder that nothing
     // could free once `setBindGroup` overwrote the only token naming them.
     let state = nativeState(RenderEncoderState {
-        pipeline: emptyRenderPipeline()
-        hasPipeline: false
-        passActive: passActive
-        hasScissor: false
-        backendContext: backendContext
-        sokolRuntime: sokolRuntime
-        dawnRuntime: dawnRuntime
-        vertexBufferId: 0
-        hasVertexBuffer: false
-        indexBufferId: 0
-        hasIndexBuffer: false
-        indexFormat: .Uint32
-        bindGroup0: unboundBindGroup()
-        hasBindGroup0: false
-        bindGroup1: unboundBindGroup()
-        hasBindGroup1: false
-        bindGroup2: unboundBindGroup()
-        hasBindGroup2: false
-        bindGroup3: unboundBindGroup()
-        hasBindGroup3: false
-        vertexCount: 0
-        indexCount: 0
+        pipeline: emptyRenderPipeline(),
+        hasPipeline: false,
+        passActive: passActive,
+        hasScissor: false,
+        backendContext: backendContext,
+        sokolRuntime: sokolRuntime,
+        dawnRuntime: dawnRuntime,
+        vertexBufferId: 0,
+        hasVertexBuffer: false,
+        indexBufferId: 0,
+        hasIndexBuffer: false,
+        indexFormat: .Uint32,
+        bindGroup0: unboundBindGroup(),
+        hasBindGroup0: false,
+        bindGroup1: unboundBindGroup(),
+        hasBindGroup1: false,
+        bindGroup2: unboundBindGroup(),
+        hasBindGroup2: false,
+        bindGroup3: unboundBindGroup(),
+        hasBindGroup3: false,
+        vertexCount: 0,
+        indexCount: 0,
         instanceCount: 1
     })
     return RenderEncoder {

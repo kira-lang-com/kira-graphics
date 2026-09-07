@@ -267,8 +267,8 @@ construct RenderBackend {
 // which backend it is.
 function renderBackendFor(backend: RenderBackendKind, context: RawPtr) -> Any RenderBackend {
     match backend {
-        Metal -> return MetalRenderBackend(context: context);
-        Sokol -> return SokolRenderBackend(context: context);
-        Dawn -> return DawnRenderBackend(context: context);
+        Metal -> return MetalRenderBackend(context: context)
+        Sokol -> return SokolRenderBackend(context: context)
+        Dawn -> return DawnRenderBackend(context: context)
     }
 }

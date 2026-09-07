@@ -30,8 +30,8 @@ function dawnAlignedSize(byteCount: Int) -> Int {
 function dawnMakeBuffer(state: borrow mut GraphicsAppRuntimeState, label: borrow String, usage: U64, byteCount: Int) -> U32 {
     let size = dawnAlignedSize(byteCount)
     let buffer = wgpuDeviceCreateBuffer(state.dawn.device, WGPUBufferDescriptor {
-        label: dawnText(label)
-        usage: usage
+        label: dawnText(label),
+        usage: usage,
         size: U64(size)
     })
     if pointerIsNull(buffer) {
@@ -56,7 +56,7 @@ function dawnCreateBuffer(context: RawPtr, descriptor: borrow BufferDescriptor) 
         wgpuQueueWriteBuffer(state.dawn.queue, dawnObject(state, id), U64(0), descriptor.data, U64(byteCount))
     }
     return .Ok(GraphicsBuffer {
-        id: id
+        id: id,
         byteSize: dawnAlignedSize(byteCount)
     })
 }
@@ -76,7 +76,7 @@ function dawnCreateIndexBuffer(context: RawPtr, descriptor: borrow IndexBufferDe
         wgpuQueueWriteBuffer(state.dawn.queue, dawnObject(state, id), U64(0), descriptor.data, U64(byteCount))
     }
     return .Ok(GraphicsBuffer {
-        id: id
+        id: id,
         byteSize: dawnAlignedSize(byteCount)
     })
 }
@@ -99,7 +99,7 @@ function dawnCreateStorageBufferWords(context: RawPtr, label: borrow String, dat
         wgpuQueueWriteBuffer(state.dawn.queue, dawnObject(state, id), U64(0), data, U64(byteCount))
     }
     return .Ok(GraphicsBuffer {
-        id: id
+        id: id,
         byteSize: dawnAlignedSize(byteCount)
     })
 }
@@ -135,9 +135,9 @@ function dawnCreateDynamicBuffer(context: RawPtr, label: borrow String, floatCap
     dawnAttachExtra(state, id, contents)
     return .Ok(DynamicBuffer {
         buffer: GraphicsBuffer {
-            id: id
+            id: id,
             byteSize: byteCount
-        }
+        },
         contents: contents
     })
 }
@@ -191,8 +191,8 @@ function dawnReadBufferWord(context: RawPtr, buffer: borrow GraphicsBuffer, inde
     // sitting on the frame's encoder has been submitted at all.
     dawnSubmitEncoder(state)
     let staging = wgpuDeviceCreateBuffer(state.dawn.device, WGPUBufferDescriptor {
-        label: dawnText("kira-buffer-readback")
-        usage: dawnBufferUsageMapRead() | dawnBufferUsageCopyDestination()
+        label: dawnText("kira-buffer-readback"),
+        usage: dawnBufferUsageMapRead() | dawnBufferUsageCopyDestination(),
         size: U64(4)
     })
     if pointerIsNull(staging) {
@@ -212,8 +212,8 @@ function dawnReadBufferWord(context: RawPtr, buffer: borrow GraphicsBuffer, inde
     state.dawn.mapResolved = false
     state.dawn.mapSucceeded = false
     wgpuBufferMapAsync(staging, dawnMapModeRead(), U64(0), U64(4), WGPUBufferMapCallbackInfo {
-        mode: dawnCallbackOnProcessEvents()
-        callback: dawnBufferMapped
+        mode: dawnCallbackOnProcessEvents(),
+        callback: dawnBufferMapped,
         userdata1: context
     })
     var spins = 0
@@ -281,16 +281,16 @@ function dawnCreateTexture(context: RawPtr, descriptor: borrow TextureDescriptor
     }
     let samples = descriptor.sampleCount <= 1 ? 1 : descriptor.sampleCount
     let texture = wgpuDeviceCreateTexture(state.dawn.device, WGPUTextureDescriptor {
-        label: dawnText(descriptor.label)
-        usage: dawnTextureUsage(descriptor.usage)
-        dimension: dawnTextureDimension2d()
+        label: dawnText(descriptor.label),
+        usage: dawnTextureUsage(descriptor.usage),
+        dimension: dawnTextureDimension2d(),
         size: WGPUExtent3D {
-            width: U32(descriptor.width)
-            height: U32(descriptor.height)
+            width: U32(descriptor.width),
+            height: U32(descriptor.height),
             depthOrArrayLayers: U32(1)
-        }
-        format: format
-        mipLevelCount: U32(1)
+        },
+        format: format,
+        mipLevelCount: U32(1),
         sampleCount: U32(samples)
     })
     if pointerIsNull(texture) {
@@ -322,49 +322,49 @@ function dawnTextureWithViews(state: borrow mut GraphicsAppRuntimeState, id: U32
         storageId = dawnRegisterObject(state, dawnMakeView(texture, format, "storage"), format)
     }
     return GraphicsTexture {
-        id: id
-        viewId: sampledId
-        colorViewId: colorId
-        depthViewId: depthId
-        storageViewId: storageId
-        width: width
-        height: height
+        id: id,
+        viewId: sampledId,
+        colorViewId: colorId,
+        depthViewId: depthId,
+        storageViewId: storageId,
+        width: width,
+        height: height,
         sampleCount: samples
     }
 }
 
 function dawnUsageIsSampled(usage: borrow TextureUsage) -> Bool {
     match usage {
-        Sampled -> return true;
-        SampledStreaming -> return true;
-        RenderTarget -> return false;
-        RenderTargetSampled -> return true;
-        DepthStencil -> return false;
-        SampledStorage -> return true;
+        Sampled -> return true
+        SampledStreaming -> return true
+        RenderTarget -> return false
+        RenderTargetSampled -> return true
+        DepthStencil -> return false
+        SampledStorage -> return true
     }
 }
 
 function dawnUsageIsColorTarget(usage: borrow TextureUsage) -> Bool {
     match usage {
-        Sampled -> return false;
-        SampledStreaming -> return false;
-        RenderTarget -> return true;
-        RenderTargetSampled -> return true;
-        DepthStencil -> return false;
-        SampledStorage -> return false;
+        Sampled -> return false
+        SampledStreaming -> return false
+        RenderTarget -> return true
+        RenderTargetSampled -> return true
+        DepthStencil -> return false
+        SampledStorage -> return false
     }
 }
 
 @Native
 function dawnMakeView(texture: RawPtr, format: I32, role: borrow String) -> RawPtr {
     return wgpuTextureCreateView(texture, WGPUTextureViewDescriptor {
-        label: dawnText("kira-texture-view-" + role)
-        format: format
-        dimension: dawnTextureViewDimension2d()
-        baseMipLevel: U32(0)
-        mipLevelCount: U32(1)
-        baseArrayLayer: U32(0)
-        arrayLayerCount: U32(1)
+        label: dawnText("kira-texture-view-" + role),
+        format: format,
+        dimension: dawnTextureViewDimension2d(),
+        baseMipLevel: U32(0),
+        mipLevelCount: U32(1),
+        baseArrayLayer: U32(0),
+        arrayLayerCount: U32(1),
         aspect: dawnTextureAspectAll()
     })
 }
@@ -372,7 +372,7 @@ function dawnMakeView(texture: RawPtr, format: I32, role: borrow String) -> RawP
 @Native
 function dawnCreateTextureFromPixels(context: RawPtr, descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
     match dawnCreateTexture(context, descriptor) {
-        Error(reason) -> return .Error(reason);
+        Error(reason) -> return .Error(reason)
         Ok(texture) -> {
             dawnWriteTexturePixels(context, texture, pixels)
             return .Ok(texture)
@@ -394,20 +394,20 @@ function dawnWriteTexturePixels(context: RawPtr, texture: borrow GraphicsTexture
     wgpuQueueWriteTexture(
         state.dawn.queue,
         WGPUTexelCopyTextureInfo {
-            texture: handle
-            mipLevel: U32(0)
+            texture: handle,
+            mipLevel: U32(0),
             aspect: dawnTextureAspectAll()
         },
         pixels,
         U64(pixels.count),
         WGPUTexelCopyBufferLayout {
-            offset: U64(0)
-            bytesPerRow: U32(texture.width * 4)
+            offset: U64(0),
+            bytesPerRow: U32(texture.width * 4),
             rowsPerImage: U32(texture.height)
         },
         WGPUExtent3D {
-            width: U32(texture.width)
-            height: U32(texture.height)
+            width: U32(texture.width),
+            height: U32(texture.height),
             depthOrArrayLayers: U32(1)
         },
     )
@@ -429,20 +429,20 @@ function dawnWriteTextureBytes(context: RawPtr, texture: borrow GraphicsTexture,
     wgpuQueueWriteTexture(
         state.dawn.queue,
         WGPUTexelCopyTextureInfo {
-            texture: handle
-            mipLevel: U32(0)
+            texture: handle,
+            mipLevel: U32(0),
             aspect: dawnTextureAspectAll()
         },
         bytes,
         U64(byteCount),
         WGPUTexelCopyBufferLayout {
-            offset: U64(0)
-            bytesPerRow: U32(texture.width * 4)
+            offset: U64(0),
+            bytesPerRow: U32(texture.width * 4),
             rowsPerImage: U32(texture.height)
         },
         WGPUExtent3D {
-            width: U32(texture.width)
-            height: U32(texture.height)
+            width: U32(texture.width),
+            height: U32(texture.height),
             depthOrArrayLayers: U32(1)
         },
     )
@@ -491,15 +491,15 @@ function dawnCreateSampler(context: RawPtr, descriptor: borrow SamplerDescriptor
     }
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     let sampler = wgpuDeviceCreateSampler(state.dawn.device, WGPUSamplerDescriptor {
-        label: dawnText(descriptor.label)
-        addressModeU: dawnAddressMode(descriptor.addressModeU)
-        addressModeV: dawnAddressMode(descriptor.addressModeV)
-        addressModeW: dawnAddressMode(.ClampToEdge)
-        magFilter: dawnFilterMode(descriptor.magFilter)
-        minFilter: dawnFilterMode(descriptor.minFilter)
-        mipmapFilter: dawnFilterMode(descriptor.minFilter)
-        lodMinClamp: F32(0.0)
-        lodMaxClamp: F32(32.0)
+        label: dawnText(descriptor.label),
+        addressModeU: dawnAddressMode(descriptor.addressModeU),
+        addressModeV: dawnAddressMode(descriptor.addressModeV),
+        addressModeW: dawnAddressMode(.ClampToEdge),
+        magFilter: dawnFilterMode(descriptor.magFilter),
+        minFilter: dawnFilterMode(descriptor.minFilter),
+        mipmapFilter: dawnFilterMode(descriptor.minFilter),
+        lodMinClamp: F32(0.0),
+        lodMaxClamp: F32(32.0),
         maxAnisotropy: U16(1)
     })
     if pointerIsNull(sampler) {

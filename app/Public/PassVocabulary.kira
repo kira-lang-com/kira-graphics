@@ -5,6 +5,8 @@
 // and each carries the wire code the backends already speak, so the typed
 // surface lands without a backend changing.
 
+import Foundation
+
 @Derive(Equatable, Clone)
 enum TextureUsage {
     // Read by a shader, written once when it is created.
@@ -26,12 +28,12 @@ enum TextureUsage {
 
 function textureUsageCode(usage: TextureUsage) -> Int {
     match usage {
-        Sampled -> return 1;
-        RenderTarget -> return 2;
-        RenderTargetSampled -> return 3;
-        DepthStencil -> return 4;
-        SampledStreaming -> return 5;
-        SampledStorage -> return 6;
+        Sampled -> return 1
+        RenderTarget -> return 2
+        RenderTargetSampled -> return 3
+        DepthStencil -> return 4
+        SampledStreaming -> return 5
+        SampledStorage -> return 6
     }
 }
 
@@ -52,9 +54,9 @@ enum LoadAction {
 
 function loadActionCode(action: LoadAction) -> Int {
     match action {
-        Clear -> return 1;
-        Load -> return 2;
-        DontCare -> return 3;
+        Clear -> return 1
+        Load -> return 2
+        DontCare -> return 3
     }
 }
 
@@ -66,8 +68,8 @@ enum StoreAction {
 
 function storeActionCode(action: StoreAction) -> Int {
     match action {
-        Store -> return 1;
-        DontCare -> return 2;
+        Store -> return 1
+        DontCare -> return 2
     }
 }
 
@@ -79,8 +81,8 @@ enum RenderTargetKind {
 
 function renderTargetKindCode(kind: RenderTargetKind) -> Int {
     match kind {
-        Swapchain -> return 1;
-        Texture -> return 2;
+        Swapchain -> return 1
+        Texture -> return 2
     }
 }
 
@@ -97,9 +99,9 @@ enum AttachmentStorage {
 
 function attachmentStorageCode(storage: AttachmentStorage) -> Int {
     match storage {
-        Persistent -> return 1;
-        Transient -> return 2;
-        Memoryless -> return 3;
+        Persistent -> return 1
+        Transient -> return 2
+        Memoryless -> return 3
     }
 }
 
@@ -111,8 +113,8 @@ enum TextureFilter {
 
 function textureFilterCode(filter: TextureFilter) -> Int {
     match filter {
-        Nearest -> return 1;
-        Linear -> return 2;
+        Nearest -> return 1
+        Linear -> return 2
     }
 }
 
@@ -124,7 +126,7 @@ enum AddressMode {
 
 function addressModeCode(mode: AddressMode) -> Int {
     match mode {
-        ClampToEdge -> return 1;
-        Repeat -> return 2;
+        ClampToEdge -> return 1
+        Repeat -> return 2
     }
 }

@@ -40,8 +40,8 @@ extend Graphics {
     // buried the one thing that differed between them.
     function createStorageBufferFloats(label: borrow String, data: borrow [F32]) -> BufferResult {
         return self.createBuffer(BufferDescriptor {
-            label: label
-            usage: .Storage
+            label: label,
+            usage: .Storage,
             data: data
         })
     }

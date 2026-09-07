@@ -10,6 +10,8 @@
 // That is what lets the typed surface land without touching a backend: the enum
 // is the API, the code is the protocol underneath it.
 
+import Foundation
+
 @Derive(Equatable, Clone)
 enum TextureFormat {
     Rgba8Unorm
@@ -25,12 +27,12 @@ enum TextureFormat {
 
 function textureFormatCode(format: TextureFormat) -> Int {
     match format {
-        Rgba8Unorm -> return 1;
-        Rgba16Float -> return 2;
-        Depth24Stencil8 -> return 3;
-        R32Uint -> return 10;
-        Swapchain -> return 0 - 1;
-        None -> return 0;
+        Rgba8Unorm -> return 1
+        Rgba16Float -> return 2
+        Depth24Stencil8 -> return 3
+        R32Uint -> return 10
+        Swapchain -> return 0 - 1
+        None -> return 0
     }
 }
 
@@ -44,10 +46,10 @@ enum VertexFormat {
 
 function vertexFormatCode(format: VertexFormat) -> Int {
     match format {
-        Float -> return 0;
-        Float2 -> return 1;
-        Float3 -> return 2;
-        Float4 -> return 3;
+        Float -> return 0
+        Float2 -> return 1
+        Float3 -> return 2
+        Float4 -> return 3
     }
 }
 
@@ -61,10 +63,10 @@ enum BlendPreset {
 
 function blendPresetCode(preset: BlendPreset) -> Int {
     match preset {
-        Replace -> return 1;
-        Alpha -> return 2;
-        PremultipliedAlpha -> return 3;
-        Additive -> return 4;
+        Replace -> return 1
+        Alpha -> return 2
+        PremultipliedAlpha -> return 3
+        Additive -> return 4
     }
 }
 
@@ -81,13 +83,13 @@ enum CompareFunction {
 
 function compareFunctionCode(compare: CompareFunction) -> Int {
     match compare {
-        Never -> return 0;
-        Less -> return 1;
-        LessEqual -> return 2;
-        Equal -> return 3;
-        GreaterEqual -> return 4;
-        Greater -> return 5;
-        Always -> return 6;
+        Never -> return 0
+        Less -> return 1
+        LessEqual -> return 2
+        Equal -> return 3
+        GreaterEqual -> return 4
+        Greater -> return 5
+        Always -> return 6
     }
 }
 
@@ -100,9 +102,9 @@ enum CullMode {
 
 function cullModeCode(mode: CullMode) -> Int {
     match mode {
-        None -> return 0;
-        Front -> return 1;
-        Back -> return 2;
+        None -> return 0
+        Front -> return 1
+        Back -> return 2
     }
 }
 
@@ -114,8 +116,8 @@ enum FrontFace {
 
 function frontFaceCode(face: FrontFace) -> Int {
     match face {
-        CounterClockwise -> return 1;
-        Clockwise -> return 2;
+        CounterClockwise -> return 1
+        Clockwise -> return 2
     }
 }
 
@@ -128,9 +130,9 @@ enum PrimitiveTopology {
 
 function primitiveTopologyCode(topology: PrimitiveTopology) -> Int {
     match topology {
-        TriangleList -> return 1;
-        TriangleStrip -> return 2;
-        LineList -> return 3;
+        TriangleList -> return 1
+        TriangleStrip -> return 2
+        LineList -> return 3
     }
 }
 
@@ -142,7 +144,7 @@ enum IndexFormat {
 
 function indexFormatCode(format: IndexFormat) -> Int {
     match format {
-        Uint16 -> return 1;
-        Uint32 -> return 2;
+        Uint16 -> return 1
+        Uint32 -> return 2
     }
 }

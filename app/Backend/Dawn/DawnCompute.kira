@@ -13,7 +13,7 @@ import Foundation
 // the render passes around them — see `DawnPass.kira` for why the frame is one
 // command buffer and not one per pass.
 
-@FFI.Array { element: WGPUBindGroupEntry; count: 12; }
+@FFI.Array { element: WGPUBindGroupEntry, count: 12 }
 struct WGPUBindGroupEntryArray12 {}
 
 @Native
@@ -29,9 +29,9 @@ function dawnCreateComputePipeline(context: RawPtr, label: borrow String, shader
     }
     let entry = entryName.count > 0 ? entryName : record.computeEntry
     let pipeline = wgpuDeviceCreateComputePipeline(state.dawn.device, WGPUComputePipelineDescriptor {
-        label: dawnText(label)
+        label: dawnText(label),
         compute: WGPUComputeState {
-            module: record.computeModule
+            module: record.computeModule,
             entryPoint: dawnText(entry)
         }
     })
@@ -60,9 +60,9 @@ function dawnDispatch(state: borrow mut GraphicsAppRuntimeState, pipelineId: Int
         return
     }
     let group = wgpuDeviceCreateBindGroup(state.dawn.device, WGPUBindGroupDescriptor {
-        label: dawnText("kira-compute-bindings")
-        layout: layout
-        entryCount: U64(entries.count)
+        label: dawnText("kira-compute-bindings"),
+        layout: layout,
+        entryCount: U64(entries.count),
         entries: WGPUBindGroupEntryArray12 { elements: entries }
     })
     wgpuBindGroupLayoutRelease(layout)
@@ -83,7 +83,7 @@ function dawnDispatch(state: borrow mut GraphicsAppRuntimeState, pipelineId: Int
         })
     } else {
         pass = wgpuCommandEncoderBeginComputePass(encoder, WGPUComputePassDescriptor {
-            label: dawnText("kira-compute-pass")
+            label: dawnText("kira-compute-pass"),
             timestampWrites: dawnClockWrites(state, timed)
         })
     }
@@ -179,29 +179,29 @@ function dawnBlurEntries(state: borrow GraphicsAppRuntimeState, extent: RawPtr, 
     let sources: [GraphicsTexture] = [firstSource, secondSource]
     var entries: [WGPUBindGroupEntry] = []
     entries.append(WGPUBindGroupEntry {
-        binding: U32(0)
-        buffer: extent
-        offset: U64(0)
+        binding: U32(0),
+        buffer: extent,
+        offset: U64(0),
         size: U64(16)
     })
     entries.append(WGPUBindGroupEntry {
-        binding: U32(1)
+        binding: U32(1),
         sampler: dawnObject(state, sampler.id)
     })
     var binding = 2
     for source in sources {
         entries.append(WGPUBindGroupEntry {
-            binding: U32(binding)
+            binding: U32(binding),
             textureView: dawnObject(state, source.viewId)
         })
         binding = binding + 1
     }
     entries.append(WGPUBindGroupEntry {
-        binding: U32(binding)
+        binding: U32(binding),
         textureView: dawnObject(state, near.storageViewId)
     })
     entries.append(WGPUBindGroupEntry {
-        binding: U32(binding + 1)
+        binding: U32(binding + 1),
         textureView: dawnObject(state, far.storageViewId)
     })
     return entries
@@ -235,7 +235,7 @@ function dawnDispatchDepthComputeBuffers(context: RawPtr, pipeline: Int, depth: 
     }
     var ordered: [WGPUBindGroupEntry] = []
     ordered.append(WGPUBindGroupEntry {
-        binding: U32(0)
+        binding: U32(0),
         textureView: view
     })
     for entry in entries {
@@ -253,9 +253,9 @@ function dawnBufferEntries(state: borrow GraphicsAppRuntimeState, bufferIds: bor
         let buffer = dawnObject(state, bufferIds[index])
         if !pointerIsNull(buffer) {
             entries.append(WGPUBindGroupEntry {
-                binding: U32(firstBinding + index)
-                buffer: buffer
-                offset: U64(0)
+                binding: U32(firstBinding + index),
+                buffer: buffer,
+                offset: U64(0),
                 size: wgpuBufferGetSize(buffer)
             })
         }

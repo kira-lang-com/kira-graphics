@@ -45,7 +45,7 @@ function sokolEnvInts(value: borrow String) -> [Int] {
                         }
                     }
                     if cDigit {
-                        v = v * 10 + (c - 48)
+                        v = v * 10 + (Int(c) - 48)
                         i = i + 1
                     } else {
                         digits = false

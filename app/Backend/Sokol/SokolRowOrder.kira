@@ -117,7 +117,7 @@ function sokolFlipTextureRows(backendContext: RawPtr, texture: borrow GraphicsTe
         return
     }
     sg_begin_pass(move sg_pass {
-        compute: true
+        compute: true,
         label: "kira-graphics-row-flip"
     })
     sg_apply_pipeline(sg_pipeline { id: U32(state.rowFlip.pipelineId) })
@@ -133,7 +133,7 @@ function sokolFlipTextureRows(backendContext: RawPtr, texture: borrow GraphicsTe
     })
     let extent = sokolRowFlipExtentWords(texture.width, texture.height)
     sg_apply_uniforms(I32(state.rowFlip.uniformSlot), move sg_range {
-        ptr: extent
+        ptr: extent,
         size: U64(extent.count * 4)
     })
     sg_dispatch(

@@ -23,13 +23,13 @@ import Foundation
 // `kira_dynamic_alloc` addressed through a hand-declared `@FFI.Pointer`, which
 // is how the members C wrote are read back.
 
-@FFI.Callback { abi: c; params: [RawPtr, U32, U64, Int]; result: Int; }
+@FFI.Callback { abi: c, params: [RawPtr, U32, U64, Int], result: Int }
 struct WindowProcedure {}
 
 // `WNDCLASSEXA`. The trailing `smallIcon` matters as much as the rest: the size
 // in `byteSize` is checked by `RegisterClassExA`, and a struct one field short
 // is refused with no diagnostic beyond a zero atom.
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct WindowClass {
     var byteSize: U32 = 0
     var style: U32 = 0
@@ -45,16 +45,16 @@ struct WindowClass {
     var smallIcon: RawPtr
 }
 
-@FFI.Pointer { target: WindowClass; ownership: borrowed; }
+@FFI.Pointer { target: WindowClass, ownership: borrowed }
 struct WindowClassPointer {}
 
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct WindowPoint {
     var x: I32 = 0
     var y: I32 = 0
 }
 
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct WindowMessage {
     var window: RawPtr
     var message: U32 = 0
@@ -64,10 +64,10 @@ struct WindowMessage {
     var point: WindowPoint
 }
 
-@FFI.Pointer { target: WindowMessage; ownership: borrowed; }
+@FFI.Pointer { target: WindowMessage, ownership: borrowed }
 struct WindowMessagePointer {}
 
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct WindowRect {
     var left: I32 = 0
     var top: I32 = 0
@@ -75,12 +75,12 @@ struct WindowRect {
     var bottom: I32 = 0
 }
 
-@FFI.Pointer { target: WindowRect; ownership: borrowed; }
+@FFI.Pointer { target: WindowRect, ownership: borrowed }
 struct WindowRectPointer {}
 
 // `MONITORINFO`: its own size, the monitor's rectangle, its work area, and a
 // flag saying whether it is the primary display.
-@FFI.Struct { layout: c; }
+@FFI.Struct { layout: c }
 struct MonitorInfo {
     var byteSize: U32 = 0
     var monitor: WindowRect
@@ -88,42 +88,42 @@ struct MonitorInfo {
     var flags: U32 = 0
 }
 
-@FFI.Pointer { target: MonitorInfo; ownership: borrowed; }
+@FFI.Pointer { target: MonitorInfo, ownership: borrowed }
 struct MonitorInfoPointer {}
 
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
-function allocateWindowMessage(size: U64) -> WindowMessagePointer;
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_alloc, abi: c }
+function allocateWindowMessage(size: U64) -> WindowMessagePointer
 
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
-function allocateWindowRect(size: U64) -> WindowRectPointer;
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_alloc, abi: c }
+function allocateWindowRect(size: U64) -> WindowRectPointer
 
-@FFI.Extern { library: kira_runtime; symbol: kira_dynamic_alloc; abi: c; }
-function allocateMonitorInfo(size: U64) -> MonitorInfoPointer;
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_alloc, abi: c }
+function allocateMonitorInfo(size: U64) -> MonitorInfoPointer
 
-@FFI.Extern { library: kernel32; symbol: GetModuleHandleA; abi: c; }
-function moduleHandle(name: CString) -> RawPtr;
+@FFI.Extern { library: kernel32, symbol: GetModuleHandleA, abi: c }
+function moduleHandle(name: CString) -> RawPtr
 
 // `LoadCursorA(NULL, IDC_ARROW)`. The second parameter is `LPCSTR`, and a stock
 // cursor is named by an integer cast to one — `MAKEINTRESOURCE`. There is no
 // integer-to-pointer cast in Kira, and none is needed: the parameter is a
 // pointer-sized word either way, so it is declared as the integer it carries.
-@FFI.Extern { library: user32; symbol: LoadCursorA; abi: c; }
-function loadCursor(instance: RawPtr, name: U64) -> RawPtr;
+@FFI.Extern { library: user32, symbol: LoadCursorA, abi: c }
+function loadCursor(instance: RawPtr, name: U64) -> RawPtr
 
-@FFI.Extern { library: user32; symbol: RegisterClassExA; abi: c; }
-function registerWindowClass(windowClass: WindowClassPointer) -> U16;
+@FFI.Extern { library: user32, symbol: RegisterClassExA, abi: c }
+function registerWindowClass(windowClass: WindowClassPointer) -> U16
 
-@FFI.Extern { library: user32; symbol: CreateWindowExA; abi: c; }
-function createWindowHandle(exStyle: U32, className: CString, title: CString, style: U32, x: I32, y: I32, width: I32, height: I32, parent: RawPtr, menu: RawPtr, instance: RawPtr, param: RawPtr) -> RawPtr;
+@FFI.Extern { library: user32, symbol: CreateWindowExA, abi: c }
+function createWindowHandle(exStyle: U32, className: CString, title: CString, style: U32, x: I32, y: I32, width: I32, height: I32, parent: RawPtr, menu: RawPtr, instance: RawPtr, param: RawPtr) -> RawPtr
 
-@FFI.Extern { library: user32; symbol: DestroyWindow; abi: c; }
-function destroyWindowHandle(window: RawPtr) -> I32;
+@FFI.Extern { library: user32, symbol: DestroyWindow, abi: c }
+function destroyWindowHandle(window: RawPtr) -> I32
 
 // A layered window's composition: `key` is the colour the desktop shows
 // through, `alpha` is how opaque the whole window is composited, and `flags`
 // says which of the two the call is setting.
-@FFI.Extern { library: user32; symbol: SetLayeredWindowAttributes; abi: c; }
-function setLayeredWindowAttributes(window: RawPtr, key: U32, alpha: U8, flags: U32) -> I32;
+@FFI.Extern { library: user32, symbol: SetLayeredWindowAttributes, abi: c }
+function setLayeredWindowAttributes(window: RawPtr, key: U32, alpha: U8, flags: U32) -> I32
 
 // The desktop's own backdrop for a window: what the compositor draws BEHIND it,
 // which is the blurred, tinted view of everything underneath. It is the
@@ -133,83 +133,83 @@ function setLayeredWindowAttributes(window: RawPtr, key: U32, alpha: U8, flags: 
 // Asked for by attribute rather than through the undocumented composition call
 // every sample on the internet reaches for: that symbol is not in the import
 // library at all, so a program that names it does not link.
-@FFI.Extern { library: dwmapi; symbol: DwmSetWindowAttribute; abi: c; }
-function setWindowAttribute(window: RawPtr, attribute: U32, value: RawPtr, size: U32) -> I32;
+@FFI.Extern { library: dwmapi, symbol: DwmSetWindowAttribute, abi: c }
+function setWindowAttribute(window: RawPtr, attribute: U32, value: RawPtr, size: U32) -> I32
 
 // Extends the window frame — the part the compositor draws — over the client
 // area, which is what puts the backdrop behind everything the application
 // draws rather than behind a title bar it does not have.
-@FFI.Extern { library: dwmapi; symbol: DwmExtendFrameIntoClientArea; abi: c; }
-function extendFrameIntoClientArea(window: RawPtr, margins: RawPtr) -> I32;
+@FFI.Extern { library: dwmapi, symbol: DwmExtendFrameIntoClientArea, abi: c }
+function extendFrameIntoClientArea(window: RawPtr, margins: RawPtr) -> I32
 
-@FFI.Extern { library: user32; symbol: ShowWindow; abi: c; }
-function showWindow(window: RawPtr, command: I32) -> I32;
+@FFI.Extern { library: user32, symbol: ShowWindow, abi: c }
+function showWindow(window: RawPtr, command: I32) -> I32
 
-@FFI.Extern { library: user32; symbol: SetForegroundWindow; abi: c; }
-function setForegroundWindow(window: RawPtr) -> I32;
+@FFI.Extern { library: user32, symbol: SetForegroundWindow, abi: c }
+function setForegroundWindow(window: RawPtr) -> I32
 
-@FFI.Extern { library: user32; symbol: PeekMessageA; abi: c; }
-function peekMessage(message: WindowMessagePointer, window: RawPtr, first: U32, last: U32, remove: U32) -> I32;
+@FFI.Extern { library: user32, symbol: PeekMessageA, abi: c }
+function peekMessage(message: WindowMessagePointer, window: RawPtr, first: U32, last: U32, remove: U32) -> I32
 
-@FFI.Extern { library: user32; symbol: TranslateMessage; abi: c; }
-function translateMessage(message: WindowMessagePointer) -> I32;
+@FFI.Extern { library: user32, symbol: TranslateMessage, abi: c }
+function translateMessage(message: WindowMessagePointer) -> I32
 
-@FFI.Extern { library: user32; symbol: DispatchMessageA; abi: c; }
-function dispatchMessage(message: WindowMessagePointer) -> Int;
+@FFI.Extern { library: user32, symbol: DispatchMessageA, abi: c }
+function dispatchMessage(message: WindowMessagePointer) -> Int
 
-@FFI.Extern { library: user32; symbol: DefWindowProcA; abi: c; }
-function defaultWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: Int) -> Int;
+@FFI.Extern { library: user32, symbol: DefWindowProcA, abi: c }
+function defaultWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: Int) -> Int
 
-@FFI.Extern { library: user32; symbol: PostQuitMessage; abi: c; }
-function postQuitMessage(code: I32) -> Void;
+@FFI.Extern { library: user32, symbol: PostQuitMessage, abi: c }
+function postQuitMessage(code: I32) -> Void
 
-@FFI.Extern { library: user32; symbol: GetClientRect; abi: c; }
-function windowClientRect(window: RawPtr, rect: WindowRectPointer) -> I32;
+@FFI.Extern { library: user32, symbol: GetClientRect, abi: c }
+function windowClientRect(window: RawPtr, rect: WindowRectPointer) -> I32
 
-@FFI.Extern { library: user32; symbol: AdjustWindowRect; abi: c; }
-function adjustWindowRect(rect: WindowRectPointer, style: U32, hasMenu: I32) -> I32;
+@FFI.Extern { library: user32, symbol: AdjustWindowRect, abi: c }
+function adjustWindowRect(rect: WindowRectPointer, style: U32, hasMenu: I32) -> I32
 
-@FFI.Extern { library: user32; symbol: SetProcessDPIAware; abi: c; }
-function markProcessDpiAware() -> I32;
+@FFI.Extern { library: user32, symbol: SetProcessDPIAware, abi: c }
+function markProcessDpiAware() -> I32
 
-@FFI.Extern { library: user32; symbol: GetDpiForWindow; abi: c; }
-function windowDpi(window: RawPtr) -> U32;
+@FFI.Extern { library: user32, symbol: GetDpiForWindow, abi: c }
+function windowDpi(window: RawPtr) -> U32
 
-@FFI.Extern { library: user32; symbol: GetDpiForSystem; abi: c; }
-function systemDpi() -> U32;
+@FFI.Extern { library: user32, symbol: GetDpiForSystem, abi: c }
+function systemDpi() -> U32
 
-@FFI.Extern { library: user32; symbol: GetWindowLongPtrA; abi: c; }
-function windowLong(window: RawPtr, index: I32) -> Int;
+@FFI.Extern { library: user32, symbol: GetWindowLongPtrA, abi: c }
+function windowLong(window: RawPtr, index: I32) -> Int
 
-@FFI.Extern { library: user32; symbol: SetWindowLongPtrA; abi: c; }
-function setWindowLong(window: RawPtr, index: I32, value: Int) -> Int;
+@FFI.Extern { library: user32, symbol: SetWindowLongPtrA, abi: c }
+function setWindowLong(window: RawPtr, index: I32, value: Int) -> Int
 
 // The same two calls, typed for the one word a window carries for its creator.
 // A pointer rather than an integer because that is what the word holds here, and
 // spelling it so needs no conversion in either direction.
-@FFI.Extern { library: user32; symbol: GetWindowLongPtrA; abi: c; }
-function windowUserPointer(window: RawPtr, index: I32) -> RawPtr;
+@FFI.Extern { library: user32, symbol: GetWindowLongPtrA, abi: c }
+function windowLong(window: RawPtr, index: I32) -> RawPtr
 
-@FFI.Extern { library: user32; symbol: SetWindowLongPtrA; abi: c; }
-function setWindowUserPointer(window: RawPtr, index: I32, value: RawPtr) -> RawPtr;
+@FFI.Extern { library: user32, symbol: SetWindowLongPtrA, abi: c }
+function setWindowLong(window: RawPtr, index: I32, value: RawPtr) -> RawPtr
 
-@FFI.Extern { library: user32; symbol: SetWindowPos; abi: c; }
-function setWindowPosition(window: RawPtr, after: RawPtr, x: I32, y: I32, width: I32, height: I32, flags: U32) -> I32;
+@FFI.Extern { library: user32, symbol: SetWindowPos, abi: c }
+function setWindowPosition(window: RawPtr, after: RawPtr, x: I32, y: I32, width: I32, height: I32, flags: U32) -> I32
 
-@FFI.Extern { library: user32; symbol: MonitorFromWindow; abi: c; }
-function monitorForWindow(window: RawPtr, fallback: U32) -> RawPtr;
+@FFI.Extern { library: user32, symbol: MonitorFromWindow, abi: c }
+function monitorForWindow(window: RawPtr, fallback: U32) -> RawPtr
 
-@FFI.Extern { library: user32; symbol: GetMonitorInfoA; abi: c; }
-function readMonitorInfo(monitor: RawPtr, info: MonitorInfoPointer) -> I32;
+@FFI.Extern { library: user32, symbol: GetMonitorInfoA, abi: c }
+function readMonitorInfo(monitor: RawPtr, info: MonitorInfoPointer) -> I32
 
-@FFI.Extern { library: user32; symbol: GetKeyState; abi: c; }
-function keyState(virtualKey: I32) -> I16;
+@FFI.Extern { library: user32, symbol: GetKeyState, abi: c }
+function keyState(virtualKey: I32) -> I16
 
-@FFI.Extern { library: user32; symbol: ShowCursor; abi: c; }
-function showCursor(show: Bool) -> I32;
+@FFI.Extern { library: user32, symbol: ShowCursor, abi: c }
+function showCursor(show: Bool) -> I32
 
-@FFI.Extern { library: user32; symbol: ClipCursor; abi: c; }
-function clipCursor(bounds: WindowRectPointer) -> I32;
+@FFI.Extern { library: user32, symbol: ClipCursor, abi: c }
+function clipCursor(bounds: WindowRectPointer) -> I32
 
 // The window styles the three window modes are made of.
 function dawnClipChildrenStyle() -> U32 { return U32(33554432) }
@@ -291,13 +291,13 @@ function dawnWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: 
 // The runtime state a window was opened for, or null before it was attached.
 @Native
 function dawnWindowRuntime(window: RawPtr) -> RawPtr {
-    return windowUserPointer(window, dawnWindowUserDataIndex())
+    return windowLong(window, dawnWindowUserDataIndex())
 }
 
 // Attaches the runtime state to the window, so its procedure can reach it.
 @Native
 function dawnAttachWindowRuntime(window: RawPtr, runtimeUserData: RawPtr) {
-    setWindowUserPointer(window, dawnWindowUserDataIndex(), runtimeUserData)
+    setWindowLong(window, dawnWindowUserDataIndex(), runtimeUserData)
     return
 }
 
@@ -312,11 +312,11 @@ function dawnRegisterWindowClass(instance: RawPtr, className: borrow String) -> 
     return registerWindowClass(WindowClass {
         // `CS_HREDRAW | CS_VREDRAW`: redraw the whole client area when either
         // dimension changes, so a resize repaints rather than smearing.
-        byteSize: U32(80)
-        style: U32(3)
-        procedure: dawnWindowProcedure
-        instance: instance
-        cursor: loadCursor(nullPointer(), U64(32512))
+        byteSize: U32(80),
+        style: U32(3),
+        procedure: dawnWindowProcedure,
+        instance: instance,
+        cursor: loadCursor(nullPointer(), U64(32512)),
         className: className
     }) != U16(0)
 }
@@ -492,9 +492,9 @@ function dawnWindowAlphaByte(opacity: Float) -> U8 {
 
 function dawnStyleForMode(mode: borrow WindowMode) -> U32 {
     match mode {
-        Windowed -> return dawnWindowedStyle() + dawnVisibleStyle();
-        WindowedBorderless -> return dawnBorderlessStyle() + dawnVisibleStyle();
-        Fullscreen -> return dawnBorderlessStyle() + dawnVisibleStyle();
+        Windowed -> return dawnWindowedStyle() + dawnVisibleStyle()
+        WindowedBorderless -> return dawnBorderlessStyle() + dawnVisibleStyle()
+        Fullscreen -> return dawnBorderlessStyle() + dawnVisibleStyle()
     }
 }
 
@@ -578,7 +578,7 @@ function dawnReadWindowMode(window: RawPtr) -> WindowMode {
     }
     // GWL_STYLE. A decorated window carries `WS_CAPTION`, which is what
     // separates the windowed mode from the two undecorated ones.
-    let style = windowLong(window, I32(0 - 16))
+    let style: Int = windowLong(window, I32(0 - 16))
     if (style & 12582912) != 0 {
         return .Windowed
     }
@@ -617,7 +617,8 @@ function dawnResizeWindow(window: RawPtr, width: Int, height: Int) {
     let frame = allocateWindowRect(U64(16))
     writeWord(frame, U64(8), U32(outerWidth))
     writeWord(frame, U64(12), U32(outerHeight))
-    if adjustWindowRect(frame, U32(windowLong(window, I32(0 - 16))), 0) != 0 {
+    let currentStyle: Int = windowLong(window, I32(0 - 16))
+    if adjustWindowRect(frame, U32(currentStyle), 0) != 0 {
         outerWidth = Int(frame.right) - Int(frame.left)
         outerHeight = Int(frame.bottom) - Int(frame.top)
     }
@@ -673,12 +674,12 @@ function dawnApplyWindowMode(window: RawPtr, mode: borrow WindowMode, width: Int
 @Native
 function dawnModifierState() -> ModifierState {
     return ModifierState {
-        shift: keyState(I32(16)) < I16(0)
-        control: keyState(I32(17)) < I16(0)
-        alt: keyState(I32(18)) < I16(0)
-        superKey: keyState(I32(91)) < I16(0) || keyState(I32(92)) < I16(0)
-        leftPointerButton: keyState(I32(1)) < I16(0)
-        rightPointerButton: keyState(I32(2)) < I16(0)
+        shift: keyState(I32(16)) < I16(0),
+        control: keyState(I32(17)) < I16(0),
+        alt: keyState(I32(18)) < I16(0),
+        superKey: keyState(I32(91)) < I16(0) || keyState(I32(92)) < I16(0),
+        leftPointerButton: keyState(I32(1)) < I16(0),
+        rightPointerButton: keyState(I32(2)) < I16(0),
         middlePointerButton: keyState(I32(4)) < I16(0)
     }
 }

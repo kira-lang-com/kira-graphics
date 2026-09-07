@@ -27,10 +27,10 @@ construct DawnWindowWin32() extends DawnWindow {
     function createSurface(instance: RawPtr, window: RawPtr) -> RawPtr {
         return wgpuInstanceCreateSurface(instance, WGPUSurfaceDescriptor {
             nextInChain: WGPUSurfaceSourceWindowsHWND {
-                chain: WGPUChainedStruct { sType: dawnStructureWindowsHwnd() }
-                hinstance: moduleHandle("")
+                chain: WGPUChainedStruct { sType: dawnStructureWindowsHwnd() },
+                hinstance: moduleHandle(""),
                 hwnd: window
-            }
+            },
             label: dawnText("kira-graphics-surface")
         })
     }

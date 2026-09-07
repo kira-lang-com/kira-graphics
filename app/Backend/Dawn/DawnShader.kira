@@ -34,8 +34,8 @@ struct DawnShaderRecord {
 @Native
 function dawnEmptyShaderRecord() -> DawnShaderRecord {
     return DawnShaderRecord {
-        vertexModule: nullPointer()
-        fragmentModule: nullPointer()
+        vertexModule: nullPointer(),
+        fragmentModule: nullPointer(),
         computeModule: nullPointer()
     }
 }
@@ -53,9 +53,9 @@ function dawnCompileWgsl(state: borrow GraphicsAppRuntimeState, label: borrow St
         nextInChain: WGPUShaderSourceWGSL {
             chain: WGPUChainedStruct {
                 sType: dawnStructureWgsl()
-            }
+            },
             code: dawnText(source)
-        }
+        },
         label: dawnText(label)
     })
 }
@@ -104,14 +104,14 @@ function dawnCreateGraphicsShader(context: RawPtr, label: borrow String, vertexW
         return .Error(.ShaderRejected)
     }
     return .Ok(dawnRecordShader(state, DawnShaderRecord {
-        vertexModule: vertexModule
-        fragmentModule: fragmentModule
-        computeModule: nullPointer()
-        vertexEntry: vertexEntry
-        fragmentEntry: fragmentEntry
-        computeEntry: ""
-        live: true
-        bindings: dawnUsedBindings(reflection)
+        vertexModule: vertexModule,
+        fragmentModule: fragmentModule,
+        computeModule: nullPointer(),
+        vertexEntry: vertexEntry,
+        fragmentEntry: fragmentEntry,
+        computeEntry: "",
+        live: true,
+        bindings: dawnUsedBindings(reflection),
         hasReflection: reflection.count > 0
     }))
 }
@@ -128,12 +128,12 @@ function dawnCreateComputeShader(context: RawPtr, label: borrow String, computeW
         return .Error(.ShaderRejected)
     }
     return .Ok(dawnRecordShader(state, DawnShaderRecord {
-        vertexModule: nullPointer()
-        fragmentModule: nullPointer()
-        computeModule: module
-        vertexEntry: ""
-        fragmentEntry: ""
-        computeEntry: computeEntry
+        vertexModule: nullPointer(),
+        fragmentModule: nullPointer(),
+        computeModule: module,
+        vertexEntry: "",
+        fragmentEntry: "",
+        computeEntry: computeEntry,
         live: true
     }))
 }

@@ -24,7 +24,7 @@ class Uniform {
 @Native
 function emptyUniform() -> Uniform {
     return Uniform {
-        storage: nativeUserData(nativeState(UniformState {}))
+        storage: nativeUserData(nativeState(UniformState {})),
         id: 0
     }
 }
@@ -47,10 +47,10 @@ function sokolCreateUniform(descriptor: borrow UniformDescriptor) -> Uniform {
     // live uniform answers the same "not empty" sentinel `uniformResult` reads.
     return Uniform {
         storage: nativeUserData(nativeState(UniformState {
-            label: descriptor.label
-            expectedFloatCount: descriptor.expectedFloatCount
+            label: descriptor.label,
+            expectedFloatCount: descriptor.expectedFloatCount,
             values: descriptor.data
-        }))
+        })),
         id: 1
     }
 }
