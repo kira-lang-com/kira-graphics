@@ -355,6 +355,37 @@ construct DawnRenderBackend(context: RawPtr) extends RenderBackend {
         return
     }
 
+    // --- pointer and keyboard --------------------------------------------
+    // Hiding the cursor is `wl_pointer.set_cursor(NULL)` and locking it is the
+    // `zwp_pointer_constraints` protocol; this backend binds the cursor-shape
+    // protocol (see `DawnWaylandInput.kira`) but neither of those, so the
+    // honest answer is that the cursor stays shown and unlocked. Wiring either
+    // protocol is what these grow into, and until then they report the truth
+    // rather than a silent success.
+    function showMouse(show: Bool) -> Void {
+        let _ = show
+        return
+    }
+    function mouseShown() -> Bool {
+        return true
+    }
+    function lockMouse(lock: Bool) -> Void {
+        let _ = lock
+        return
+    }
+    function mouseLocked() -> Bool {
+        return false
+    }
+    // No soft keyboard on a desktop or a browser window: none is summoned, so
+    // this answers rather than pretends.
+    function showKeyboard(show: Bool) -> Void {
+        let _ = show
+        return
+    }
+    function keyboardShown() -> Bool {
+        return false
+    }
+
     // --- the run loop ----------------------------------------------------
     function runApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Void {
         dawnRunApplication(app, runtimeUserData)

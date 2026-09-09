@@ -16,7 +16,7 @@ class RenderFrame {
     var passSubmitted: Bool = false
     var shouldQuit: Bool = false
     var userData: RawPtr
-    var backend: RenderBackendKind = .Sokol
+    var backend: RenderBackendKind = .Dawn
     var backendContext: RawPtr
 
     // The backend this frame belongs to, as a value that answers rather than as

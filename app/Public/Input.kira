@@ -207,50 +207,6 @@ function graphicsEventUsesPointerPosition(kind: borrow AppEventKind) -> Bool {
 }
 
 
-function graphicsRawKindIsTouch(rawKind: Int) -> Bool {
-    return rawKind >= 10 && rawKind <= 13
-}
-
-@Native
-function graphicsEventFromSapp(eventPtr: borrow sapp_event_ptr) -> AppEvent {
-    let rawKind = eventPtr.type_value
-    let touchCount = eventPtr.num_touches
-    // Touch events carry their position in touches[0] rather than the mouse
-    // fields. Routing the primary touch into pointerX/Y lets the shared
-    // pointer hit-testing path drive hover/press/drag from touch input too.
-    let isTouch = graphicsRawKindIsTouch(rawKind) && touchCount > 0
-    // Sokol reports pointer positions and deltas in FRAMEBUFFER PIXELS (mouse
-    // coords are multiplied by the DPI scale). UI layout, hit regions, and the
-    // window size (sapp_event.window_width) are all in logical POINTS, so divide
-    // the raw pixel coordinates by the backing scale to keep pointer space and
-    // layout space in the same units — otherwise hit-testing misses by the DPI
-    // factor on Retina. dpi_scale is 1.0 off Retina, so this is a no-op there.
-    let dpiScale = sokolDpiScale()
-    let primaryTouch = eventPtr.touches[0]
-    let pointerX = (isTouch ? primaryTouch.pos_x : eventPtr.mouse_x) / dpiScale
-    let pointerY = (isTouch ? primaryTouch.pos_y : eventPtr.mouse_y) / dpiScale
-    return AppEvent {
-        kind: graphicsEventKindFromRaw(rawKind),
-        frameCount: eventPtr.frame_count,
-        keyCode: eventPtr.key_code,
-        textCodepoint: eventPtr.char_code,
-        keyRepeat: eventPtr.key_repeat,
-        modifiers: graphicsModifierStateFromRaw(eventPtr.modifiers),
-        pointerButton: graphicsPointerButtonFromRaw(eventPtr.mouse_button),
-        pointerX: pointerX,
-        pointerY: pointerY,
-        pointerDeltaX: eventPtr.mouse_dx / dpiScale,
-        pointerDeltaY: eventPtr.mouse_dy / dpiScale,
-        scrollX: eventPtr.scroll_x,
-        scrollY: eventPtr.scroll_y,
-        touchCount: touchCount,
-        windowWidth: eventPtr.window_width,
-        windowHeight: eventPtr.window_height,
-        framebufferWidth: eventPtr.framebuffer_width,
-        framebufferHeight: eventPtr.framebuffer_height
-    }
-}
-
 @Native
 function graphicsStringFromCodepoint(codepoint: Int) -> String {
     return scalarText(codepoint)
@@ -271,27 +227,34 @@ function graphicsStringConcat(a: borrow String, b: borrow String) -> String {
     return a + b
 }
 
+// The cursor and the soft keyboard, routed to the backend that owns the
+// window. These were sokol's `sapp_*` when sokol owned input, with a Metal
+// supplement bolted beside them; the backend answers for its own window now,
+// so there is one path rather than two half-paths gated on the platform.
+//
+// The backend is built with a null context because what these reach — the
+// cursor, the pointer lock — is the window server's and not a per-run object.
+// `graphicsDefaultBackend` is what a run without an explicit choice selects,
+// which is the same backend its window was opened by.
+@Native
+function graphicsInputBackend() -> Any RenderBackend {
+    return renderBackendFor(graphicsDefaultBackend(), nullPointer())
+}
+
 @Native
 function graphicsShowKeyboard(show: Bool) {
-    sapp_show_keyboard(show)
+    graphicsInputBackend().showKeyboard(show)
     return
 }
 
 @Native
 function graphicsKeyboardShown() -> Bool {
-    return sapp_keyboard_shown()
+    return graphicsInputBackend().keyboardShown()
 }
 
 @Native
 function graphicsShowMouse(show: Bool) {
-    sapp_show_mouse(show)
-    // The native Metal window path doesn't run through Sokol, so drive NSCursor too.
-    // Apple-only: the ObjC runtime does not exist elsewhere (on wasm the objc
-    // externs are abort-stubs), so gate on the actual host platform.
-    let platform = hostPlatform()
-    if platform == .MacOS || platform == .IOS {
-        metalSetCursorHidden(show == false)
-    }
+    graphicsInputBackend().showMouse(show)
     return
 }
 
@@ -303,22 +266,16 @@ function graphicsShowMouse(show: Bool) {
 // jam at the screen edge — and paired the same way: one lock per one unlock.
 @Native
 function graphicsLockMouse(lock: Bool) {
-    sapp_lock_mouse(lock)
-    // The native Metal window path doesn't run through Sokol, so drive
-    // CoreGraphics too. Apple-only, on the same terms as `graphicsShowMouse`.
-    let platform = hostPlatform()
-    if platform == .MacOS || platform == .IOS {
-        metalSetMouseLocked(lock)
-    }
+    graphicsInputBackend().lockMouse(lock)
     return
 }
 
 @Native
 function graphicsMouseLocked() -> Bool {
-    return sapp_mouse_locked()
+    return graphicsInputBackend().mouseLocked()
 }
 
 @Native
 function graphicsMouseShown() -> Bool {
-    return sapp_mouse_shown()
+    return graphicsInputBackend().mouseShown()
 }

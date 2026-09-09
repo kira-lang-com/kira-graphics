@@ -3,7 +3,7 @@ import Foundation
 // nothing else.
 //
 // Every method here forwards to `RenderBackend`, the construct family whose two
-// declarations — `MetalRenderBackend` and `SokolRenderBackend` — do the work.
+// declarations — `MetalRenderBackend` and `DawnRenderBackend` — do the work.
 // This class used to hold 34 hand-written `match self.backend` blocks; the
 // dispatch is `renderBackendFor` now, in one place, and adding a backend is a
 // declaration rather than an edit at every method.
@@ -12,10 +12,10 @@ import Foundation
 // decoding an image is not a backend's work.
 class Graphics {
     var userData: RawPtr
-    var backend: RenderBackendKind = .Sokol
-    // The backend's own per-run context: Metal's context object, and on sokol
-    // the `GraphicsAppRuntimeState` the run loop keeps its frame counters on.
-    // It was called `metalContext` and it was null on every backend but Metal,
+    var backend: RenderBackendKind = .Dawn
+    // The backend's own per-run context: Metal's context object, and Dawn's
+    // `GraphicsAppRuntimeState` the run loop keeps its frame counters on. It
+    // was called `metalContext` and it was null on every backend but Metal,
     // which is why callers started reading `!pointerIsNull(...)` as "am I
     // Metal" — a question about identity wearing the name of a resource.
     var backendContext: RawPtr

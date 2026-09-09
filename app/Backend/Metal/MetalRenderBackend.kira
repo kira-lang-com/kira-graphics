@@ -325,6 +325,38 @@ construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
     function minimizeWindow() -> Void { return }
     function toggleMaximizeWindow() -> Void { return }
 
+    // --- pointer and keyboard --------------------------------------------
+    // The cursor and the pointer lock are the window server's, reached through
+    // the global key window rather than this context, so a null-context backend
+    // built only to answer these still works.
+    function showMouse(show: Bool) -> Void {
+        metalSetCursorHidden(show == false)
+        return
+    }
+    function mouseShown() -> Bool {
+        return metalCursorIsVisible()
+    }
+    function lockMouse(lock: Bool) -> Void {
+        metalSetMouseLocked(lock)
+        return
+    }
+    // Locking disassociates the hardware mouse and hides the cursor, so cursor
+    // visibility doubles as the lock state without a flag of this backend's own
+    // to keep in step with the OS — see `metalCursorIsVisible`.
+    function mouseLocked() -> Bool {
+        return metalCursorIsVisible() == false
+    }
+    // No soft keyboard on macOS: a hardware keyboard is always present and
+    // nothing is summoned. The touch platform that summoned one was sokol's, and
+    // it left with that backend, so this answers rather than pretends.
+    function showKeyboard(show: Bool) -> Void {
+        let _ = show
+        return
+    }
+    function keyboardShown() -> Bool {
+        return false
+    }
+
     // --- the run loop ----------------------------------------------------
     function runApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Void {
         metalRunApplication(app, runtimeUserData)
