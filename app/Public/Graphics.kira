@@ -287,12 +287,6 @@ class Graphics {
     }
 
     @Native
-    function runLifetimeStress(iterations: Int, shaderDirectory: borrow String, shaderAsset: borrow String) -> Bool {
-        let nativeIterations: Int = iterations
-        return kgRunLifetimeStress(nativeIterations, shaderDirectory, shaderAsset) != 0
-    }
-
-    @Native
     function frame() -> RenderFrame {
         return RenderFrame {
             attachments: PassAttachments {

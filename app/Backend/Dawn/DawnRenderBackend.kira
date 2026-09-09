@@ -344,7 +344,7 @@ construct DawnRenderBackend(context: RawPtr) extends RenderBackend {
     // context and the second the Sokol runtime, and an encoder takes the draw
     // path of whichever one it was given.
     function makeEncoder(passActive: Bool) -> RenderEncoder {
-        return makeRenderEncoderForBackend(passActive, nullPointer(), nullPointer(), context)
+        return makeRenderEncoderForBackend(passActive, nullPointer(), context)
     }
 
     // The pass already submitted what it encoded, and the run loop presents. A

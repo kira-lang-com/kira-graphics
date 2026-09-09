@@ -34,6 +34,25 @@ Package KiraGraphics {
             ]
         },
         NativeLibrary {
+            // The backend-neutral C the library needs and Kira cannot express:
+            // a monotonic clock, and the weak live-reload hooks. This was
+            // sokol's job only because sokol was the one native library here;
+            // it outlived sokol because a frame is timed on every backend.
+            name: "graphics_support",
+            linkMode: LinkMode.Static,
+            headers: Headers { entrypoint: "NativeLibs/Support/kira_graphics_support.h", includeDirs: ["NativeLibs/Support"] },
+            sources: ["NativeLibs/Support/kira_graphics_support.c"],
+            nativeTargets: [
+                NativeTarget { triple: "x86_64-linux-gnu" },
+                NativeTarget { triple: "aarch64-linux-gnu" },
+                NativeTarget { triple: "x86_64-windows-msvc", systemLibs: ["kernel32"] },
+                NativeTarget { triple: "aarch64-macos-none" },
+                NativeTarget { triple: "x86_64-macos-none" },
+                NativeTarget { triple: "aarch64-ios-none" },
+                NativeTarget { triple: "wasm32-emscripten-unknown" }
+            ]
+        },
+        NativeLibrary {
             // The xdg-shell and decoration protocols, as `wayland-scanner`
             // emits them from the canonical XML.
             //
@@ -42,8 +61,13 @@ Package KiraGraphics {
             // protocol's generated inline functions; autobind owns the Kira
             // declarations, including listener callback layouts.
             //
-            // Optional: no other target has a row here, and on one this links
-            // nothing rather than failing the build.
+            // Optional, so a target with no row links nothing and the Kira
+            // declarations trap by name instead of leaving wl_* undefined at link,
+            // the same mechanism kira_metal uses off Apple. The windowed Wayland
+            // path is x86_64-linux's; aarch64-linux has no row because the arm64
+            // Linux consumer this serves is a compositor rather than a Wayland
+            // client and carries no libwayland-client. An arm64 desktop that wants
+            // the window adds the row back or dlopens the client.
             name: "waylandprotocols",
             linkMode: LinkMode.Static,
             availability: Availability.Optional,
@@ -58,8 +82,7 @@ Package KiraGraphics {
             ],
             autobind: Autobind { module: "wayland", headers: ["NativeLibs/Wayland/kira_wayland.h"], mode: AutobindMode.AllPublic },
             nativeTargets: [
-                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["wayland-client"] },
-                NativeTarget { triple: "aarch64-linux-gnu", systemLibs: ["wayland-client"] }
+                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["wayland-client"] }
             ],
         },
         NativeLibrary {

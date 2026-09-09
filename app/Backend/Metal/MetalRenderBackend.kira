@@ -302,7 +302,7 @@ construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
     // loop's state and the third is Dawn's, and handing the context through
     // either would route every Metal draw into that backend's path.
     function makeEncoder(passActive: Bool) -> RenderEncoder {
-        return makeRenderEncoderForBackend(passActive, context, nullPointer(), nullPointer())
+        return makeRenderEncoderForBackend(passActive, context, nullPointer())
     }
 
     function submitFrame(frame: borrow RenderFrame) -> Void {

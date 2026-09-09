@@ -1,24 +1,8 @@
-// Small host-window accessors for embedders that need to attach a native child
-// control to the Sokol window without depending on KiraGraphics' private
-// generated bindings.
-function kiraGraphicsWin32WindowHandle() -> RawPtr {
-    return sapp_win32_get_hwnd()
-}
-
-function kiraGraphicsViewportWidth() -> I32 {
-    return sapp_width()
-}
-
-function kiraGraphicsViewportHeight() -> I32 {
-    return sapp_height()
-}
-
 // Backend-neutral host accessors for embedders that attach a native child
-// control to the graphics window. The legacy accessors above are intentionally
-// Sokol-only; Dawn owns a separate Win32 window and must never call sapp_*.
+// control to the graphics window. Window size comes off the frame's drawable
+// rather than a backend's own call, so there is one path for every backend.
 function kiraGraphicsHostWindowHandle(frame: borrow RenderFrame) -> RawPtr {
     match frame.backend {
-        Sokol -> return sapp_win32_get_hwnd()
         Dawn -> {
             if pointerIsNull(frame.backendContext) {
                 return nullPointer()

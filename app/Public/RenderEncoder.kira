@@ -6,17 +6,11 @@ struct RenderEncoderState {
     // A non-null backendContext selects the Metal backend for draw encoding. (An
     // enum field here proved unreliable to read back from nativeState storage; a
     // pointer presence check is robust.) It is the Metal context and nothing
-    // else, which is why the sokol run loop's state has a field of its own
-    // below rather than sharing this one.
+    // else.
     var backendContext: RawPtr
-    // The `GraphicsAppRuntimeState` behind a sokol frame, so a draw can be
-    // counted where it is issued. Null on Metal, and null for an encoder built
-    // outside a run loop.
-    var sokolRuntime: RawPtr
-    // The same blob behind a Dawn frame, which is where the open pass encoder
-    // lives. Non-null selects the WebGPU draw path, on the same terms the two
-    // pointers above select theirs: three backends, three slots, and exactly one
-    // of them filled.
+    // The `GraphicsAppRuntimeState` behind a Dawn frame, which is where the open
+    // pass encoder lives. Non-null selects the WebGPU draw path; a Metal encoder
+    // fills `backendContext` instead, and exactly one of the two is filled.
     var dawnRuntime: RawPtr
 
     var vertexBufferId: U32 = 0
@@ -121,22 +115,6 @@ class RenderEncoder {
                 metalEncoderDraw(state.backendContext, state.pipeline.id, state.vertexBufferId, state.hasVertexBuffer, state.vertexCount, state.instanceCount)
                 return
             }
-            sokolNoteDraw(state.sokolRuntime, state.indexCount > 0 ? state.indexCount * state.instanceCount : state.vertexCount * state.instanceCount)
-            sokolDrawWithBindings(
-                state.sokolRuntime,
-                state.hasScissor, state.scissorX, state.scissorY, state.scissorWidth, state.scissorHeight,
-                state.pipeline,
-                state.vertexBufferId, state.hasVertexBuffer,
-                state.indexBufferId, state.hasIndexBuffer,
-                state.bindGroup0, state.hasBindGroup0,
-                state.bindGroup1, state.hasBindGroup1,
-                state.bindGroup2, state.hasBindGroup2,
-                state.bindGroup3, state.hasBindGroup3,
-                0,
-                state.vertexCount,
-                state.indexCount,
-                state.instanceCount
-            )
         }
         return
     }
@@ -159,22 +137,6 @@ class RenderEncoder {
                 metalEncoderDrawIndexed(state.backendContext, state.pipeline.id, state.vertexBufferId, state.hasVertexBuffer, state.indexBufferId, state.indexCount, state.instanceCount)
                 return
             }
-            sokolNoteDraw(state.sokolRuntime, state.indexCount > 0 ? state.indexCount * state.instanceCount : state.vertexCount * state.instanceCount)
-            sokolDrawWithBindings(
-                state.sokolRuntime,
-                state.hasScissor, state.scissorX, state.scissorY, state.scissorWidth, state.scissorHeight,
-                state.pipeline,
-                state.vertexBufferId, state.hasVertexBuffer,
-                state.indexBufferId, state.hasIndexBuffer,
-                state.bindGroup0, state.hasBindGroup0,
-                state.bindGroup1, state.hasBindGroup1,
-                state.bindGroup2, state.hasBindGroup2,
-                state.bindGroup3, state.hasBindGroup3,
-                0,
-                state.vertexCount,
-                state.indexCount,
-                state.instanceCount
-            )
         }
         return
     }
@@ -216,22 +178,6 @@ class RenderEncoder {
                 metalEncoderDrawIndexedRange(state.backendContext, state.pipeline.id, state.vertexBufferId, state.hasVertexBuffer, state.indexBufferId, state.indexCount, state.instanceCount, firstIndex)
                 return
             }
-            sokolNoteDraw(state.sokolRuntime, state.indexCount > 0 ? state.indexCount * state.instanceCount : state.vertexCount * state.instanceCount)
-            sokolDrawWithBindings(
-                state.sokolRuntime,
-                state.hasScissor, state.scissorX, state.scissorY, state.scissorWidth, state.scissorHeight,
-                state.pipeline,
-                state.vertexBufferId, state.hasVertexBuffer,
-                state.indexBufferId, state.hasIndexBuffer,
-                state.bindGroup0, state.hasBindGroup0,
-                state.bindGroup1, state.hasBindGroup1,
-                state.bindGroup2, state.hasBindGroup2,
-                state.bindGroup3, state.hasBindGroup3,
-                firstIndex,
-                state.vertexCount,
-                state.indexCount,
-                state.instanceCount
-            )
         }
         return
     }
@@ -274,22 +220,6 @@ class RenderEncoder {
                 metalEncoderDraw(state.backendContext, state.pipeline.id, state.vertexBufferId, state.hasVertexBuffer, state.vertexCount, state.instanceCount)
                 return
             }
-            sokolNoteDraw(state.sokolRuntime, state.indexCount > 0 ? state.indexCount * state.instanceCount : state.vertexCount * state.instanceCount)
-            sokolDrawWithBindings(
-                state.sokolRuntime,
-                state.hasScissor, state.scissorX, state.scissorY, state.scissorWidth, state.scissorHeight,
-                state.pipeline,
-                state.vertexBufferId, state.hasVertexBuffer,
-                state.indexBufferId, state.hasIndexBuffer,
-                state.bindGroup0, state.hasBindGroup0,
-                state.bindGroup1, state.hasBindGroup1,
-                state.bindGroup2, state.hasBindGroup2,
-                state.bindGroup3, state.hasBindGroup3,
-                0,
-                state.vertexCount,
-                state.indexCount,
-                state.instanceCount
-            )
         }
         return
     }
@@ -300,22 +230,6 @@ class RenderEncoder {
         state.vertexCount = 0
         state.instanceCount = instanceCount
         if (state.passActive && state.hasPipeline && state.pipeline.id != 0) {
-            sokolNoteDraw(state.sokolRuntime, state.indexCount > 0 ? state.indexCount * state.instanceCount : state.vertexCount * state.instanceCount)
-            sokolDrawWithBindings(
-                state.sokolRuntime,
-                state.hasScissor, state.scissorX, state.scissorY, state.scissorWidth, state.scissorHeight,
-                state.pipeline,
-                state.vertexBufferId, state.hasVertexBuffer,
-                state.indexBufferId, state.hasIndexBuffer,
-                state.bindGroup0, state.hasBindGroup0,
-                state.bindGroup1, state.hasBindGroup1,
-                state.bindGroup2, state.hasBindGroup2,
-                state.bindGroup3, state.hasBindGroup3,
-                0,
-                state.vertexCount,
-                state.indexCount,
-                state.instanceCount
-            )
         }
         return
     }
@@ -348,10 +262,10 @@ function dawnEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
 
 @Native
 function makeRenderEncoder() -> RenderEncoder {
-    return makeRenderEncoderForBackend(false, nullPointer(), nullPointer(), nullPointer())
+    return makeRenderEncoderForBackend(false, nullPointer(), nullPointer())
 }
 
-function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, sokolRuntime: RawPtr, dawnRuntime: RawPtr) -> RenderEncoder {
+function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, dawnRuntime: RawPtr) -> RenderEncoder {
     // The empty slots carry no state box: every read of a slot is gated on its
     // `has` flag, so a group that was never set needs no storage — and giving
     // it some, as this once did, allocated four boxes per encoder that nothing
@@ -362,7 +276,6 @@ function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, s
         passActive: passActive,
         hasScissor: false,
         backendContext: backendContext,
-        sokolRuntime: sokolRuntime,
         dawnRuntime: dawnRuntime,
         vertexBufferId: 0,
         hasVertexBuffer: false,
