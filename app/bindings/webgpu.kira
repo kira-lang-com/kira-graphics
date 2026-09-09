@@ -2810,6 +2810,1390 @@ function wgpuTextureViewRelease(textureView: WGPUTextureViewImpl_ptr) -> Void
 @FFI.Extern { library: dawn, symbol: wgpuTextureViewSetLabel, abi: c }
 function wgpuTextureViewSetLabel(textureView: WGPUTextureViewImpl_ptr, label: WGPUStringView) -> Void
 
+let WGPUAdapterType_CPU: Int = 3
+
+let WGPUAdapterType_DiscreteGPU: Int = 1
+
+let WGPUAdapterType_Force32: Int = 2147483647
+
+let WGPUAdapterType_IntegratedGPU: Int = 2
+
+let WGPUAdapterType_Unknown: Int = 4
+
+let WGPUAddressMode_ClampToEdge: Int = 1
+
+let WGPUAddressMode_Force32: Int = 2147483647
+
+let WGPUAddressMode_MirrorRepeat: Int = 3
+
+let WGPUAddressMode_Repeat: Int = 2
+
+let WGPUAddressMode_Undefined: Int = 0
+
+let WGPUAlphaMode_Force32: Int = 2147483647
+
+let WGPUAlphaMode_Opaque: Int = 1
+
+let WGPUAlphaMode_Premultiplied: Int = 2
+
+let WGPUAlphaMode_Unpremultiplied: Int = 3
+
+let WGPUBackendType_D3D11: Int = 3
+
+let WGPUBackendType_D3D12: Int = 4
+
+let WGPUBackendType_Force32: Int = 2147483647
+
+let WGPUBackendType_Metal: Int = 5
+
+let WGPUBackendType_Null: Int = 1
+
+let WGPUBackendType_OpenGL: Int = 7
+
+let WGPUBackendType_OpenGLES: Int = 8
+
+let WGPUBackendType_Undefined: Int = 0
+
+let WGPUBackendType_Vulkan: Int = 6
+
+let WGPUBackendType_WebGPU: Int = 2
+
+let WGPUBlendFactor_Constant: Int = 12
+
+let WGPUBlendFactor_Dst: Int = 7
+
+let WGPUBlendFactor_DstAlpha: Int = 9
+
+let WGPUBlendFactor_Force32: Int = 2147483647
+
+let WGPUBlendFactor_One: Int = 2
+
+let WGPUBlendFactor_OneMinusConstant: Int = 13
+
+let WGPUBlendFactor_OneMinusDst: Int = 8
+
+let WGPUBlendFactor_OneMinusDstAlpha: Int = 10
+
+let WGPUBlendFactor_OneMinusSrc: Int = 4
+
+let WGPUBlendFactor_OneMinusSrc1: Int = 15
+
+let WGPUBlendFactor_OneMinusSrc1Alpha: Int = 17
+
+let WGPUBlendFactor_OneMinusSrcAlpha: Int = 6
+
+let WGPUBlendFactor_Src: Int = 3
+
+let WGPUBlendFactor_Src1: Int = 14
+
+let WGPUBlendFactor_Src1Alpha: Int = 16
+
+let WGPUBlendFactor_SrcAlpha: Int = 5
+
+let WGPUBlendFactor_SrcAlphaSaturated: Int = 11
+
+let WGPUBlendFactor_Undefined: Int = 0
+
+let WGPUBlendFactor_Zero: Int = 1
+
+let WGPUBlendOperation_Add: Int = 1
+
+let WGPUBlendOperation_Force32: Int = 2147483647
+
+let WGPUBlendOperation_Max: Int = 5
+
+let WGPUBlendOperation_Min: Int = 4
+
+let WGPUBlendOperation_ReverseSubtract: Int = 3
+
+let WGPUBlendOperation_Subtract: Int = 2
+
+let WGPUBlendOperation_Undefined: Int = 0
+
+let WGPUBufferBindingType_BindingNotUsed: Int = 0
+
+let WGPUBufferBindingType_Force32: Int = 2147483647
+
+let WGPUBufferBindingType_ReadOnlyStorage: Int = 4
+
+let WGPUBufferBindingType_Storage: Int = 3
+
+let WGPUBufferBindingType_Undefined: Int = 1
+
+let WGPUBufferBindingType_Uniform: Int = 2
+
+let WGPUBufferMapState_Force32: Int = 2147483647
+
+let WGPUBufferMapState_Mapped: Int = 3
+
+let WGPUBufferMapState_Pending: Int = 2
+
+let WGPUBufferMapState_Unmapped: Int = 1
+
+let WGPUCallbackMode_AllowProcessEvents: Int = 2
+
+let WGPUCallbackMode_AllowSpontaneous: Int = 3
+
+let WGPUCallbackMode_Force32: Int = 2147483647
+
+let WGPUCallbackMode_WaitAnyOnly: Int = 1
+
+let WGPUColorSpacePrimariesDawn_DisplayP3: Int = 4
+
+let WGPUColorSpacePrimariesDawn_Force32: Int = 2147483647
+
+let WGPUColorSpacePrimariesDawn_Rec2020: Int = 3
+
+let WGPUColorSpacePrimariesDawn_Rec601: Int = 2
+
+let WGPUColorSpacePrimariesDawn_Rec709: Int = 1
+
+let WGPUColorSpacePrimariesDawn_SRGB: Int = 1
+
+let WGPUColorSpaceTransferDawn_BT_1886: Int = 7
+
+let WGPUColorSpaceTransferDawn_DisplayP3: Int = 3
+
+let WGPUColorSpaceTransferDawn_Force32: Int = 2147483647
+
+let WGPUColorSpaceTransferDawn_HLG: Int = 5
+
+let WGPUColorSpaceTransferDawn_Identity: Int = 1
+
+let WGPUColorSpaceTransferDawn_PQ: Int = 6
+
+let WGPUColorSpaceTransferDawn_SMPTE_170M: Int = 4
+
+let WGPUColorSpaceTransferDawn_SRGB: Int = 2
+
+let WGPUColorSpaceYCbCrMatrixDawn_Force32: Int = 2147483647
+
+let WGPUColorSpaceYCbCrMatrixDawn_Identity: Int = 1
+
+let WGPUColorSpaceYCbCrMatrixDawn_Rec2020: Int = 4
+
+let WGPUColorSpaceYCbCrMatrixDawn_Rec601: Int = 2
+
+let WGPUColorSpaceYCbCrMatrixDawn_Rec709: Int = 3
+
+let WGPUColorSpaceYCbCrRangeDawn_Force32: Int = 2147483647
+
+let WGPUColorSpaceYCbCrRangeDawn_Full: Int = 3
+
+let WGPUColorSpaceYCbCrRangeDawn_Identity: Int = 1
+
+let WGPUColorSpaceYCbCrRangeDawn_Narrow: Int = 2
+
+let WGPUCompareFunction_Always: Int = 8
+
+let WGPUCompareFunction_Equal: Int = 3
+
+let WGPUCompareFunction_Force32: Int = 2147483647
+
+let WGPUCompareFunction_Greater: Int = 5
+
+let WGPUCompareFunction_GreaterEqual: Int = 7
+
+let WGPUCompareFunction_Less: Int = 2
+
+let WGPUCompareFunction_LessEqual: Int = 4
+
+let WGPUCompareFunction_Never: Int = 1
+
+let WGPUCompareFunction_NotEqual: Int = 6
+
+let WGPUCompareFunction_Undefined: Int = 0
+
+let WGPUCompilationInfoRequestStatus_CallbackCancelled: Int = 2
+
+let WGPUCompilationInfoRequestStatus_Force32: Int = 2147483647
+
+let WGPUCompilationInfoRequestStatus_Success: Int = 1
+
+let WGPUCompilationMessageType_Error: Int = 1
+
+let WGPUCompilationMessageType_Force32: Int = 2147483647
+
+let WGPUCompilationMessageType_Info: Int = 3
+
+let WGPUCompilationMessageType_Warning: Int = 2
+
+let WGPUComponentSwizzle_A: Int = 6
+
+let WGPUComponentSwizzle_B: Int = 5
+
+let WGPUComponentSwizzle_Force32: Int = 2147483647
+
+let WGPUComponentSwizzle_G: Int = 4
+
+let WGPUComponentSwizzle_One: Int = 2
+
+let WGPUComponentSwizzle_R: Int = 3
+
+let WGPUComponentSwizzle_Undefined: Int = 0
+
+let WGPUComponentSwizzle_Zero: Int = 1
+
+let WGPUCompositeAlphaMode_Auto: Int = 0
+
+let WGPUCompositeAlphaMode_Force32: Int = 2147483647
+
+let WGPUCompositeAlphaMode_Inherit: Int = 4
+
+let WGPUCompositeAlphaMode_Opaque: Int = 1
+
+let WGPUCompositeAlphaMode_Premultiplied: Int = 2
+
+let WGPUCompositeAlphaMode_Unpremultiplied: Int = 3
+
+let WGPUCreatePipelineAsyncStatus_CallbackCancelled: Int = 2
+
+let WGPUCreatePipelineAsyncStatus_Force32: Int = 2147483647
+
+let WGPUCreatePipelineAsyncStatus_InternalError: Int = 4
+
+let WGPUCreatePipelineAsyncStatus_Success: Int = 1
+
+let WGPUCreatePipelineAsyncStatus_ValidationError: Int = 3
+
+let WGPUCullMode_Back: Int = 3
+
+let WGPUCullMode_Force32: Int = 2147483647
+
+let WGPUCullMode_Front: Int = 2
+
+let WGPUCullMode_None: Int = 1
+
+let WGPUCullMode_Undefined: Int = 0
+
+let WGPUDeviceLostReason_CallbackCancelled: Int = 3
+
+let WGPUDeviceLostReason_Destroyed: Int = 2
+
+let WGPUDeviceLostReason_FailedCreation: Int = 4
+
+let WGPUDeviceLostReason_Force32: Int = 2147483647
+
+let WGPUDeviceLostReason_Unknown: Int = 1
+
+let WGPUErrorFilter_Force32: Int = 2147483647
+
+let WGPUErrorFilter_Internal: Int = 3
+
+let WGPUErrorFilter_OutOfMemory: Int = 2
+
+let WGPUErrorFilter_Validation: Int = 1
+
+let WGPUErrorType_Force32: Int = 2147483647
+
+let WGPUErrorType_Internal: Int = 4
+
+let WGPUErrorType_NoError: Int = 1
+
+let WGPUErrorType_OutOfMemory: Int = 3
+
+let WGPUErrorType_Unknown: Int = 5
+
+let WGPUErrorType_Validation: Int = 2
+
+let WGPUExternalTextureRotation_Force32: Int = 2147483647
+
+let WGPUExternalTextureRotation_Rotate0Degrees: Int = 1
+
+let WGPUExternalTextureRotation_Rotate180Degrees: Int = 3
+
+let WGPUExternalTextureRotation_Rotate270Degrees: Int = 4
+
+let WGPUExternalTextureRotation_Rotate90Degrees: Int = 2
+
+let WGPUFeatureLevel_Compatibility: Int = 1
+
+let WGPUFeatureLevel_Core: Int = 2
+
+let WGPUFeatureLevel_Force32: Int = 2147483647
+
+let WGPUFeatureLevel_Undefined: Int = 0
+
+let WGPUFeatureName_ANGLETextureSharing: Int = 327689
+
+let WGPUFeatureName_AdapterPropertiesD3D: Int = 327701
+
+let WGPUFeatureName_AdapterPropertiesDrm: Int = 327744
+
+let WGPUFeatureName_AdapterPropertiesMemoryHeaps: Int = 327700
+
+let WGPUFeatureName_AdapterPropertiesVk: Int = 327702
+
+let WGPUFeatureName_AdapterPropertiesWGPU: Int = 327735
+
+let WGPUFeatureName_AtomicVec2uMinMax: Int = 327739
+
+let WGPUFeatureName_BGRA8UnormStorage: Int = 13
+
+let WGPUFeatureName_BufferMapExtendedUsages: Int = 327699
+
+let WGPUFeatureName_ChromiumExperimentalSamplingResourceTable: Int = 327738
+
+let WGPUFeatureName_ChromiumExperimentalSubgroupMatrix: Int = 327732
+
+let WGPUFeatureName_ChromiumExperimentalTimestampQueryInsidePasses: Int = 327683
+
+let WGPUFeatureName_ClipDistances: Int = 16
+
+let WGPUFeatureName_CoreFeaturesAndLimits: Int = 1
+
+let WGPUFeatureName_D3D11MultithreadProtected: Int = 327688
+
+let WGPUFeatureName_DawnAllowUndefinedLoadStoreOp: Int = 327746
+
+let WGPUFeatureName_DawnDeviceAllocatorControl: Int = 327734
+
+let WGPUFeatureName_DawnDrmFormatCapabilities: Int = 327704
+
+let WGPUFeatureName_DawnFormatCapabilities: Int = 327703
+
+let WGPUFeatureName_DawnInternalUsages: Int = 327680
+
+let WGPUFeatureName_DawnLoadResolveTexture: Int = 327727
+
+let WGPUFeatureName_DawnMultiPlanarFormats: Int = 327681
+
+let WGPUFeatureName_DawnNative: Int = 327682
+
+let WGPUFeatureName_DawnPartialLoadResolveTexture: Int = 327728
+
+let WGPUFeatureName_DawnTexelCopyBufferRowAlignment: Int = 327730
+
+let WGPUFeatureName_Depth32FloatStencil8: Int = 3
+
+let WGPUFeatureName_DepthClipControl: Int = 2
+
+let WGPUFeatureName_DualSourceBlending: Int = 17
+
+let WGPUFeatureName_FlexibleTextureViews: Int = 327731
+
+let WGPUFeatureName_Float32Blendable: Int = 15
+
+let WGPUFeatureName_Float32Filterable: Int = 14
+
+let WGPUFeatureName_Force32: Int = 2147483647
+
+let WGPUFeatureName_FramebufferFetch: Int = 327698
+
+let WGPUFeatureName_HostMappedPointer: Int = 327695
+
+let WGPUFeatureName_ImplicitDeviceSynchronization: Int = 327684
+
+let WGPUFeatureName_IndirectFirstInstance: Int = 10
+
+let WGPUFeatureName_MSAARenderToSingleSampled: Int = 327687
+
+let WGPUFeatureName_MultiDrawIndirect: Int = 327729
+
+let WGPUFeatureName_MultiPlanarFormatExtendedUsages: Int = 327693
+
+let WGPUFeatureName_MultiPlanarFormatNv12a: Int = 327697
+
+let WGPUFeatureName_MultiPlanarFormatNv16: Int = 327705
+
+let WGPUFeatureName_MultiPlanarFormatNv24: Int = 327706
+
+let WGPUFeatureName_MultiPlanarFormatP010: Int = 327694
+
+let WGPUFeatureName_MultiPlanarFormatP210: Int = 327707
+
+let WGPUFeatureName_MultiPlanarFormatP410: Int = 327708
+
+let WGPUFeatureName_MultiPlanarRenderTargets: Int = 327696
+
+let WGPUFeatureName_OpaqueYCbCrAndroidForExternalTexture: Int = 327741
+
+let WGPUFeatureName_PixelLocalStorageCoherent: Int = 327690
+
+let WGPUFeatureName_PixelLocalStorageNonCoherent: Int = 327691
+
+let WGPUFeatureName_PrimitiveIndex: Int = 21
+
+let WGPUFeatureName_RG11B10UfloatRenderable: Int = 12
+
+let WGPUFeatureName_RenderPassRenderArea: Int = 327743
+
+let WGPUFeatureName_ShaderF16: Int = 11
+
+let WGPUFeatureName_ShaderModuleCompilationOptions: Int = 327726
+
+let WGPUFeatureName_SharedBufferMemoryD3D12Resource: Int = 327723
+
+let WGPUFeatureName_SharedBufferMemoryFromWindowsHandle: Int = 327736
+
+let WGPUFeatureName_SharedFenceDXGISharedHandle: Int = 327721
+
+let WGPUFeatureName_SharedFenceEGLSync: Int = 327733
+
+let WGPUFeatureName_SharedFenceMTLSharedEvent: Int = 327722
+
+let WGPUFeatureName_SharedFenceSyncFD: Int = 327719
+
+let WGPUFeatureName_SharedFenceVkSemaphoreOpaqueFD: Int = 327718
+
+let WGPUFeatureName_SharedFenceVkSemaphoreZirconHandle: Int = 327720
+
+let WGPUFeatureName_SharedTextureMemoryAHardwareBuffer: Int = 327710
+
+let WGPUFeatureName_SharedTextureMemoryD3D11Texture2D: Int = 327715
+
+let WGPUFeatureName_SharedTextureMemoryD3D12Resource: Int = 327737
+
+let WGPUFeatureName_SharedTextureMemoryDXGISharedHandle: Int = 327714
+
+let WGPUFeatureName_SharedTextureMemoryDmaBuf: Int = 327711
+
+let WGPUFeatureName_SharedTextureMemoryEGLImage: Int = 327717
+
+let WGPUFeatureName_SharedTextureMemoryIOSurface: Int = 327716
+
+let WGPUFeatureName_SharedTextureMemoryOpaqueFD: Int = 327712
+
+let WGPUFeatureName_SharedTextureMemoryVkDedicatedAllocation: Int = 327709
+
+let WGPUFeatureName_SharedTextureMemoryZirconHandle: Int = 327713
+
+let WGPUFeatureName_StaticSamplers: Int = 327724
+
+let WGPUFeatureName_SubgroupSizeControl: Int = 23
+
+let WGPUFeatureName_Subgroups: Int = 18
+
+let WGPUFeatureName_TextureComponentSwizzle: Int = 22
+
+let WGPUFeatureName_TextureCompressionASTC: Int = 7
+
+let WGPUFeatureName_TextureCompressionASTCSliced3D: Int = 8
+
+let WGPUFeatureName_TextureCompressionBC: Int = 4
+
+let WGPUFeatureName_TextureCompressionBCSliced3D: Int = 5
+
+let WGPUFeatureName_TextureCompressionETC2: Int = 6
+
+let WGPUFeatureName_TextureCompressionUnaligned: Int = 327745
+
+let WGPUFeatureName_TextureFormatsTier1: Int = 19
+
+let WGPUFeatureName_TextureFormatsTier2: Int = 20
+
+let WGPUFeatureName_TimestampQuery: Int = 9
+
+let WGPUFeatureName_TransientAttachments: Int = 327686
+
+let WGPUFeatureName_Unorm16Filterable: Int = 327742
+
+let WGPUFeatureName_Unorm16FormatsForExternalTexture: Int = 327740
+
+let WGPUFeatureName_Unorm16TextureFormats: Int = 327692
+
+let WGPUFeatureName_YCbCrVulkanSamplers: Int = 327725
+
+let WGPUFilterMode_Force32: Int = 2147483647
+
+let WGPUFilterMode_Linear: Int = 2
+
+let WGPUFilterMode_Nearest: Int = 1
+
+let WGPUFilterMode_Undefined: Int = 0
+
+let WGPUFrontFace_CCW: Int = 1
+
+let WGPUFrontFace_CW: Int = 2
+
+let WGPUFrontFace_Force32: Int = 2147483647
+
+let WGPUFrontFace_Undefined: Int = 0
+
+let WGPUIndexFormat_Force32: Int = 2147483647
+
+let WGPUIndexFormat_Uint16: Int = 1
+
+let WGPUIndexFormat_Uint32: Int = 2
+
+let WGPUIndexFormat_Undefined: Int = 0
+
+let WGPUInstanceFeatureName_Force32: Int = 2147483647
+
+let WGPUInstanceFeatureName_MultipleDevicesPerAdapter: Int = 3
+
+let WGPUInstanceFeatureName_ShaderSourceSPIRV: Int = 2
+
+let WGPUInstanceFeatureName_TimedWaitAny: Int = 1
+
+let WGPULoadOp_Clear: Int = 2
+
+let WGPULoadOp_ExpandResolveTexture: Int = 327683
+
+let WGPULoadOp_Force32: Int = 2147483647
+
+let WGPULoadOp_Load: Int = 1
+
+let WGPULoadOp_Undefined: Int = 0
+
+let WGPULoggingType_Error: Int = 4
+
+let WGPULoggingType_Force32: Int = 2147483647
+
+let WGPULoggingType_Info: Int = 2
+
+let WGPULoggingType_Verbose: Int = 1
+
+let WGPULoggingType_Warning: Int = 3
+
+let WGPUMapAsyncStatus_Aborted: Int = 4
+
+let WGPUMapAsyncStatus_CallbackCancelled: Int = 2
+
+let WGPUMapAsyncStatus_Error: Int = 3
+
+let WGPUMapAsyncStatus_Force32: Int = 2147483647
+
+let WGPUMapAsyncStatus_Success: Int = 1
+
+let WGPUMipmapFilterMode_Force32: Int = 2147483647
+
+let WGPUMipmapFilterMode_Linear: Int = 2
+
+let WGPUMipmapFilterMode_Nearest: Int = 1
+
+let WGPUMipmapFilterMode_Undefined: Int = 0
+
+let WGPUOptionalBool_False: Int = 0
+
+let WGPUOptionalBool_Force32: Int = 2147483647
+
+let WGPUOptionalBool_True: Int = 1
+
+let WGPUOptionalBool_Undefined: Int = 2
+
+let WGPUPopErrorScopeStatus_CallbackCancelled: Int = 2
+
+let WGPUPopErrorScopeStatus_Error: Int = 3
+
+let WGPUPopErrorScopeStatus_Force32: Int = 2147483647
+
+let WGPUPopErrorScopeStatus_Success: Int = 1
+
+let WGPUPowerPreference_Force32: Int = 2147483647
+
+let WGPUPowerPreference_HighPerformance: Int = 2
+
+let WGPUPowerPreference_LowPower: Int = 1
+
+let WGPUPowerPreference_Undefined: Int = 0
+
+let WGPUPredefinedColorSpace_DisplayP3: Int = 2
+
+let WGPUPredefinedColorSpace_DisplayP3Linear: Int = 327684
+
+let WGPUPredefinedColorSpace_Force32: Int = 2147483647
+
+let WGPUPredefinedColorSpace_Rec2020Linear: Int = 327685
+
+let WGPUPredefinedColorSpace_SRGB: Int = 1
+
+let WGPUPredefinedColorSpace_SRGBLinear: Int = 327683
+
+let WGPUPresentMode_Fifo: Int = 1
+
+let WGPUPresentMode_FifoRelaxed: Int = 2
+
+let WGPUPresentMode_Force32: Int = 2147483647
+
+let WGPUPresentMode_Immediate: Int = 3
+
+let WGPUPresentMode_Mailbox: Int = 4
+
+let WGPUPresentMode_Undefined: Int = 0
+
+let WGPUPrimitiveTopology_Force32: Int = 2147483647
+
+let WGPUPrimitiveTopology_LineList: Int = 2
+
+let WGPUPrimitiveTopology_LineStrip: Int = 3
+
+let WGPUPrimitiveTopology_PointList: Int = 1
+
+let WGPUPrimitiveTopology_TriangleList: Int = 4
+
+let WGPUPrimitiveTopology_TriangleStrip: Int = 5
+
+let WGPUPrimitiveTopology_Undefined: Int = 0
+
+let WGPUQueryType_Force32: Int = 2147483647
+
+let WGPUQueryType_Occlusion: Int = 1
+
+let WGPUQueryType_Timestamp: Int = 2
+
+let WGPUQueueWorkDoneStatus_CallbackCancelled: Int = 2
+
+let WGPUQueueWorkDoneStatus_Error: Int = 3
+
+let WGPUQueueWorkDoneStatus_Force32: Int = 2147483647
+
+let WGPUQueueWorkDoneStatus_Success: Int = 1
+
+let WGPURequestAdapterStatus_CallbackCancelled: Int = 2
+
+let WGPURequestAdapterStatus_Error: Int = 4
+
+let WGPURequestAdapterStatus_Force32: Int = 2147483647
+
+let WGPURequestAdapterStatus_Success: Int = 1
+
+let WGPURequestAdapterStatus_Unavailable: Int = 3
+
+let WGPURequestDeviceStatus_CallbackCancelled: Int = 2
+
+let WGPURequestDeviceStatus_Error: Int = 3
+
+let WGPURequestDeviceStatus_Force32: Int = 2147483647
+
+let WGPURequestDeviceStatus_Success: Int = 1
+
+let WGPUSType_AHardwareBufferProperties: Int = 327736
+
+let WGPUSType_AdapterPropertiesD3D: Int = 327700
+
+let WGPUSType_AdapterPropertiesDrm: Int = 327761
+
+let WGPUSType_AdapterPropertiesMemoryHeaps: Int = 327699
+
+let WGPUSType_AdapterPropertiesSubgroupMatrixConfigs: Int = 327739
+
+let WGPUSType_AdapterPropertiesVk: Int = 327701
+
+let WGPUSType_AdapterPropertiesWGPU: Int = 327756
+
+let WGPUSType_BufferHostMappedPointer: Int = 327698
+
+let WGPUSType_ColorTargetStateExpandResolveTextureDawn: Int = 327706
+
+let WGPUSType_CompatibilityModeLimits: Int = 15
+
+let WGPUSType_DawnAdapterPropertiesPowerPreference: Int = 327688
+
+let WGPUSType_DawnBufferDescriptorErrorInfoFromWireClient: Int = 327689
+
+let WGPUSType_DawnCacheDeviceDescriptor: Int = 327687
+
+let WGPUSType_DawnCompilationMessageUtf16: Int = 327743
+
+let WGPUSType_DawnConsumeAdapterDescriptor: Int = 327752
+
+let WGPUSType_DawnDeviceAllocatorControl: Int = 327746
+
+let WGPUSType_DawnDrmFormatCapabilities: Int = 327704
+
+let WGPUSType_DawnEncoderInternalUsageDescriptor: Int = 327685
+
+let WGPUSType_DawnFakeBufferOOMForTesting: Int = 327744
+
+let WGPUSType_DawnFakeDeviceInitializeErrorForTesting: Int = 327750
+
+let WGPUSType_DawnHostMappedPointerLimits: Int = 327747
+
+let WGPUSType_DawnInjectedInvalidSType: Int = 327742
+
+let WGPUSType_DawnInstanceDescriptor: Int = 327686
+
+let WGPUSType_DawnRenderPassSampleCount: Int = 327695
+
+let WGPUSType_DawnShaderModuleSPIRVOptionsDescriptor: Int = 327691
+
+let WGPUSType_DawnTexelCopyBufferRowAlignmentLimits: Int = 327738
+
+let WGPUSType_DawnTextureInternalUsageDescriptor: Int = 327684
+
+let WGPUSType_DawnTogglesDescriptor: Int = 327690
+
+let WGPUSType_DawnWGSLBlocklist: Int = 327703
+
+let WGPUSType_DawnWireWGSLControl: Int = 327702
+
+let WGPUSType_EmscriptenSurfaceSourceCanvasHTMLSelector: Int = 262144
+
+let WGPUSType_ExternalTextureBindingEntry: Int = 14
+
+let WGPUSType_ExternalTextureBindingLayout: Int = 13
+
+let WGPUSType_Force32: Int = 2147483647
+
+let WGPUSType_PipelineLayoutPixelLocalStorage: Int = 327697
+
+let WGPUSType_PipelineLayoutResourceTable: Int = 327760
+
+let WGPUSType_RenderPassDescriptorResolveRect: Int = 327748
+
+let WGPUSType_RenderPassMaxDrawCount: Int = 3
+
+let WGPUSType_RenderPassPixelLocalStorage: Int = 327696
+
+let WGPUSType_RenderPassRenderAreaRect: Int = 327707
+
+let WGPUSType_RequestAdapterOptionsAngleVirtualizationGroup: Int = 327759
+
+let WGPUSType_RequestAdapterOptionsD3D11Device: Int = 327694
+
+let WGPUSType_RequestAdapterOptionsGetGLProc: Int = 327693
+
+let WGPUSType_RequestAdapterOptionsLUID: Int = 327692
+
+let WGPUSType_RequestAdapterWebGPUBackendOptions: Int = 327749
+
+let WGPUSType_RequestAdapterWebXROptions: Int = 11
+
+let WGPUSType_ShaderModuleCompilationOptions: Int = 327705
+
+let WGPUSType_ShaderSourceSPIRV: Int = 1
+
+let WGPUSType_ShaderSourceWGSL: Int = 2
+
+let WGPUSType_SharedBufferMemoryD3D12ResourceDescriptor: Int = 327732
+
+let WGPUSType_SharedBufferMemoryFromWindowsHandleDescriptor: Int = 327757
+
+let WGPUSType_SharedFenceDXGISharedHandleDescriptor: Int = 327728
+
+let WGPUSType_SharedFenceDXGISharedHandleExportInfo: Int = 327729
+
+let WGPUSType_SharedFenceEGLSyncDescriptor: Int = 327740
+
+let WGPUSType_SharedFenceEGLSyncExportInfo: Int = 327741
+
+let WGPUSType_SharedFenceMTLSharedEventDescriptor: Int = 327730
+
+let WGPUSType_SharedFenceMTLSharedEventExportInfo: Int = 327731
+
+let WGPUSType_SharedFenceSyncFDDescriptor: Int = 327724
+
+let WGPUSType_SharedFenceSyncFDExportInfo: Int = 327725
+
+let WGPUSType_SharedFenceVkSemaphoreOpaqueFDDescriptor: Int = 327722
+
+let WGPUSType_SharedFenceVkSemaphoreOpaqueFDExportInfo: Int = 327723
+
+let WGPUSType_SharedFenceVkSemaphoreZirconHandleDescriptor: Int = 327726
+
+let WGPUSType_SharedFenceVkSemaphoreZirconHandleExportInfo: Int = 327727
+
+let WGPUSType_SharedTextureMemoryAHardwareBufferDescriptor: Int = 327709
+
+let WGPUSType_SharedTextureMemoryAHardwareBufferProperties: Int = 327735
+
+let WGPUSType_SharedTextureMemoryD3D11BeginState: Int = 327751
+
+let WGPUSType_SharedTextureMemoryD3D11Texture2DDescriptor: Int = 327714
+
+let WGPUSType_SharedTextureMemoryD3D12ResourceDescriptor: Int = 327758
+
+let WGPUSType_SharedTextureMemoryD3DSwapchainBeginState: Int = 327721
+
+let WGPUSType_SharedTextureMemoryDXGISharedHandleDescriptor: Int = 327713
+
+let WGPUSType_SharedTextureMemoryDmaBufDescriptor: Int = 327710
+
+let WGPUSType_SharedTextureMemoryEGLImageDescriptor: Int = 327716
+
+let WGPUSType_SharedTextureMemoryIOSurfaceDescriptor: Int = 327715
+
+let WGPUSType_SharedTextureMemoryInitializedBeginState: Int = 327717
+
+let WGPUSType_SharedTextureMemoryInitializedEndState: Int = 327718
+
+let WGPUSType_SharedTextureMemoryMetalEndAccessState: Int = 327755
+
+let WGPUSType_SharedTextureMemoryOpaqueFDDescriptor: Int = 327711
+
+let WGPUSType_SharedTextureMemoryVkDedicatedAllocationDescriptor: Int = 327708
+
+let WGPUSType_SharedTextureMemoryVkImageLayoutBeginState: Int = 327719
+
+let WGPUSType_SharedTextureMemoryVkImageLayoutEndState: Int = 327720
+
+let WGPUSType_SharedTextureMemoryZirconHandleDescriptor: Int = 327712
+
+let WGPUSType_StaticSamplerBindingLayout: Int = 327733
+
+let WGPUSType_SurfaceColorManagement: Int = 10
+
+let WGPUSType_SurfaceDescriptorFromWindowsCoreWindow: Int = 327680
+
+let WGPUSType_SurfaceDescriptorFromWindowsUWPSwapChainPanel: Int = 327683
+
+let WGPUSType_SurfaceDescriptorFromWindowsWinUISwapChainPanel: Int = 327745
+
+let WGPUSType_SurfaceSourceAndroidNativeWindow: Int = 8
+
+let WGPUSType_SurfaceSourceMetalLayer: Int = 4
+
+let WGPUSType_SurfaceSourceWaylandSurface: Int = 7
+
+let WGPUSType_SurfaceSourceWindowsHWND: Int = 5
+
+let WGPUSType_SurfaceSourceXCBWindow: Int = 9
+
+let WGPUSType_SurfaceSourceXlibWindow: Int = 6
+
+let WGPUSType_TexelBufferBindingEntry: Int = 327753
+
+let WGPUSType_TexelBufferBindingLayout: Int = 327754
+
+let WGPUSType_TextureBindingViewDimension: Int = 16
+
+let WGPUSType_TextureComponentSwizzleDescriptor: Int = 12
+
+let WGPUSType_YCbCrVkDescriptor: Int = 327734
+
+let WGPUSamplerBindingType_BindingNotUsed: Int = 0
+
+let WGPUSamplerBindingType_Comparison: Int = 4
+
+let WGPUSamplerBindingType_Filtering: Int = 2
+
+let WGPUSamplerBindingType_Force32: Int = 2147483647
+
+let WGPUSamplerBindingType_NonFiltering: Int = 3
+
+let WGPUSamplerBindingType_Undefined: Int = 1
+
+let WGPUSharedFenceType_DXGISharedHandle: Int = 4
+
+let WGPUSharedFenceType_EGLSync: Int = 6
+
+let WGPUSharedFenceType_Force32: Int = 2147483647
+
+let WGPUSharedFenceType_MTLSharedEvent: Int = 5
+
+let WGPUSharedFenceType_SyncFD: Int = 2
+
+let WGPUSharedFenceType_VkSemaphoreOpaqueFD: Int = 1
+
+let WGPUSharedFenceType_VkSemaphoreZirconHandle: Int = 3
+
+let WGPUStatus_Error: Int = 2
+
+let WGPUStatus_Force32: Int = 2147483647
+
+let WGPUStatus_Success: Int = 1
+
+let WGPUStencilOperation_DecrementClamp: Int = 6
+
+let WGPUStencilOperation_DecrementWrap: Int = 8
+
+let WGPUStencilOperation_Force32: Int = 2147483647
+
+let WGPUStencilOperation_IncrementClamp: Int = 5
+
+let WGPUStencilOperation_IncrementWrap: Int = 7
+
+let WGPUStencilOperation_Invert: Int = 4
+
+let WGPUStencilOperation_Keep: Int = 1
+
+let WGPUStencilOperation_Replace: Int = 3
+
+let WGPUStencilOperation_Undefined: Int = 0
+
+let WGPUStencilOperation_Zero: Int = 2
+
+let WGPUStorageTextureAccess_BindingNotUsed: Int = 0
+
+let WGPUStorageTextureAccess_Force32: Int = 2147483647
+
+let WGPUStorageTextureAccess_ReadOnly: Int = 3
+
+let WGPUStorageTextureAccess_ReadWrite: Int = 4
+
+let WGPUStorageTextureAccess_Undefined: Int = 1
+
+let WGPUStorageTextureAccess_WriteOnly: Int = 2
+
+let WGPUStoreOp_Discard: Int = 2
+
+let WGPUStoreOp_Force32: Int = 2147483647
+
+let WGPUStoreOp_Store: Int = 1
+
+let WGPUStoreOp_Undefined: Int = 0
+
+let WGPUSubgroupMatrixComponentType_F16: Int = 2
+
+let WGPUSubgroupMatrixComponentType_F32: Int = 1
+
+let WGPUSubgroupMatrixComponentType_Force32: Int = 2147483647
+
+let WGPUSubgroupMatrixComponentType_I32: Int = 4
+
+let WGPUSubgroupMatrixComponentType_I8: Int = 6
+
+let WGPUSubgroupMatrixComponentType_U32: Int = 3
+
+let WGPUSubgroupMatrixComponentType_U8: Int = 5
+
+let WGPUSurfaceGetCurrentTextureStatus_Error: Int = 6
+
+let WGPUSurfaceGetCurrentTextureStatus_Force32: Int = 2147483647
+
+let WGPUSurfaceGetCurrentTextureStatus_Lost: Int = 5
+
+let WGPUSurfaceGetCurrentTextureStatus_Outdated: Int = 4
+
+let WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal: Int = 1
+
+let WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal: Int = 2
+
+let WGPUSurfaceGetCurrentTextureStatus_Timeout: Int = 3
+
+let WGPUTexelBufferAccess_Force32: Int = 2147483647
+
+let WGPUTexelBufferAccess_ReadOnly: Int = 1
+
+let WGPUTexelBufferAccess_ReadWrite: Int = 2
+
+let WGPUTexelBufferAccess_Undefined: Int = 0
+
+let WGPUTextureAspect_All: Int = 1
+
+let WGPUTextureAspect_DepthOnly: Int = 3
+
+let WGPUTextureAspect_Force32: Int = 2147483647
+
+let WGPUTextureAspect_Plane0Only: Int = 327680
+
+let WGPUTextureAspect_Plane1Only: Int = 327681
+
+let WGPUTextureAspect_Plane2Only: Int = 327682
+
+let WGPUTextureAspect_StencilOnly: Int = 2
+
+let WGPUTextureAspect_Undefined: Int = 0
+
+let WGPUTextureDimension_1D: Int = 1
+
+let WGPUTextureDimension_2D: Int = 2
+
+let WGPUTextureDimension_3D: Int = 3
+
+let WGPUTextureDimension_Force32: Int = 2147483647
+
+let WGPUTextureDimension_Undefined: Int = 0
+
+let WGPUTextureFormat_ASTC10x10Unorm: Int = 96
+
+let WGPUTextureFormat_ASTC10x10UnormSrgb: Int = 97
+
+let WGPUTextureFormat_ASTC10x5Unorm: Int = 90
+
+let WGPUTextureFormat_ASTC10x5UnormSrgb: Int = 91
+
+let WGPUTextureFormat_ASTC10x6Unorm: Int = 92
+
+let WGPUTextureFormat_ASTC10x6UnormSrgb: Int = 93
+
+let WGPUTextureFormat_ASTC10x8Unorm: Int = 94
+
+let WGPUTextureFormat_ASTC10x8UnormSrgb: Int = 95
+
+let WGPUTextureFormat_ASTC12x10Unorm: Int = 98
+
+let WGPUTextureFormat_ASTC12x10UnormSrgb: Int = 99
+
+let WGPUTextureFormat_ASTC12x12Unorm: Int = 100
+
+let WGPUTextureFormat_ASTC12x12UnormSrgb: Int = 101
+
+let WGPUTextureFormat_ASTC4x4Unorm: Int = 74
+
+let WGPUTextureFormat_ASTC4x4UnormSrgb: Int = 75
+
+let WGPUTextureFormat_ASTC5x4Unorm: Int = 76
+
+let WGPUTextureFormat_ASTC5x4UnormSrgb: Int = 77
+
+let WGPUTextureFormat_ASTC5x5Unorm: Int = 78
+
+let WGPUTextureFormat_ASTC5x5UnormSrgb: Int = 79
+
+let WGPUTextureFormat_ASTC6x5Unorm: Int = 80
+
+let WGPUTextureFormat_ASTC6x5UnormSrgb: Int = 81
+
+let WGPUTextureFormat_ASTC6x6Unorm: Int = 82
+
+let WGPUTextureFormat_ASTC6x6UnormSrgb: Int = 83
+
+let WGPUTextureFormat_ASTC8x5Unorm: Int = 84
+
+let WGPUTextureFormat_ASTC8x5UnormSrgb: Int = 85
+
+let WGPUTextureFormat_ASTC8x6Unorm: Int = 86
+
+let WGPUTextureFormat_ASTC8x6UnormSrgb: Int = 87
+
+let WGPUTextureFormat_ASTC8x8Unorm: Int = 88
+
+let WGPUTextureFormat_ASTC8x8UnormSrgb: Int = 89
+
+let WGPUTextureFormat_BC1RGBAUnorm: Int = 50
+
+let WGPUTextureFormat_BC1RGBAUnormSrgb: Int = 51
+
+let WGPUTextureFormat_BC2RGBAUnorm: Int = 52
+
+let WGPUTextureFormat_BC2RGBAUnormSrgb: Int = 53
+
+let WGPUTextureFormat_BC3RGBAUnorm: Int = 54
+
+let WGPUTextureFormat_BC3RGBAUnormSrgb: Int = 55
+
+let WGPUTextureFormat_BC4RSnorm: Int = 57
+
+let WGPUTextureFormat_BC4RUnorm: Int = 56
+
+let WGPUTextureFormat_BC5RGSnorm: Int = 59
+
+let WGPUTextureFormat_BC5RGUnorm: Int = 58
+
+let WGPUTextureFormat_BC6HRGBFloat: Int = 61
+
+let WGPUTextureFormat_BC6HRGBUfloat: Int = 60
+
+let WGPUTextureFormat_BC7RGBAUnorm: Int = 62
+
+let WGPUTextureFormat_BC7RGBAUnormSrgb: Int = 63
+
+let WGPUTextureFormat_BGRA8Unorm: Int = 27
+
+let WGPUTextureFormat_BGRA8UnormSrgb: Int = 28
+
+let WGPUTextureFormat_Depth16Unorm: Int = 45
+
+let WGPUTextureFormat_Depth24Plus: Int = 46
+
+let WGPUTextureFormat_Depth24PlusStencil8: Int = 47
+
+let WGPUTextureFormat_Depth32Float: Int = 48
+
+let WGPUTextureFormat_Depth32FloatStencil8: Int = 49
+
+let WGPUTextureFormat_EACR11Snorm: Int = 71
+
+let WGPUTextureFormat_EACR11Unorm: Int = 70
+
+let WGPUTextureFormat_EACRG11Snorm: Int = 73
+
+let WGPUTextureFormat_EACRG11Unorm: Int = 72
+
+let WGPUTextureFormat_ETC2RGB8A1Unorm: Int = 66
+
+let WGPUTextureFormat_ETC2RGB8A1UnormSrgb: Int = 67
+
+let WGPUTextureFormat_ETC2RGB8Unorm: Int = 64
+
+let WGPUTextureFormat_ETC2RGB8UnormSrgb: Int = 65
+
+let WGPUTextureFormat_ETC2RGBA8Unorm: Int = 68
+
+let WGPUTextureFormat_ETC2RGBA8UnormSrgb: Int = 69
+
+let WGPUTextureFormat_Force32: Int = 2147483647
+
+let WGPUTextureFormat_OpaqueYCbCrAndroid: Int = 327687
+
+let WGPUTextureFormat_R10X6BG10X6Biplanar420Unorm: Int = 327681
+
+let WGPUTextureFormat_R10X6BG10X6Biplanar422Unorm: Int = 327685
+
+let WGPUTextureFormat_R10X6BG10X6Biplanar444Unorm: Int = 327686
+
+let WGPUTextureFormat_R16Float: Int = 9
+
+let WGPUTextureFormat_R16Sint: Int = 8
+
+let WGPUTextureFormat_R16Snorm: Int = 6
+
+let WGPUTextureFormat_R16Uint: Int = 7
+
+let WGPUTextureFormat_R16Unorm: Int = 5
+
+let WGPUTextureFormat_R32Float: Int = 14
+
+let WGPUTextureFormat_R32Sint: Int = 16
+
+let WGPUTextureFormat_R32Uint: Int = 15
+
+let WGPUTextureFormat_R8BG8A8Triplanar420Unorm: Int = 327682
+
+let WGPUTextureFormat_R8BG8Biplanar420Unorm: Int = 327680
+
+let WGPUTextureFormat_R8BG8Biplanar422Unorm: Int = 327683
+
+let WGPUTextureFormat_R8BG8Biplanar444Unorm: Int = 327684
+
+let WGPUTextureFormat_R8Sint: Int = 4
+
+let WGPUTextureFormat_R8Snorm: Int = 2
+
+let WGPUTextureFormat_R8Uint: Int = 3
+
+let WGPUTextureFormat_R8Unorm: Int = 1
+
+let WGPUTextureFormat_RG11B10Ufloat: Int = 31
+
+let WGPUTextureFormat_RG16Float: Int = 21
+
+let WGPUTextureFormat_RG16Sint: Int = 20
+
+let WGPUTextureFormat_RG16Snorm: Int = 18
+
+let WGPUTextureFormat_RG16Uint: Int = 19
+
+let WGPUTextureFormat_RG16Unorm: Int = 17
+
+let WGPUTextureFormat_RG32Float: Int = 33
+
+let WGPUTextureFormat_RG32Sint: Int = 35
+
+let WGPUTextureFormat_RG32Uint: Int = 34
+
+let WGPUTextureFormat_RG8Sint: Int = 13
+
+let WGPUTextureFormat_RG8Snorm: Int = 11
+
+let WGPUTextureFormat_RG8Uint: Int = 12
+
+let WGPUTextureFormat_RG8Unorm: Int = 10
+
+let WGPUTextureFormat_RGB10A2Uint: Int = 29
+
+let WGPUTextureFormat_RGB10A2Unorm: Int = 30
+
+let WGPUTextureFormat_RGB9E5Ufloat: Int = 32
+
+let WGPUTextureFormat_RGBA16Float: Int = 40
+
+let WGPUTextureFormat_RGBA16Sint: Int = 39
+
+let WGPUTextureFormat_RGBA16Snorm: Int = 37
+
+let WGPUTextureFormat_RGBA16Uint: Int = 38
+
+let WGPUTextureFormat_RGBA16Unorm: Int = 36
+
+let WGPUTextureFormat_RGBA32Float: Int = 41
+
+let WGPUTextureFormat_RGBA32Sint: Int = 43
+
+let WGPUTextureFormat_RGBA32Uint: Int = 42
+
+let WGPUTextureFormat_RGBA8Sint: Int = 26
+
+let WGPUTextureFormat_RGBA8Snorm: Int = 24
+
+let WGPUTextureFormat_RGBA8Uint: Int = 25
+
+let WGPUTextureFormat_RGBA8Unorm: Int = 22
+
+let WGPUTextureFormat_RGBA8UnormSrgb: Int = 23
+
+let WGPUTextureFormat_Stencil8: Int = 44
+
+let WGPUTextureFormat_Undefined: Int = 0
+
+let WGPUTextureSampleType_BindingNotUsed: Int = 0
+
+let WGPUTextureSampleType_Depth: Int = 4
+
+let WGPUTextureSampleType_Float: Int = 2
+
+let WGPUTextureSampleType_Force32: Int = 2147483647
+
+let WGPUTextureSampleType_Sint: Int = 5
+
+let WGPUTextureSampleType_Uint: Int = 6
+
+let WGPUTextureSampleType_Undefined: Int = 1
+
+let WGPUTextureSampleType_UnfilterableFloat: Int = 3
+
+let WGPUTextureViewDimension_1D: Int = 1
+
+let WGPUTextureViewDimension_2D: Int = 2
+
+let WGPUTextureViewDimension_2DArray: Int = 3
+
+let WGPUTextureViewDimension_3D: Int = 6
+
+let WGPUTextureViewDimension_Cube: Int = 4
+
+let WGPUTextureViewDimension_CubeArray: Int = 5
+
+let WGPUTextureViewDimension_Force32: Int = 2147483647
+
+let WGPUTextureViewDimension_Undefined: Int = 0
+
+let WGPUToneMappingMode_Extended: Int = 2
+
+let WGPUToneMappingMode_Force32: Int = 2147483647
+
+let WGPUToneMappingMode_Standard: Int = 1
+
+let WGPUVertexFormat_Float16: Int = 25
+
+let WGPUVertexFormat_Float16x2: Int = 26
+
+let WGPUVertexFormat_Float16x4: Int = 27
+
+let WGPUVertexFormat_Float32: Int = 28
+
+let WGPUVertexFormat_Float32x2: Int = 29
+
+let WGPUVertexFormat_Float32x3: Int = 30
+
+let WGPUVertexFormat_Float32x4: Int = 31
+
+let WGPUVertexFormat_Force32: Int = 2147483647
+
+let WGPUVertexFormat_Sint16: Int = 16
+
+let WGPUVertexFormat_Sint16x2: Int = 17
+
+let WGPUVertexFormat_Sint16x4: Int = 18
+
+let WGPUVertexFormat_Sint32: Int = 36
+
+let WGPUVertexFormat_Sint32x2: Int = 37
+
+let WGPUVertexFormat_Sint32x3: Int = 38
+
+let WGPUVertexFormat_Sint32x4: Int = 39
+
+let WGPUVertexFormat_Sint8: Int = 4
+
+let WGPUVertexFormat_Sint8x2: Int = 5
+
+let WGPUVertexFormat_Sint8x4: Int = 6
+
+let WGPUVertexFormat_Snorm10_10_10_2: Int = 42
+
+let WGPUVertexFormat_Snorm16: Int = 22
+
+let WGPUVertexFormat_Snorm16x2: Int = 23
+
+let WGPUVertexFormat_Snorm16x4: Int = 24
+
+let WGPUVertexFormat_Snorm8: Int = 10
+
+let WGPUVertexFormat_Snorm8x2: Int = 11
+
+let WGPUVertexFormat_Snorm8x4: Int = 12
+
+let WGPUVertexFormat_Uint16: Int = 13
+
+let WGPUVertexFormat_Uint16x2: Int = 14
+
+let WGPUVertexFormat_Uint16x4: Int = 15
+
+let WGPUVertexFormat_Uint32: Int = 32
+
+let WGPUVertexFormat_Uint32x2: Int = 33
+
+let WGPUVertexFormat_Uint32x3: Int = 34
+
+let WGPUVertexFormat_Uint32x4: Int = 35
+
+let WGPUVertexFormat_Uint8: Int = 1
+
+let WGPUVertexFormat_Uint8x2: Int = 2
+
+let WGPUVertexFormat_Uint8x4: Int = 3
+
+let WGPUVertexFormat_Unorm10_10_10_2: Int = 40
+
+let WGPUVertexFormat_Unorm16: Int = 19
+
+let WGPUVertexFormat_Unorm16x2: Int = 20
+
+let WGPUVertexFormat_Unorm16x4: Int = 21
+
+let WGPUVertexFormat_Unorm8: Int = 7
+
+let WGPUVertexFormat_Unorm8x2: Int = 8
+
+let WGPUVertexFormat_Unorm8x4: Int = 9
+
+let WGPUVertexFormat_Unorm8x4BGRA: Int = 41
+
+let WGPUVertexStepMode_Force32: Int = 2147483647
+
+let WGPUVertexStepMode_Instance: Int = 2
+
+let WGPUVertexStepMode_Undefined: Int = 0
+
+let WGPUVertexStepMode_Vertex: Int = 1
+
+let WGPUWGSLLanguageFeatureName_BufferView: Int = 12
+
+let WGPUWGSLLanguageFeatureName_ChromiumPrint: Int = 327687
+
+let WGPUWGSLLanguageFeatureName_ChromiumTestingExperimental: Int = 327682
+
+let WGPUWGSLLanguageFeatureName_ChromiumTestingShipped: Int = 327684
+
+let WGPUWGSLLanguageFeatureName_ChromiumTestingShippedWithKillswitch: Int = 327683
+
+let WGPUWGSLLanguageFeatureName_ChromiumTestingUnimplemented: Int = 327680
+
+let WGPUWGSLLanguageFeatureName_ChromiumTestingUnsafeExperimental: Int = 327681
+
+let WGPUWGSLLanguageFeatureName_Force32: Int = 2147483647
+
+let WGPUWGSLLanguageFeatureName_FragmentDepth: Int = 327688
+
+let WGPUWGSLLanguageFeatureName_ImmediateAddressSpace: Int = 11
+
+let WGPUWGSLLanguageFeatureName_LinearIndexing: Int = 10
+
+let WGPUWGSLLanguageFeatureName_Packed4x8IntegerDotProduct: Int = 2
+
+let WGPUWGSLLanguageFeatureName_PointerCompositeAccess: Int = 4
+
+let WGPUWGSLLanguageFeatureName_ReadonlyAndReadwriteStorageTextures: Int = 1
+
+let WGPUWGSLLanguageFeatureName_SizedBindingArray: Int = 327685
+
+let WGPUWGSLLanguageFeatureName_SubgroupId: Int = 6
+
+let WGPUWGSLLanguageFeatureName_SubgroupUniformity: Int = 8
+
+let WGPUWGSLLanguageFeatureName_SwizzleAssignment: Int = 327689
+
+let WGPUWGSLLanguageFeatureName_TexelBuffers: Int = 327686
+
+let WGPUWGSLLanguageFeatureName_TextureAndSamplerLet: Int = 7
+
+let WGPUWGSLLanguageFeatureName_TextureFormatsTier1: Int = 9
+
+let WGPUWGSLLanguageFeatureName_UniformBufferStandardLayout: Int = 5
+
+let WGPUWGSLLanguageFeatureName_UnrestrictedPointerParameters: Int = 3
+
+let WGPUWaitStatus_Error: Int = 3
+
+let WGPUWaitStatus_Force32: Int = 2147483647
+
+let WGPUWaitStatus_Success: Int = 1
+
+let WGPUWaitStatus_TimedOut: Int = 2
+
 // Declared by the headers and not bound, each for the reason given.
 // Nothing below is a gap to be filled by hand: a hand-written `@FFI.Extern`
 // for one of these would be refused by the same rule that skipped it.
