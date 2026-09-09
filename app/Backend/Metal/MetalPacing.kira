@@ -233,7 +233,12 @@ function metalRaceProbeUniformWrite(ctx: RawPtr) {
     }
     // The stash holds the last COMMITTED buffer — the frame before this one — and
     // retains it, so this status is safe to ask for right up until it is replaced.
-    if metalMsgSend(commandBuffer, metalSel("status")) < metalCommandBufferStatusCompleted() {
+    // Annotated because `metalMsgSend` carries a shape per selector prototype
+    // and `status` is one of the six that take a receiver and a selector: an
+    // operand of `<` is told nothing about what it should be, so the shape is
+    // named here rather than guessed at.
+    let status: U64 = metalMsgSend(commandBuffer, metalSel("status"))
+    if status < metalCommandBufferStatusCompleted() {
         metalMemWriteU64(ctx, metalOffsetRaceOverlaps(), metalMemReadU64(ctx, metalOffsetRaceOverlaps()) + U64(1))
     }
     return
