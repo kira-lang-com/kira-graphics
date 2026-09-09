@@ -153,6 +153,20 @@ construct RenderBackend {
     @Required function minimizeWindow() -> Void
     @Required function toggleMaximizeWindow() -> Void
 
+    // --- pointer and keyboard --------------------------------------------
+    // Cursor visibility and pointer lock, and whether a soft keyboard is up.
+    // These went to sokol's `sapp_*` when sokol owned input; each backend now
+    // answers for the window it actually owns. The soft-keyboard pair has no
+    // platform to act on among the surviving backends — a desktop window
+    // summons no keyboard, and the touch platform that did was sokol's — so
+    // both answer honestly rather than pretending, and say so in their bodies.
+    @Required function showKeyboard(show: Bool) -> Void
+    @Required function keyboardShown() -> Bool
+    @Required function showMouse(show: Bool) -> Void
+    @Required function mouseShown() -> Bool
+    @Required function lockMouse(lock: Bool) -> Void
+    @Required function mouseLocked() -> Bool
+
     // --- compute ---------------------------------------------------------
     // Whether this backend can build and encode a compute pipeline at all.
     //
@@ -268,7 +282,6 @@ construct RenderBackend {
 function renderBackendFor(backend: RenderBackendKind, context: RawPtr) -> Any RenderBackend {
     match backend {
         Metal -> return MetalRenderBackend(context: context)
-        Sokol -> return SokolRenderBackend(context: context)
         Dawn -> return DawnRenderBackend(context: context)
     }
 }

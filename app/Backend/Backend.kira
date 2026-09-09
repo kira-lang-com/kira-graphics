@@ -7,7 +7,6 @@ import Foundation
 // `app/Public/RenderBackend.kira`) is the *dispatch* vocabulary, and everything
 // past `renderBackendFor` asks the backend rather than asking which one it is.
 enum RenderBackendKind {
-    Sokol
     Metal
     Dawn
 }
@@ -24,7 +23,7 @@ enum Platform {
 
 
 struct RenderBackendSelection {
-    var backend: RenderBackendKind = .Sokol
+    var backend: RenderBackendKind = .Dawn
     var platform: Platform = .Unknown
     var supported: Bool = true
     var loaderName: String = ""
@@ -34,12 +33,11 @@ struct RenderBackendSelection {
 
 
 // Platform-aware default backend for hosts that do not pick one explicitly:
-// Metal owns Apple hosts, and Dawn owns Windows and Linux — WebGPU over
-// D3D12/Vulkan on one and Vulkan on the other — while everything else
-// defaults to Sokol, the portable backend. Web/WASM lands there honestly:
-// the browser sandbox has no host-OS probe, so `hostPlatform()` returns
-// `Unknown` there, and Unknown -> Sokol is the correct choice because Sokol
-// (WebGPU) is the only backend that exists on wasm32-emscripten.
+// Metal owns Apple hosts, and Dawn owns everywhere else — WebGPU over D3D12 or
+// Vulkan on Windows and Linux, and over the browser's own WebGPU on the Web.
+// Web/WASM lands on Dawn honestly: the browser sandbox has no host-OS probe, so
+// `hostPlatform()` returns `Unknown` there, and Dawn is the only backend that
+// exists on wasm32-emscripten, through emscripten's WebGPU port.
 @Native
 function graphicsDefaultBackend() -> RenderBackendKind {
     let platform = hostPlatform()
@@ -55,12 +53,12 @@ function graphicsDefaultBackend() -> RenderBackendKind {
     if platform == .Linux {
         return graphicsBackendFromEnvironment(.Dawn)
     }
-    return graphicsBackendFromEnvironment(.Sokol)
+    return graphicsBackendFromEnvironment(.Dawn)
 }
 
 // KiraUI supplies window furniture only for the undecorated Dawn/Wayland
-// window. Cocoa, Win32 and Sokol keep the controls supplied by their native
-// window implementation.
+// window. Cocoa and Win32 keep the controls supplied by their native window
+// implementation.
 function graphicsUsesWaylandClientWindowControls() -> Bool {
     return hostPlatform() == .Linux && graphicsDefaultBackend() == .Dawn
 }
@@ -68,12 +66,12 @@ function graphicsUsesWaylandClientWindowControls() -> Bool {
 
 // The renderer a run was asked for, or `fallback` when it was not asked.
 //
-// `KIRA_GRAPHICS_BACKEND` names one of the three. It exists so that one program
+// `KIRA_GRAPHICS_BACKEND` names one of the two. It exists so that one program
 // can be run on two backends without being edited between the runs — which is
 // what makes a pixel comparison between them mean anything, since a difference
 // in the source would be a difference in the answer.
 //
-// A name that is none of the three is reported rather than ignored: a typo in an
+// A name that is neither is reported rather than ignored: a typo in an
 // environment variable that silently selects the default is a run that proves
 // nothing about the backend it was supposed to exercise.
 @Native
@@ -82,16 +80,13 @@ function graphicsBackendFromEnvironment(fallback: RenderBackendKind) -> RenderBa
     if requested.count == 0 {
         return fallback
     }
-    if requested == "sokol" {
-        return .Sokol
-    }
     if requested == "metal" {
         return .Metal
     }
     if requested == "dawn" {
         return .Dawn
     }
-    graphicsDiagnostic("Kira Graphics: KIRA_GRAPHICS_BACKEND names '" + requested + "', which is not `sokol`, `metal` or `dawn`")
+    graphicsDiagnostic("Kira Graphics: KIRA_GRAPHICS_BACKEND names '" + requested + "', which is not `metal` or `dawn`")
     return fallback
 }
 
@@ -108,14 +103,6 @@ function effectivePlatform(requested: Platform) -> Platform {
 function validateRenderBackend(backend: RenderBackendKind, platform: Platform) -> RenderBackendSelection {
     let resolvedPlatform = effectivePlatform(move platform)
     match backend {
-        Sokol -> return RenderBackendSelection {
-            backend: move backend,
-            platform: resolvedPlatform,
-            supported: true,
-            loaderName: "sokol",
-            requiredSymbolCount: 0,
-            reason: ""
-        }
         Metal -> return validateMetalBackend(move resolvedPlatform)
         Dawn -> return validateDawnBackend(move resolvedPlatform)
     }

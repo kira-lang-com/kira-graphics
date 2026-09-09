@@ -344,7 +344,7 @@ construct DawnRenderBackend(context: RawPtr) extends RenderBackend {
     // context and the second the Sokol runtime, and an encoder takes the draw
     // path of whichever one it was given.
     function makeEncoder(passActive: Bool) -> RenderEncoder {
-        return makeRenderEncoderForBackend(passActive, nullPointer(), nullPointer(), context)
+        return makeRenderEncoderForBackend(passActive, nullPointer(), context)
     }
 
     // The pass already submitted what it encoded, and the run loop presents. A
@@ -353,6 +353,37 @@ construct DawnRenderBackend(context: RawPtr) extends RenderBackend {
     // the application never drew into still has to reach the end of the loop.
     function submitFrame(frame: borrow RenderFrame) -> Void {
         return
+    }
+
+    // --- pointer and keyboard --------------------------------------------
+    // Hiding the cursor is `wl_pointer.set_cursor(NULL)` and locking it is the
+    // `zwp_pointer_constraints` protocol; this backend binds the cursor-shape
+    // protocol (see `DawnWaylandInput.kira`) but neither of those, so the
+    // honest answer is that the cursor stays shown and unlocked. Wiring either
+    // protocol is what these grow into, and until then they report the truth
+    // rather than a silent success.
+    function showMouse(show: Bool) -> Void {
+        let _ = show
+        return
+    }
+    function mouseShown() -> Bool {
+        return true
+    }
+    function lockMouse(lock: Bool) -> Void {
+        let _ = lock
+        return
+    }
+    function mouseLocked() -> Bool {
+        return false
+    }
+    // No soft keyboard on a desktop or a browser window: none is summoned, so
+    // this answers rather than pretends.
+    function showKeyboard(show: Bool) -> Void {
+        let _ = show
+        return
+    }
+    function keyboardShown() -> Bool {
+        return false
     }
 
     // --- the run loop ----------------------------------------------------

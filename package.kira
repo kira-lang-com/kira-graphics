@@ -34,24 +34,23 @@ Package KiraGraphics {
             ]
         },
         NativeLibrary {
-            name: "sokol",
+            // The backend-neutral C the library needs and Kira cannot express:
+            // a monotonic clock, and the weak live-reload hooks. This was
+            // sokol's job only because sokol was the one native library here;
+            // it outlived sokol because a frame is timed on every backend.
+            name: "graphics_support",
             linkMode: LinkMode.Static,
-            headers: Headers { entrypoint: "NativeLibs/Sokol/sokol_bindings.h", includeDirs: ["NativeLibs/Sokol"], defines: ["SOKOL_NO_ENTRY"] },
-            sources: ["NativeLibs/Sokol/sokol_impl.c"],
-            autobind: Autobind { module: "sokol", headers: ["NativeLibs/Sokol/sokol_app.h", "NativeLibs/Sokol/sokol_gfx.h", "NativeLibs/Sokol/sokol_glue.h"], mode: AutobindMode.AllPublic },
+            headers: Headers { entrypoint: "NativeLibs/Support/kira_graphics_support.h", includeDirs: ["NativeLibs/Support"] },
+            sources: ["NativeLibs/Support/kira_graphics_support.c"],
             nativeTargets: [
-                NativeTarget { triple: "aarch64-macos-none", staticLib: "NativeLibs/../generated/native/aarch64-macos/libsokol.a", defines: ["SOKOL_GLCORE"], frameworks: ["Foundation", "AppKit", "QuartzCore", "OpenGL"] },
-                NativeTarget { triple: "aarch64-ios-none", staticLib: "NativeLibs/../generated/native/aarch64-ios/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
-                NativeTarget { triple: "aarch64-ios-simulator", staticLib: "NativeLibs/../generated/native/aarch64-ios-simulator/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
-                NativeTarget { triple: "aarch64-tvos-none", staticLib: "NativeLibs/../generated/native/aarch64-tvos/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
-                NativeTarget { triple: "aarch64-tvos-simulator", staticLib: "NativeLibs/../generated/native/aarch64-tvos-simulator/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
-                NativeTarget { triple: "aarch64-xros-none", staticLib: "NativeLibs/../generated/native/aarch64-xros/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
-                NativeTarget { triple: "aarch64-xros-simulator", staticLib: "NativeLibs/../generated/native/aarch64-xros-simulator/libsokol.a", defines: ["SOKOL_METAL"], frameworks: ["Foundation", "UIKit", "QuartzCore", "Metal", "MetalKit"] },
-                NativeTarget { triple: "x86_64-linux-gnu", staticLib: "NativeLibs/../generated/native/x86_64-linux-gnu/libsokol.a", defines: ["SOKOL_GLCORE"], systemLibs: ["X11", "Xi", "Xcursor", "GL", "dl", "pthread", "m"] },
-                NativeTarget { triple: "aarch64-linux-gnu", defines: ["SOKOL_GLCORE"], systemLibs: ["X11", "Xi", "Xcursor", "GL", "dl", "pthread", "m"] },
-                NativeTarget { triple: "x86_64-windows-msvc", staticLib: "NativeLibs/../generated/native/x86_64-windows-msvc/sokol.lib", defines: ["SOKOL_GLCORE"], systemLibs: ["opengl32"] },
-                NativeTarget { triple: "wasm32-emscripten-unknown", staticLib: "NativeLibs/../generated/native/wasm32-emscripten/libsokol.a", compilerFlags: ["--use-port=emdawnwebgpu"], linkerFlags: ["--use-port=emdawnwebgpu"] }
-            ],
+                NativeTarget { triple: "x86_64-linux-gnu" },
+                NativeTarget { triple: "aarch64-linux-gnu" },
+                NativeTarget { triple: "x86_64-windows-msvc", systemLibs: ["kernel32"] },
+                NativeTarget { triple: "aarch64-macos-none" },
+                NativeTarget { triple: "x86_64-macos-none" },
+                NativeTarget { triple: "aarch64-ios-none" },
+                NativeTarget { triple: "wasm32-emscripten-unknown" }
+            ]
         },
         NativeLibrary {
             // The xdg-shell and decoration protocols, as `wayland-scanner`
@@ -62,8 +61,13 @@ Package KiraGraphics {
             // protocol's generated inline functions; autobind owns the Kira
             // declarations, including listener callback layouts.
             //
-            // Optional: no other target has a row here, and on one this links
-            // nothing rather than failing the build.
+            // Optional, so a target with no row links nothing and the Kira
+            // declarations trap by name instead of leaving wl_* undefined at link,
+            // the same mechanism kira_metal uses off Apple. The windowed Wayland
+            // path is x86_64-linux's; aarch64-linux has no row because the arm64
+            // Linux consumer this serves is a compositor rather than a Wayland
+            // client and carries no libwayland-client. An arm64 desktop that wants
+            // the window adds the row back or dlopens the client.
             name: "waylandprotocols",
             linkMode: LinkMode.Static,
             availability: Availability.Optional,
@@ -78,8 +82,7 @@ Package KiraGraphics {
             ],
             autobind: Autobind { module: "wayland", headers: ["NativeLibs/Wayland/kira_wayland.h"], mode: AutobindMode.AllPublic },
             nativeTargets: [
-                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["wayland-client"] },
-                NativeTarget { triple: "aarch64-linux-gnu", systemLibs: ["wayland-client"] }
+                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["wayland-client"] }
             ],
         },
         NativeLibrary {
@@ -123,7 +126,13 @@ Package KiraGraphics {
                 // at run time). Dawn's Metal backend pulls in the graphics and
                 // surface frameworks below; the C++ runtime it is built against
                 // comes in through `c++`.
-                NativeTarget { triple: "aarch64-macos-none", dynamicLib: "NativeLibs/Dawn/aarch64-macos-none/lib/libwebgpu_dawn.a", frameworks: ["Metal", "QuartzCore", "Foundation", "IOKit", "IOSurface", "CoreFoundation", "CoreGraphics"], systemLibs: ["c++", "objc"] }
+                NativeTarget { triple: "aarch64-macos-none", dynamicLib: "NativeLibs/Dawn/aarch64-macos-none/lib/libwebgpu_dawn.a", frameworks: ["Metal", "QuartzCore", "Foundation", "IOKit", "IOSurface", "CoreFoundation", "CoreGraphics"], systemLibs: ["c++", "objc"] },
+                // The Web, through emscripten's own Dawn port rather than a
+                // shipped binary: `--use-port=emdawnwebgpu` builds WebGPU into
+                // the module against the browser's implementation, so there is
+                // no library to name. This is the backend the browser sandbox
+                // resolves to, and the only one wasm32 has.
+                NativeTarget { triple: "wasm32-emscripten-unknown", dynamicLib: "", compilerFlags: ["--use-port=emdawnwebgpu"], linkerFlags: ["--use-port=emdawnwebgpu"] }
             ],
         },
         NativeLibrary {
