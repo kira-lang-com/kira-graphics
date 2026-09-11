@@ -10,7 +10,8 @@ Kira Graphics is a general-purpose graphics foundation for Kira, not a UI-only r
 
 Public applications import `KiraGraphics`, configure a `GraphicsApplication`, attach lifecycle callbacks with trailing blocks, store app state with `nativeState` / `nativeUserData` / `nativeRecover<T>`, create real buffers and pipelines during init, and encode work through descriptor-first render passes and `RenderEncoder`.
 
-Raw Sokol remains available for backend work and the explicit interop sample, but normal public examples should not expose it.
+The native backends are Metal on Apple and Vulkan on Windows/Linux; Dawn remains
+available for WebGPU and compatibility runs.
 
 ## Public API
 
@@ -42,17 +43,11 @@ frame.renderPass(pass) { encoder in
 
 The local alias step is important today. Direct `state.member` capture inside the trailing render-pass block is still unsafe with the current compiler.
 
-## Compiler-Safe Descriptor Values
+## Typed Descriptor Values
 
-The repo currently uses public Int-returning helper functions instead of enum-backed descriptor values. Examples:
-
-- `bufferUsageVertex()`
-- `vertexFormatFloat3()`
-- `textureFormatDepth24Stencil8()`
-- `primitiveTopologyTriangleList()`
-- `compareFunctionLessEqual()`
-
-This is a deliberate temporary surface based on `docs/api-preflight-report.md`. Once `kirac` supports enum-backed descriptor defaults and related typing reliably, the API can migrate from these Int constants to real enums without changing the overall architecture.
+Descriptors use typed enums for usage, formats, topology, blending, depth, and
+window mode. Backend wire numbers stay inside the backend vocabulary and never
+leak into application code.
 
 ## Source Layout
 
@@ -82,15 +77,18 @@ app/
   Backend/
     Backend.kira
     BackendTypes.kira
-    Sokol/
-      SokolApplication.kira
-      SokolBackend.kira
-      SokolBuffer.kira
-      SokolConversions.kira
-      SokolFrame.kira
-      SokolPipeline.kira
-      SokolShader.kira
-      SokolTexture.kira
+    Dawn/
+      DawnApplication.kira
+      DawnContext.kira
+      DawnResources.kira
+      DawnPipeline.kira
+    Vulkan/
+      VulkanApplication.kira
+      VulkanContext.kira
+      VulkanResources.kira
+      VulkanPipeline.kira
+      VulkanPass.kira
+      VulkanDraw.kira
     Metal/
       MetalForeign.kira       (the entire objc-runtime + Metal FFI surface; no shim)
       MetalContext.kira        (device/queue/surface/registry/depth)
@@ -114,7 +112,7 @@ app/
     NativeStateBridge.kira
 ```
 
-`Public/` is the user-facing facade. `Core/` owns runtime flow, validation, and diagnostics. `Backend/` owns the backend abstraction and Sokol implementation. `Resources/` and `Shader/` hold the descriptor-first surface. `App/` owns lifecycle registration and callback-state bridging.
+`Public/` is the user-facing facade. `Core/` owns runtime flow, validation, and diagnostics. `Backend/` owns the backend abstraction and the Metal, Dawn, and Vulkan implementations. `Resources/` and `Shader/` hold the descriptor-first surface. `App/` owns lifecycle registration and callback-state bridging.
 
 ## Examples
 
@@ -124,13 +122,15 @@ Public examples:
 - `examples/basic_triangle`: real vertex buffer plus descriptor-first trailing render pass.
 - `examples/frame_api_triangle`: explicit `beginRenderPass` / `endPass` usage.
 - `examples/ksl_triangle`: KSL-backed triangle using `createShaderFromKsl(...)`.
+- `examples/vulkan_triangle`: Vulkan triangle using inline SPIR-V from `ksl!`.
 - `examples/basic_3d_cube`: vertex buffer, index buffer, depth texture, depth-enabled pipeline, and indexed draw.
 - `examples/runtime_entry`: callback-state lifecycle smoke test.
-- `examples/liquid_glass`: KSL liquid-glass render with sampled image and offscreen blur passes. On Windows, use `run_backend.ps1 opengl`, `directx`, or `vulkan`. On macOS/Linux, use `run_backend.sh`; macOS defaults to `metal`.
+- `examples/liquid_glass`: KSL liquid-glass render with sampled image and offscreen blur passes. Run `run_backend.sh metal|dawn|vulkan` or the PowerShell equivalent.
 
-Backend interop:
+Backend verification:
 
-- `examples/raw_sokol_interop`: direct raw Sokol usage only for explicit backend work.
+- `tests/metal_kik`: Apple offscreen pixel tests.
+- `tests/vulkan_kik`: Linux/Windows Vulkan clear-and-readback test.
 
 ## Validation
 
@@ -145,7 +145,7 @@ kira check --backend hybrid examples\basic_triangle
 kira check --backend hybrid examples\frame_api_triangle
 kira check --backend hybrid examples\ksl_triangle
 kira check --backend hybrid examples\runtime_entry
-kira check --backend hybrid examples\raw_sokol_interop
+  kira check --backend hybrid examples\vulkan_triangle
 kira check --backend hybrid examples\basic_3d_cube
 kira build --backend hybrid examples\basic_triangle
 kira build --backend hybrid examples\basic_3d_cube

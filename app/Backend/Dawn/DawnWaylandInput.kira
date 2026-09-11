@@ -171,6 +171,9 @@ function waylandOnToplevelConfigure(data: RawPtr, toplevel: RawPtr, width: I32, 
         states,
         kira_wayland_toplevel_state_activated(),
     ) != I32(0)
+    if state.app.backend == .Vulkan {
+        state.vulkan.focused = focused
+    }
     if focused != state.dawn.focused {
         state.dawn.focused = focused
         if focused {
@@ -187,7 +190,13 @@ function waylandOnToplevelConfigure(data: RawPtr, toplevel: RawPtr, width: I32, 
     if nextWidth == state.dawn.surfaceWidth && nextHeight == state.dawn.surfaceHeight {
         return
     }
-    dawnConfigureSurface(state, nextWidth, nextHeight)
+    if state.app.backend == .Vulkan {
+        kira_wayland_surface_note_size(state.vulkan.window, I32(nextWidth), I32(nextHeight))
+        state.dawn.surfaceWidth = nextWidth
+        state.dawn.surfaceHeight = nextHeight
+    } else {
+        dawnConfigureSurface(state, nextWidth, nextHeight)
+    }
     onEvent(AppEvent {
         kind: .Resized,
         windowWidth: nextWidth,
@@ -222,6 +231,9 @@ function dawnWaylandToggleMaximize(state: borrow GraphicsAppRuntimeState) {
 function waylandOnToplevelClose(data: RawPtr, toplevel: RawPtr) {
     var state = nativeRecover<GraphicsAppRuntimeState>(data)
     state.dawn.quitRequested = true
+    if state.app.backend == .Vulkan {
+        state.vulkan.quitRequested = true
+    }
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     onEvent(AppEvent { kind: .QuitRequested })
     return

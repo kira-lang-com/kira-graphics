@@ -12,8 +12,8 @@ struct UniformBlockDescriptor {
     var binding: Int = 0
     // The block's std140 byte size, what a bound uniform's payload must match.
     var size: Int = 0
-    // Which Sokol `uniform_blocks[]` slot the vertex stage configured this
-    // block into, or -1 when the block is not visible to the vertex stage.
+    // Which vertex-stage binding slot configured this block, or -1 when the
+    // block is not visible to the vertex stage.
     var vertexBlockSlot: Int = -1
     // The fragment-stage counterpart of `vertexBlockSlot`.
     var fragmentBlockSlot: Int = -1

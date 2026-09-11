@@ -9,6 +9,12 @@ function kiraGraphicsHostWindowHandle(frame: borrow RenderFrame) -> RawPtr {
             }
             return nativeRecover<GraphicsAppRuntimeState>(frame.backendContext).dawn.window
         }
+        Vulkan -> {
+            if pointerIsNull(frame.backendContext) {
+                return nullPointer()
+            }
+            return nativeRecover<GraphicsAppRuntimeState>(frame.backendContext).vulkan.window
+        }
         Metal -> return nullPointer()
     }
 }

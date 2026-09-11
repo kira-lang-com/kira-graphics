@@ -36,8 +36,8 @@ Package KiraGraphics {
         NativeLibrary {
             // The backend-neutral C the library needs and Kira cannot express:
             // a monotonic clock, and the weak live-reload hooks. This was
-            // sokol's job only because sokol was the one native library here;
-            // it outlived sokol because a frame is timed on every backend.
+            // It remains backend-neutral because every renderer needs the same
+            // clock and live-reload hooks.
             name: "graphics_support",
             linkMode: LinkMode.Static,
             headers: Headers { entrypoint: "NativeLibs/Support/kira_graphics_support.h", includeDirs: ["NativeLibs/Support"] },
@@ -63,11 +63,9 @@ Package KiraGraphics {
             //
             // Optional, so a target with no row links nothing and the Kira
             // declarations trap by name instead of leaving wl_* undefined at link,
-            // the same mechanism kira_metal uses off Apple. The windowed Wayland
-            // path is x86_64-linux's; aarch64-linux has no row because the arm64
-            // Linux consumer this serves is a compositor rather than a Wayland
-            // client and carries no libwayland-client. An arm64 desktop that wants
-            // the window adds the row back or dlopens the client.
+            // the same mechanism kira_metal uses off Apple. Both Linux desktop
+            // targets use this protocol seam; their systems provide the client
+            // library.
             name: "waylandprotocols",
             linkMode: LinkMode.Static,
             availability: Availability.Optional,
@@ -82,7 +80,8 @@ Package KiraGraphics {
             ],
             autobind: Autobind { module: "wayland", headers: ["NativeLibs/Wayland/kira_wayland.h"], mode: AutobindMode.AllPublic },
             nativeTargets: [
-                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["wayland-client"] }
+                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["wayland-client"] },
+                NativeTarget { triple: "aarch64-linux-gnu", systemLibs: ["wayland-client"] }
             ],
         },
         NativeLibrary {
@@ -133,6 +132,67 @@ Package KiraGraphics {
                 // no library to name. This is the backend the browser sandbox
                 // resolves to, and the only one wasm32 has.
                 NativeTarget { triple: "wasm32-emscripten-unknown", dynamicLib: "", compilerFlags: ["--use-port=emdawnwebgpu"], linkerFlags: ["--use-port=emdawnwebgpu"] }
+            ],
+        },
+        NativeLibrary {
+            // The Vulkan loader, for the from-scratch Vulkan backend that owns
+            // the desktop targets Dawn reaches Vulkan through anyway -- Linux
+            // and Windows -- without the WebGPU layer in between. Nothing is
+            // built here: the core API is a vendored copy of the Apache-2.0
+            // Vulkan-Headers (NativeLibs/Vulkan/include, unpacked as it ships),
+            // and the symbols resolve against the system's own loader, which is
+            // the one component a Vulkan program never carries itself.
+            //
+            // Dynamic, because the loader is a shared object the platform
+            // provides -- `libvulkan.so.1` on Linux, `vulkan-1.dll` on Windows --
+            // and every core entry point is a trampoline it exports, so a
+            // binding calls them directly rather than threading
+            // `vkGetInstanceProcAddr` by hand.
+            //
+            // Optional, and that is what keeps a macOS or Web build of this
+            // package working: there is no row for those targets, the binding is
+            // excluded, and `validateRenderBackend` refuses the Vulkan backend
+            // there before anything calls into it -- the same mechanism
+            // `kira_metal` uses off Apple. Apple is deliberately absent: Metal
+            // owns it here, and native Vulkan on Apple would mean shipping
+            // MoltenVK, which buys nothing the Metal backend does not already.
+            //
+            // Bound straight from the vendored `vulkan_core.h`, which carries
+            // the whole core API inline -- the autobinder emits the
+            // declarations a listed header holds itself, not the ones it pulls
+            // in, so this points at the real header the way `dawn` points at
+            // `webgpu.h` rather than at a wrapper whose body is one `#include`.
+            //
+            // `vulkan_core.h` is the platform-neutral core only. The
+            // platform-native surface-creation calls live behind
+            // `VK_USE_PLATFORM_*` in headers that drag in a window toolkit
+            // (`wayland-client.h`, `windows.h`), so the backend's per-platform
+            // window code owns that seam instead of the cross-platform binding.
+            name: "vulkan",
+            linkMode: LinkMode.Dynamic,
+            availability: Availability.Optional,
+            headers: Headers { entrypoint: "NativeLibs/Vulkan/include/vulkan/vulkan_core.h", includeDirs: ["NativeLibs/Vulkan/include"] },
+            autobind: Autobind { module: "vulkan", headers: ["NativeLibs/Vulkan/include/vulkan/vulkan_core.h"], mode: AutobindMode.AllPublic },
+            nativeTargets: [
+                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["vulkan"] },
+                NativeTarget { triple: "aarch64-linux-gnu", systemLibs: ["vulkan"] },
+                NativeTarget { triple: "x86_64-windows-msvc", systemLibs: ["vulkan-1"] }
+            ],
+        },
+        NativeLibrary {
+            // Platform surface creation is the one part of Vulkan that cannot
+            // use the neutral core header: Win32 needs HWND/HINSTANCE and
+            // Wayland needs wl_display/wl_surface. Keep that ABI in one tiny C
+            // seam while the renderer uses the generated core declarations.
+            name: "kira_vulkan_surface",
+            linkMode: LinkMode.Static,
+            availability: Availability.Optional,
+            headers: Headers { entrypoint: "NativeLibs/Vulkan/kira_vulkan_surface.h", includeDirs: ["NativeLibs/Vulkan/include", "NativeLibs/Vulkan"] },
+            sources: ["NativeLibs/Vulkan/kira_vulkan_surface.c"],
+            nativeTargets: [
+                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["vulkan", "wayland-client"] },
+                NativeTarget { triple: "aarch64-linux-gnu", systemLibs: ["vulkan", "wayland-client"] },
+                NativeTarget { triple: "x86_64-windows-msvc", systemLibs: ["vulkan-1"] }
             ],
         },
         NativeLibrary {

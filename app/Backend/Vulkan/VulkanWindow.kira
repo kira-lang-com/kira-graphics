@@ -1,0 +1,142 @@
+import Foundation
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_device_supported, abi: c }
+function vulkanDeviceSupported(physicalDevice: RawPtr) -> I32
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_has_dynamic_rendering, abi: c }
+function vulkanHasDynamicRendering(device: RawPtr) -> I32
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_begin_rendering, abi: c }
+function vulkanBeginRendering(device: RawPtr, commandBuffer: RawPtr, info: VkRenderingInfo_ptr) -> Void
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_end_rendering, abi: c }
+function vulkanEndRendering(device: RawPtr, commandBuffer: RawPtr) -> Void
+
+// Only surface creation is Vulkan-specific. Window creation stays on the same
+// native Win32 and Wayland implementations Dawn already uses, so both backends
+// get identical sizing, input and close behaviour.
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_create_win32_surface, abi: c }
+function vulkanCreateWin32Surface(instance: RawPtr, hinstance: RawPtr, window: RawPtr) -> RawPtr
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_create_wayland_surface, abi: c }
+function vulkanCreateWaylandSurface(instance: RawPtr, display: RawPtr, surface: RawPtr) -> RawPtr
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_destroy_surface, abi: c }
+function vulkanDestroySurface(instance: RawPtr, surface: RawPtr) -> Void
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_clip_cursor, abi: c }
+function vulkanClipCursor(window: RawPtr, lock: I32) -> I32
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_instance_extensions, abi: c }
+function vulkanInstanceExtensions(linuxPlatform: I32) -> RawPtr
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_device_extensions, abi: c }
+function vulkanDeviceExtensions() -> RawPtr
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_queue_priority, abi: c }
+function vulkanQueuePriority() -> RawPtr
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_dynamic_rendering_features, abi: c }
+function vulkanDynamicRenderingFeatures() -> RawPtr
+
+@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_pipeline_rendering_info, abi: c }
+function vulkanPipelineRenderingInfo(colorFormat: I32, depthFormat: I32, stencilFormat: I32) -> RawPtr
+
+enum VulkanWindowPlatform {
+    Windows
+    Linux
+}
+
+function vulkanWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: Int) -> Int {
+    if message == dawnMessageClose() {
+        destroyWindowHandle(window)
+        return 0
+    }
+    if message == dawnMessageDestroy() {
+        postQuitMessage(0)
+        return 0
+    }
+    return defaultWindowProcedure(window, message, wparam, lparam)
+}
+
+@Native
+function vulkanRegisterWindowClass(instance: RawPtr, className: borrow String) -> Bool {
+    return registerWindowClass(WindowClass {
+        byteSize: U32(80),
+        style: U32(3),
+        procedure: vulkanWindowProcedure,
+        instance: instance,
+        cursor: loadCursor(nullPointer(), U64(32512)),
+        className: className
+    }) != U16(0)
+}
+
+construct VulkanWindow {
+    requires {
+        function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr
+        function clientWidth(window: RawPtr) -> Int
+        function clientHeight(window: RawPtr) -> Int
+        function scale(window: RawPtr) -> Float
+        function resize(window: RawPtr, width: Int, height: Int)
+        function close(window: RawPtr) -> Void
+        function createSurface(instance: RawPtr, window: RawPtr) -> RawPtr
+    }
+}
+
+construct VulkanWindowWin32() extends VulkanWindow {
+    function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr {
+        let instance = moduleHandle("")
+        if !vulkanRegisterWindowClass(instance, "KiraGraphicsVulkanWindow") {
+            return nullPointer()
+        }
+        return dawnOpenWindow(instance, "KiraGraphicsVulkanWindow", title, width, height, mode, transparent, opacity)
+    }
+    function clientWidth(window: RawPtr) -> Int { return dawnClientWidth(window) }
+    function clientHeight(window: RawPtr) -> Int { return dawnClientHeight(window) }
+    function scale(window: RawPtr) -> Float { return dawnWindowScale(window) }
+    function resize(window: RawPtr, width: Int, height: Int) {
+        dawnResizeWindow(window, width, height)
+        return
+    }
+    function close(window: RawPtr) {
+        destroyWindowHandle(window)
+        return
+    }
+    function createSurface(instance: RawPtr, window: RawPtr) -> RawPtr {
+        return vulkanCreateWin32Surface(instance, moduleHandle(""), window)
+    }
+}
+
+construct VulkanWindowWayland() extends VulkanWindow {
+    function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr {
+        return DawnWindowWayland().open(title, width, height, mode, transparent, opacity)
+    }
+    function clientWidth(window: RawPtr) -> Int { return Int(kira_wayland_surface_width(window)) }
+    function clientHeight(window: RawPtr) -> Int { return Int(kira_wayland_surface_height(window)) }
+    function scale(window: RawPtr) -> Float { return 1.0 }
+    function resize(window: RawPtr, width: Int, height: Int) {
+        return
+    }
+    function close(window: RawPtr) {
+        kira_wayland_proxy_destroy(window)
+        return
+    }
+    function createSurface(instance: RawPtr, window: RawPtr) -> RawPtr {
+        return vulkanCreateWaylandSurface(instance, kira_wayland_proxy_get_display(window), window)
+    }
+}
+
+function vulkanWindowFor(platform: borrow VulkanWindowPlatform) -> Any VulkanWindow {
+    match platform {
+        Windows -> return VulkanWindowWin32()
+        Linux -> return VulkanWindowWayland()
+    }
+}
+
+function vulkanWindowPlatformForHost() -> VulkanWindowPlatform {
+    if hostPlatform() == .Linux {
+        return .Linux
+    }
+    return .Windows
+}

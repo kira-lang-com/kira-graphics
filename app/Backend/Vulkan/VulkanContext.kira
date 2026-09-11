@@ -1,0 +1,554 @@
+import Foundation
+
+// The Vulkan state owned by one graphics run.
+//
+// Vulkan handles stay behind this state rather than on public Kira values. Public
+// ids are slots in `objects`; the adjacent arrays keep the allocation, mapping,
+// format and current dynamic offset needed to use or release each slot.
+struct VulkanState {
+    var window: RawPtr = nullPointer()
+    var messageBlock: RawPtr = nullPointer()
+    var instance: RawPtr = nullPointer()
+    var physicalDevice: RawPtr = nullPointer()
+    var device: RawPtr = nullPointer()
+    var queue: RawPtr = nullPointer()
+    var surface: RawPtr = nullPointer()
+    var swapchain: RawPtr = nullPointer()
+    var commandPool: RawPtr = nullPointer()
+    var commandBuffer: RawPtr = nullPointer()
+    var imageAvailable: RawPtr = nullPointer()
+    var inFlightFence: RawPtr = nullPointer()
+    var descriptorPool: RawPtr = nullPointer()
+    var queueFamilyIndex: U32 = 0
+    var swapchainWidth: Int = 0
+    var swapchainHeight: Int = 0
+    var swapchainFormat: I32 = 0
+    var captureSupported: Bool = false
+    var swapchainImages: [RawPtr] = []
+    var swapchainViews: [RawPtr] = []
+    var swapchainPresentSemaphores: [RawPtr] = []
+    var swapchainLayouts: [I32] = []
+    var currentImageIndex: U32 = 0
+    var frameActive: Bool = false
+    var acquired: Bool = false
+    var acquireWaitPending: Bool = false
+    var focused: Bool = true
+    var pointerX: Float = 0.0
+    var pointerY: Float = 0.0
+    var hasPointer: Bool = false
+    var mouseVisible: Bool = true
+    var mouseLocked: Bool = false
+    var passActive: Bool = false
+    var passWidth: Int = 0
+    var passHeight: Int = 0
+    var passFormat: I32 = 0
+    var passColorImage: RawPtr = nullPointer()
+    var passColorView: RawPtr = nullPointer()
+    var passDepthImage: RawPtr = nullPointer()
+    var passDepthView: RawPtr = nullPointer()
+    var passIsSwapchain: Bool = false
+    var managedDepthId: U32 = 0
+    var managedDepthViewId: U32 = 0
+    var managedDepthWidth: Int = 0
+    var managedDepthHeight: Int = 0
+    var objects: [RawPtr] = []
+    var objectMemory: [RawPtr] = []
+    var objectExtra: [RawPtr] = []
+    var objectSizes: [U64] = []
+    var objectAllocationSizes: [U64] = []
+    var objectStrides: [U64] = []
+    var objectFormats: [I32] = []
+    var objectOffsets: [U64] = []
+    var objectKinds: [I32] = []
+    var objectLayouts: [I32] = []
+    var shaders: [VulkanShaderRecord] = []
+    var pipelines: [VulkanPipelineRecord] = []
+    var freeSlots: [Int] = []
+    var freeCount: Int = 0
+    var allocatedBytes: U64 = 0
+    var resourceCount: Int = 0
+    var dynamicFrame: Int = 0
+    var frameStartedAt: U64 = 0
+    var pendingUploadBuffers: [U32] = []
+    var pendingRetireObjects: [U32] = []
+    var pendingRetirePipelines: [Int] = []
+    var initialized: Bool = false
+    var announcedFramePresented: Bool = false
+    var quitRequested: Bool = false
+    var stats: FrameStatistics = FrameStatistics()
+    var framePassCount: Int = 0
+    var frameDrawCount: Int = 0
+    var frameTriangleCount: Int = 0
+}
+
+struct VulkanShaderRecord {
+    var vertexModule: RawPtr = nullPointer()
+    var fragmentModule: RawPtr = nullPointer()
+    var computeModule: RawPtr = nullPointer()
+    var vertexEntry: String = ""
+    var fragmentEntry: String = ""
+    var computeEntry: String = ""
+    var reflection: KslResourceReflection = KslResourceReflection()
+    var live: Bool = false
+}
+
+struct VulkanPipelineRecord {
+    var pipeline: RawPtr = nullPointer()
+    var layout: RawPtr = nullPointer()
+    var groupLayouts: [RawPtr] = []
+    var groupCount: Int = 0
+    var reflection: KslResourceReflection = KslResourceReflection()
+    var compute: Bool = false
+    var live: Bool = false
+}
+
+@Native
+function vulkanHasDevice(context: RawPtr) -> Bool {
+    if pointerIsNull(context) {
+        return false
+    }
+    return !pointerIsNull(nativeRecover<GraphicsAppRuntimeState>(context).vulkan.device)
+}
+
+@Native
+function vulkanShaderRecord(state: borrow VulkanState, id: U32) -> VulkanShaderRecord {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.shaders.count {
+        return VulkanShaderRecord()
+    }
+    return state.shaders[slot]
+}
+
+@Native
+function vulkanObject(state: borrow VulkanState, id: U32) -> RawPtr {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objects.count {
+        return nullPointer()
+    }
+    return state.objects[slot]
+}
+
+@Native
+function vulkanObjectMemory(state: borrow VulkanState, id: U32) -> RawPtr {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objectMemory.count {
+        return nullPointer()
+    }
+    return state.objectMemory[slot]
+}
+
+@Native
+function vulkanObjectExtra(state: borrow VulkanState, id: U32) -> RawPtr {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objectExtra.count {
+        return nullPointer()
+    }
+    return state.objectExtra[slot]
+}
+
+@Native
+function vulkanObjectOffset(state: borrow VulkanState, id: U32) -> U64 {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objectOffsets.count {
+        return U64(0)
+    }
+    return state.objectOffsets[slot]
+}
+
+@Native
+function vulkanObjectFormat(state: borrow VulkanState, id: U32) -> I32 {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objectFormats.count {
+        return I32(0)
+    }
+    return state.objectFormats[slot]
+}
+
+@Native
+function vulkanObjectSize(state: borrow VulkanState, id: U32) -> U64 {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objectSizes.count {
+        return U64(0)
+    }
+    return state.objectSizes[slot]
+}
+
+@Native
+function vulkanObjectStride(state: borrow VulkanState, id: U32) -> U64 {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objectStrides.count {
+        return U64(0)
+    }
+    return state.objectStrides[slot]
+}
+
+@Native
+function vulkanRegisterObject(state: borrow mut VulkanState, object: RawPtr, memory: RawPtr, extra: RawPtr, size: U64, format: I32, kind: I32) -> U32 {
+    if pointerIsNull(object) {
+        return U32(0)
+    }
+    var slot = 0
+    if state.freeCount > 0 {
+        state.freeCount = state.freeCount - 1
+        slot = state.freeSlots[state.freeCount]
+        state.objects[slot] = object
+        state.objectMemory[slot] = memory
+        state.objectExtra[slot] = extra
+        state.objectSizes[slot] = size
+        state.objectAllocationSizes[slot] = size
+        state.objectStrides[slot] = size
+        state.objectFormats[slot] = format
+        state.objectOffsets[slot] = U64(0)
+        state.objectKinds[slot] = kind
+        state.objectLayouts[slot] = vulkanImageLayoutUndefined()
+    } else {
+        state.objects.append(object)
+        state.objectMemory.append(memory)
+        state.objectExtra.append(extra)
+        state.objectSizes.append(size)
+        state.objectAllocationSizes.append(size)
+        state.objectStrides.append(size)
+        state.objectFormats.append(format)
+        state.objectOffsets.append(U64(0))
+        state.objectKinds.append(kind)
+        state.objectLayouts.append(vulkanImageLayoutUndefined())
+        slot = state.objects.count - 1
+    }
+    state.resourceCount = state.resourceCount + 1
+    state.allocatedBytes = state.allocatedBytes + size
+    return U32(slot + 1)
+}
+
+@Native
+function vulkanSetObjectOffset(state: borrow mut VulkanState, id: U32, offset: U64) {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objectOffsets.count {
+        return
+    }
+    state.objectOffsets[slot] = offset
+    return
+}
+
+@Native
+function vulkanSetObjectStride(state: borrow mut VulkanState, id: U32, stride: U64) {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objectStrides.count {
+        return
+    }
+    state.objectStrides[slot] = stride
+    return
+}
+
+@Native
+function vulkanObjectLayout(state: borrow VulkanState, id: U32) -> I32 {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objectLayouts.count {
+        return vulkanImageLayoutUndefined()
+    }
+    return state.objectLayouts[slot]
+}
+
+@Native
+function vulkanSetObjectLayout(state: borrow mut VulkanState, id: U32, layout: I32) {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objectLayouts.count {
+        return
+    }
+    state.objectLayouts[slot] = layout
+    return
+}
+
+@Native
+function vulkanForgetObject(state: borrow mut VulkanState, id: U32) {
+    let slot = Int(id) - 1
+    if slot < 0 || slot >= state.objects.count || pointerIsNull(state.objects[slot]) {
+        return
+    }
+    state.allocatedBytes = state.allocatedBytes - state.objectAllocationSizes[slot]
+    state.objectAllocationSizes[slot] = U64(0)
+    state.objects[slot] = nullPointer()
+    state.objectMemory[slot] = nullPointer()
+    state.objectExtra[slot] = nullPointer()
+    state.objectSizes[slot] = U64(0)
+    state.objectStrides[slot] = U64(0)
+    state.objectFormats[slot] = I32(0)
+    state.objectOffsets[slot] = U64(0)
+    state.objectKinds[slot] = 0
+    state.objectLayouts[slot] = vulkanImageLayoutUndefined()
+    if state.freeCount < state.freeSlots.count {
+        state.freeSlots[state.freeCount] = slot
+    } else {
+        state.freeSlots.append(slot)
+    }
+    state.freeCount = state.freeCount + 1
+    state.resourceCount = state.resourceCount - 1
+    return
+}
+
+// The loader writes handles and scalar counts through ordinary out pointers.
+// Keeping these tiny slots in runtime-owned memory avoids embedding host pointer
+// widths in the Kira state layout.
+@Native
+function vulkanPointerSlot() -> RawPtr {
+    let slot = allocateBytes(U64(8))
+    writePointer(slot, U64(0), nullPointer())
+    return slot
+}
+
+@Native
+function vulkanWordSlot() -> RawPtr {
+    let slot = allocateBytes(U64(4))
+    writeWord(slot, U64(0), U32(0))
+    return slot
+}
+
+@Native
+function vulkanCreateInstance(state: borrow mut VulkanState) -> Bool {
+    let application = VkApplicationInfo {
+        sType: vulkanStructureApplicationInfo(),
+        pApplicationName: "Kira Graphics Vulkan",
+        applicationVersion: U32(1),
+        pEngineName: "Kira",
+        engineVersion: U32(1),
+        apiVersion: vulkanApiVersion12()
+    }
+    let linuxPlatform = hostPlatform() == .Linux ? I32(1) : I32(0)
+    let createInfo = VkInstanceCreateInfo {
+        sType: vulkanStructureInstanceCreateInfo(),
+        pApplicationInfo: application,
+        enabledExtensionCount: U32(2),
+        ppEnabledExtensionNames: vulkanInstanceExtensions(linuxPlatform)
+    }
+    let resultSlot = vulkanPointerSlot()
+    let result = vkCreateInstance(createInfo, nullPointer(), resultSlot)
+    state.instance = pointerAt(resultSlot, U64(0))
+    freeBytes(resultSlot)
+    if result != vulkanSuccess() || pointerIsNull(state.instance) {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not create an instance (" + vulkanResultName(result) + ")")
+        return false
+    }
+    return true
+}
+
+function vulkanResultName(result: I32) -> String {
+    if result == vulkanSuccess() { return "success" }
+    if result == vulkanNotReady() { return "not ready" }
+    if result == vulkanTimeout() { return "timeout" }
+    if result == vulkanErrorOutOfHostMemory() { return "out of host memory" }
+    if result == vulkanErrorOutOfDeviceMemory() { return "out of device memory" }
+    if result == vulkanErrorInitializationFailed() { return "initialization failed" }
+    if result == vulkanErrorDeviceLost() { return "device lost" }
+    if result == vulkanErrorExtensionNotPresent() { return "extension not present" }
+    if result == vulkanErrorFeatureNotPresent() { return "feature not present" }
+    if result == vulkanErrorIncompatibleDriver() { return "incompatible driver" }
+    if result == vulkanErrorFormatNotSupported() { return "format not supported" }
+    if result == vulkanErrorSurfaceLost() { return "surface lost" }
+    if result == vulkanErrorOutOfDate() { return "out of date" }
+    return "error " + String(result)
+}
+
+@Native
+function vulkanChoosePhysicalDevice(state: borrow mut VulkanState) -> Bool {
+    let countSlot = vulkanWordSlot()
+    vkEnumeratePhysicalDevices(state.instance, countSlot, nullPointer())
+    let count = Int(wordAt(countSlot, U64(0)))
+    if count <= 0 {
+        freeBytes(countSlot)
+        graphicsDiagnostic("Kira Graphics: Vulkan found no physical device")
+        return false
+    }
+    let devices = allocateBytes(U64(count * 8))
+    let result = vkEnumeratePhysicalDevices(state.instance, countSlot, devices)
+    if result != vulkanSuccess() {
+        freeBytes(devices)
+        freeBytes(countSlot)
+        graphicsDiagnostic("Kira Graphics: Vulkan could not enumerate physical devices (" + vulkanResultName(result) + ")")
+        return false
+    }
+    var deviceIndex = 0
+    while deviceIndex < count {
+        let candidate = pointerAt(devices, U64(deviceIndex * 8))
+        if !pointerIsNull(candidate) && vulkanDeviceSupported(candidate) != I32(0) && vulkanFindQueueFamily(state, candidate) {
+            state.physicalDevice = candidate
+            freeBytes(devices)
+            freeBytes(countSlot)
+            return true
+        }
+        deviceIndex = deviceIndex + 1
+    }
+    freeBytes(devices)
+    freeBytes(countSlot)
+    graphicsDiagnostic("Kira Graphics: Vulkan found no physical device with graphics and presentation support")
+    return false
+}
+
+@Native
+function vulkanFindQueueFamily(state: borrow mut VulkanState, physicalDevice: RawPtr) -> Bool {
+    let countSlot = vulkanWordSlot()
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, countSlot, nullPointer())
+    let count = Int(wordAt(countSlot, U64(0)))
+    if count <= 0 {
+        freeBytes(countSlot)
+        return false
+    }
+    let properties = allocateBytes(U64(count * 24))
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, countSlot, properties)
+    var index = 0
+    while index < count {
+        let offset = U64(index * 24)
+        let flags = wordAt(properties, offset)
+        if (flags & (vulkanQueueGraphics() | vulkanQueueCompute())) == (vulkanQueueGraphics() | vulkanQueueCompute()) {
+            let presentSlot = vulkanWordSlot()
+            let result = vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, U32(index), state.surface, presentSlot)
+            let present = wordAt(presentSlot, U64(0)) != U32(0)
+            freeBytes(presentSlot)
+            if result == vulkanSuccess() && present {
+                state.queueFamilyIndex = U32(index)
+                freeBytes(properties)
+                freeBytes(countSlot)
+                return true
+            }
+        }
+        index = index + 1
+    }
+    freeBytes(properties)
+    freeBytes(countSlot)
+    return false
+}
+
+@Native
+function vulkanCreateDevice(state: borrow mut VulkanState) -> Bool {
+    let queueInfo = VkDeviceQueueCreateInfo {
+        sType: vulkanStructureDeviceQueueCreateInfo(),
+        queueFamilyIndex: state.queueFamilyIndex,
+        queueCount: U32(1),
+        pQueuePriorities: vulkanQueuePriority()
+    }
+    let createInfo = VkDeviceCreateInfo {
+        sType: vulkanStructureDeviceCreateInfo(),
+        pNext: vulkanDynamicRenderingFeatures(),
+        queueCreateInfoCount: U32(1),
+        pQueueCreateInfos: queueInfo,
+        enabledExtensionCount: U32(2),
+        ppEnabledExtensionNames: vulkanDeviceExtensions(),
+        pEnabledFeatures: VkPhysicalDeviceFeatures {}
+    }
+    let deviceSlot = vulkanPointerSlot()
+    let result = vkCreateDevice(state.physicalDevice, createInfo, nullPointer(), deviceSlot)
+    state.device = pointerAt(deviceSlot, U64(0))
+    freeBytes(deviceSlot)
+    if result != vulkanSuccess() || pointerIsNull(state.device) {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not create a device (" + vulkanResultName(result) + ")")
+        return false
+    }
+    if vulkanHasDynamicRendering(state.device) == I32(0) {
+        graphicsDiagnostic("Kira Graphics: Vulkan device lacks dynamic rendering commands")
+        return false
+    }
+    let queueSlot = vulkanPointerSlot()
+    vkGetDeviceQueue(state.device, state.queueFamilyIndex, U32(0), queueSlot)
+    state.queue = pointerAt(queueSlot, U64(0))
+    freeBytes(queueSlot)
+    if pointerIsNull(state.queue) {
+        graphicsDiagnostic("Kira Graphics: Vulkan returned no graphics queue")
+        return false
+    }
+    return true
+}
+
+@Native
+function vulkanCreateCommandState(state: borrow mut VulkanState) -> Bool {
+    let poolInfo = VkCommandPoolCreateInfo {
+        sType: vulkanStructureCommandPoolCreateInfo(),
+        flags: vulkanCommandPoolResettable(),
+        queueFamilyIndex: state.queueFamilyIndex
+    }
+    let poolSlot = vulkanPointerSlot()
+    let poolResult = vkCreateCommandPool(state.device, poolInfo, nullPointer(), poolSlot)
+    state.commandPool = pointerAt(poolSlot, U64(0))
+    freeBytes(poolSlot)
+    if poolResult != vulkanSuccess() || pointerIsNull(state.commandPool) {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not create a command pool (" + vulkanResultName(poolResult) + ")")
+        return false
+    }
+    let allocation = VkCommandBufferAllocateInfo {
+        sType: vulkanStructureCommandBufferAllocateInfo(),
+        commandPool: state.commandPool,
+        level: vulkanCommandBufferPrimary(),
+        commandBufferCount: U32(1)
+    }
+    let commandSlot = vulkanPointerSlot()
+    let commandResult = vkAllocateCommandBuffers(state.device, allocation, commandSlot)
+    state.commandBuffer = pointerAt(commandSlot, U64(0))
+    freeBytes(commandSlot)
+    if commandResult != vulkanSuccess() || pointerIsNull(state.commandBuffer) {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not allocate a command buffer (" + vulkanResultName(commandResult) + ")")
+        return false
+    }
+    if !vulkanCreateDescriptorPool(state) {
+        return false
+    }
+    return vulkanCreateSyncObjects(state)
+}
+
+@Native
+function vulkanCreateDescriptorPool(state: borrow mut VulkanState) -> Bool {
+    let sizes = VulkanDescriptorPoolSizeArray5 {
+        elements: [
+            VkDescriptorPoolSize { type_value: vulkanDescriptorUniformBuffer(), descriptorCount: U32(4096) },
+            VkDescriptorPoolSize { type_value: vulkanDescriptorStorageBuffer(), descriptorCount: U32(4096) },
+            VkDescriptorPoolSize { type_value: vulkanDescriptorSampledImage(), descriptorCount: U32(4096) },
+            VkDescriptorPoolSize { type_value: vulkanDescriptorSampler(), descriptorCount: U32(4096) },
+            VkDescriptorPoolSize { type_value: vulkanDescriptorStorageImage(), descriptorCount: U32(4096) }
+        ]
+    }
+    let info = VkDescriptorPoolCreateInfo {
+        sType: vulkanStructureDescriptorPoolCreateInfo(),
+        flags: U32(1),
+        maxSets: U32(4096),
+        poolSizeCount: U32(5),
+        pPoolSizes: sizes
+    }
+    let poolSlot = vulkanPointerSlot()
+    let result = vkCreateDescriptorPool(state.device, info, nullPointer(), poolSlot)
+    state.descriptorPool = pointerAt(poolSlot, U64(0))
+    freeBytes(poolSlot)
+    if result != vulkanSuccess() || pointerIsNull(state.descriptorPool) {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not create its descriptor pool (" + vulkanResultName(result) + ")")
+        return false
+    }
+    return true
+}
+
+@Native
+function vulkanCreateSyncObjects(state: borrow mut VulkanState) -> Bool {
+    let semaphoreInfo = VkSemaphoreCreateInfo { sType: vulkanStructureSemaphoreCreateInfo() }
+    let imageSlot = vulkanPointerSlot()
+    let imageResult = vkCreateSemaphore(state.device, semaphoreInfo, nullPointer(), imageSlot)
+    state.imageAvailable = pointerAt(imageSlot, U64(0))
+    freeBytes(imageSlot)
+    let fenceInfo = VkFenceCreateInfo {
+        sType: vulkanStructureFenceCreateInfo(),
+        flags: vulkanFenceSignaled()
+    }
+    let fenceSlot = vulkanPointerSlot()
+    let fenceResult = vkCreateFence(state.device, fenceInfo, nullPointer(), fenceSlot)
+    state.inFlightFence = pointerAt(fenceSlot, U64(0))
+    freeBytes(fenceSlot)
+    if imageResult != vulkanSuccess() || fenceResult != vulkanSuccess() {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not create frame synchronization objects")
+        return false
+    }
+    return !pointerIsNull(state.imageAvailable) && !pointerIsNull(state.inFlightFence)
+}
+
+function vulkanObjectKindBuffer() -> I32 { return I32(1) }
+function vulkanObjectKindImage() -> I32 { return I32(2) }
+function vulkanObjectKindImageView() -> I32 { return I32(3) }
+function vulkanObjectKindSampler() -> I32 { return I32(4) }
+function vulkanObjectKindShader() -> I32 { return I32(5) }
+function vulkanObjectKindPipeline() -> I32 { return I32(6) }
+function vulkanObjectKindPipelineLayout() -> I32 { return I32(7) }
+function vulkanObjectKindDescriptorLayout() -> I32 { return I32(8) }
+function vulkanObjectKindDescriptorPool() -> I32 { return I32(9) }
+function vulkanObjectKindDescriptorSet() -> I32 { return I32(10) }

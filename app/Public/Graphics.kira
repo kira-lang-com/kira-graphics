@@ -69,8 +69,8 @@ class Graphics {
     // emission stream and refills it every frame rather than churning buffers.
     //
     // The memory arrives with the buffer because the two are not always the same
-    // storage: on Metal a write lands where the GPU reads, on sokol it lands in a
-    // staging block `commitDynamicBuffer` hands over. See `DynamicBuffer`.
+    // storage: on Metal/Vulkan a write lands where the GPU reads, while a staging
+    // backend writes into a block `commitDynamicBuffer` hands over. See `DynamicBuffer`.
     function createDynamicBuffer(label: borrow String, floatCapacity: Int) -> DynamicBufferResult {
         return self.renderBackend().createDynamicBuffer(label, floatCapacity)
     }
@@ -187,7 +187,7 @@ class Graphics {
 
     // Drawable size in framebuffer pixels. A host rendering context-sized
     // offscreen targets must use these rather than the Metal-only
-    // `metalContextWidth`/`Height`, which read 0 on sokol.
+    // backend context accessors, which remain valid on every backend.
     function contextWidth() -> Int {
         return self.renderBackend().contextWidth()
     }
@@ -205,16 +205,16 @@ class Graphics {
     // `pixels` is RGBA8, row-major, four bytes per pixel and no header —
     // `width * height * 4` entries. One step rather than create-then-upload
     // because a backend can do better when the contents arrive with the image:
-    // sokol keeps it immutable, and Metal re-tiles it once into the layout every
-    // later sample reads.
+    // a backend may keep it immutable, and Metal re-tiles it once into the layout
+    // every later sample reads.
     function createTextureFromPixels(descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
         return self.renderBackend().createTextureFromPixels(descriptor, pixels)
     }
 
     // Replace a texture's pixels.
     //
-    // Whole-image, which is the shape both backends share: sokol has no
-    // sub-region upload at all. A caller changing part of an atlas composites
+    // Whole-image, which is the shape all current backends share: there is no
+    // sub-region upload in this public contract. A caller changing part of an atlas composites
     // into its own array and hands the whole thing over, so no backend keeps a
     // CPU copy of a texture nobody asked it to remember.
     //
@@ -233,7 +233,7 @@ class Graphics {
     // than one per glyph, which is what the sub-region form cost.
     //
     // The texture must have been created with the `SampledStreaming` usage,
-    // and on sokol this may run at most ONCE per texture per frame.
+    // and a backend may impose a once-per-frame upload limit.
     function updateTextureBytes(texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) {
         self.renderBackend().updateTextureBytes(texture, bytes, byteCount)
         return
@@ -249,7 +249,7 @@ class Graphics {
     // The one method here that names no backend, because decoding is not a
     // backend's work. `decodeImageFile` is Foundation's, reaches no device, and
     // hands back the same RGBA8 that `createTextureFromPixels` already takes on
-    // both backends. This used to be a member sokol answered and Metal
+    // all backends. This used to be a member one backend answered and Metal
     // declined, which made "can this program load a PNG" a question about which
     // GPU was in the machine.
     //

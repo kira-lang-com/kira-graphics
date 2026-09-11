@@ -167,7 +167,7 @@ class RenderFrame {
     // image is the same call with the texture passed twice and `blend` 0.
     //
     // Textures rather than ids, because the two backends bind different things:
-    // Metal binds the texture object, and sokol binds a *view* — a sampled one
+    // Metal binds the texture object, while Dawn/Vulkan bind a *view* — a sampled one
     // for what the kernel reads and a storage-image one for what it writes, and
     // neither can be recovered from an image id.
     function dispatchTextureComputePair(

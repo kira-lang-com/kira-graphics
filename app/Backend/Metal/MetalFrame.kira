@@ -225,9 +225,8 @@ function metalBenchCollect(ctxPtr: RawPtr, frameNs: borrow mut [Int], cpuNs: bor
 
 @Native
 function metalBenchReport(ctxPtr: RawPtr, frameNs: borrow mut [Int], cpuNs: borrow mut [Int], gpuNs: borrow mut [Int]) {
-    let scale = metalContextScale(ctxPtr)
-    let pxW = Int(Float(metalContextWidth(ctxPtr)) * scale)
-    let pxH = Int(Float(metalContextHeight(ctxPtr)) * scale)
+    let pxW = metalContextPhysicalWidth(ctxPtr)
+    let pxH = metalContextPhysicalHeight(ctxPtr)
     print("kira-bench on-screen  " + metalBenchInt(pxW) + "x" + metalBenchInt(pxH)
         + " px  frames " + metalBenchInt(frameNs.count)
         + "  (gpu = command-buffer residency, a ceiling)")

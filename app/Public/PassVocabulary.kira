@@ -12,7 +12,7 @@ enum TextureUsage {
     // Read by a shader, written once when it is created.
     Sampled
     // Read by a shader and re-uploadable afterwards. Separate from `Sampled`
-    // because the difference is a permission a backend enforces: sokol refuses
+    // because the difference is a permission a backend enforces: a backend may refuse
     // `sg_update_image` against an immutable image, so a texture that will be
     // written again has to say so up front.
     SampledStreaming

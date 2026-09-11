@@ -2,8 +2,8 @@ import Foundation
 // The test-harness controls a run reads, and the two backend-neutral C symbols
 // underneath them.
 //
-// All of this lived in the sokol backend because sokol was the library's only
-// C and its first run loop. None of it is sokol's: reading knobs off the
+// These controls belong to the shared application harness, not to a renderer:
+// reading knobs off the
 // environment, replaying a typing script through the ordinary event handler,
 // and timing a frame are the same on Metal and on Dawn, which both reach them
 // through here.

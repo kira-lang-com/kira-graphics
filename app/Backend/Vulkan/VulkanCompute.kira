@@ -1,0 +1,228 @@
+import Foundation
+
+// Compute pipelines share the descriptor-layout machinery used by graphics
+// pipelines. Dispatches are recorded into the frame command buffer and therefore
+// remain ordered with the render passes around them.
+
+@Native
+function vulkanCreateComputePipeline(context: RawPtr, label: borrow String, shader: borrow GraphicsShader, entryName: borrow String) -> Int {
+    if !vulkanHasDevice(context) || shader.id == 0 { return 0 }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    let shaderRecord = vulkanShaderRecord(runtime.vulkan, shader.id)
+    if !shaderRecord.live || pointerIsNull(shaderRecord.computeModule) { return 0 }
+    let layouts = vulkanCreateDescriptorSetLayouts(runtime.vulkan, shaderRecord.reflection)
+    if layouts.count != vulkanReflectionGroupCount(shaderRecord.reflection) { return 0 }
+    let layout = vulkanCreatePipelineLayout(runtime.vulkan, layouts)
+    if pointerIsNull(layout) {
+        for held in layouts { vkDestroyDescriptorSetLayout(runtime.vulkan.device, held, nullPointer()) }
+        return 0
+    }
+    let stage = VkPipelineShaderStageCreateInfo {
+        sType: vulkanStructurePipelineShaderStageCreateInfo(),
+        stage: I32(32),
+        module: shaderRecord.computeModule,
+        pName: entryName.count > 0 ? entryName : shaderRecord.computeEntry
+    }
+    let info = VkComputePipelineCreateInfo {
+        sType: vulkanStructureComputePipelineCreateInfo(),
+        stage: stage,
+        layout: layout,
+        basePipelineIndex: 0 - 1
+    }
+    let pipelineSlot = vulkanPointerSlot()
+    let result = vkCreateComputePipelines(runtime.vulkan.device, nullPointer(), U32(1), info, nullPointer(), pipelineSlot)
+    let pipeline = pointerAt(pipelineSlot, U64(0))
+    freeBytes(pipelineSlot)
+    if result != vulkanSuccess() || pointerIsNull(pipeline) {
+        vkDestroyPipelineLayout(runtime.vulkan.device, layout, nullPointer())
+        for held in layouts { vkDestroyDescriptorSetLayout(runtime.vulkan.device, held, nullPointer()) }
+        graphicsDiagnostic("Kira Graphics: Vulkan rejected compute pipeline '" + label + "' (" + vulkanResultName(result) + ")")
+        return 0
+    }
+    return vulkanRecordPipeline(runtime.vulkan, VulkanPipelineRecord {
+        pipeline: pipeline,
+        layout: layout,
+        groupLayouts: layouts,
+        groupCount: layouts.count,
+        reflection: shaderRecord.reflection,
+        compute: true,
+        live: true
+    })
+}
+
+function vulkanDispatchGroups(threadCount: Int, threadsPerGroup: Int) -> U32 {
+    let width = threadsPerGroup <= 0 ? 1 : threadsPerGroup
+    let count = threadCount <= 0 ? 1 : (threadCount + width - 1) / width
+    return U32(count)
+}
+
+@Native
+function vulkanComputeBufferGroup(state: borrow VulkanState, bufferIds: borrow [U32], firstSlot: Int) -> BindGroup {
+    let group = vulkanNewBindGroup("kira-vulkan-compute")
+    var index = 0
+    while index < bufferIds.count {
+        var groupState = nativeRecover<BindGroupState>(group.storage)
+        groupState.storageEntries.append(StorageBindEntry {
+            storageSlot: firstSlot + index,
+            viewId: bufferIds[index]
+        })
+        groupState.revision = groupState.revision + 1
+        index = index + 1
+    }
+    return group
+}
+
+@Native
+function vulkanDispatchComputeBuffers(context: RawPtr, pipelineId: Int, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
+    if !vulkanHasDevice(context) || pipelineId <= 0 { return }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    let pipeline = vulkanPipelineRecord(runtime.vulkan, pipelineId)
+    if !pipeline.live || !pipeline.compute || pointerIsNull(runtime.vulkan.commandBuffer) { return }
+    if !vulkanBeginComputeCommands(runtime.vulkan) { return }
+    let group = vulkanComputeBufferGroup(runtime.vulkan, bufferIds, 0)
+    vkCmdBindPipeline(runtime.vulkan.commandBuffer, vulkanPipelineCompute(), pipeline.pipeline)
+    let bound = pipeline.groupCount == 0 || vulkanBindDescriptorGroup(runtime.vulkan, pipeline, pipeline.reflection, 0, group, true)
+    nativeUserDataRelease(group.storage)
+    if bound { vkCmdDispatch(runtime.vulkan.commandBuffer, vulkanDispatchGroups(threadCount, threadsPerGroup), U32(1), U32(1)) }
+    vulkanFinishComputeCommands(runtime.vulkan)
+    return
+}
+
+@Native
+function vulkanDispatchDepthComputeBuffers(context: RawPtr, pipelineId: Int, depth: borrow GraphicsTexture, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
+    if !vulkanHasDevice(context) || pipelineId <= 0 { return }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    let pipeline = vulkanPipelineRecord(runtime.vulkan, pipelineId)
+    if !pipeline.live || !pipeline.compute { return }
+    if !vulkanBeginComputeCommands(runtime.vulkan) { return }
+    let group = vulkanComputeBufferGroup(runtime.vulkan, bufferIds, 1)
+    vulkanTransitionImage(runtime.vulkan, depth.id, vulkanImageLayoutShaderRead(),
+        vulkanStageEarlyFragmentTests() | U32(VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT), vulkanStageComputeShader(),
+        vulkanAccessDepthStencilWrite(), vulkanAccessShaderRead(), vulkanAspectDepth() | vulkanAspectStencil())
+    vulkanBindGroupAddTexture(group, 0, depth)
+    vkCmdBindPipeline(runtime.vulkan.commandBuffer, vulkanPipelineCompute(), pipeline.pipeline)
+    let bound = pipeline.groupCount == 0 || vulkanBindDescriptorGroup(runtime.vulkan, pipeline, pipeline.reflection, 0, group, true)
+    nativeUserDataRelease(group.storage)
+    if bound { vkCmdDispatch(runtime.vulkan.commandBuffer, vulkanDispatchGroups(threadCount, threadsPerGroup), U32(1), U32(1)) }
+    vulkanFinishComputeCommands(runtime.vulkan)
+    return
+}
+
+@Native
+function vulkanDispatchTextureComputePair(
+    context: RawPtr,
+    horizontalPipeline: Int,
+    verticalPipeline: Int,
+    source: borrow GraphicsTexture,
+    secondSource: borrow GraphicsTexture,
+    blend: Float,
+    tempNear: borrow GraphicsTexture,
+    tempFar: borrow GraphicsTexture,
+    outputNear: borrow GraphicsTexture,
+    outputFar: borrow GraphicsTexture,
+    sampler: borrow GraphicsSampler,
+    width: Int,
+    height: Int,
+) {
+    if !vulkanHasDevice(context) { return }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    let horizontal = vulkanPipelineRecord(runtime.vulkan, horizontalPipeline)
+    let vertical = vulkanPipelineRecord(runtime.vulkan, verticalPipeline)
+    if !horizontal.live || !vertical.live || !horizontal.compute || !vertical.compute { return }
+    let extentId = vulkanCreateBufferHandle(runtime.vulkan, "kira-vulkan-blur-extent",
+        vulkanBufferUsageUniform(), 16, vulkanMemoryHostVisible() | vulkanMemoryHostCoherent())
+    if extentId == 0 { return }
+    if !vulkanBeginComputeCommands(runtime.vulkan) {
+        vulkanReleaseBuffer(runtime.vulkan, extentId)
+        return
+    }
+    // Every recorded pair needs its own bytes until the submission completes.
+    vulkanWriteFloats(runtime.vulkan, extentId, [F32(width), F32(height), blend, 0.0], U64(0))
+    let extent = Uniform { storage: nullPointer(), id: extentId }
+    vulkanTransitionImage(runtime.vulkan, tempNear.id, vulkanImageLayoutGeneral(), vulkanStageTopOfPipe(), vulkanStageComputeShader(), vulkanAccessNone(), vulkanAccessShaderWrite(), vulkanAspectColor())
+    vulkanTransitionImage(runtime.vulkan, tempFar.id, vulkanImageLayoutGeneral(), vulkanStageTopOfPipe(), vulkanStageComputeShader(), vulkanAccessNone(), vulkanAccessShaderWrite(), vulkanAspectColor())
+    let first = vulkanNewBindGroup("kira-vulkan-blur-horizontal")
+    vulkanBindGroupAddUniform(first, 0, extent)
+    vulkanBindGroupAddSampler(first, 1, sampler)
+    vulkanBindGroupAddTexture(first, 2, source)
+    vulkanBindGroupAddTexture(first, 3, secondSource)
+    vulkanBindGroupAddTexture(first, 4, tempNear)
+    vulkanBindGroupAddTexture(first, 5, tempFar)
+    vkCmdBindPipeline(runtime.vulkan.commandBuffer, vulkanPipelineCompute(), horizontal.pipeline)
+    let firstBound = horizontal.groupCount == 0 || vulkanBindDescriptorGroup(runtime.vulkan, horizontal, horizontal.reflection, 0, first, true)
+    nativeUserDataRelease(first.storage)
+    if !firstBound {
+        vulkanFinishComputeCommands(runtime.vulkan)
+        vulkanRetireComputeBuffer(runtime.vulkan, extentId)
+        return
+    }
+    vkCmdDispatch(runtime.vulkan.commandBuffer, vulkanDispatchGroups(width, 16), vulkanDispatchGroups(height, 16), U32(1))
+    vulkanTransitionImage(runtime.vulkan, tempNear.id, vulkanImageLayoutShaderRead(), vulkanStageComputeShader(), vulkanStageComputeShader(), vulkanAccessShaderWrite(), vulkanAccessShaderRead(), vulkanAspectColor())
+    vulkanTransitionImage(runtime.vulkan, tempFar.id, vulkanImageLayoutShaderRead(), vulkanStageComputeShader(), vulkanStageComputeShader(), vulkanAccessShaderWrite(), vulkanAccessShaderRead(), vulkanAspectColor())
+    vulkanTransitionImage(runtime.vulkan, outputNear.id, vulkanImageLayoutGeneral(), vulkanStageTopOfPipe(), vulkanStageComputeShader(), vulkanAccessNone(), vulkanAccessShaderWrite(), vulkanAspectColor())
+    vulkanTransitionImage(runtime.vulkan, outputFar.id, vulkanImageLayoutGeneral(), vulkanStageTopOfPipe(), vulkanStageComputeShader(), vulkanAccessNone(), vulkanAccessShaderWrite(), vulkanAspectColor())
+    let second = vulkanNewBindGroup("kira-vulkan-blur-vertical")
+    vulkanBindGroupAddUniform(second, 0, extent)
+    vulkanBindGroupAddSampler(second, 1, sampler)
+    vulkanBindGroupAddTexture(second, 2, tempNear)
+    vulkanBindGroupAddTexture(second, 3, tempFar)
+    vulkanBindGroupAddTexture(second, 4, outputNear)
+    vulkanBindGroupAddTexture(second, 5, outputFar)
+    vkCmdBindPipeline(runtime.vulkan.commandBuffer, vulkanPipelineCompute(), vertical.pipeline)
+    let secondBound = vertical.groupCount == 0 || vulkanBindDescriptorGroup(runtime.vulkan, vertical, vertical.reflection, 0, second, true)
+    nativeUserDataRelease(second.storage)
+    if secondBound { vkCmdDispatch(runtime.vulkan.commandBuffer, vulkanDispatchGroups(width, 16), vulkanDispatchGroups(height, 16), U32(1)) }
+    vulkanTransitionImage(runtime.vulkan, outputNear.id, vulkanImageLayoutShaderRead(), vulkanStageComputeShader(), vulkanStageFragmentShader() | vulkanStageComputeShader(), vulkanAccessShaderWrite(), vulkanAccessShaderRead(), vulkanAspectColor())
+    vulkanTransitionImage(runtime.vulkan, outputFar.id, vulkanImageLayoutShaderRead(), vulkanStageComputeShader(), vulkanStageFragmentShader() | vulkanStageComputeShader(), vulkanAccessShaderWrite(), vulkanAccessShaderRead(), vulkanAspectColor())
+    vulkanFinishComputeCommands(runtime.vulkan)
+    vulkanRetireComputeBuffer(runtime.vulkan, extentId)
+    return
+}
+
+@Native
+function vulkanRetireComputeBuffer(state: borrow mut VulkanState, id: U32) {
+    if state.frameActive {
+        state.pendingUploadBuffers.append(id)
+    } else {
+        vulkanReleaseBuffer(state, id)
+    }
+}
+
+@Native
+function vulkanReadBufferU32(context: RawPtr, buffer: borrow GraphicsBuffer, index: Int) -> U32 {
+    if !vulkanHasDevice(context) || buffer.id == 0 || index < 0 { return U32(0) }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    if runtime.vulkan.passActive {
+        graphicsDiagnostic("Kira Graphics: end the Vulkan render pass before reading a buffer")
+        return U32(0)
+    }
+    if U64(index) >= vulkanObjectStride(runtime.vulkan, buffer.id) / U64(4) { return U32(0) }
+    if runtime.vulkan.frameActive {
+        if !vulkanFlushCommands(runtime.vulkan, true) {
+            runtime.vulkan.quitRequested = true
+            return U32(0)
+        }
+    } else if vkQueueWaitIdle(runtime.vulkan.queue) != vulkanSuccess() { return U32(0) }
+    let mapped = vulkanObjectExtra(runtime.vulkan, buffer.id)
+    if pointerIsNull(mapped) { return U32(0) }
+    return wordAt(mapped, vulkanObjectOffset(runtime.vulkan, buffer.id) + U64(index * 4))
+}
+
+@Native
+function vulkanOptimizeTexture(context: RawPtr, textureId: Int) {
+    let _ = context
+    let _ = textureId
+    return
+}
+
+@Native
+function vulkanMonotonicNanoseconds() -> U64 {
+    return U64(kgMonotonicSeconds() * 1000000000.0)
+}
+
+@Native
+function vulkanFrameStatistics(context: RawPtr) -> FrameStatistics {
+    if pointerIsNull(context) { return FrameStatistics {} }
+    let runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    return runtime.vulkan.stats
+}

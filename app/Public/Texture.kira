@@ -1,7 +1,7 @@
 // A texture, and the views a backend reaches it through.
 //
 // Metal has one object: the id is the texture, and the view fields repeat it.
-// sokol splits the two — an image holds the pixels, and a view is what a bind
+// Dawn and Vulkan split the two — an image holds the pixels, and a view is what a bind
 // group, a UI draw and a pass attachment each take — so the ids it mints travel
 // here with the image rather than in a table keyed on it. A caller passes a
 // `GraphicsTexture` and never learns which of the two shapes it has.

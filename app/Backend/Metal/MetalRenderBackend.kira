@@ -172,25 +172,36 @@ construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
         return metalContextScale(context)
     }
 
-    // Recorded on the context by the run loop, because sokol's `sapp_*` are not
-    // valid here.
+    // Framebuffer pixels, matching Dawn/Vulkan and the RenderBackend contract:
+    // `backingScale` is pixels per point and `viewportWidth/Height` are points.
+    // (These used to return the view bounds in points, so every caller that
+    // divided by the scale — notably the UI batch's beginFrame — halved the
+    // logical viewport on Retina and drew the whole interface at 2x.)
     function contextWidth() -> Int {
-        return metalContextWidth(context)
+        return metalContextPhysicalWidth(context)
     }
 
     function contextHeight() -> Int {
-        return metalContextHeight(context)
+        return metalContextPhysicalHeight(context)
     }
 
     // The run loop keeps the context's width/height tracking the host view's
-    // bounds, which Metal reports in points, so reading them reflows the UI to
-    // the current window size during an interactive resize.
+    // bounds; points are what the physical drawable divided by the scale gives,
+    // the same derivation Dawn and Vulkan use.
     function viewportWidth() -> Float {
-        return Float(metalContextWidth(context))
+        let scale = metalContextScale(context)
+        if scale <= 0.0 {
+            return Float(metalContextPhysicalWidth(context))
+        }
+        return Float(metalContextPhysicalWidth(context)) / scale
     }
 
     function viewportHeight() -> Float {
-        return Float(metalContextHeight(context))
+        let scale = metalContextScale(context)
+        if scale <= 0.0 {
+            return Float(metalContextPhysicalHeight(context))
+        }
+        return Float(metalContextPhysicalHeight(context)) / scale
     }
 
     // --- compute ---------------------------------------------------------
@@ -302,7 +313,7 @@ construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
     // loop's state and the third is Dawn's, and handing the context through
     // either would route every Metal draw into that backend's path.
     function makeEncoder(passActive: Bool) -> RenderEncoder {
-        return makeRenderEncoderForBackend(passActive, context, nullPointer())
+        return makeRenderEncoderForBackend(passActive, context, nullPointer(), nullPointer())
     }
 
     function submitFrame(frame: borrow RenderFrame) -> Void {

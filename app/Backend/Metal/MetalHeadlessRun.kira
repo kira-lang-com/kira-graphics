@@ -293,9 +293,8 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
         // number an on-screen run captures its drawable.
         let offscreenHarness = metalHarnessKnobs(app)
         if offscreenHarness.capturePath.count > 0 && fi + 1 == offscreenHarness.captureAtFrame {
-            let offscreenScale = metalContextScale(ctxPtr)
-            let offscreenW = Int(Float(metalContextWidth(ctxPtr)) * offscreenScale)
-            let offscreenH = Int(Float(metalContextHeight(ctxPtr)) * offscreenScale)
+            let offscreenW = metalContextPhysicalWidth(ctxPtr)
+            let offscreenH = metalContextPhysicalHeight(ctxPtr)
             if metalCapturePpm(ctxPtr, metalMemReadPtr(ctxPtr, metalOffsetColorTexture()), offscreenW, offscreenH, offscreenHarness.capturePath) {
                 graphicsDiagnostic("Kira Graphics wrote the rendered frame to " + offscreenHarness.capturePath)
             }
@@ -318,9 +317,8 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
     // target mid-run; an offscreen-scale run has a points-x-scale target).
     let dumpEnv = metalGetEnv("KIRA_METAL_IMAGE_DUMP")
     if !pointerIsNull(dumpEnv) {
-        let dumpScale = metalContextScale(ctxPtr)
-        let dumpW = Int(Float(metalContextWidth(ctxPtr)) * dumpScale)
-        let dumpH = Int(Float(metalContextHeight(ctxPtr)) * dumpScale)
+        let dumpW = metalContextPhysicalWidth(ctxPtr)
+        let dumpH = metalContextPhysicalHeight(ctxPtr)
         metalContextImageDump(ctxPtr, dumpW, dumpH, dumpEnv)
     }
     metalContextFree(ctxPtr)

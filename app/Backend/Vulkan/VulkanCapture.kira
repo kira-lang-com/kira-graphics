@@ -1,0 +1,80 @@
+import Foundation
+
+// Record readback while the acquired image still belongs to the application.
+// Consume the staging buffer after its submission fence completes. This is a proof
+// instrument, not a rendering path: a finite capture is what lets a test inspect
+// actual pixels instead of trusting draw counters.
+
+@Native
+function vulkanRecordFrameCapture(state: borrow mut VulkanState) -> U32 {
+    if !state.captureSupported || !state.frameActive || !state.acquired || state.swapchainImages.count == 0 {
+        graphicsDiagnostic("Kira Graphics: Vulkan cannot capture this swapchain")
+        return U32(0)
+    }
+    if state.passActive { vulkanEndPassAndCommitState(state) }
+    let byteCount = state.swapchainWidth * state.swapchainHeight * 4
+    let staging = vulkanCreateBufferHandle(state, "kira-vulkan-frame-capture", vulkanBufferUsageTransferDestination(), byteCount, vulkanMemoryHostVisible() | vulkanMemoryHostCoherent())
+    if staging == 0 {
+        return U32(0)
+    }
+    let image = state.swapchainImages[Int(state.currentImageIndex)]
+    vulkanTransitionSwapchainImage(state, image, state.currentImageIndex, vulkanImageLayoutTransferSource(), vulkanStageColorAttachmentOutput(), vulkanStageTransfer(), vulkanAccessColorAttachmentWrite(), vulkanAccessTransferRead())
+    vkCmdCopyImageToBuffer(state.commandBuffer, image, vulkanImageLayoutTransferSource(), vulkanObject(state, staging), U32(1), VkBufferImageCopy {
+        imageSubresource: VkImageSubresourceLayers {
+            aspectMask: vulkanAspectColor(),
+            layerCount: U32(1)
+        },
+        imageExtent: VkExtent3D {
+            width: U32(state.swapchainWidth),
+            height: U32(state.swapchainHeight),
+            depth: U32(1)
+        }
+    })
+    vulkanTransitionSwapchainImage(state, image, state.currentImageIndex, vulkanImageLayoutPresent(), vulkanStageTransfer(), vulkanStageBottomOfPipe(), vulkanAccessTransferRead(), vulkanAccessNone())
+    return staging
+}
+
+@Native
+function vulkanWriteFrameCapture(state: borrow mut VulkanState, staging: U32, path: borrow String) {
+    if staging == 0 { return }
+    if vkQueueWaitIdle(state.queue) != vulkanSuccess() {
+        graphicsDiagnostic("Kira Graphics: Vulkan capture submission did not complete")
+        return
+    }
+    let mapped = vulkanObjectExtra(state, staging)
+    if !pointerIsNull(mapped) {
+        let pixels = vulkanPortablePixmap(mapped, state.swapchainWidth, state.swapchainHeight, state.swapchainFormat)
+        if writeBytesFile(path, pixels) {
+            graphicsDiagnostic("Kira Graphics wrote the presented frame to " + path)
+        } else {
+            graphicsDiagnostic("Kira Graphics could not write the presented frame to " + path)
+        }
+    }
+    vulkanReleaseBuffer(state, staging)
+    return
+}
+
+@Native
+function vulkanPortablePixmap(mapped: RawPtr, width: Int, height: Int, format: I32) -> [U8] {
+    let blueFirst = format == vulkanFormatBgra8()
+    var bytes: [U8] = []
+    for byte in dawnAsciiBytes("P6\n" + String(width) + " " + String(height) + "\n255\n") {
+        bytes.append(byte)
+    }
+    var row = 0
+    while row < height {
+        var column = 0
+        while column < width {
+            let offset = U64(row * width * 4 + column * 4)
+            let first = byteAt(mapped, offset)
+            let green = byteAt(mapped, offset + U64(1))
+            let third = byteAt(mapped, offset + U64(2))
+            bytes.append(blueFirst ? third : first)
+            bytes.append(green)
+            bytes.append(blueFirst ? first : third)
+            column = column + 1
+        }
+        row = row + 1
+    }
+    return bytes
+}

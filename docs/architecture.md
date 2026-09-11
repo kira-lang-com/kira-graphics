@@ -1,13 +1,13 @@
 # Architecture
 
-Kira Graphics is organized around a stable public facade, explicit descriptor data, a runtime/validation core, and a hidden Sokol backend implementation.
+Kira Graphics is organized around a stable public facade, explicit descriptor data, a runtime/validation core, and backend implementations for Metal, Dawn, and Vulkan.
 
 ## Layers
 
 `app/Public/`
 
 - user-facing API objects and handles such as `GraphicsApplication`, `Graphics`, `RenderFrame`, `RenderEncoder`, `GraphicsBuffer`, `GraphicsTexture`, `GraphicsShader`, and `RenderPipeline`
-- compiler-safe Int helper constants in `Constants.kira`
+- typed enum values for formats, usage, topology, blending, and depth
 - lifecycle callback surface that examples import directly through `KiraGraphics`
 
 `app/Core/`
@@ -23,8 +23,9 @@ Kira Graphics is organized around a stable public facade, explicit descriptor da
 `app/Backend/`
 
 - opaque backend handle types
-- Sokol-specific translation and submission logic in `app/Backend/Sokol/`
-- all raw `sg_*` and `sapp_*` usage stays here or in the explicit raw interop example
+- Metal, Dawn, and Vulkan translation and submission logic in their backend
+  directories
+- platform-native window seams stay beside the backend that owns them
 
 ## Why The Pass Model Is Descriptor-First
 
@@ -47,7 +48,7 @@ That preserves room for:
 
 The implementation pass follows `docs/api-preflight-report.md` directly. The important current constraints are:
 
-- enum-backed descriptor defaults are not yet reliable, so public descriptors use Int helper functions
+- descriptor values are typed enums; backend wire codes stay at the FFI edge
 - typed empty array defaults are not reliable, so descriptor arrays are always explicitly populated
 - array-of-struct literals require commas between elements
 - `[Int]` is used for public index data instead of `[U16]` or `[U32]`
@@ -70,17 +71,20 @@ Direct `state.pipeline`-style capture inside the render-pass callback body is st
 
 ## Current Backend Scope
 
-The Sokol backend now translates a strong honest subset of the descriptor data:
+Metal is the Apple backend. Dawn owns the WebGPU path and remains available on
+Windows, Linux, and Web. Vulkan is the direct desktop backend on x86_64 and
+aarch64 Linux plus x86_64 Windows:
 
-- real float vertex buffers
-- real `[Int]` index buffers, currently consumed as uint32 index buffers
-- vertex layout translation for the first four attributes
-- one active color target in pass submission
-- one active color target in pipeline translation
-- depth texture creation for depth-enabled passes
-- indexed and non-indexed draw submission with instance counts
+- the core API is generated from the vendored Vulkan-Headers
+- Win32 and Wayland surface creation lives in one small C ABI seam
+- device memory, host-visible ring buffers, images, samplers, SPIR-V shader
+  modules, descriptor sets, dynamic-rendering pipelines, compute dispatch, and
+  swapchain presentation are owned by `app/Backend/Vulkan/`
+- the Vulkan harness can capture a presented BGRA/RGBA frame as a PPM for pixel
+  inspection
 
-Fields that are stored publicly but not fully enforced yet should stay documented as deferred limitations instead of being hidden.
+The Vulkan path deliberately has no macOS target; Metal owns Apple and avoids a
+second MoltenVK distribution path.
 
 ## Future Migration Path
 
@@ -88,15 +92,16 @@ The public descriptor shapes are meant to survive the next compiler step. The pl
 
 1. replace Int-returning constant helpers with enum-backed descriptor values once `kirac` supports them reliably
 2. remove the local-alias callback rule once direct outer-member capture is sound
-3. expand backend coverage for multiple color attachments, resolve targets, richer texture usage, samplers, bind groups, and view-level attachment control
+    3. expand backend coverage for multiple color attachments, richer resolve
+       targets, and additional Vulkan device features
 
 That path keeps today’s compiler-safe API honest while preserving the intended long-term graphics architecture.
 
 ## The Metal Backend (no shim)
 
 `RenderBackendKind.Metal` is a from-scratch Metal backend for Apple platforms,
-selected per-platform alongside Sokol (which still serves Windows/Linux/Web). It
-replaces the legacy OpenGL path used by Sokol on macOS with a real `CAMetalLayer`
+selected per-platform alongside Dawn and Vulkan. It
+replaces the legacy cross-platform path on Apple with a real `CAMetalLayer`
 surface.
 
 Crucially it uses **no C or Objective-C shim**. The backend drives Metal,
@@ -110,7 +115,7 @@ descriptor that only links the system frameworks.
 
 Because the Metal API is Objective-C *messages* rather than C functions, the
 foreign surface is hand-authored (one typed `objc_msgSend` alias per call shape);
-there is no C header to autobind, which is what autobinding (used for Sokol/Vulkan)
+there is no C header to autobind, which is what autobinding (used for Dawn/Vulkan)
 requires.
 
 The context is a small raw heap block threaded as a `RawPtr` handle. It owns the
@@ -158,6 +163,6 @@ helpers, no shim): `basic-foundation-app` and a `kira_ui` widget app run on scre
 single batched SDF-surface + glyph-atlas draw per frame, resizable, at interactive
 frame rates.
 
-The remaining work is making Metal the *default* Apple backend and retiring Sokol's
-Apple targets (the legacy GLSL/KSL examples still default to Sokol), plus the iOS UIKit
-host and on-device verification.
+The remaining platform boundary is iOS UIKit and on-device verification. Vulkan
+verification belongs on its Linux and Windows target runners; the macOS host
+only proves that the optional Vulkan library is excluded and Metal still links.

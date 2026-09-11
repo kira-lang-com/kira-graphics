@@ -63,7 +63,6 @@ function Assert-SampleLifecycle {
     Assert-Contains -Output $source -Needle "setVertexBuffer" -Context $Path
     Assert-Contains -Output $source -Needle "createRenderPipeline" -Context $Path
     Assert-Contains -Output $source -Needle "app.run(nativeUserData" -Context $Path
-    Assert-NotContains -Output $source -Needle "KiraGraphics.sokol" -Context $Path
     Assert-NotContains -Output $source -Needle "applicationPresentFrame" -Context $Path
     Assert-NotContains -Output $source -Needle "applicationRunWithVertexData" -Context $Path
 }
@@ -107,5 +106,6 @@ Run-Kira -Command "kira check --backend hybrid examples\basic_3d_cube" -Expected
 
 Assert-SampleLifecycle -Path "examples/basic_triangle/app/main.kira"
 Assert-SampleLifecycle -Path "examples/ksl_triangle/app/main.kira"
+Assert-SampleLifecycle -Path "examples/vulkan_triangle/app/main.kira"
 
 Write-Host "KSL integration checks passed."

@@ -408,12 +408,18 @@ function metalContextBeginClearTarget(ctx: RawPtr, textureId: Int, loadAction: U
 }
 
 // Create a Depth32Float depth target and a less/write depth-stencil state for the
-// context (sized to the current color target). Enables depth-tested passes.
+// context (sized to the current color target, in physical pixels, like the
+// offscreen target it pairs with — sizing it in points left Retina depth at
+// half resolution under a full-resolution color buffer).
 @Native
 function metalContextAttachDepth(ctx: RawPtr) {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
-    let width = metalMemReadU64(ctx, metalOffsetWidth())
-    let height = metalMemReadU64(ctx, metalOffsetHeight())
+    var width = metalContextPhysicalWidth(ctx)
+    var height = metalContextPhysicalHeight(ctx)
+    if width <= 0 || height <= 0 {
+        width = metalContextWidth(ctx)
+        height = metalContextHeight(ctx)
+    }
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
     let desc: RawPtr = metalMsgSend(descClass, metalSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), metalPixelFormatDepth32Float(), width, height, false)
     metalMsgSend(desc, metalSel("setUsage:"), metalTextureUsageRenderTarget() + metalTextureUsageShaderRead())

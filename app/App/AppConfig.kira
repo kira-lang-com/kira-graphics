@@ -34,8 +34,8 @@ struct GraphicsApplication {
     var height: Int = 480
     var sampleCount: Int = 1
     // Request a full-resolution framebuffer on HighDPI/Retina displays. When true
-    // (the default), the Sokol backend sets sapp_desc.high_dpi so sapp_width/height
-    // return PIXEL sizes and sapp_dpi_scale() gives the backing factor; UI layout
+    // (the default), a desktop backend makes its drawable pixel-sized and reports
+    // the backing factor; UI layout
     // stays in logical points (pixels / dpi_scale) so nothing shrinks, while the
     // framebuffer is rendered at native resolution for crisp text and vector edges.
     var highDpi: Bool = true
@@ -64,8 +64,8 @@ struct GraphicsApplication {
     // The renderer, which `KIRA_GRAPHICS_BACKEND` overrides.
     //
     // The platform's own default without one. The override is what lets one
-    // program be run on two backends without being edited between the runs —
-    // and a comparison between two backends is only worth anything when the
+    // program be run on several backends without being edited between the runs —
+    // and a comparison is only worth anything when the
     // program either one drew is the same program.
     var backend: RenderBackendKind = graphicsDefaultBackend()
     var platform: Platform = .Unknown

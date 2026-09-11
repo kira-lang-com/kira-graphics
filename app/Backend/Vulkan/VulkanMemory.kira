@@ -1,0 +1,108 @@
+import Foundation
+
+// Host-visible buffer allocation and the mapped writes shared by vertex,
+// uniform, storage and staging resources.
+
+@Native
+function vulkanFindMemoryType(state: borrow VulkanState, typeBits: U32, required: U32) -> U32 {
+    let properties = allocateBytes(U64(520))
+    vkGetPhysicalDeviceMemoryProperties(state.physicalDevice, properties)
+    let count = Int(wordAt(properties, U64(0)))
+    let limit = count > 32 ? 32 : count
+    for index in 0..limit {
+        let flags = wordAt(properties, U64(4 + index * 8))
+        if (typeBits & (U32(1) << U32(index))) != U32(0) && (flags & required) == required {
+            freeBytes(properties)
+            return U32(index)
+        }
+    }
+    freeBytes(properties)
+    return U32(4294967295)
+}
+
+@Native
+function vulkanCreateBufferHandle(state: borrow mut VulkanState, label: borrow String, usage: U32, byteSize: Int, memoryFlags: U32) -> U32 {
+    if byteSize <= 0 || pointerIsNull(state.device) {
+        return U32(0)
+    }
+    let bufferInfo = VkBufferCreateInfo {
+        sType: vulkanStructureBufferCreateInfo(),
+        size: U64(byteSize),
+        usage: usage,
+        sharingMode: vulkanSharingExclusive()
+    }
+    let bufferSlot = vulkanPointerSlot()
+    let createResult = vkCreateBuffer(state.device, bufferInfo, nullPointer(), bufferSlot)
+    let buffer = pointerAt(bufferSlot, U64(0))
+    freeBytes(bufferSlot)
+    if createResult != vulkanSuccess() || pointerIsNull(buffer) {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not create buffer '" + label + "' (" + vulkanResultName(createResult) + ")")
+        return U32(0)
+    }
+    let requirements = allocateBytes(U64(24))
+    vkGetBufferMemoryRequirements(state.device, buffer, requirements)
+    let allocationSize = doubleWordAt(requirements, U64(0))
+    let memoryTypeBits = wordAt(requirements, U64(16))
+    freeBytes(requirements)
+    let memoryType = vulkanFindMemoryType(state, memoryTypeBits, memoryFlags)
+    if memoryType == U32(4294967295) {
+        vkDestroyBuffer(state.device, buffer, nullPointer())
+        graphicsDiagnostic("Kira Graphics: Vulkan found no compatible memory for buffer '" + label + "'")
+        return U32(0)
+    }
+    let allocation = VkMemoryAllocateInfo {
+        sType: vulkanStructureMemoryAllocateInfo(),
+        allocationSize: allocationSize,
+        memoryTypeIndex: memoryType
+    }
+    let memorySlot = vulkanPointerSlot()
+    let memoryResult = vkAllocateMemory(state.device, allocation, nullPointer(), memorySlot)
+    let memory = pointerAt(memorySlot, U64(0))
+    freeBytes(memorySlot)
+    if memoryResult != vulkanSuccess() || pointerIsNull(memory) {
+        vkDestroyBuffer(state.device, buffer, nullPointer())
+        graphicsDiagnostic("Kira Graphics: Vulkan could not allocate memory for buffer '" + label + "' (" + vulkanResultName(memoryResult) + ")")
+        return U32(0)
+    }
+    let bindResult = vkBindBufferMemory(state.device, buffer, memory, U64(0))
+    if bindResult != vulkanSuccess() {
+        vkFreeMemory(state.device, memory, nullPointer())
+        vkDestroyBuffer(state.device, buffer, nullPointer())
+        graphicsDiagnostic("Kira Graphics: Vulkan could not bind memory for buffer '" + label + "' (" + vulkanResultName(bindResult) + ")")
+        return U32(0)
+    }
+    var mapped = nullPointer()
+    if (memoryFlags & vulkanMemoryHostVisible()) != U32(0) {
+        let mappedSlot = vulkanPointerSlot()
+        let mapResult = vkMapMemory(state.device, memory, U64(0), allocationSize, U32(0), mappedSlot)
+        mapped = pointerAt(mappedSlot, U64(0))
+        freeBytes(mappedSlot)
+        if mapResult != vulkanSuccess() || pointerIsNull(mapped) {
+            vkDestroyBuffer(state.device, buffer, nullPointer())
+            vkFreeMemory(state.device, memory, nullPointer())
+            graphicsDiagnostic("Kira Graphics: Vulkan could not map buffer '" + label + "' (" + vulkanResultName(mapResult) + ")")
+            return U32(0)
+        }
+    }
+    let id = vulkanRegisterObject(state, buffer, memory, mapped, U64(byteSize), I32(0), vulkanObjectKindBuffer())
+    state.objectAllocationSizes[Int(id) - 1] = allocationSize
+    state.allocatedBytes = state.allocatedBytes + allocationSize - U64(byteSize)
+    return id
+}
+
+@Native
+function vulkanWriteFloats(state: borrow VulkanState, bufferId: U32, data: borrow [F32], offset: U64) {
+    let mapped = vulkanObjectExtra(state, bufferId)
+    if pointerIsNull(mapped) {
+        return
+    }
+    let size = vulkanObjectSize(state, bufferId)
+    if offset > size || U64(data.count) > (size - offset) / U64(4) {
+        graphicsDiagnostic("Kira Graphics: Vulkan buffer write exceeds its size")
+        return
+    }
+    for index in 0..data.count {
+        writeFloat32(mapped, offset + U64(index * 4), data[index])
+    }
+    return
+}

@@ -1,0 +1,139 @@
+import Foundation
+
+// Resource retirement and public destruction entry points.
+
+@Native
+function vulkanDeferObjectRelease(state: borrow mut VulkanState, id: U32) -> Bool {
+    if !state.frameActive { return false }
+    for pending in state.pendingRetireObjects {
+        if pending == id { return true }
+    }
+    state.pendingRetireObjects.append(id)
+    return true
+}
+
+@Native
+function vulkanReleaseRetiredObjects(state: borrow mut VulkanState) {
+    for id in state.pendingRetireObjects {
+        let kind = state.objectKinds[Int(id) - 1]
+        if kind == vulkanObjectKindImageView() { vulkanReleaseImageView(state, id) }
+    }
+    for id in state.pendingRetireObjects {
+        let kind = state.objectKinds[Int(id) - 1]
+        if kind == vulkanObjectKindBuffer() { vulkanReleaseBuffer(state, id) }
+        if kind == vulkanObjectKindImage() { vulkanReleaseImage(state, id) }
+        if kind == vulkanObjectKindSampler() { vulkanReleaseSampler(state, id) }
+    }
+    state.pendingRetireObjects = []
+    for index in state.pendingRetirePipelines { vulkanReleasePipeline(state, index) }
+    state.pendingRetirePipelines = []
+}
+
+@Native
+function vulkanReleaseBuffer(state: borrow mut VulkanState, id: U32) {
+    let buffer = vulkanObject(state, id)
+    if pointerIsNull(buffer) {
+        return
+    }
+    if vulkanDeferObjectRelease(state, id) { return }
+    if !pointerIsNull(state.queue) { vkQueueWaitIdle(state.queue) }
+    let memory = vulkanObjectMemory(state, id)
+    if !pointerIsNull(state.device) {
+        if !pointerIsNull(vulkanObjectExtra(state, id)) && !pointerIsNull(memory) {
+            vkUnmapMemory(state.device, memory)
+        }
+        vkDestroyBuffer(state.device, buffer, nullPointer())
+        if !pointerIsNull(memory) {
+            vkFreeMemory(state.device, memory, nullPointer())
+        }
+    }
+    vulkanForgetObject(state, id)
+    return
+}
+
+@Native
+function vulkanReleaseImageView(state: borrow mut VulkanState, id: U32) {
+    let view = vulkanObject(state, id)
+    if pointerIsNull(view) {
+        return
+    }
+    if vulkanDeferObjectRelease(state, id) { return }
+    if !pointerIsNull(state.queue) { vkQueueWaitIdle(state.queue) }
+    vkDestroyImageView(state.device, view, nullPointer())
+    vulkanForgetObject(state, id)
+    return
+}
+
+@Native
+function vulkanReleaseImage(state: borrow mut VulkanState, id: U32) {
+    let image = vulkanObject(state, id)
+    if pointerIsNull(image) {
+        return
+    }
+    if vulkanDeferObjectRelease(state, id) { return }
+    if !pointerIsNull(state.queue) { vkQueueWaitIdle(state.queue) }
+    let memory = vulkanObjectMemory(state, id)
+    vkDestroyImage(state.device, image, nullPointer())
+    if !pointerIsNull(memory) {
+        vkFreeMemory(state.device, memory, nullPointer())
+    }
+    vulkanForgetObject(state, id)
+    return
+}
+
+@Native
+function vulkanDestroyBuffer(context: RawPtr, buffer: borrow GraphicsBuffer) {
+    if !vulkanHasDevice(context) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    vulkanReleaseBuffer(state.vulkan, buffer.id)
+    return
+}
+
+@Native
+function vulkanDestroyUniform(context: RawPtr, uniform: borrow Uniform) {
+    if !vulkanHasDevice(context) {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    vulkanReleaseBuffer(state.vulkan, uniform.id)
+    if !pointerIsNull(uniform.storage) { nativeUserDataRelease(uniform.storage) }
+    return
+}
+
+@Native
+function vulkanDestroySampler(context: RawPtr, sampler: borrow GraphicsSampler) {
+    if !vulkanHasDevice(context) || sampler.id == 0 {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    vulkanReleaseSampler(state.vulkan, sampler.id)
+    return
+}
+
+@Native
+function vulkanReleaseSampler(state: borrow mut VulkanState, id: U32) {
+    let handle = vulkanObject(state, id)
+    if !pointerIsNull(handle) {
+        if vulkanDeferObjectRelease(state, id) { return }
+        if !pointerIsNull(state.queue) { vkQueueWaitIdle(state.queue) }
+        vkDestroySampler(state.device, handle, nullPointer())
+        vulkanForgetObject(state, id)
+    }
+    return
+}
+
+@Native
+function vulkanDestroyTexture(context: RawPtr, texture: borrow GraphicsTexture) {
+    if !vulkanHasDevice(context) || texture.id == 0 {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    if texture.storageViewId != 0 { vulkanReleaseImageView(state.vulkan, texture.storageViewId) }
+    if texture.depthViewId != 0 { vulkanReleaseImageView(state.vulkan, texture.depthViewId) }
+    if texture.colorViewId != 0 { vulkanReleaseImageView(state.vulkan, texture.colorViewId) }
+    if texture.viewId != 0 { vulkanReleaseImageView(state.vulkan, texture.viewId) }
+    vulkanReleaseImage(state.vulkan, texture.id)
+    return
+}

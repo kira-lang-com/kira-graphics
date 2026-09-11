@@ -27,7 +27,7 @@ struct DepthStencilDescriptor {
     // No depth buffer unless a pipeline asks for one.
     //
     // A backend may bake this into the pipeline object and check it against the
-    // pass being drawn into — sokol does — so a pipeline naming a depth format
+    // pass being drawn into — a backend may enforce this — so a pipeline naming a depth format
     // is a pipeline that can only be used in a pass carrying that attachment.
     // Defaulting to a real format made every pipeline claim one, and a pipeline
     // drawn into an offscreen colour target with no depth was then refused at

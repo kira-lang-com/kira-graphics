@@ -1,0 +1,224 @@
+import Foundation
+
+// The window-facing swapchain. The presentable images are owned by Vulkan's
+// swapchain, so only their views live in the run state; application textures use
+// the normal object table.
+
+function vulkanCompositeAlpha(capabilities: borrow VkSurfaceCapabilitiesKHR) -> I32 {
+    if (capabilities.supportedCompositeAlpha & U32(1)) != U32(0) { return I32(1) }
+    if (capabilities.supportedCompositeAlpha & U32(2)) != U32(0) { return I32(2) }
+    if (capabilities.supportedCompositeAlpha & U32(4)) != U32(0) { return I32(4) }
+    return I32(8)
+}
+
+@Native
+function vulkanSurfaceExtent(state: borrow VulkanState, capabilities: RawPtr) -> VkExtent2D {
+    if wordAt(capabilities, U64(8)) != U32(4294967295) {
+        return VkExtent2D {
+            width: wordAt(capabilities, U64(8)),
+            height: wordAt(capabilities, U64(12))
+        }
+    }
+    let window = vulkanWindowFor(vulkanWindowPlatformForHost())
+    var width = window.clientWidth(state.window)
+    var height = window.clientHeight(state.window)
+    if width <= 0 { width = 1 }
+    if height <= 0 { height = 1 }
+    let minWidth = Int(wordAt(capabilities, U64(16)))
+    let minHeight = Int(wordAt(capabilities, U64(20)))
+    let maxWidth = Int(wordAt(capabilities, U64(24)))
+    let maxHeight = Int(wordAt(capabilities, U64(28)))
+    if width < minWidth { width = minWidth }
+    if height < minHeight { height = minHeight }
+    if width > maxWidth { width = maxWidth }
+    if height > maxHeight { height = maxHeight }
+    return VkExtent2D {
+        width: U32(width),
+        height: U32(height)
+    }
+}
+
+@Native
+function vulkanChooseSurfaceFormat(state: borrow VulkanState, count: Int, formats: RawPtr) -> VkSurfaceFormatKHR {
+    var selected = VkSurfaceFormatKHR {
+        format: vulkanFormatBgra8()
+    }
+    var index = 0
+    while index < count {
+        let format = I32(wordAt(formats, U64(index * 8)))
+        let colorSpace = I32(wordAt(formats, U64(index * 8 + 4)))
+        if format == vulkanFormatBgra8() || format == vulkanFormatRgba8() {
+            return VkSurfaceFormatKHR {
+                format: format,
+                colorSpace: colorSpace
+            }
+        }
+        if index == 0 {
+            selected = VkSurfaceFormatKHR {
+                format: format,
+                colorSpace: colorSpace
+            }
+        }
+        index = index + 1
+    }
+    return selected
+}
+
+@Native
+function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
+    let capabilities = allocateBytes(U64(52))
+    let capabilitiesResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(state.physicalDevice, state.surface, capabilities)
+    if capabilitiesResult != vulkanSuccess() {
+        freeBytes(capabilities)
+        graphicsDiagnostic("Kira Graphics: Vulkan could not query surface capabilities (" + vulkanResultName(capabilitiesResult) + ")")
+        return false
+    }
+    let formatsCountSlot = vulkanWordSlot()
+    let formatsResult = vkGetPhysicalDeviceSurfaceFormatsKHR(state.physicalDevice, state.surface, formatsCountSlot, nullPointer())
+    let formatCount = Int(wordAt(formatsCountSlot, U64(0)))
+    if formatsResult != vulkanSuccess() || formatCount <= 0 {
+        freeBytes(formatsCountSlot)
+        freeBytes(capabilities)
+        graphicsDiagnostic("Kira Graphics: Vulkan surface reported no usable formats")
+        return false
+    }
+    let formats = allocateBytes(U64(formatCount * 8))
+    let formatsReadResult = vkGetPhysicalDeviceSurfaceFormatsKHR(state.physicalDevice, state.surface, formatsCountSlot, formats)
+    if formatsReadResult != vulkanSuccess() {
+        freeBytes(formats)
+        freeBytes(formatsCountSlot)
+        freeBytes(capabilities)
+        return false
+    }
+    let chosen = vulkanChooseSurfaceFormat(state, formatCount, formats)
+    let extent = vulkanSurfaceExtent(state, capabilities)
+    let minCount = wordAt(capabilities, U64(0))
+    let maxCount = wordAt(capabilities, U64(4))
+    var imageCount = minCount + U32(1)
+    if maxCount != U32(0) && imageCount > maxCount { imageCount = maxCount }
+    let supportedUsage = wordAt(capabilities, U64(48))
+    var imageUsage = vulkanImageUsageColorAttachment()
+    state.captureSupported = (supportedUsage & vulkanImageUsageTransferSource()) != U32(0) && (chosen.format == vulkanFormatBgra8() || chosen.format == vulkanFormatRgba8())
+    if state.captureSupported { imageUsage = imageUsage | vulkanImageUsageTransferSource() }
+    let transform = I32(wordAt(capabilities, U64(40)))
+    let capabilitiesValue = VkSurfaceCapabilitiesKHR {
+        supportedCompositeAlpha: wordAt(capabilities, U64(44))
+    }
+    let info = VkSwapchainCreateInfoKHR {
+        sType: vulkanStructureSwapchainCreateInfo(),
+        surface: state.surface,
+        minImageCount: imageCount,
+        imageFormat: chosen.format,
+        imageColorSpace: chosen.colorSpace,
+        imageExtent: extent,
+        imageArrayLayers: U32(1),
+        imageUsage: imageUsage,
+        imageSharingMode: vulkanSharingExclusive(),
+        preTransform: transform,
+        compositeAlpha: vulkanCompositeAlpha(capabilitiesValue),
+        presentMode: I32(2),
+        clipped: U32(1)
+    }
+    let swapchainSlot = vulkanPointerSlot()
+    let swapchainResult = vkCreateSwapchainKHR(state.device, info, nullPointer(), swapchainSlot)
+    state.swapchain = pointerAt(swapchainSlot, U64(0))
+    freeBytes(swapchainSlot)
+    freeBytes(formats)
+    freeBytes(formatsCountSlot)
+    freeBytes(capabilities)
+    if formatsReadResult != vulkanSuccess() || swapchainResult != vulkanSuccess() || pointerIsNull(state.swapchain) {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not create a swapchain (" + vulkanResultName(swapchainResult) + ")")
+        return false
+    }
+    let imageCountSlot = vulkanWordSlot()
+    let imagesResult = vkGetSwapchainImagesKHR(state.device, state.swapchain, imageCountSlot, nullPointer())
+    let count = Int(wordAt(imageCountSlot, U64(0)))
+    if imagesResult != vulkanSuccess() || count <= 0 {
+        freeBytes(imageCountSlot)
+        return false
+    }
+    let images = allocateBytes(U64(count * 8))
+    let imageReadResult = vkGetSwapchainImagesKHR(state.device, state.swapchain, imageCountSlot, images)
+    if imageReadResult != vulkanSuccess() {
+        freeBytes(images)
+        freeBytes(imageCountSlot)
+        return false
+    }
+    state.swapchainImages = []
+    state.swapchainViews = []
+    state.swapchainPresentSemaphores = []
+    state.swapchainLayouts = []
+    var index = 0
+    while index < count {
+        let image = pointerAt(images, U64(index * 8))
+        state.swapchainImages.append(image)
+        let viewInfo = VkImageViewCreateInfo {
+            sType: vulkanStructureImageViewCreateInfo(),
+            image: image,
+            viewType: vulkanImageViewType2d(),
+            format: chosen.format,
+            components: VkComponentMapping {},
+            subresourceRange: VkImageSubresourceRange {
+                aspectMask: vulkanAspectColor(),
+                levelCount: U32(1),
+                layerCount: U32(1)
+            }
+        }
+        let viewSlot = vulkanPointerSlot()
+        let viewResult = vkCreateImageView(state.device, viewInfo, nullPointer(), viewSlot)
+        let view = pointerAt(viewSlot, U64(0))
+        freeBytes(viewSlot)
+        if viewResult != vulkanSuccess() || pointerIsNull(view) {
+            freeBytes(images)
+            freeBytes(imageCountSlot)
+            return false
+        }
+        state.swapchainViews.append(view)
+        let semaphoreSlot = vulkanPointerSlot()
+        let semaphoreResult = vkCreateSemaphore(state.device, VkSemaphoreCreateInfo {
+            sType: vulkanStructureSemaphoreCreateInfo()
+        }, nullPointer(), semaphoreSlot)
+        let semaphore = pointerAt(semaphoreSlot, U64(0))
+        freeBytes(semaphoreSlot)
+        if semaphoreResult != vulkanSuccess() || pointerIsNull(semaphore) {
+            freeBytes(images)
+            freeBytes(imageCountSlot)
+            return false
+        }
+        state.swapchainPresentSemaphores.append(semaphore)
+        state.swapchainLayouts.append(vulkanImageLayoutUndefined())
+        index = index + 1
+    }
+    state.swapchainWidth = Int(extent.width)
+    state.swapchainHeight = Int(extent.height)
+    state.swapchainFormat = chosen.format
+    freeBytes(images)
+    freeBytes(imageCountSlot)
+    return true
+}
+
+@Native
+function vulkanDestroySwapchain(state: borrow mut VulkanState) {
+    for semaphore in state.swapchainPresentSemaphores {
+        vkDestroySemaphore(state.device, semaphore, nullPointer())
+    }
+    state.swapchainPresentSemaphores = []
+    for view in state.swapchainViews {
+        if !pointerIsNull(view) { vkDestroyImageView(state.device, view, nullPointer()) }
+    }
+    state.swapchainViews = []
+    state.swapchainImages = []
+    state.swapchainLayouts = []
+    if !pointerIsNull(state.swapchain) {
+        vkDestroySwapchainKHR(state.device, state.swapchain, nullPointer())
+        state.swapchain = nullPointer()
+    }
+    return
+}
+
+@Native
+function vulkanRecreateSwapchain(state: borrow mut VulkanState) -> Bool {
+    vkDeviceWaitIdle(state.device)
+    vulkanDestroySwapchain(state)
+    return vulkanCreateSwapchain(state)
+}

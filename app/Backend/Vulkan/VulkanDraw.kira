@@ -1,0 +1,367 @@
+import Foundation
+
+// Draw encoding. Vulkan descriptor sets are transient per draw and reclaimed by
+// resetting the descriptor pool after the frame fence completes. This preserves
+// public bind groups' pipeline-independent lifetime without leaking one set per
+// frame.
+
+function vulkanResourceBinding(reflection: borrow KslResourceReflection, group: Int, binding: Int) -> I32 {
+    for item in reflection.uniforms {
+        if item.group == group && item.binding == binding && item.stageMask != 0 { return vulkanDescriptorUniformBuffer() }
+    }
+    for item in reflection.storageBuffers {
+        if item.group == group && item.binding == binding && item.stageMask != 0 { return vulkanDescriptorStorageBuffer() }
+    }
+    for item in reflection.textures {
+        if item.group == group && item.binding == binding && item.stageMask != 0 { return vulkanDescriptorSampledImage() }
+    }
+    for item in reflection.samplers {
+        if item.group == group && item.binding == binding && item.stageMask != 0 { return vulkanDescriptorSampler() }
+    }
+    for item in reflection.images {
+        if item.group == group && item.binding == binding && item.stageMask != 0 { return vulkanDescriptorStorageImage() }
+    }
+    return I32(0 - 1)
+}
+
+function vulkanHasUniform(group: borrow BindGroupState, binding: Int) -> Bool {
+    for entry in group.uniformEntries {
+        if entry.uniformSlot == binding { return true }
+    }
+    return false
+}
+
+function vulkanHasTexture(group: borrow BindGroupState, binding: Int) -> Bool {
+    for entry in group.textureEntries {
+        if entry.textureSlot == binding { return true }
+    }
+    return false
+}
+
+function vulkanHasSampler(group: borrow BindGroupState, binding: Int) -> Bool {
+    for entry in group.samplerEntries {
+        if entry.samplerSlot == binding { return true }
+    }
+    return false
+}
+
+function vulkanHasStorage(group: borrow BindGroupState, binding: Int) -> Bool {
+    for entry in group.storageEntries {
+        if entry.storageSlot == binding { return true }
+    }
+    return false
+}
+
+@Native
+function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, binding: Int, descriptorType: I32, group: borrow BindGroupState) -> Bool {
+    if descriptorType == vulkanDescriptorUniformBuffer() {
+        for entry in group.uniformEntries {
+            if entry.uniformSlot == binding {
+                let bufferId = vulkanSnapshotUniform(state, entry.uniform)
+                let buffer = vulkanObject(state, bufferId)
+                if pointerIsNull(buffer) { return false }
+                let info = VkDescriptorBufferInfo {
+                    buffer: buffer,
+                    range: vulkanObjectStride(state, bufferId)
+                }
+                vkUpdateDescriptorSets(state.device, U32(1), VkWriteDescriptorSet {
+                    sType: vulkanStructureWriteDescriptorSet(),
+                    dstSet: set,
+                    dstBinding: U32(binding),
+                    descriptorCount: U32(1),
+                    descriptorType: descriptorType,
+                    pBufferInfo: info
+                }, U32(0), nullPointer())
+                return true
+            }
+        }
+        return false
+    }
+    if descriptorType == vulkanDescriptorStorageBuffer() {
+        for entry in group.storageEntries {
+            if entry.storageSlot == binding {
+                let buffer = vulkanObject(state, entry.viewId)
+                if pointerIsNull(buffer) { return false }
+                let info = VkDescriptorBufferInfo {
+                    buffer: buffer,
+                    range: vulkanObjectStride(state, entry.viewId)
+                }
+                vkUpdateDescriptorSets(state.device, U32(1), VkWriteDescriptorSet {
+                    sType: vulkanStructureWriteDescriptorSet(),
+                    dstSet: set,
+                    dstBinding: U32(binding),
+                    descriptorCount: U32(1),
+                    descriptorType: descriptorType,
+                    pBufferInfo: info
+                }, U32(0), nullPointer())
+                return true
+            }
+        }
+        return false
+    }
+    if descriptorType == vulkanDescriptorSampledImage() || descriptorType == vulkanDescriptorStorageImage() {
+        for entry in group.textureEntries {
+            if entry.textureSlot == binding {
+                let viewId = descriptorType == vulkanDescriptorStorageImage() ? entry.texture.storageViewId : entry.texture.viewId
+                let view = vulkanObject(state, viewId)
+                if pointerIsNull(view) { return false }
+                let info = VkDescriptorImageInfo {
+                    imageView: view,
+                    imageLayout: descriptorType == vulkanDescriptorStorageImage() ? vulkanImageLayoutGeneral() : vulkanImageLayoutShaderRead()
+                }
+                vkUpdateDescriptorSets(state.device, U32(1), VkWriteDescriptorSet {
+                    sType: vulkanStructureWriteDescriptorSet(),
+                    dstSet: set,
+                    dstBinding: U32(binding),
+                    descriptorCount: U32(1),
+                    descriptorType: descriptorType,
+                    pImageInfo: info
+                }, U32(0), nullPointer())
+                return true
+            }
+        }
+        return false
+    }
+    if descriptorType == vulkanDescriptorSampler() {
+        for entry in group.samplerEntries {
+            if entry.samplerSlot == binding {
+                let sampler = vulkanObject(state, entry.sampler.id)
+                if pointerIsNull(sampler) { return false }
+                let info = VkDescriptorImageInfo {
+                    sampler: sampler
+                }
+                vkUpdateDescriptorSets(state.device, U32(1), VkWriteDescriptorSet {
+                    sType: vulkanStructureWriteDescriptorSet(),
+                    dstSet: set,
+                    dstBinding: U32(binding),
+                    descriptorCount: U32(1),
+                    descriptorType: descriptorType,
+                    pImageInfo: info
+                }, U32(0), nullPointer())
+                return true
+            }
+        }
+        return false
+    }
+    return false
+}
+
+@Native
+function vulkanDynamicOffsetWords(state: borrow VulkanState, reflection: borrow KslResourceReflection, groupIndex: Int, group: borrow BindGroupState) -> [U32] {
+    var offsets: [U32] = []
+    for binding in vulkanDescriptorBindings(reflection, groupIndex) {
+        let descriptorType = binding.descriptorType
+        if descriptorType == vulkanDescriptorUniformBuffer() {
+            for entry in group.uniformEntries {
+                if entry.uniformSlot == Int(binding.binding) {
+                    offsets.append(pointerIsNull(entry.uniform.storage) ? U32(vulkanObjectOffset(state, entry.uniform.id)) : U32(0))
+                }
+            }
+        } else if descriptorType == vulkanDescriptorStorageBuffer() {
+            for entry in group.storageEntries {
+                if entry.storageSlot == Int(binding.binding) {
+                    offsets.append(U32(vulkanObjectOffset(state, entry.viewId)))
+                }
+            }
+        }
+    }
+    return offsets
+}
+
+@Native
+function vulkanBindDescriptorGroup(state: borrow mut VulkanState, pipeline: borrow VulkanPipelineRecord, reflection: borrow KslResourceReflection, groupIndex: Int, group: borrow BindGroup, present: Bool) -> Bool {
+    let bindings = vulkanDescriptorBindings(reflection, groupIndex)
+    if bindings.count == 0 { return true }
+    if !present || pointerIsNull(group.storage) {
+        graphicsDiagnostic("Kira Graphics: Vulkan draw left descriptor group " + String(groupIndex) + " unbound")
+        return false
+    }
+    let groupState = nativeRecover<BindGroupState>(group.storage)
+    return vulkanBindDescriptorState(state, pipeline, reflection, groupIndex, groupState)
+}
+
+@Native
+function vulkanBindDescriptorState(state: borrow mut VulkanState, pipeline: borrow VulkanPipelineRecord, reflection: borrow KslResourceReflection, groupIndex: Int, groupState: borrow BindGroupState) -> Bool {
+    let bindings = vulkanDescriptorBindings(reflection, groupIndex)
+    for binding in bindings {
+        let descriptorType = binding.descriptorType
+        var supplied = false
+        if descriptorType == vulkanDescriptorUniformBuffer() { supplied = vulkanHasUniform(groupState, Int(binding.binding)) }
+        if descriptorType == vulkanDescriptorStorageBuffer() { supplied = vulkanHasStorage(groupState, Int(binding.binding)) }
+        if descriptorType == vulkanDescriptorSampledImage() || descriptorType == vulkanDescriptorStorageImage() { supplied = vulkanHasTexture(groupState, Int(binding.binding)) }
+        if descriptorType == vulkanDescriptorSampler() { supplied = vulkanHasSampler(groupState, Int(binding.binding)) }
+        if !supplied {
+            graphicsDiagnostic("Kira Graphics: Vulkan draw did not supply descriptor binding " + String(binding.binding))
+            return false
+        }
+    }
+    let layout = pipeline.groupLayouts[groupIndex]
+    let layoutSlot = vulkanPointerSlot()
+    writePointer(layoutSlot, U64(0), layout)
+    let setSlot = vulkanPointerSlot()
+    let allocationResult = vkAllocateDescriptorSets(state.device, VkDescriptorSetAllocateInfo {
+        sType: vulkanStructureDescriptorSetAllocateInfo(),
+        descriptorPool: state.descriptorPool,
+        descriptorSetCount: U32(1),
+        pSetLayouts: layoutSlot
+    }, setSlot)
+    let set = pointerAt(setSlot, U64(0))
+    freeBytes(layoutSlot)
+    if allocationResult != vulkanSuccess() || pointerIsNull(set) {
+        freeBytes(setSlot)
+        graphicsDiagnostic("Kira Graphics: Vulkan could not allocate a descriptor set (" + vulkanResultName(allocationResult) + ")")
+        return false
+    }
+    for binding in bindings {
+        if !vulkanWriteDescriptor(state, set, Int(binding.binding), binding.descriptorType, groupState) {
+            freeBytes(setSlot)
+            return false
+        }
+    }
+    let offsets = vulkanDynamicOffsetWords(state, reflection, groupIndex, groupState)
+    let offsetSlot = allocateBytes(U64(offsets.count * 4))
+    for index in 0..offsets.count {
+        writeWord(offsetSlot, U64(index * 4), offsets[index])
+    }
+    let bindPoint = pipeline.compute ? vulkanPipelineCompute() : vulkanPipelineGraphics()
+    vkCmdBindDescriptorSets(state.commandBuffer, bindPoint, pipeline.layout, U32(groupIndex), U32(1), setSlot, U32(offsets.count), offsetSlot)
+    freeBytes(offsetSlot)
+    freeBytes(setSlot)
+    return true
+}
+
+@Native
+function vulkanDrawWithBindings(
+    runtime: RawPtr,
+    hasScissor: Bool,
+    scissorX: Int,
+    scissorY: Int,
+    scissorWidth: Int,
+    scissorHeight: Int,
+    pipeline: borrow RenderPipeline,
+    vertexBufferId: U32,
+    hasVertexBuffer: Bool,
+    indexBufferId: U32,
+    hasIndexBuffer: Bool,
+    indexFormat: borrow IndexFormat,
+    bindGroup0: borrow BindGroup,
+    hasBindGroup0: Bool,
+    bindGroup1: borrow BindGroup,
+    hasBindGroup1: Bool,
+    bindGroup2: borrow BindGroup,
+    hasBindGroup2: Bool,
+    bindGroup3: borrow BindGroup,
+    hasBindGroup3: Bool,
+    firstIndex: Int,
+    vertexCount: Int,
+    indexCount: Int,
+    instanceCount: Int,
+) {
+    if !vulkanHasDevice(runtime) { return }
+    var state = nativeRecover<GraphicsAppRuntimeState>(runtime)
+    if !state.vulkan.passActive || pipeline.id == 0 { return }
+    let record = vulkanPipelineRecord(state.vulkan, Int(pipeline.id))
+    if !record.live || pointerIsNull(record.pipeline) { return }
+    vkCmdBindPipeline(state.vulkan.commandBuffer, vulkanPipelineGraphics(), record.pipeline)
+    vkCmdSetViewport(state.vulkan.commandBuffer, U32(0), U32(1), VkViewport {
+        y: F32(state.vulkan.passHeight),
+        width: F32(state.vulkan.passWidth),
+        height: F32(0 - state.vulkan.passHeight),
+        maxDepth: 1.0
+    })
+    var x = 0
+    var y = 0
+    var width = state.vulkan.passWidth
+    var height = state.vulkan.passHeight
+    if hasScissor {
+        x = scissorX < 0 ? 0 : scissorX
+        y = scissorY < 0 ? 0 : scissorY
+        width = scissorWidth
+        height = scissorHeight
+        if scissorX < 0 { width = width + scissorX }
+        if scissorY < 0 { height = height + scissorY }
+        if x + width > state.vulkan.passWidth { width = state.vulkan.passWidth - x }
+        if y + height > state.vulkan.passHeight { height = state.vulkan.passHeight - y }
+    }
+    if width <= 0 || height <= 0 { return }
+    vkCmdSetScissor(state.vulkan.commandBuffer, U32(0), U32(1), VkRect2D {
+        offset: VkOffset2D { x: I32(x), y: I32(y) },
+        extent: VkExtent2D { width: U32(width), height: U32(height) }
+    })
+    if hasVertexBuffer {
+        let buffer = vulkanObject(state.vulkan, vertexBufferId)
+        let bufferSlot = vulkanPointerSlot()
+        let offsetSlot = vulkanPointerSlot()
+        writePointer(bufferSlot, U64(0), buffer)
+        writeWord(offsetSlot, U64(0), U32(vulkanObjectOffset(state.vulkan, vertexBufferId)))
+        vkCmdBindVertexBuffers(state.vulkan.commandBuffer, U32(0), U32(1), bufferSlot, offsetSlot)
+        freeBytes(bufferSlot)
+        freeBytes(offsetSlot)
+    }
+    if hasIndexBuffer {
+        let buffer = vulkanObject(state.vulkan, indexBufferId)
+        vkCmdBindIndexBuffer(state.vulkan.commandBuffer, buffer, vulkanObjectOffset(state.vulkan, indexBufferId), indexFormat == .Uint16 ? vulkanIndexUint16() : vulkanIndexUint32())
+    }
+    if !vulkanApplyBindings(state.vulkan, record, bindGroup0, hasBindGroup0, bindGroup1, hasBindGroup1, bindGroup2, hasBindGroup2, bindGroup3, hasBindGroup3) { return }
+    let instances = instanceCount <= 0 ? 1 : instanceCount
+    if indexCount > 0 && hasIndexBuffer {
+        vkCmdDrawIndexed(state.vulkan.commandBuffer, U32(indexCount), U32(instances), U32(firstIndex), I32(0), U32(0))
+        state.vulkan.frameDrawCount = state.vulkan.frameDrawCount + 1
+        state.vulkan.frameTriangleCount = state.vulkan.frameTriangleCount + indexCount * instances / 3
+        return
+    }
+    if vertexCount > 0 {
+        vkCmdDraw(state.vulkan.commandBuffer, U32(vertexCount), U32(instances), U32(0), U32(0))
+        state.vulkan.frameDrawCount = state.vulkan.frameDrawCount + 1
+        state.vulkan.frameTriangleCount = state.vulkan.frameTriangleCount + vertexCount * instances / 3
+    }
+    return
+}
+
+@Native
+function vulkanEncoderDrawIndirect(encoder: borrow RenderEncoderState, indirectBufferId: Int) {
+    if pointerIsNull(encoder.vulkanRuntime) { return }
+    var state = nativeRecover<GraphicsAppRuntimeState>(encoder.vulkanRuntime)
+    if !state.vulkan.passActive { return }
+    let pipeline = vulkanPipelineRecord(state.vulkan, Int(encoder.pipeline.id))
+    let arguments = vulkanObject(state.vulkan, U32(indirectBufferId))
+    if !pipeline.live || pointerIsNull(arguments) { return }
+    vkCmdBindPipeline(state.vulkan.commandBuffer, vulkanPipelineGraphics(), pipeline.pipeline)
+    vkCmdSetViewport(state.vulkan.commandBuffer, U32(0), U32(1), VkViewport {
+        y: F32(state.vulkan.passHeight),
+        width: F32(state.vulkan.passWidth),
+        height: F32(0 - state.vulkan.passHeight),
+        maxDepth: 1.0
+    })
+    var x = 0
+    var y = 0
+    var width = state.vulkan.passWidth
+    var height = state.vulkan.passHeight
+    if encoder.hasScissor {
+        x = encoder.scissorX < 0 ? 0 : encoder.scissorX
+        y = encoder.scissorY < 0 ? 0 : encoder.scissorY
+        width = encoder.scissorWidth + (encoder.scissorX < 0 ? encoder.scissorX : 0)
+        height = encoder.scissorHeight + (encoder.scissorY < 0 ? encoder.scissorY : 0)
+        if x + width > state.vulkan.passWidth { width = state.vulkan.passWidth - x }
+        if y + height > state.vulkan.passHeight { height = state.vulkan.passHeight - y }
+    }
+    if width <= 0 || height <= 0 { return }
+    vkCmdSetScissor(state.vulkan.commandBuffer, U32(0), U32(1), VkRect2D {
+        offset: VkOffset2D { x: I32(x), y: I32(y) },
+        extent: VkExtent2D { width: U32(width), height: U32(height) }
+    })
+    if encoder.hasVertexBuffer {
+        let buffer = vulkanObject(state.vulkan, encoder.vertexBufferId)
+        let bufferSlot = vulkanPointerSlot()
+        let offsetSlot = vulkanPointerSlot()
+        writePointer(bufferSlot, U64(0), buffer)
+        writeWord(offsetSlot, U64(0), U32(vulkanObjectOffset(state.vulkan, encoder.vertexBufferId)))
+        vkCmdBindVertexBuffers(state.vulkan.commandBuffer, U32(0), U32(1), bufferSlot, offsetSlot)
+        freeBytes(bufferSlot)
+        freeBytes(offsetSlot)
+    }
+    if !vulkanApplyBindings(state.vulkan, pipeline, encoder.bindGroup0, encoder.hasBindGroup0, encoder.bindGroup1, encoder.hasBindGroup1, encoder.bindGroup2, encoder.hasBindGroup2, encoder.bindGroup3, encoder.hasBindGroup3) { return }
+    vkCmdDrawIndirect(state.vulkan.commandBuffer, arguments, U64(0), U32(1), U32(16))
+    state.vulkan.frameDrawCount = state.vulkan.frameDrawCount + 1
+    return
+}

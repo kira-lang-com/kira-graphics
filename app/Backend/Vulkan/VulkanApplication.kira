@@ -1,0 +1,373 @@
+import Foundation
+
+// Vulkan's native run loop. Window events are added at the platform boundary;
+// the GPU lifetime below is deliberately independent of that translation.
+
+@Native
+function vulkanRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) {
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    runtime.vulkan = VulkanState()
+    readHarnessKnobs(runtime)
+    if hostPlatform() == .Windows && app.highDpi {
+        markProcessDpiAware()
+    }
+    let window = vulkanWindowFor(vulkanWindowPlatformForHost())
+    runtime.vulkan.window = window.open(app.title, app.width, app.height, app.windowMode, app.transparent, app.opacity)
+    if pointerIsNull(runtime.vulkan.window) { return }
+    if hostPlatform() == .Windows {
+        runtime.vulkan.messageBlock = allocateBytes(U64(48))
+        dawnAttachWindowRuntime(runtime.vulkan.window, runtimeUserData)
+    }
+    if hostPlatform() == .Linux {
+        runtime.dawn.window = runtime.vulkan.window
+        dawnWaylandAttachInput(runtime, runtimeUserData)
+        let display = kira_wayland_proxy_get_display(runtime.vulkan.window)
+        kira_wayland_surface_commit(runtime.vulkan.window)
+        kira_wayland_display_roundtrip(display)
+    }
+    if !vulkanCreateInstance(runtime.vulkan) {
+        vulkanShutdownState(runtime.vulkan)
+        return
+    }
+    runtime.vulkan.surface = window.createSurface(runtime.vulkan.instance, runtime.vulkan.window)
+    if pointerIsNull(runtime.vulkan.surface) {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not create a surface for its window")
+        vulkanShutdownState(runtime.vulkan)
+        return
+    }
+    if !vulkanChoosePhysicalDevice(runtime.vulkan) || !vulkanCreateDevice(runtime.vulkan) || !vulkanCreateCommandState(runtime.vulkan) || !vulkanCreateSwapchain(runtime.vulkan) {
+        vulkanShutdownState(runtime.vulkan)
+        return
+    }
+    runtime.dawn.surfaceWidth = runtime.vulkan.swapchainWidth
+    runtime.dawn.surfaceHeight = runtime.vulkan.swapchainHeight
+    runtime.vulkan.initialized = true
+    kiraGraphicsLiveBackendInitialized()
+    let graphics = Graphics {
+        userData: runtime.userData,
+        backend: .Vulkan,
+        backendContext: runtimeUserData
+    }
+    let onInit: (Graphics) -> Void = runtime.app.initHandler
+    onInit(move graphics)
+    vulkanDriveFrames(runtimeUserData)
+    vkDeviceWaitIdle(runtime.vulkan.device)
+    let cleanupGraphics = Graphics {
+        userData: runtime.userData,
+        backend: .Vulkan,
+        backendContext: runtimeUserData
+    }
+    let onCleanup: (Graphics) -> Void = runtime.app.cleanupHandler
+    onCleanup(move cleanupGraphics)
+    vulkanShutdownState(runtime.vulkan)
+    return
+}
+
+@Native
+function vulkanDriveFrames(runtimeUserData: RawPtr) {
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
+    while !runtime.vulkan.quitRequested {
+        if hostPlatform() == .Windows {
+            vulkanPumpWindows(runtime, runtimeUserData)
+        }
+        if hostPlatform() == .Linux {
+            dawnPumpWayland(runtime.vulkan.window)
+        }
+        if runtime.vulkan.quitRequested { return }
+        vulkanResizeIfNeeded(runtime)
+        if !vulkanAcquireFrame(runtime.vulkan) { return }
+        runtime.vulkan.frameStartedAt = vulkanMonotonicNanoseconds()
+        runtime.vulkan.framePassCount = 0
+        runtime.vulkan.frameDrawCount = 0
+        runtime.vulkan.frameTriangleCount = 0
+        let graphics = Graphics {
+            userData: runtime.userData,
+            backend: .Vulkan,
+            backendContext: runtimeUserData
+        }
+        var frame = graphics.frame()
+        runtime.frameIndex = runtime.frameIndex + 1
+        vulkanDriveScripts(runtime, frame, runtime.frameIndex - 1)
+        let onFrame: (borrow mut RenderFrame) -> Void = runtime.app.frameHandler
+        onFrame(frame)
+        if frame.shouldQuit {
+            runtime.vulkan.quitRequested = true
+        }
+        var captureBuffer = U32(0)
+        if runtime.captureAtFrame > 0 && runtime.frameIndex == runtime.captureAtFrame {
+            captureBuffer = vulkanRecordFrameCapture(runtime.vulkan)
+        }
+        vulkanSubmitFrame(runtimeUserData, frame)
+        nativeUserDataRelease(frame.currentEncoder.storage)
+        vulkanWriteFrameCapture(runtime.vulkan, captureBuffer, runtime.capturePath)
+        if runtime.quitAfterFrames > 0 && runtime.frameIndex >= runtime.quitAfterFrames {
+            return
+        }
+    }
+    return
+}
+
+@Native
+function vulkanResizeIfNeeded(runtime: borrow mut GraphicsAppRuntimeState) {
+    let window = vulkanWindowFor(vulkanWindowPlatformForHost())
+    let width = window.clientWidth(runtime.vulkan.window)
+    let height = window.clientHeight(runtime.vulkan.window)
+    if width <= 0 || height <= 0 || (width == runtime.vulkan.swapchainWidth && height == runtime.vulkan.swapchainHeight) {
+        return
+    }
+    if !vulkanRecreateSwapchain(runtime.vulkan) { return }
+    runtime.dawn.surfaceWidth = runtime.vulkan.swapchainWidth
+    runtime.dawn.surfaceHeight = runtime.vulkan.swapchainHeight
+    let scale = window.scale(runtime.vulkan.window)
+    let onEvent: (borrow AppEvent) -> Void = runtime.app.eventHandler
+    onEvent(AppEvent {
+        kind: .Resized,
+        windowWidth: Int(Float(width) / scale),
+        windowHeight: Int(Float(height) / scale),
+        framebufferWidth: width,
+        framebufferHeight: height
+    })
+    return
+}
+
+@Native
+function vulkanPumpWindows(runtime: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
+    let messages: WindowMessagePointer = runtime.vulkan.messageBlock
+    let onEvent: (borrow AppEvent) -> Void = runtime.app.eventHandler
+    while peekMessage(messages, nullPointer(), U32(0), U32(0), U32(1)) != 0 {
+        let message = messages.message
+        if message == dawnMessageQuit() {
+            runtime.vulkan.quitRequested = true
+            onEvent(AppEvent { kind: .QuitRequested, modifiers: dawnModifierState() })
+            return
+        }
+        vulkanDeliverWindowMessage(runtime, message, messages.wparam, messages.lparam)
+        translateMessage(messages)
+        dispatchMessage(messages)
+    }
+    let _ = runtimeUserData
+    return
+}
+
+@Native
+function vulkanDeliverWindowMessage(runtime: borrow mut GraphicsAppRuntimeState, message: U32, wparam: U64, lparam: Int) {
+    let onEvent: (borrow AppEvent) -> Void = runtime.app.eventHandler
+    let scale = vulkanWindowFor(vulkanWindowPlatformForHost()).scale(runtime.vulkan.window)
+    let rawX = lparam & 65535
+    let rawY = (lparam >> 16) & 65535
+    let x = Float(rawX >= 32768 ? rawX - 65536 : rawX) / scale
+    let y = Float(rawY >= 32768 ? rawY - 65536 : rawY) / scale
+    if message == dawnMessagePointerMove() {
+        let deltaX = runtime.vulkan.hasPointer ? x - runtime.vulkan.pointerX : 0.0
+        let deltaY = runtime.vulkan.hasPointer ? y - runtime.vulkan.pointerY : 0.0
+        runtime.vulkan.pointerX = x
+        runtime.vulkan.pointerY = y
+        runtime.vulkan.hasPointer = true
+        onEvent(AppEvent { kind: .PointerMoved, modifiers: dawnModifierState(), pointerX: x, pointerY: y, pointerDeltaX: deltaX, pointerDeltaY: deltaY })
+        return
+    }
+    if dawnMessageIsPointerButton(message) {
+        runtime.vulkan.pointerX = x
+        runtime.vulkan.pointerY = y
+        runtime.vulkan.hasPointer = true
+        onEvent(AppEvent {
+            kind: dawnMessageIsPointerDown(message) ? .PointerDown : .PointerUp,
+            modifiers: dawnModifierState(),
+            pointerButton: dawnPointerButton(message),
+            pointerX: x,
+            pointerY: y
+        })
+        return
+    }
+    if message == dawnMessageWheel() {
+        onEvent(AppEvent {
+            kind: .Scroll,
+            modifiers: dawnModifierState(),
+            pointerX: runtime.vulkan.pointerX,
+            pointerY: runtime.vulkan.pointerY,
+            scrollY: Float(dawnWheelNotches(wparam)) / 120.0
+        })
+        return
+    }
+    if message == dawnMessageKeyDown() || message == dawnMessageSystemKeyDown() {
+        onEvent(AppEvent {
+            kind: .KeyDown,
+            modifiers: dawnModifierState(),
+            keyCode: dawnKeyCode(Int(wparam)),
+            keyRepeat: ((lparam >> 30) & 1) == 1
+        })
+        return
+    }
+    if message == dawnMessageKeyUp() || message == dawnMessageSystemKeyUp() {
+        onEvent(AppEvent { kind: .KeyUp, modifiers: dawnModifierState(), keyCode: dawnKeyCode(Int(wparam)) })
+        return
+    }
+    if message == dawnMessageChar() {
+        let codepoint = Int(wparam)
+        if codepoint >= 32 && (codepoint < 55296 || codepoint > 57343) {
+            onEvent(AppEvent { kind: .TextInput, modifiers: dawnModifierState(), textCodepoint: codepoint })
+        }
+        return
+    }
+    if message == dawnMessageSetFocus() {
+        runtime.vulkan.focused = true
+        onEvent(AppEvent { kind: .Focused })
+        return
+    }
+    if message == dawnMessageKillFocus() {
+        runtime.vulkan.focused = false
+        onEvent(AppEvent { kind: .Unfocused })
+    }
+    return
+}
+
+@Native
+function vulkanDriveScripts(runtime: borrow mut GraphicsAppRuntimeState, frame: borrow mut RenderFrame, scriptFrame: Int) {
+    let onEvent: (borrow AppEvent) -> Void = runtime.app.eventHandler
+    var clickIndex = 0
+    while clickIndex + 3 <= runtime.clickScript.count {
+        if runtime.clickScript[clickIndex] == scriptFrame {
+            let px = Float(runtime.clickScript[clickIndex + 1])
+            let py = Float(runtime.clickScript[clickIndex + 2])
+            onEvent(AppEvent { kind: .PointerDown, pointerButton: .Left, pointerX: px, pointerY: py })
+            onEvent(AppEvent { kind: .PointerUp, pointerButton: .Left, pointerX: px, pointerY: py })
+        }
+        clickIndex = clickIndex + 3
+    }
+    var scrollIndex = 0
+    while scrollIndex + 4 <= runtime.scrollScript.count {
+        if runtime.scrollScript[scrollIndex] == scriptFrame {
+            let px = Float(runtime.scrollScript[scrollIndex + 1])
+            let py = Float(runtime.scrollScript[scrollIndex + 2])
+            onEvent(AppEvent { kind: .PointerMoved, pointerX: px, pointerY: py })
+            onEvent(AppEvent { kind: .Scroll, pointerX: px, pointerY: py, scrollY: Float(runtime.scrollScript[scrollIndex + 3]) / 10.0 })
+        }
+        scrollIndex = scrollIndex + 4
+    }
+    var dragIndex = 0
+    while dragIndex + 7 <= runtime.dragScript.count {
+        let start = runtime.dragScript[dragIndex]
+        let steps = runtime.dragScript[dragIndex + 6]
+        let px = Float(runtime.dragScript[dragIndex + 1])
+        let py = Float(runtime.dragScript[dragIndex + 2])
+        let dx = Float(runtime.dragScript[dragIndex + 3])
+        let dy = Float(runtime.dragScript[dragIndex + 4])
+        if scriptFrame == start {
+            onEvent(AppEvent { kind: .PointerMoved, pointerX: px, pointerY: py })
+            onEvent(AppEvent { kind: .PointerDown, pointerButton: dawnScriptButton(runtime.dragScript[dragIndex + 5]), pointerX: px, pointerY: py })
+        }
+        if steps > 0 && scriptFrame > start && scriptFrame <= start + steps {
+            let step = Float(scriptFrame - start) / Float(steps)
+            onEvent(AppEvent { kind: .PointerMoved, pointerX: px + dx * step, pointerY: py + dy * step })
+        }
+        if scriptFrame == start + steps + 1 {
+            onEvent(AppEvent { kind: .PointerUp, pointerButton: dawnScriptButton(runtime.dragScript[dragIndex + 5]), pointerX: px + dx, pointerY: py + dy })
+        }
+        dragIndex = dragIndex + 7
+    }
+    driveTypingScripts(runtime, scriptFrame)
+    let _ = frame
+    return
+}
+
+@Native
+function vulkanShutdownState(state: borrow mut VulkanState) {
+    if pointerIsNull(state.instance) {
+        if !pointerIsNull(state.window) {
+            vulkanWindowFor(vulkanWindowPlatformForHost()).close(state.window)
+            state.window = nullPointer()
+        }
+        return
+    }
+    if !pointerIsNull(state.device) {
+        vkDeviceWaitIdle(state.device)
+    }
+    for shader in state.shaders {
+        if shader.live {
+            if !pointerIsNull(shader.vertexModule) { vkDestroyShaderModule(state.device, shader.vertexModule, nullPointer()) }
+            if !pointerIsNull(shader.fragmentModule) { vkDestroyShaderModule(state.device, shader.fragmentModule, nullPointer()) }
+            if !pointerIsNull(shader.computeModule) { vkDestroyShaderModule(state.device, shader.computeModule, nullPointer()) }
+        }
+    }
+    state.shaders = []
+    for pipeline in state.pipelines {
+        if pipeline.live {
+            vkDestroyPipeline(state.device, pipeline.pipeline, nullPointer())
+            vkDestroyPipelineLayout(state.device, pipeline.layout, nullPointer())
+            for layout in pipeline.groupLayouts { vkDestroyDescriptorSetLayout(state.device, layout, nullPointer()) }
+        }
+    }
+    state.pipelines = []
+    // Views reference their images, so retire every view before any image.
+    for objectIndex in 0..state.objects.count {
+        let object = state.objects[objectIndex]
+        if !pointerIsNull(object) && state.objectKinds[objectIndex] == vulkanObjectKindImageView() && !pointerIsNull(state.device) {
+            vkDestroyImageView(state.device, object, nullPointer())
+        }
+    }
+    for objectIndex in 0..state.objects.count {
+        let object = state.objects[objectIndex]
+        if pointerIsNull(object) { continue }
+        let kind = state.objectKinds[objectIndex]
+        if kind == vulkanObjectKindImage() {
+            if !pointerIsNull(state.device) { vkDestroyImage(state.device, object, nullPointer()) }
+            let memory = state.objectMemory[objectIndex]
+            if !pointerIsNull(memory) && !pointerIsNull(state.device) { vkFreeMemory(state.device, memory, nullPointer()) }
+        }
+        if kind == vulkanObjectKindBuffer() {
+            let memory = state.objectMemory[objectIndex]
+            if !pointerIsNull(state.objectExtra[objectIndex]) && !pointerIsNull(memory) && !pointerIsNull(state.device) { vkUnmapMemory(state.device, memory) }
+            if !pointerIsNull(state.device) { vkDestroyBuffer(state.device, object, nullPointer()) }
+            if !pointerIsNull(memory) && !pointerIsNull(state.device) { vkFreeMemory(state.device, memory, nullPointer()) }
+        }
+        if kind == vulkanObjectKindSampler() && !pointerIsNull(state.device) { vkDestroySampler(state.device, object, nullPointer()) }
+    }
+    state.objects = []
+    state.objectMemory = []
+    state.objectExtra = []
+    state.objectSizes = []
+    state.objectAllocationSizes = []
+    state.objectStrides = []
+    state.objectFormats = []
+    state.objectOffsets = []
+    state.objectKinds = []
+    state.objectLayouts = []
+    if !pointerIsNull(state.descriptorPool) {
+        vkDestroyDescriptorPool(state.device, state.descriptorPool, nullPointer())
+        state.descriptorPool = nullPointer()
+    }
+    if !pointerIsNull(state.inFlightFence) {
+        vkDestroyFence(state.device, state.inFlightFence, nullPointer())
+        state.inFlightFence = nullPointer()
+    }
+    if !pointerIsNull(state.imageAvailable) {
+        vkDestroySemaphore(state.device, state.imageAvailable, nullPointer())
+        state.imageAvailable = nullPointer()
+    }
+    vulkanDestroySwapchain(state)
+    if !pointerIsNull(state.commandPool) {
+        vkDestroyCommandPool(state.device, state.commandPool, nullPointer())
+        state.commandPool = nullPointer()
+    }
+    if !pointerIsNull(state.surface) {
+        vulkanDestroySurface(state.instance, state.surface)
+        state.surface = nullPointer()
+    }
+    if !pointerIsNull(state.device) {
+        vkDestroyDevice(state.device, nullPointer())
+        state.device = nullPointer()
+    }
+    if !pointerIsNull(state.instance) {
+        vkDestroyInstance(state.instance, nullPointer())
+        state.instance = nullPointer()
+    }
+    if !pointerIsNull(state.window) {
+        vulkanWindowFor(vulkanWindowPlatformForHost()).close(state.window)
+        state.window = nullPointer()
+    }
+    if !pointerIsNull(state.messageBlock) {
+        freeBytes(state.messageBlock)
+        state.messageBlock = nullPointer()
+    }
+    return
+}

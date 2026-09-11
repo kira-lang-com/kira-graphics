@@ -1,0 +1,428 @@
+import Foundation
+
+// Pipeline layouts are derived from the KSL resource digest. A descriptor set is
+// still allocated per draw, because public bind groups intentionally exist before
+// a pipeline and Vulkan layouts are pipeline-owned.
+
+function vulkanShaderStageFlags(mask: Int) -> U32 {
+    var flags = U32(0)
+    if (mask & 1) != 0 { flags = flags | U32(1) }
+    if (mask & 2) != 0 { flags = flags | U32(16) }
+    if (mask & 4) != 0 { flags = flags | U32(32) }
+    return flags
+}
+
+function vulkanReflectionGroupCount(reflection: borrow KslResourceReflection) -> Int {
+    var count = 0
+    for block in reflection.uniforms {
+        if block.stageMask != 0 && block.group + 1 > count { count = block.group + 1 }
+    }
+    for buffer in reflection.storageBuffers {
+        if buffer.stageMask != 0 && buffer.group + 1 > count { count = buffer.group + 1 }
+    }
+    for texture in reflection.textures {
+        if texture.stageMask != 0 && texture.group + 1 > count { count = texture.group + 1 }
+    }
+    for sampler in reflection.samplers {
+        if sampler.stageMask != 0 && sampler.group + 1 > count { count = sampler.group + 1 }
+    }
+    for image in reflection.images {
+        if image.stageMask != 0 && image.group + 1 > count { count = image.group + 1 }
+    }
+    return count > 4 ? 4 : count
+}
+
+function vulkanHasBinding(bindings: borrow [VkDescriptorSetLayoutBinding], binding: Int) -> Bool {
+    for item in bindings {
+        if Int(item.binding) == binding {
+            return true
+        }
+    }
+    return false
+}
+
+function vulkanAddBinding(bindings: borrow mut [VkDescriptorSetLayoutBinding], binding: Int, descriptorType: I32, stageMask: Int) {
+    if binding < 0 || vulkanHasBinding(bindings, binding) || bindings.count >= 32 {
+        return
+    }
+    bindings.append(VkDescriptorSetLayoutBinding {
+        binding: U32(binding),
+        descriptorType: descriptorType,
+        descriptorCount: U32(1),
+        stageFlags: vulkanShaderStageFlags(stageMask)
+    })
+    return
+}
+
+function vulkanDescriptorBindings(reflection: borrow KslResourceReflection, group: Int) -> [VkDescriptorSetLayoutBinding] {
+    var bindings: [VkDescriptorSetLayoutBinding] = []
+    for block in reflection.uniforms {
+        if block.group == group && block.stageMask != 0 {
+            vulkanAddBinding(bindings, block.binding, vulkanDescriptorUniformBuffer(), block.stageMask)
+        }
+    }
+    for buffer in reflection.storageBuffers {
+        if buffer.group == group && buffer.stageMask != 0 {
+            vulkanAddBinding(bindings, buffer.binding, vulkanDescriptorStorageBuffer(), buffer.stageMask)
+        }
+    }
+    for texture in reflection.textures {
+        if texture.group == group && texture.stageMask != 0 {
+            vulkanAddBinding(bindings, texture.binding, vulkanDescriptorSampledImage(), texture.stageMask)
+        }
+    }
+    for sampler in reflection.samplers {
+        if sampler.group == group && sampler.stageMask != 0 {
+            vulkanAddBinding(bindings, sampler.binding, vulkanDescriptorSampler(), sampler.stageMask)
+        }
+    }
+    for image in reflection.images {
+        if image.group == group && image.stageMask != 0 {
+            vulkanAddBinding(bindings, image.binding, vulkanDescriptorStorageImage(), image.stageMask)
+        }
+    }
+    // Vulkan consumes dynamic offsets in ascending binding order, regardless
+    // of the resource categories used by reflection.
+    var index = 1
+    while index < bindings.count {
+        var position = index
+        while position > 0 && bindings[position - 1].binding > bindings[position].binding {
+            let previous = bindings[position - 1]
+            bindings[position - 1] = bindings[position]
+            bindings[position] = previous
+            position = position - 1
+        }
+        index = index + 1
+    }
+    return bindings
+}
+
+@Native
+function vulkanCreateDescriptorSetLayouts(state: borrow mut VulkanState, reflection: borrow KslResourceReflection) -> [RawPtr] {
+    let groupCount = vulkanReflectionGroupCount(reflection)
+    var layouts: [RawPtr] = []
+    var group = 0
+    while group < groupCount {
+        let bindings = vulkanDescriptorBindings(reflection, group)
+        let info = VkDescriptorSetLayoutCreateInfo {
+            sType: vulkanStructureDescriptorSetLayoutCreateInfo(),
+            bindingCount: U32(bindings.count),
+            pBindings: VulkanDescriptorBindingArray32 { elements: bindings }
+        }
+        let layoutSlot = vulkanPointerSlot()
+        let result = vkCreateDescriptorSetLayout(state.device, info, nullPointer(), layoutSlot)
+        let layout = pointerAt(layoutSlot, U64(0))
+        freeBytes(layoutSlot)
+        if result != vulkanSuccess() || pointerIsNull(layout) {
+            for held in layouts {
+                vkDestroyDescriptorSetLayout(state.device, held, nullPointer())
+            }
+            return []
+        }
+        layouts.append(layout)
+        group = group + 1
+    }
+    return layouts
+}
+
+@Native
+function vulkanRecordPipeline(state: borrow mut VulkanState, record: VulkanPipelineRecord) -> Int {
+    for index in 0..state.pipelines.count {
+        if !state.pipelines[index].live {
+            state.pipelines[index] = record
+            state.resourceCount = state.resourceCount + 1
+            return index + 1
+        }
+    }
+    state.pipelines.append(record)
+    state.resourceCount = state.resourceCount + 1
+    return state.pipelines.count
+}
+
+@Native
+function vulkanPipelineRecord(state: borrow VulkanState, id: Int) -> VulkanPipelineRecord {
+    let index = id - 1
+    if index < 0 || index >= state.pipelines.count {
+        return VulkanPipelineRecord {
+            pipeline: nullPointer(),
+            layout: nullPointer(),
+            reflection: KslResourceReflection {}
+        }
+    }
+    return state.pipelines[index]
+}
+
+@Native
+function vulkanCreatePipelineLayout(state: borrow mut VulkanState, layouts: borrow [RawPtr]) -> RawPtr {
+    let layoutPointers = vulkanPointerSlotArray(layouts)
+    let info = VkPipelineLayoutCreateInfo {
+        sType: vulkanStructurePipelineLayoutCreateInfo(),
+        setLayoutCount: U32(layouts.count),
+        pSetLayouts: layoutPointers
+    }
+    let layoutSlot = vulkanPointerSlot()
+    let result = vkCreatePipelineLayout(state.device, info, nullPointer(), layoutSlot)
+    let layout = pointerAt(layoutSlot, U64(0))
+    freeBytes(layoutSlot)
+    freeBytes(layoutPointers)
+    if result != vulkanSuccess() {
+        return nullPointer()
+    }
+    return layout
+}
+
+@Native
+function vulkanPointerSlotArray(values: borrow [RawPtr]) -> RawPtr {
+    let storage = allocateBytes(U64(values.count * 8))
+    for index in 0..values.count {
+        writePointer(storage, U64(index * 8), values[index])
+    }
+    return storage
+}
+
+function vulkanPipelineColorFormat(descriptor: borrow RenderPipelineDescriptor, state: borrow VulkanState) -> I32 {
+    if descriptor.colorTargets.count == 0 {
+        return state.swapchainFormat
+    }
+    let format = descriptor.colorTargets[0].format
+    if format == .Swapchain {
+        return state.swapchainFormat
+    }
+    return vulkanTextureFormat(format)
+}
+
+function vulkanBuildBlend(preset: borrow BlendPreset) -> VkPipelineColorBlendAttachmentState {
+    match preset {
+        Replace -> return VkPipelineColorBlendAttachmentState {
+            srcColorBlendFactor: vulkanBlendOne(),
+            dstColorBlendFactor: vulkanBlendZero(),
+            colorBlendOp: vulkanBlendAdd(),
+            srcAlphaBlendFactor: vulkanBlendOne(),
+            dstAlphaBlendFactor: vulkanBlendZero(),
+            alphaBlendOp: vulkanBlendAdd(),
+            colorWriteMask: U32(15)
+        }
+        Alpha -> return VkPipelineColorBlendAttachmentState {
+            blendEnable: U32(1),
+            srcColorBlendFactor: vulkanBlendSrcAlpha(),
+            dstColorBlendFactor: vulkanBlendOneMinusSrcAlpha(),
+            colorBlendOp: vulkanBlendAdd(),
+            srcAlphaBlendFactor: vulkanBlendOne(),
+            dstAlphaBlendFactor: vulkanBlendOneMinusSrcAlpha(),
+            alphaBlendOp: vulkanBlendAdd(),
+            colorWriteMask: U32(15)
+        }
+        PremultipliedAlpha -> return VkPipelineColorBlendAttachmentState {
+            blendEnable: U32(1),
+            srcColorBlendFactor: vulkanBlendOne(),
+            dstColorBlendFactor: vulkanBlendOneMinusSrcAlpha(),
+            colorBlendOp: vulkanBlendAdd(),
+            srcAlphaBlendFactor: vulkanBlendOne(),
+            dstAlphaBlendFactor: vulkanBlendOneMinusSrcAlpha(),
+            alphaBlendOp: vulkanBlendAdd(),
+            colorWriteMask: U32(15)
+        }
+        Additive -> return VkPipelineColorBlendAttachmentState {
+            blendEnable: U32(1),
+            srcColorBlendFactor: vulkanBlendSrcAlpha(),
+            dstColorBlendFactor: vulkanBlendOne(),
+            colorBlendOp: vulkanBlendAdd(),
+            srcAlphaBlendFactor: vulkanBlendOne(),
+            dstAlphaBlendFactor: vulkanBlendOne(),
+            alphaBlendOp: vulkanBlendAdd(),
+            colorWriteMask: U32(15)
+        }
+    }
+}
+
+@Native
+function vulkanCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPipelineDescriptor) -> PipelineResult {
+    if !vulkanHasDevice(context) || descriptor.shader.id == 0 {
+        return .Error(.DeviceRefused)
+    }
+    if descriptor.colorTargets.count > 1 || descriptor.vertexLayout.attributes.count > 16 {
+        graphicsDiagnostic("Kira Graphics: Vulkan currently exposes one colour attachment and at most sixteen vertex attributes per pipeline")
+        return .Error(.DeviceRefused)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let shader = vulkanShaderRecord(state.vulkan, descriptor.shader.id)
+    if !shader.live || pointerIsNull(shader.vertexModule) || pointerIsNull(shader.fragmentModule) {
+        return .Error(.ShaderRejected)
+    }
+    let layouts = vulkanCreateDescriptorSetLayouts(state.vulkan, shader.reflection)
+    if vulkanReflectionGroupCount(shader.reflection) > 0 && layouts.count == 0 {
+        return .Error(.DeviceRefused)
+    }
+    let layout = vulkanCreatePipelineLayout(state.vulkan, layouts)
+    if pointerIsNull(layout) {
+        for held in layouts { vkDestroyDescriptorSetLayout(state.vulkan.device, held, nullPointer()) }
+        return .Error(.DeviceRefused)
+    }
+    var attributes: [VkVertexInputAttributeDescription] = []
+    for attribute in descriptor.vertexLayout.attributes {
+        if attributes.count >= 16 { break }
+        attributes.append(VkVertexInputAttributeDescription {
+            location: U32(attribute.location),
+            binding: U32(0),
+            format: vulkanVertexFormat(attribute.format),
+            offset: U32(attribute.offset)
+        })
+    }
+    let binding = VkVertexInputBindingDescription {
+        binding: U32(0),
+        stride: U32(descriptor.vertexLayout.stride),
+        inputRate: vulkanInputRateVertex()
+    }
+    let stages = VulkanShaderStageArray2 {
+        elements: [
+            VkPipelineShaderStageCreateInfo {
+                sType: vulkanStructurePipelineShaderStageCreateInfo(),
+                stage: I32(1),
+                module: shader.vertexModule,
+                pName: shader.vertexEntry
+            },
+            VkPipelineShaderStageCreateInfo {
+                sType: vulkanStructurePipelineShaderStageCreateInfo(),
+                stage: I32(16),
+                module: shader.fragmentModule,
+                pName: shader.fragmentEntry
+            }
+        ]
+    }
+    let vertexInput = VkPipelineVertexInputStateCreateInfo {
+        sType: vulkanStructurePipelineVertexInputStateCreateInfo(),
+        vertexBindingDescriptionCount: attributes.count > 0 ? U32(1) : U32(0),
+        pVertexBindingDescriptions: VulkanVertexBindingArray1 { elements: [binding] },
+        vertexAttributeDescriptionCount: U32(attributes.count),
+        pVertexAttributeDescriptions: VulkanVertexAttributeArray16 { elements: attributes }
+    }
+    let inputAssembly = VkPipelineInputAssemblyStateCreateInfo {
+        sType: vulkanStructurePipelineInputAssemblyStateCreateInfo(),
+        topology: vulkanTopology(descriptor.primitive.topology)
+    }
+    let viewport = VkPipelineViewportStateCreateInfo {
+        sType: vulkanStructurePipelineViewportStateCreateInfo(),
+        viewportCount: U32(1),
+        scissorCount: U32(1)
+    }
+    let raster = VkPipelineRasterizationStateCreateInfo {
+        sType: vulkanStructurePipelineRasterizationStateCreateInfo(),
+        polygonMode: vulkanPolygonFill(),
+        cullMode: vulkanCullMode(descriptor.rasterization.cullMode),
+        frontFace: vulkanFrontFace(descriptor.rasterization.frontFace),
+        lineWidth: 1.0
+    }
+    let multisample = VkPipelineMultisampleStateCreateInfo {
+        sType: vulkanStructurePipelineMultisampleStateCreateInfo(),
+        rasterizationSamples: vulkanSampleCount1()
+    }
+    let usesDepth = descriptor.depthStencil.depthEnabled || descriptor.depthStencil.depthWriteEnabled
+    let depth = VkPipelineDepthStencilStateCreateInfo {
+        sType: vulkanStructurePipelineDepthStencilStateCreateInfo(),
+        depthTestEnable: usesDepth && descriptor.depthStencil.depthEnabled ? U32(1) : U32(0),
+        depthWriteEnable: descriptor.depthStencil.depthWriteEnabled ? U32(1) : U32(0),
+        depthCompareOp: vulkanCompareFunction(descriptor.depthStencil.depthCompare),
+        front: VkStencilOpState { compareOp: vulkanCompareAlways(), compareMask: U32(4294967295), writeMask: U32(4294967295) },
+        back: VkStencilOpState { compareOp: vulkanCompareAlways(), compareMask: U32(4294967295), writeMask: U32(4294967295) },
+        maxDepthBounds: 1.0
+    }
+    var blend = vulkanBuildBlend(.Replace)
+    if descriptor.colorTargets.count > 0 && descriptor.colorTargets[0].blend.enabled {
+        blend = vulkanBuildBlend(descriptor.colorTargets[0].blend.preset)
+    }
+    let colorBlend = VkPipelineColorBlendStateCreateInfo {
+        sType: vulkanStructurePipelineColorBlendStateCreateInfo(),
+        attachmentCount: U32(1),
+        pAttachments: VulkanBlendAttachmentArray1 { elements: [blend] }
+    }
+    let dynamicStateData = allocateBytes(U64(8))
+    writeWord(dynamicStateData, U64(0), U32(0))
+    writeWord(dynamicStateData, U64(4), U32(1))
+    let dynamicState = VkPipelineDynamicStateCreateInfo {
+        sType: vulkanStructurePipelineDynamicStateCreateInfo(),
+        dynamicStateCount: U32(2),
+        pDynamicStates: dynamicStateData
+    }
+    let pipelineInfo = VkGraphicsPipelineCreateInfo {
+        sType: vulkanStructureGraphicsPipelineCreateInfo(),
+        pNext: vulkanPipelineRenderingInfo(
+            vulkanPipelineColorFormat(descriptor, state.vulkan),
+            usesDepth ? vulkanTextureFormat(descriptor.depthStencil.format) : I32(0),
+            usesDepth && descriptor.depthStencil.format == .Depth24Stencil8 ? vulkanFormatDepth24Stencil8() : I32(0)
+        ),
+        stageCount: U32(2),
+        pStages: stages,
+        pVertexInputState: vertexInput,
+        pInputAssemblyState: inputAssembly,
+        pViewportState: viewport,
+        pRasterizationState: raster,
+        pMultisampleState: multisample,
+        pDepthStencilState: depth,
+        pColorBlendState: colorBlend,
+        pDynamicState: dynamicState,
+        layout: layout
+    }
+    let pipelineSlot = vulkanPointerSlot()
+    let result = vkCreateGraphicsPipelines(state.vulkan.device, nullPointer(), U32(1), pipelineInfo, nullPointer(), pipelineSlot)
+    let pipeline = pointerAt(pipelineSlot, U64(0))
+    freeBytes(pipelineSlot)
+    freeBytes(dynamicStateData)
+    if result != vulkanSuccess() || pointerIsNull(pipeline) {
+        vkDestroyPipelineLayout(state.vulkan.device, layout, nullPointer())
+        for held in layouts { vkDestroyDescriptorSetLayout(state.vulkan.device, held, nullPointer()) }
+        graphicsDiagnostic("Kira Graphics: Vulkan rejected pipeline '" + descriptor.label + "' (" + vulkanResultName(result) + ")")
+        return .Error(.DeviceRefused)
+    }
+    let id = vulkanRecordPipeline(state.vulkan, VulkanPipelineRecord {
+        pipeline: pipeline,
+        layout: layout,
+        groupLayouts: layouts,
+        groupCount: layouts.count,
+        reflection: shader.reflection,
+        live: true
+    })
+    return .Ok(RenderPipeline {
+        id: U32(id),
+        drawPipelineId: U32(id),
+        indexedPipelineId: U32(id),
+        hasPositionAttribute: descriptor.shader.hasPositionAttribute,
+        requiredUniformMask: descriptor.shader.requiredUniformMask,
+        availableUniformMask: descriptor.shader.availableUniformMask,
+        uniformBlocks: descriptor.shader.uniformBlocks
+    })
+}
+
+@Native
+function vulkanDestroyPipeline(context: RawPtr, pipeline: borrow RenderPipeline) {
+    if !vulkanHasDevice(context) || pipeline.id == 0 {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let index = Int(pipeline.id) - 1
+    if index < 0 || index >= state.vulkan.pipelines.count || !state.vulkan.pipelines[index].live {
+        return
+    }
+    if state.vulkan.frameActive {
+        for pending in state.vulkan.pendingRetirePipelines {
+            if pending == index { return }
+        }
+        state.vulkan.pendingRetirePipelines.append(index)
+        return
+    }
+    vulkanReleasePipeline(state.vulkan, index)
+}
+
+@Native
+function vulkanReleasePipeline(state: borrow mut VulkanState, index: Int) {
+    if index < 0 || index >= state.pipelines.count || !state.pipelines[index].live { return }
+    vkQueueWaitIdle(state.queue)
+    let record = state.pipelines[index]
+    vkDestroyPipeline(state.device, record.pipeline, nullPointer())
+    vkDestroyPipelineLayout(state.device, record.layout, nullPointer())
+    for layout in record.groupLayouts {
+        vkDestroyDescriptorSetLayout(state.device, layout, nullPointer())
+    }
+    state.pipelines[index].live = false
+    state.resourceCount = state.resourceCount - 1
+    return
+}

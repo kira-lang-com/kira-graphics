@@ -279,9 +279,8 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         }
         graphicsSubmitFrame(frame)
         if !pointerIsNull(capturedTexture) {
-            let captureScale = metalContextScale(ctxPtr)
-            let captureW = Int(Float(metalContextWidth(ctxPtr)) * captureScale)
-            let captureH = Int(Float(metalContextHeight(ctxPtr)) * captureScale)
+            let captureW = metalContextPhysicalWidth(ctxPtr)
+            let captureH = metalContextPhysicalHeight(ctxPtr)
             if metalCapturePpm(ctxPtr, capturedTexture, captureW, captureH, harness.capturePath) {
                 graphicsDiagnostic("Kira Graphics wrote the presented frame to " + harness.capturePath)
             } else {
@@ -305,9 +304,8 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             kiraGraphicsLiveFramePresented()
         }
         if !pointerIsNull(onScreenDumpEnv) {
-            let onScreenScale = metalContextScale(ctxPtr)
-            let onScreenW = Int(Float(metalContextWidth(ctxPtr)) * onScreenScale)
-            let onScreenH = Int(Float(metalContextHeight(ctxPtr)) * onScreenScale)
+            let onScreenW = metalContextPhysicalWidth(ctxPtr)
+            let onScreenH = metalContextPhysicalHeight(ctxPtr)
             metalContextImageDump(ctxPtr, onScreenW, onScreenH, onScreenDumpEnv)
         }
         if frame.shouldQuit {

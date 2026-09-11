@@ -2,25 +2,17 @@
 
 set -eu
 
-backend="${1:-metal}"
+case "$(uname -s)" in
+    Darwin) default_backend=metal ;;
+    *) default_backend=dawn ;;
+esac
+backend="${1:-$default_backend}"
 frames="${2:-0}"
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-"$script_dir/set_backend.sh" "$backend"
-
 case "$backend" in
-    vulkan)
-        if [ -z "${VULKAN_SDK:-}" ]; then
-            echo "set VULKAN_SDK before running the Vulkan backend" >&2
-            exit 1
-        fi
-        export CPATH="${VULKAN_SDK}/include${CPATH:+:$CPATH}"
-        export KIRA_NATIVE_LIBRARY_PATH="${VULKAN_SDK}/lib${KIRA_NATIVE_LIBRARY_PATH:+:$KIRA_NATIVE_LIBRARY_PATH}"
-        ;;
-    *)
-        unset CPATH || true
-        unset KIRA_NATIVE_LIBRARY_PATH || true
-        ;;
+    metal|dawn|vulkan) export KIRA_GRAPHICS_BACKEND="$backend" ;;
+    *) echo "usage: $0 [metal|dawn|vulkan] [frames]" >&2; exit 2 ;;
 esac
 
 "$script_dir/build_shaders.sh"
@@ -30,4 +22,5 @@ if [ "$frames" -gt 0 ] 2>/dev/null; then
     export KIRA_GRAPHICS_LIFETIME_REPORT=1
 fi
 
-kira run --backend llvm "$script_dir"
+cd "$script_dir"
+kira run --backend llvm .

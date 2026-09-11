@@ -1,0 +1,114 @@
+import Foundation
+
+// Submit one acquired frame and present its swapchain image. The fence is the
+// sole in-flight slot, so the next acquire waits for all commands that can read
+// the CPU-visible ring buffers before those buffers are reused.
+
+@Native
+function vulkanSubmitFrame(context: RawPtr, frame: borrow RenderFrame) {
+    if !vulkanHasDevice(context) { return }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    vulkanSubmitFrameState(runtime.vulkan)
+    noteFrameCost(runtime, runtime.vulkan.stats.frameSeconds, runtime.vulkan.stats.passCount, runtime.vulkan.stats.drawCount)
+    let _ = frame
+    return
+}
+
+@Native
+function vulkanSubmitFrameState(state: borrow mut VulkanState) {
+    if !state.frameActive || !state.acquired { return }
+    if state.passActive {
+        vulkanEndPassAndCommitState(state)
+    }
+    vulkanTransitionSwapchainImage(state, state.swapchainImages[Int(state.currentImageIndex)], state.currentImageIndex,
+        vulkanImageLayoutPresent(), vulkanStageTopOfPipe(), vulkanStageBottomOfPipe(), vulkanAccessNone(), vulkanAccessNone())
+    let endResult = vkEndCommandBuffer(state.commandBuffer)
+    if endResult != vulkanSuccess() {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not finish its frame command buffer (" + vulkanResultName(endResult) + ")")
+        state.frameActive = false
+        state.acquired = false
+        state.quitRequested = true
+        return
+    }
+    let waitSemaphoreSlot = vulkanPointerSlot()
+    let signalSemaphoreSlot = vulkanPointerSlot()
+    let commandBufferSlot = vulkanPointerSlot()
+    let waitStageSlot = vulkanWordSlot()
+    writePointer(waitSemaphoreSlot, U64(0), state.imageAvailable)
+    // Reacquiring this image proves its preceding presentation has consumed
+    // the semaphore. A frame fence alone cannot prove that for a shared one.
+    writePointer(signalSemaphoreSlot, U64(0), state.swapchainPresentSemaphores[Int(state.currentImageIndex)])
+    writePointer(commandBufferSlot, U64(0), state.commandBuffer)
+    writeWord(waitStageSlot, U64(0), U32(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT))
+    let fenceSlot = vulkanPointerSlot()
+    writePointer(fenceSlot, U64(0), state.inFlightFence)
+    let resetResult = vkResetFences(state.device, U32(1), fenceSlot)
+    freeBytes(fenceSlot)
+    if resetResult != vulkanSuccess() {
+        freeBytes(waitSemaphoreSlot)
+        freeBytes(signalSemaphoreSlot)
+        freeBytes(commandBufferSlot)
+        freeBytes(waitStageSlot)
+        state.quitRequested = true
+        return
+    }
+    let encodingSeconds = Float(Int(vulkanMonotonicNanoseconds() - state.frameStartedAt)) / 1000000000.0
+    let submitResult = vkQueueSubmit(state.queue, U32(1), VkSubmitInfo {
+        sType: vulkanStructureSubmitInfo(),
+        waitSemaphoreCount: state.acquireWaitPending ? U32(1) : U32(0),
+        pWaitSemaphores: waitSemaphoreSlot,
+        pWaitDstStageMask: waitStageSlot,
+        commandBufferCount: U32(1),
+        pCommandBuffers: commandBufferSlot,
+        signalSemaphoreCount: U32(1),
+        pSignalSemaphores: signalSemaphoreSlot
+    }, state.inFlightFence)
+    if submitResult != vulkanSuccess() {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not submit the frame (" + vulkanResultName(submitResult) + ")")
+        state.quitRequested = true
+    } else {
+        state.acquireWaitPending = false
+        let swapchainSlot = vulkanPointerSlot()
+        let presentImageIndexSlot = vulkanWordSlot()
+        writePointer(swapchainSlot, U64(0), state.swapchain)
+        writeWord(presentImageIndexSlot, U64(0), state.currentImageIndex)
+        let presentResult = vkQueuePresentKHR(state.queue, VkPresentInfoKHR {
+            sType: vulkanStructurePresentInfo(),
+            waitSemaphoreCount: U32(1),
+            pWaitSemaphores: signalSemaphoreSlot,
+            swapchainCount: U32(1),
+            pSwapchains: swapchainSlot,
+            pImageIndices: presentImageIndexSlot
+        })
+        if presentResult != vulkanSuccess() && presentResult != vulkanSuboptimal() && presentResult != vulkanErrorOutOfDate() {
+            graphicsDiagnostic("Kira Graphics: Vulkan could not present the frame (" + vulkanResultName(presentResult) + ")")
+        }
+        freeBytes(swapchainSlot)
+        freeBytes(presentImageIndexSlot)
+        if !state.announcedFramePresented {
+            state.announcedFramePresented = true
+            kiraGraphicsLiveFramePresented()
+        }
+    }
+    freeBytes(waitSemaphoreSlot)
+    freeBytes(signalSemaphoreSlot)
+    freeBytes(commandBufferSlot)
+    freeBytes(waitStageSlot)
+    state.frameActive = false
+    state.acquired = false
+    let elapsed = Float(Int(vulkanMonotonicNanoseconds() - state.frameStartedAt)) / 1000000000.0
+    state.stats.frameSeconds = elapsed
+    state.stats.cpuSeconds = encodingSeconds
+    state.stats.drawableWidth = state.swapchainWidth
+    state.stats.drawableHeight = state.swapchainHeight
+    state.stats.allocatedBytes = state.allocatedBytes
+    state.stats.hasAllocatedBytes = true
+    state.stats.resourceCount = state.resourceCount
+    state.stats.passCount = state.framePassCount
+    state.stats.drawCount = state.frameDrawCount
+    state.stats.triangleCount = state.frameTriangleCount
+    state.stats.framesInFlight = 1
+    state.stats.frameSerial = state.stats.frameSerial + 1
+    state.stats.windowState = state.focused ? 1 : 2
+    return
+}

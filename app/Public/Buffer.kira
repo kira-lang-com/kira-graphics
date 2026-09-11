@@ -12,7 +12,7 @@ struct GraphicsBuffer {
 // The two arrive together because on one backend they are the same storage and
 // on the other they are not, and a caller cannot tell which without being told.
 // Metal's `contents` IS the buffer — a write lands in memory the GPU reads, and
-// `commitDynamicBuffer` has nothing to do. sokol's is a staging block, and the
+// `commitDynamicBuffer` has nothing to do. A staging backend can upload the
 // commit is the upload. Asking for the memory in a second call would have to
 // answer "the block I allocated for you last time", which needs a table keyed by
 // buffer id — exactly the kind of side table this backend spent its migration

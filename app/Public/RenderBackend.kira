@@ -18,7 +18,7 @@ import Foundation
 //
 // The same rule is why nothing here answers `.Error(.BackendLacksCapability)`.
 // A capability a backend lacks is a compile-time fact about that backend, not a
-// runtime failure for a caller to branch on. Where the two backends genuinely do
+// runtime failure for a caller to branch on. Where backends genuinely do
 // different amounts of work for the same request — `optimizeTexture`, which is a
 // blit on Metal and nothing under GL — both write the member and the one that
 // does nothing says in its own body why there is nothing to do.
@@ -37,7 +37,7 @@ construct RenderBackend {
     @Required function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult
     // Compile a KSL asset that `kira shader build` has already written out.
     // Each backend reads the file its own device compiles: the GLSL/WGSL pair
-    // on sokol, the combined `.metal` library on Metal.
+    // on a text backend, the combined `.metal` library on Metal.
     @Required function createShaderFromKsl(descriptor: borrow KslShaderDescriptor) -> ShaderResult
     // Shader creation from an inline `ksl!` artifact, which carries every
     // target's precompiled text and the entry names beside them. Which of those
@@ -55,7 +55,7 @@ construct RenderBackend {
     // A persistent buffer of `floatCapacity` f32 slots that the CPU rewrites,
     // and the memory it writes into. The memory arrives with the buffer because
     // the two are not always the same storage: on Metal a write lands where the
-    // GPU reads, on sokol it lands in a staging block `commitDynamicBuffer`
+    // GPU reads, on a staging backend it lands in a block `commitDynamicBuffer`
     // hands over.
     @Required function createDynamicBuffer(label: borrow String, floatCapacity: Int) -> DynamicBufferResult
     // Claim this frame's slot in a dynamic buffer and return the byte offset
@@ -106,7 +106,7 @@ construct RenderBackend {
     // backend can do better when the contents arrive with the image.
     @Required function createTextureFromPixels(descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult
     // Replace a texture's pixels, whole-image — the shape both backends share,
-    // since sokol has no sub-region upload at all.
+    // since the portable upload contract is whole-image.
     @Required function updateTexture(texture: borrow GraphicsTexture, width: Int, height: Int, pixels: borrow [U8]) -> Void
     // Replace a texture's contents from raw memory the caller already owns, for
     // a texture the caller composites into itself — a glyph atlas, whose CPU
@@ -155,10 +155,10 @@ construct RenderBackend {
 
     // --- pointer and keyboard --------------------------------------------
     // Cursor visibility and pointer lock, and whether a soft keyboard is up.
-    // These went to sokol's `sapp_*` when sokol owned input; each backend now
+    // These once went through a single window shim; each backend now
     // answers for the window it actually owns. The soft-keyboard pair has no
     // platform to act on among the surviving backends — a desktop window
-    // summons no keyboard, and the touch platform that did was sokol's — so
+    // summons no keyboard, and desktop Vulkan/Dawn have no touch keyboard — so
     // both answer honestly rather than pretending, and say so in their bodies.
     @Required function showKeyboard(show: Bool) -> Void
     @Required function keyboardShown() -> Bool
@@ -187,8 +187,8 @@ construct RenderBackend {
     // input. A caller with one image passes it twice at `blend` 0, and the
     // kernel's uniform branch reads it once.
     //
-    // Textures rather than ids, because the two backends bind different things:
-    // Metal binds the texture object, and sokol binds a *view* — a sampled one
+    // Textures rather than ids, because backends bind different things:
+    // Metal binds the texture object, while Vulkan/Dawn bind a *view* — a sampled one
     // for what the kernel reads and a storage-image one for what it writes, and
     // neither can be recovered from an image id.
     @Required function dispatchTextureComputePair(
@@ -243,7 +243,7 @@ construct RenderBackend {
     // Nanoseconds on a monotonic clock.
     //
     // Reading a clock is a platform call — `clock_gettime_nsec_np` on Apple,
-    // whatever sokol's own timer sits on elsewhere — so it is the backend's to
+    // whatever a backend's own timer uses elsewhere — so it is the backend's to
     // answer. A caller timing its frame asks the backend it already has rather
     // than naming a platform's clock, which is what made a host that timed
     // itself refuse to start anywhere but macOS.
@@ -283,5 +283,6 @@ function renderBackendFor(backend: RenderBackendKind, context: RawPtr) -> Any Re
     match backend {
         Metal -> return MetalRenderBackend(context: context)
         Dawn -> return DawnRenderBackend(context: context)
+        Vulkan -> return VulkanRenderBackend(context: context)
     }
 }

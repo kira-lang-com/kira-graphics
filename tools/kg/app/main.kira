@@ -58,9 +58,9 @@ construct BackendsCommand() extends ParsableCommand {
     }
 
     function run(arguments: borrow ParsedArguments) -> Int {
-        print("sokol  — GL/D3D/Metal via sokol_gfx, the portable default")
-        print("dawn   — WebGPU (Vulkan/D3D12/Metal) via Dawn")
-        print("metal  — native Metal, macOS only")
+        print("metal  — native Metal, Apple platforms")
+        print("vulkan — native Vulkan, Windows and Linux")
+        print("dawn   — WebGPU, Windows/Linux/Apple/Web")
         print("The host picks one unless a run names it.")
         return 0
     }

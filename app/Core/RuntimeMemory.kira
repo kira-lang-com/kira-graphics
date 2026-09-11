@@ -23,6 +23,9 @@ function writeWord(ptr: RawPtr, offset: U64, value: U32): Void
 @FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u32_at, abi: c }
 function wordAt(ptr: RawPtr, offset: U64) -> U32
 
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u64_at, abi: c }
+function doubleWordAt(ptr: RawPtr, offset: U64) -> U64
+
 @FFI.Extern { library: kira_runtime, symbol: kira_dynamic_write_f32_at, abi: c }
 function writeFloat32(ptr: RawPtr, offset: U64, value: F32): Void
 

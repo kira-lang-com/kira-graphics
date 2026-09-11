@@ -1,0 +1,214 @@
+import Foundation
+
+// Vulkan consumes binary SPIR-V as a stream of 32-bit words. An inline `ksl!`
+// artifact already carries that stream as `[U32]`, so it uploads with no
+// decode. The on-disk form `kira shader build --target spirv` writes keeps
+// generated files textual — eight hexadecimal characters per word — so the
+// file path decodes it back to words through `vulkanSpirvWords` before upload.
+
+function vulkanHexDigit(value: borrow String) -> Int {
+    if value == "0" { return 0 }
+    if value == "1" { return 1 }
+    if value == "2" { return 2 }
+    if value == "3" { return 3 }
+    if value == "4" { return 4 }
+    if value == "5" { return 5 }
+    if value == "6" { return 6 }
+    if value == "7" { return 7 }
+    if value == "8" { return 8 }
+    if value == "9" { return 9 }
+    if value == "a" || value == "A" { return 10 }
+    if value == "b" || value == "B" { return 11 }
+    if value == "c" || value == "C" { return 12 }
+    if value == "d" || value == "D" { return 13 }
+    if value == "e" || value == "E" { return 14 }
+    if value == "f" || value == "F" { return 15 }
+    return 0 - 1
+}
+
+@Native
+function vulkanSpirvWords(hex: borrow String) -> [U32] {
+    var words: [U32] = []
+    if hex.count == 0 || hex.count % 8 != 0 {
+        return words
+    }
+    var offset = 0
+    while offset < hex.count {
+        var word = U32(0)
+        var digit = 0
+        var valid = true
+        while digit < 8 {
+            let value = vulkanHexDigit(hex.substring(offset + digit, offset + digit + 1))
+            if value < 0 {
+                valid = false
+            }
+            word = word * U32(16) + U32(value < 0 ? 0 : value)
+            digit = digit + 1
+        }
+        if !valid {
+            return []
+        }
+        words.append(word)
+        offset = offset + 8
+    }
+    return words
+}
+
+@Native
+function vulkanCreateShaderModule(state: borrow VulkanState, label: borrow String, words: borrow [U32]) -> RawPtr {
+    if words.count == 0 {
+        graphicsDiagnostic("Kira Graphics: Vulkan shader '" + label + "' has no valid SPIR-V words")
+        return nullPointer()
+    }
+    let code = allocateBytes(U64(words.count * 4))
+    for index in 0..words.count {
+        writeWord(code, U64(index * 4), words[index])
+    }
+    let info = VkShaderModuleCreateInfo {
+        sType: vulkanStructureShaderModuleCreateInfo(),
+        codeSize: U64(words.count * 4),
+        pCode: code
+    }
+    let moduleSlot = vulkanPointerSlot()
+    let result = vkCreateShaderModule(state.device, info, nullPointer(), moduleSlot)
+    let module = pointerAt(moduleSlot, U64(0))
+    freeBytes(moduleSlot)
+    freeBytes(code)
+    if result != vulkanSuccess() || pointerIsNull(module) {
+        graphicsDiagnostic("Kira Graphics: Vulkan rejected shader '" + label + "' (" + vulkanResultName(result) + ")")
+        return nullPointer()
+    }
+    return module
+}
+
+function vulkanUniformBlocks(reflection: borrow KslResourceReflection) -> [UniformBlockDescriptor] {
+    var blocks: [UniformBlockDescriptor] = []
+    for block in reflection.uniforms {
+        blocks.append(UniformBlockDescriptor {
+            binding: block.binding,
+            size: block.size
+        })
+    }
+    return blocks
+}
+
+@Native
+function vulkanRecordShader(state: borrow mut VulkanState, record: VulkanShaderRecord) -> GraphicsShader {
+    for index in 0..state.shaders.count {
+        if !state.shaders[index].live {
+            state.shaders[index] = record
+            return GraphicsShader {
+                id: U32(index + 1),
+                uniformBlocks: vulkanUniformBlocks(record.reflection)
+            }
+        }
+    }
+    state.shaders.append(record)
+    return GraphicsShader {
+        id: U32(state.shaders.count),
+        uniformBlocks: vulkanUniformBlocks(record.reflection)
+    }
+}
+
+@Native
+function vulkanCreateGraphicsShader(context: RawPtr, label: borrow String, vertexSpirv: borrow [U32], fragmentSpirv: borrow [U32], vertexEntry: borrow String, fragmentEntry: borrow String, reflection: borrow String) -> ShaderResult {
+    if !vulkanHasDevice(context) {
+        return .Error(.DeviceRefused)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let vertex = vulkanCreateShaderModule(state.vulkan, label + " vertex", vertexSpirv)
+    let fragment = vulkanCreateShaderModule(state.vulkan, label + " fragment", fragmentSpirv)
+    if pointerIsNull(vertex) || pointerIsNull(fragment) {
+        if !pointerIsNull(vertex) { vkDestroyShaderModule(state.vulkan.device, vertex, nullPointer()) }
+        if !pointerIsNull(fragment) { vkDestroyShaderModule(state.vulkan.device, fragment, nullPointer()) }
+        return .Error(.ShaderRejected)
+    }
+    return .Ok(vulkanRecordShader(state.vulkan, VulkanShaderRecord {
+        vertexModule: vertex,
+        fragmentModule: fragment,
+        computeModule: nullPointer(),
+        vertexEntry: vertexEntry,
+        fragmentEntry: fragmentEntry,
+        reflection: kslParseResourceReflection(reflection),
+        live: true
+    }))
+}
+
+@Native
+function vulkanCreateComputeShader(context: RawPtr, label: borrow String, computeSpirv: borrow [U32], computeEntry: borrow String, reflection: borrow String) -> ShaderResult {
+    if !vulkanHasDevice(context) {
+        return .Error(.DeviceRefused)
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let module = vulkanCreateShaderModule(state.vulkan, label + " compute", computeSpirv)
+    if pointerIsNull(module) {
+        return .Error(.ShaderRejected)
+    }
+    return .Ok(vulkanRecordShader(state.vulkan, VulkanShaderRecord {
+        vertexModule: nullPointer(),
+        fragmentModule: nullPointer(),
+        computeModule: module,
+        computeEntry: computeEntry,
+        reflection: kslParseResourceReflection(reflection),
+        live: true
+    }))
+}
+
+@Native
+function vulkanCreateShaderFromArtifact(context: RawPtr, label: borrow String, artifact: borrow KslArtifact) -> ShaderResult {
+    if artifact.computeEntry.count > 0 {
+        return vulkanCreateComputeShader(context, label, artifact.computeSpirv, artifact.computeEntry, artifact.resourceReflection)
+    }
+    return vulkanCreateGraphicsShader(context, label, artifact.vertexSpirv, artifact.fragmentSpirv, artifact.vertexEntry, artifact.fragmentEntry, artifact.resourceReflection)
+}
+
+@Native
+function vulkanCreateShaderFromKsl(context: RawPtr, descriptor: borrow KslShaderDescriptor) -> ShaderResult {
+    let base = descriptor.directory + "/" + descriptor.asset
+    let compute = readFile(base + ".comp.spv")
+    if compute.ok {
+        let reflection = readFile(base + ".resources")
+        return vulkanCreateComputeShader(context, descriptor.label, vulkanSpirvWords(compute.text), "compute_main", reflection.ok ? reflection.text : "")
+    }
+    let vertex = readFile(base + ".vert.spv")
+    let fragment = readFile(base + ".frag.spv")
+    if !vertex.ok || !fragment.ok {
+        graphicsDiagnostic("Kira Graphics: no SPIR-V for '" + descriptor.asset + "' under " + descriptor.directory + " — run `kira shader build --target spirv`")
+        return .Error(.AssetUnreadable)
+    }
+    let reflection = readFile(base + ".resources")
+    return vulkanCreateGraphicsShader(context, descriptor.label, vulkanSpirvWords(vertex.text), vulkanSpirvWords(fragment.text), "vertex_main", "fragment_main", reflection.ok ? reflection.text : "")
+}
+
+@Native
+function vulkanCreateShaderFromSources(context: RawPtr, descriptor: borrow ShaderDescriptor) -> ShaderResult {
+    var vertex = descriptor.vertexSource
+    var fragment = descriptor.fragmentSource
+    if vertex.count == 0 && descriptor.vertexPath.count > 0 {
+        let contents = readFile(descriptor.vertexPath)
+        if contents.ok { vertex = contents.text }
+    }
+    if fragment.count == 0 && descriptor.fragmentPath.count > 0 {
+        let contents = readFile(descriptor.fragmentPath)
+        if contents.ok { fragment = contents.text }
+    }
+    return vulkanCreateGraphicsShader(context, descriptor.label, vulkanSpirvWords(vertex), vulkanSpirvWords(fragment), "vertex_main", "fragment_main", "")
+}
+
+@Native
+function vulkanDestroyShader(context: RawPtr, shader: borrow GraphicsShader) {
+    if !vulkanHasDevice(context) || shader.id == 0 {
+        return
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let index = Int(shader.id) - 1
+    if index < 0 || index >= state.vulkan.shaders.count || !state.vulkan.shaders[index].live {
+        return
+    }
+    let record = state.vulkan.shaders[index]
+    if !pointerIsNull(record.vertexModule) { vkDestroyShaderModule(state.vulkan.device, record.vertexModule, nullPointer()) }
+    if !pointerIsNull(record.fragmentModule) { vkDestroyShaderModule(state.vulkan.device, record.fragmentModule, nullPointer()) }
+    if !pointerIsNull(record.computeModule) { vkDestroyShaderModule(state.vulkan.device, record.computeModule, nullPointer()) }
+    state.vulkan.shaders[index] = VulkanShaderRecord()
+    return
+}

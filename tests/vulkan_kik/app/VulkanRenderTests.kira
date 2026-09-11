@@ -1,0 +1,60 @@
+import Foundation
+import KiraGraphics
+
+function vulkanSelfTestCapturePath() -> String {
+    return ".kira-build/vulkan-clear-test.ppm"
+}
+
+@Native
+function vulkanSelfTestClear() -> Bool {
+    if hostPlatform() != .Linux && hostPlatform() != .Windows {
+        printLine("Vulkan rendering requires Linux or Windows; no GPU test was executed")
+        return false
+    }
+    let path = vulkanSelfTestCapturePath()
+    removePath(path)
+    var app = GraphicsApplication {
+        title: "Kira Vulkan test",
+        width: 8,
+        height: 8,
+        sampleCount: 1,
+        highDpi: false,
+        backend: .Vulkan,
+        harness: harnessCapture(copy path, 1, 1),
+    }
+    app.onFrame { frame in
+        let _ = frame.beginPass(Color {
+            r: 0.125,
+            g: 0.25,
+            b: 0.5,
+            a: 1.0,
+        })
+        frame.endPass()
+        frame.requestQuit()
+        return
+    }
+    app.run(nullPointer())
+    let headerBytes = readFileRange(path, 0, 128)
+    var header = ""
+    var headerSize = 0
+    var lines = 0
+    for byte in headerBytes {
+        header = header + scalarText(Int(byte))
+        headerSize = headerSize + 1
+        if byte == U8(10) { lines = lines + 1 }
+        if lines == 3 { break }
+    }
+    let fields = header.split("\n")
+    if lines != 3 || fields[0] != "P6" || fields[2] != "255" { return false }
+    let dimensions = fields[1].split(" ")
+    if dimensions.count != 2 { return false }
+    let width = kslDigestInt(dimensions[0])
+    let height = kslDigestInt(dimensions[1])
+    if width <= 0 || height <= 0 { return false }
+    let pixels = readFileRange(path, headerSize + ((height / 2) * width + width / 2) * 3, 3)
+    removePath(path)
+    if pixels.count != 3 {
+        return false
+    }
+    return pixels[0] == U8(32) && pixels[1] == U8(64) && pixels[2] == U8(128)
+}

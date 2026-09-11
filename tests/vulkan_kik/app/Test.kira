@@ -1,0 +1,20 @@
+import Foundation
+
+enum TestFailure {
+    Runtime(String)
+    Diagnostic(KiraError)
+    Compile(String)
+}
+
+construct Test {
+    @Required function test() -> Any
+    @Required function expect() -> Result<Any, TestFailure>
+}
+
+construct VkClearRendersExactColor() extends Test {
+    test { return vulkanSelfTestClear() }
+    expect {
+        let e: Result<Any, TestFailure> = Result.Ok(true)
+        return e
+    }
+}

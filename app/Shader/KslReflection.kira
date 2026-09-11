@@ -13,8 +13,8 @@
 // m|name:binding:stageMask
 // ```
 //
-// Read here rather than in C because the sides that need it are Kira: Sokol
-// builds an `sg_shader_desc` from it, and Dawn decides from it which of the
+// Read here rather than in C because the sides that need it are Kira: each
+// backend decides from it which of the
 // bindings an encoder carries belong in the one WebGPU group a pipeline reads.
 // A record whose kind this does not know is skipped rather than misread as
 // another kind's fields: the format is append-only, so a shader compiled by a

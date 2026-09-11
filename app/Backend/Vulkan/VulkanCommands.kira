@@ -1,0 +1,77 @@
+import Foundation
+
+// Compute may run during initialization as well as between render passes.
+// Standalone work uses the same command buffer only after its frame retires.
+@Native
+function vulkanBeginComputeCommands(state: borrow mut VulkanState) -> Bool {
+    if state.passActive {
+        graphicsDiagnostic("Kira Graphics: end the Vulkan render pass before dispatching compute")
+        return false
+    }
+    if state.frameActive { return true }
+    if !vulkanWaitForFrame(state) { return false }
+    if vkResetCommandBuffer(state.commandBuffer, U32(0)) != vulkanSuccess() { return false }
+    if vkResetDescriptorPool(state.device, state.descriptorPool, U32(0)) != vulkanSuccess() { return false }
+    return vkBeginCommandBuffer(state.commandBuffer, VkCommandBufferBeginInfo {
+        sType: vulkanStructureCommandBufferBeginInfo(),
+        flags: vulkanCommandBufferOneTime()
+    }) == vulkanSuccess()
+}
+
+// Make compute writes visible to subsequent shaders, vertex/index fetches,
+// indirect commands, transfers and host readback.
+@Native
+function vulkanComputeBarrier(state: borrow VulkanState) {
+    let barrier = VkMemoryBarrier {
+        sType: I32(VK_STRUCTURE_TYPE_MEMORY_BARRIER),
+        srcAccessMask: U32(VK_ACCESS_SHADER_WRITE_BIT),
+        dstAccessMask: U32(VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_HOST_READ_BIT)
+    }
+    vkCmdPipelineBarrier(state.commandBuffer, U32(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT),
+        U32(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT | VK_PIPELINE_STAGE_HOST_BIT), U32(0),
+        U32(1), barrier, U32(0), nullPointer(), U32(0), nullPointer())
+}
+
+// Flush recorded commands without presenting. A readback in the middle of a
+// frame consumes the acquire semaphore once, then resumes recording on the
+// same acquired image. The final submission still signals the frame fence.
+@Native
+function vulkanFlushCommands(state: borrow mut VulkanState, resume: Bool) -> Bool {
+    if state.passActive { return false }
+    if vkEndCommandBuffer(state.commandBuffer) != vulkanSuccess() { return false }
+    let commandSlot = vulkanPointerSlot()
+    let semaphoreSlot = vulkanPointerSlot()
+    let stageSlot = vulkanWordSlot()
+    writePointer(commandSlot, U64(0), state.commandBuffer)
+    writePointer(semaphoreSlot, U64(0), state.imageAvailable)
+    writeWord(stageSlot, U64(0), U32(VK_PIPELINE_STAGE_ALL_COMMANDS_BIT))
+    let result = vkQueueSubmit(state.queue, U32(1), VkSubmitInfo {
+        sType: vulkanStructureSubmitInfo(),
+        waitSemaphoreCount: state.acquireWaitPending ? U32(1) : U32(0),
+        pWaitSemaphores: semaphoreSlot,
+        pWaitDstStageMask: stageSlot,
+        commandBufferCount: U32(1),
+        pCommandBuffers: commandSlot
+    }, nullPointer())
+    freeBytes(commandSlot)
+    freeBytes(semaphoreSlot)
+    freeBytes(stageSlot)
+    if result != vulkanSuccess() { return false }
+    state.acquireWaitPending = false
+    if vkQueueWaitIdle(state.queue) != vulkanSuccess() { return false }
+    if !resume { return true }
+    if vkResetCommandBuffer(state.commandBuffer, U32(0)) != vulkanSuccess() { return false }
+    return vkBeginCommandBuffer(state.commandBuffer, VkCommandBufferBeginInfo {
+        sType: vulkanStructureCommandBufferBeginInfo(),
+        flags: vulkanCommandBufferOneTime()
+    }) == vulkanSuccess()
+}
+
+@Native
+function vulkanFinishComputeCommands(state: borrow mut VulkanState) {
+    vulkanComputeBarrier(state)
+    if !state.frameActive && !vulkanFlushCommands(state, false) {
+        graphicsDiagnostic("Kira Graphics: Vulkan compute submission failed")
+        state.quitRequested = true
+    }
+}

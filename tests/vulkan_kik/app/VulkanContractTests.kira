@@ -1,0 +1,40 @@
+import Foundation
+import KiraGraphics
+
+construct VkCompositeAlphaUsesSupportedBits() extends Test {
+    test {
+        var capabilities = VkSurfaceCapabilitiesKHR()
+        for bit in [1, 2, 4, 8] {
+            capabilities.supportedCompositeAlpha = U32(bit)
+            if vulkanCompositeAlpha(capabilities) != I32(bit) { return false }
+        }
+        return true
+    }
+    expect { return .Ok(true) }
+}
+
+construct VkDynamicOffsetsFollowBindingOrder() extends Test {
+    test {
+        // Reflection stores uniforms before storage buffers. Vulkan orders
+        // dynamic offsets by binding number across both resource categories.
+        let reflection = kslParseResourceReflection("u|later:7:16:1:0::;s|earlier:2:1:2:0")
+        let bindings = vulkanDescriptorBindings(reflection, 0)
+        return bindings.count == 2 && bindings[0].binding == U32(2) && bindings[1].binding == U32(7)
+    }
+    expect { return .Ok(true) }
+}
+
+construct VkSpirvRejectsMalformedHex() extends Test {
+    test {
+        return vulkanSpirvWords("123").count == 0 && vulkanSpirvWords("0000000g").count == 0
+    }
+    expect { return .Ok(true) }
+}
+
+construct VkSpirvPreservesWordBits() extends Test {
+    test {
+        let words = vulkanSpirvWords("07230203ffffffff80000000")
+        return words.count == 3 && words[0] == U32(119734787) && words[1] == U32(4294967295) && words[2] == U32(2147483648)
+    }
+    expect { return .Ok(true) }
+}

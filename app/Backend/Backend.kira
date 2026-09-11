@@ -9,6 +9,7 @@ import Foundation
 enum RenderBackendKind {
     Metal
     Dawn
+    Vulkan
 }
 
 
@@ -33,8 +34,8 @@ struct RenderBackendSelection {
 
 
 // Platform-aware default backend for hosts that do not pick one explicitly:
-// Metal owns Apple hosts, and Dawn owns everywhere else — WebGPU over D3D12 or
-// Vulkan on Windows and Linux, and over the browser's own WebGPU on the Web.
+// Metal owns Apple hosts, Vulkan is the direct desktop path on Windows and
+// Linux, and Dawn owns the browser's WebGPU device.
 // Web/WASM lands on Dawn honestly: the browser sandbox has no host-OS probe, so
 // `hostPlatform()` returns `Unknown` there, and Dawn is the only backend that
 // exists on wasm32-emscripten, through emscripten's WebGPU port.
@@ -48,26 +49,27 @@ function graphicsDefaultBackend() -> RenderBackendKind {
         return graphicsBackendFromEnvironment(.Metal)
     }
     if platform == .Windows {
-        return graphicsBackendFromEnvironment(.Dawn)
+        return graphicsBackendFromEnvironment(.Vulkan)
     }
     if platform == .Linux {
-        return graphicsBackendFromEnvironment(.Dawn)
+        return graphicsBackendFromEnvironment(.Vulkan)
     }
     return graphicsBackendFromEnvironment(.Dawn)
 }
 
-// KiraUI supplies window furniture only for the undecorated Dawn/Wayland
+// KiraUI supplies window furniture for the undecorated Wayland
 // window. Cocoa and Win32 keep the controls supplied by their native window
 // implementation.
 function graphicsUsesWaylandClientWindowControls() -> Bool {
-    return hostPlatform() == .Linux && graphicsDefaultBackend() == .Dawn
+    let backend = graphicsDefaultBackend()
+    return hostPlatform() == .Linux && (backend == .Dawn || backend == .Vulkan)
 }
 
 
 // The renderer a run was asked for, or `fallback` when it was not asked.
 //
 // `KIRA_GRAPHICS_BACKEND` names one of the two. It exists so that one program
-// can be run on two backends without being edited between the runs — which is
+// can be run on several backends without being edited between the runs — which is
 // what makes a pixel comparison between them mean anything, since a difference
 // in the source would be a difference in the answer.
 //
@@ -86,7 +88,10 @@ function graphicsBackendFromEnvironment(fallback: RenderBackendKind) -> RenderBa
     if requested == "dawn" {
         return .Dawn
     }
-    graphicsDiagnostic("Kira Graphics: KIRA_GRAPHICS_BACKEND names '" + requested + "', which is not `metal` or `dawn`")
+    if requested == "vulkan" {
+        return .Vulkan
+    }
+    graphicsDiagnostic("Kira Graphics: KIRA_GRAPHICS_BACKEND names '" + requested + "', which is not `metal`, `dawn` or `vulkan`")
     return fallback
 }
 
@@ -105,7 +110,24 @@ function validateRenderBackend(backend: RenderBackendKind, platform: Platform) -
     match backend {
         Metal -> return validateMetalBackend(move resolvedPlatform)
         Dawn -> return validateDawnBackend(move resolvedPlatform)
+        Vulkan -> return validateVulkanBackend(move resolvedPlatform)
     }
+}
+
+
+@Native
+function validateVulkanBackend(platform: Platform) -> RenderBackendSelection {
+    if platform == .Windows || platform == .Linux {
+        return RenderBackendSelection {
+            backend: .Vulkan,
+            platform: platform,
+            supported: true,
+            loaderName: "vulkan",
+            requiredSymbolCount: 0,
+            reason: ""
+        }
+    }
+    return unsupportedBackend(.Vulkan, move platform, "Kira Graphics Vulkan backend opens a Win32 or Wayland window and is supported on Windows and Linux")
 }
 
 

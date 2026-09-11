@@ -2,11 +2,11 @@ struct GraphicsAppRuntimeState {
     var app: GraphicsApplication
     var userData: RawPtr
     var frameIndex: Int = 0
-    // The Dawn backend's window, device, resource table and pass state (see
-    // `app/Backend/Dawn/DawnContext.kira`). Here for the same reason the Sokol
-    // blocks above are: this is the one state blob the run loop, a frame and a
-    // draw all already recover.
+    // The Dawn and Vulkan backends' window, device, resource table and pass
+    // state. The one state blob is what the run loop, a frame and a draw all
+    // already recover.
     var dawn: DawnState = dawnEmptyState()
+    var vulkan: VulkanState = VulkanState()
     // Whether this run was asked for frame-rate telemetry
     // (`KIRA_GRAPHICS_LOG_FPS`). A harness knob rather than pass state, which is
     // why it sits beside the other three rather than inside one backend's.

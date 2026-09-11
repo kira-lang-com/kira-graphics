@@ -12,6 +12,9 @@ struct RenderEncoderState {
     // pass encoder lives. Non-null selects the WebGPU draw path; a Metal encoder
     // fills `backendContext` instead, and exactly one of the two is filled.
     var dawnRuntime: RawPtr
+    // The Vulkan runtime state behind a Vulkan frame. Exactly one of the three
+    // backend pointers is filled by `makeRenderEncoderForBackend`.
+    var vulkanRuntime: RawPtr
 
     var vertexBufferId: U32 = 0
     var hasVertexBuffer: Bool = false
@@ -20,9 +23,9 @@ struct RenderEncoderState {
     var hasIndexBuffer: Bool = false
     var indexFormat: IndexFormat = .Uint32
 
-    // Each slot holds the whole `BindGroup`, not just its id: the Sokol draw
+    // Each slot holds the whole `BindGroup`, not just its id: Vulkan/Dawn draw
     // path reads bound uniforms' *current* values straight off it (see
-    // `SokolDraw.kira`), which a bare id would give it no way to reach now
+    // code reads bound uniforms' current values, which a bare id would give it no way to reach now
     // that there is no `kg_bind_group_records` table to look one up in.
     var bindGroup0: BindGroup
     var hasBindGroup0: Bool = false
@@ -38,7 +41,7 @@ struct RenderEncoderState {
     var instanceCount: Int = 1
 
     // The scissor a caller set, in top-left pixels of the pass. Remembered
-    // rather than applied and forgotten: the Sokol draw path sets the viewport
+    // rather than applied and forgotten: the portable draw paths set the viewport
     // and scissor itself on every draw — the pass it is drawing into may be an
     // offscreen target of its own size — and used to reset both to the whole
     // pass, so a `setScissorRect` was overwritten by the very next draw and the
@@ -107,6 +110,10 @@ class RenderEncoder {
                 dawnEncoderIssue(state, 0)
                 return
             }
+            if !pointerIsNull(state.vulkanRuntime) {
+                vulkanEncoderIssue(state, 0)
+                return
+            }
             if metalContextActive(state.backendContext) {
                 if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup0.id) }
                 if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup1.id) }
@@ -129,6 +136,10 @@ class RenderEncoder {
                 dawnEncoderIssue(state, 0)
                 return
             }
+            if !pointerIsNull(state.vulkanRuntime) {
+                vulkanEncoderIssue(state, 0)
+                return
+            }
             if metalContextActive(state.backendContext) {
                 if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup0.id) }
                 if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup1.id) }
@@ -141,7 +152,7 @@ class RenderEncoder {
         return
     }
 
-    // Pixel-space scissor in the current render target. Both Metal and Sokol
+    // Pixel-space scissor in the current render target. Every backend
     // implement it; callers restore the full target explicitly when finished.
     function setScissorRect(x: Int, y: Int, width: Int, height: Int) {
         var state = nativeRecover<RenderEncoderState>(self.storage)
@@ -170,6 +181,10 @@ class RenderEncoder {
                 dawnEncoderIssue(state, firstIndex)
                 return
             }
+            if !pointerIsNull(state.vulkanRuntime) {
+                vulkanEncoderIssue(state, firstIndex)
+                return
+            }
             if metalContextActive(state.backendContext) {
                 if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup0.id) }
                 if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup1.id) }
@@ -188,6 +203,10 @@ class RenderEncoder {
         if (state.passActive && state.hasPipeline && state.pipeline.id != 0) {
             if !pointerIsNull(state.dawnRuntime) {
                 dawnEncoderDrawIndirect(state, indirectBufferId)
+                return
+            }
+            if !pointerIsNull(state.vulkanRuntime) {
+                vulkanEncoderDrawIndirect(state, indirectBufferId)
                 return
             }
             if metalContextActive(state.backendContext) {
@@ -212,6 +231,10 @@ class RenderEncoder {
                 dawnEncoderIssue(state, 0)
                 return
             }
+            if !pointerIsNull(state.vulkanRuntime) {
+                vulkanEncoderIssue(state, 0)
+                return
+            }
             if metalContextActive(state.backendContext) {
                 if state.hasBindGroup0 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup0.id) }
                 if state.hasBindGroup1 { metalEncoderApplyBindGroup(state.backendContext, state.bindGroup1.id) }
@@ -230,6 +253,14 @@ class RenderEncoder {
         state.vertexCount = 0
         state.instanceCount = instanceCount
         if (state.passActive && state.hasPipeline && state.pipeline.id != 0) {
+            if !pointerIsNull(state.dawnRuntime) {
+                dawnEncoderIssue(state, 0)
+                return
+            }
+            if !pointerIsNull(state.vulkanRuntime) {
+                vulkanEncoderIssue(state, 0)
+                return
+            }
         }
         return
     }
@@ -239,7 +270,7 @@ class RenderEncoder {
 // Everything a Dawn draw needs, read off the encoder's own state.
 //
 // One function rather than the same twenty arguments written out at each of the
-// five draw methods — the Metal and Sokol arms above predate it and still do.
+// five draw methods — the Metal arm above predates it and still does.
 function dawnEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
     dawnDrawWithBindings(
         state.dawnRuntime,
@@ -260,12 +291,32 @@ function dawnEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
     return
 }
 
-@Native
-function makeRenderEncoder() -> RenderEncoder {
-    return makeRenderEncoderForBackend(false, nullPointer(), nullPointer())
+function vulkanEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
+    vulkanDrawWithBindings(
+        state.vulkanRuntime,
+        state.hasScissor, state.scissorX, state.scissorY, state.scissorWidth, state.scissorHeight,
+        state.pipeline,
+        state.vertexBufferId, state.hasVertexBuffer,
+        state.indexBufferId, state.hasIndexBuffer,
+        state.indexFormat,
+        state.bindGroup0, state.hasBindGroup0,
+        state.bindGroup1, state.hasBindGroup1,
+        state.bindGroup2, state.hasBindGroup2,
+        state.bindGroup3, state.hasBindGroup3,
+        firstIndex,
+        state.vertexCount,
+        state.indexCount,
+        state.instanceCount
+    )
+    return
 }
 
-function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, dawnRuntime: RawPtr) -> RenderEncoder {
+@Native
+function makeRenderEncoder() -> RenderEncoder {
+    return makeRenderEncoderForBackend(false, nullPointer(), nullPointer(), nullPointer())
+}
+
+function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, dawnRuntime: RawPtr, vulkanRuntime: RawPtr) -> RenderEncoder {
     // The empty slots carry no state box: every read of a slot is gated on its
     // `has` flag, so a group that was never set needs no storage — and giving
     // it some, as this once did, allocated four boxes per encoder that nothing
@@ -277,6 +328,7 @@ function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, d
         hasScissor: false,
         backendContext: backendContext,
         dawnRuntime: dawnRuntime,
+        vulkanRuntime: vulkanRuntime,
         vertexBufferId: 0,
         hasVertexBuffer: false,
         indexBufferId: 0,

@@ -1,0 +1,70 @@
+import Foundation
+
+// Uniform values can change between draws, including through setUniformValues.
+// Snapshot their CPU state so each recorded draw sees the values it bound.
+@Native
+function vulkanSnapshotUniform(state: borrow mut VulkanState, uniform: borrow Uniform) -> U32 {
+    if pointerIsNull(uniform.storage) { return uniform.id }
+    let values = nativeRecover<UniformState>(uniform.storage)
+    if values.expectedFloatCount <= 0 || values.values.count != values.expectedFloatCount {
+        graphicsDiagnostic("Kira Graphics: Vulkan uniform values do not match the declared size")
+        return U32(0)
+    }
+    let id = vulkanCreateBufferHandle(state, values.label, vulkanBufferUsageUniform(),
+        values.values.count * 4, vulkanMemoryHostVisible() | vulkanMemoryHostCoherent())
+    if id != 0 {
+        vulkanWriteFloats(state, id, values.values, U64(0))
+        state.pendingUploadBuffers.append(id)
+    }
+    return id
+}
+
+// Match the portable binding contract: a shader with one resource group may
+// receive its resources partitioned across the encoder's four slots.
+@Native
+function vulkanCollectGroup(collected: borrow mut BindGroupState, group: borrow BindGroup, present: Bool) {
+    if !present || pointerIsNull(group.storage) { return }
+    let source = nativeRecover<BindGroupState>(group.storage)
+    for entry in source.uniformEntries {
+        if !vulkanHasUniform(collected, entry.uniformSlot) { collected.uniformEntries.append(entry) }
+    }
+    for entry in source.storageEntries {
+        if !vulkanHasStorage(collected, entry.storageSlot) { collected.storageEntries.append(entry) }
+    }
+    for entry in source.textureEntries {
+        if !vulkanHasTexture(collected, entry.textureSlot) { collected.textureEntries.append(entry) }
+    }
+    for entry in source.samplerEntries {
+        if !vulkanHasSampler(collected, entry.samplerSlot) { collected.samplerEntries.append(entry) }
+    }
+}
+
+@Native
+function vulkanApplyBindings(
+    state: borrow mut VulkanState, pipeline: borrow VulkanPipelineRecord,
+    group0: borrow BindGroup, has0: Bool, group1: borrow BindGroup, has1: Bool,
+    group2: borrow BindGroup, has2: Bool, group3: borrow BindGroup, has3: Bool,
+) -> Bool {
+    var activeGroups = 0
+    var singleGroup = 0
+    for index in 0..pipeline.groupCount {
+        if vulkanDescriptorBindings(pipeline.reflection, index).count > 0 {
+            activeGroups = activeGroups + 1
+            singleGroup = index
+        }
+    }
+    if activeGroups == 0 { return true }
+    if activeGroups == 1 {
+        var collected = BindGroupState()
+        vulkanCollectGroup(collected, group0, has0)
+        vulkanCollectGroup(collected, group1, has1)
+        vulkanCollectGroup(collected, group2, has2)
+        vulkanCollectGroup(collected, group3, has3)
+        return vulkanBindDescriptorState(state, pipeline, pipeline.reflection, singleGroup, collected)
+    }
+    if pipeline.groupCount > 0 && !vulkanBindDescriptorGroup(state, pipeline, pipeline.reflection, 0, group0, has0) { return false }
+    if pipeline.groupCount > 1 && !vulkanBindDescriptorGroup(state, pipeline, pipeline.reflection, 1, group1, has1) { return false }
+    if pipeline.groupCount > 2 && !vulkanBindDescriptorGroup(state, pipeline, pipeline.reflection, 2, group2, has2) { return false }
+    if pipeline.groupCount > 3 && !vulkanBindDescriptorGroup(state, pipeline, pipeline.reflection, 3, group3, has3) { return false }
+    return true
+}
