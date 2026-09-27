@@ -7,9 +7,9 @@ import Foundation
 @Native
 function vulkanNewBindGroup(label: borrow String) -> BindGroup {
     return BindGroup {
-        storage: nativeUserData(nativeState(BindGroupState {
+        storage: nativeState(BindGroupState {
             label: label
-        })),
+        }),
         id: 1
     }
 }
@@ -20,8 +20,14 @@ function vulkanCreateBindGroup(context: RawPtr, descriptor: borrow BindGroupDesc
         return .Error(.DeviceRefused)
     }
     let group = vulkanNewBindGroup(descriptor.label)
-    for entry in descriptor.uniformEntries {
-        vulkanBindGroupAddUniform(group, entry.uniformSlot, entry.uniform)
+    var uniformIndex = 0
+    while uniformIndex < descriptor.uniformEntries.count {
+        vulkanBindGroupAddUniform(
+            group,
+            descriptor.uniformEntries[uniformIndex].uniformSlot,
+            descriptor.uniformEntries[uniformIndex].uniform
+        )
+        uniformIndex = uniformIndex + 1
     }
     for entry in descriptor.textureEntries {
         vulkanBindGroupAddTexture(group, entry.textureSlot, entry.texture)
@@ -61,13 +67,14 @@ function vulkanBeginBindGroup(label: borrow String) -> BindGroupResult {
 
 @Native
 function vulkanBindGroupAddUniform(group: borrow BindGroup, slot: Int, uniform: borrow Uniform) {
-    if pointerIsNull(group.storage) || slot < 0 || uniform.id == 0 {
+    if group.id == 0 || slot < 0 || uniform.id == 0 {
         return
     }
     var state = nativeRecover<BindGroupState>(group.storage)
-    state.uniformEntries.append(UniformBindEntry {
+    state.uniformEntries.append(StoredUniformBindEntry {
         uniformSlot: slot,
-        uniform: uniform
+        uniformId: uniform.id,
+        storage: nativeUserData(uniform.storage)
     })
     state.revision = state.revision + 1
     return
@@ -75,7 +82,7 @@ function vulkanBindGroupAddUniform(group: borrow BindGroup, slot: Int, uniform: 
 
 @Native
 function vulkanBindGroupAddTexture(group: borrow BindGroup, slot: Int, texture: borrow GraphicsTexture) {
-    if pointerIsNull(group.storage) || slot < 0 || texture.viewId == 0 {
+    if slot < 0 || texture.viewId == 0 {
         return
     }
     var state = nativeRecover<BindGroupState>(group.storage)
@@ -89,7 +96,7 @@ function vulkanBindGroupAddTexture(group: borrow BindGroup, slot: Int, texture: 
 
 @Native
 function vulkanBindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: borrow GraphicsSampler) {
-    if pointerIsNull(group.storage) || slot < 0 || sampler.id == 0 {
+    if slot < 0 || sampler.id == 0 {
         return
     }
     var state = nativeRecover<BindGroupState>(group.storage)

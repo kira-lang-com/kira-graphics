@@ -82,7 +82,6 @@ function vulkanDispatchComputeBuffers(context: RawPtr, pipelineId: Int, bufferId
     let group = vulkanComputeBufferGroup(runtime.vulkan, bufferIds, 0)
     vkCmdBindPipeline(runtime.vulkan.commandBuffer, vulkanPipelineCompute(), pipeline.pipeline)
     let bound = pipeline.groupCount == 0 || vulkanBindDescriptorGroup(runtime.vulkan, pipeline, pipeline.reflection, 0, group, true)
-    nativeUserDataRelease(group.storage)
     if bound { vkCmdDispatch(runtime.vulkan.commandBuffer, vulkanDispatchGroups(threadCount, threadsPerGroup), U32(1), U32(1)) }
     vulkanFinishComputeCommands(runtime.vulkan)
     return
@@ -102,7 +101,6 @@ function vulkanDispatchDepthComputeBuffers(context: RawPtr, pipelineId: Int, dep
     vulkanBindGroupAddTexture(group, 0, depth)
     vkCmdBindPipeline(runtime.vulkan.commandBuffer, vulkanPipelineCompute(), pipeline.pipeline)
     let bound = pipeline.groupCount == 0 || vulkanBindDescriptorGroup(runtime.vulkan, pipeline, pipeline.reflection, 0, group, true)
-    nativeUserDataRelease(group.storage)
     if bound { vkCmdDispatch(runtime.vulkan.commandBuffer, vulkanDispatchGroups(threadCount, threadsPerGroup), U32(1), U32(1)) }
     vulkanFinishComputeCommands(runtime.vulkan)
     return
@@ -138,7 +136,14 @@ function vulkanDispatchTextureComputePair(
     }
     // Every recorded pair needs its own bytes until the submission completes.
     vulkanWriteFloats(runtime.vulkan, extentId, [F32(width), F32(height), blend, 0.0], U64(0))
-    let extent = Uniform { storage: nullPointer(), id: extentId }
+    let extent = Uniform {
+        storage: nativeState(UniformState {
+            label: "kira-vulkan-blur-extent",
+            expectedFloatCount: 4,
+            values: [F32(width), F32(height), blend, 0.0]
+        }),
+        id: extentId
+    }
     vulkanTransitionImage(runtime.vulkan, tempNear.id, vulkanImageLayoutGeneral(), vulkanStageTopOfPipe(), vulkanStageComputeShader(), vulkanAccessNone(), vulkanAccessShaderWrite(), vulkanAspectColor())
     vulkanTransitionImage(runtime.vulkan, tempFar.id, vulkanImageLayoutGeneral(), vulkanStageTopOfPipe(), vulkanStageComputeShader(), vulkanAccessNone(), vulkanAccessShaderWrite(), vulkanAspectColor())
     let first = vulkanNewBindGroup("kira-vulkan-blur-horizontal")
@@ -150,7 +155,6 @@ function vulkanDispatchTextureComputePair(
     vulkanBindGroupAddTexture(first, 5, tempFar)
     vkCmdBindPipeline(runtime.vulkan.commandBuffer, vulkanPipelineCompute(), horizontal.pipeline)
     let firstBound = horizontal.groupCount == 0 || vulkanBindDescriptorGroup(runtime.vulkan, horizontal, horizontal.reflection, 0, first, true)
-    nativeUserDataRelease(first.storage)
     if !firstBound {
         vulkanFinishComputeCommands(runtime.vulkan)
         vulkanRetireComputeBuffer(runtime.vulkan, extentId)
@@ -170,7 +174,6 @@ function vulkanDispatchTextureComputePair(
     vulkanBindGroupAddTexture(second, 5, outputFar)
     vkCmdBindPipeline(runtime.vulkan.commandBuffer, vulkanPipelineCompute(), vertical.pipeline)
     let secondBound = vertical.groupCount == 0 || vulkanBindDescriptorGroup(runtime.vulkan, vertical, vertical.reflection, 0, second, true)
-    nativeUserDataRelease(second.storage)
     if secondBound { vkCmdDispatch(runtime.vulkan.commandBuffer, vulkanDispatchGroups(width, 16), vulkanDispatchGroups(height, 16), U32(1)) }
     vulkanTransitionImage(runtime.vulkan, outputNear.id, vulkanImageLayoutShaderRead(), vulkanStageComputeShader(), vulkanStageFragmentShader() | vulkanStageComputeShader(), vulkanAccessShaderWrite(), vulkanAccessShaderRead(), vulkanAspectColor())
     vulkanTransitionImage(runtime.vulkan, outputFar.id, vulkanImageLayoutShaderRead(), vulkanStageComputeShader(), vulkanStageFragmentShader() | vulkanStageComputeShader(), vulkanAccessShaderWrite(), vulkanAccessShaderRead(), vulkanAspectColor())
@@ -210,6 +213,9 @@ function vulkanReadBufferU32(context: RawPtr, buffer: borrow GraphicsBuffer, ind
 
 @Native
 function vulkanOptimizeTexture(context: RawPtr, textureId: Int) {
+    // Vulkan textures are allocated in device-local memory from creation and
+    // never need Metal's explicit post-upload private-storage blit. Keeping this
+    // backend hook intentionally empty is the optimized path, not a missing one.
     let _ = context
     let _ = textureId
     return

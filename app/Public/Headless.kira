@@ -26,7 +26,9 @@ import Foundation
 // its own: a browser draws when a page moves and an assistant draws when a token
 // arrives, and neither is a display refresh.
 struct GraphicsHeadless {
-    var context: RawPtr = nullPointer()
+    // The headless device state is an ordinary typed owner. `Graphics` keeps
+    // only borrowed raw callback words into it; this field is the lifetime.
+    var context: NativeState<GraphicsAppRuntimeState>
     var graphics: Graphics = Graphics {
         userData: nullPointer(),
         backend: .Dawn,
@@ -38,6 +40,10 @@ struct GraphicsHeadless {
     // no swapchain here, and a pass that asked for one would be asking for the
     // window this deliberately does not have.
     function frame() -> RenderFrame {
+        if self.ready && self.graphics.backend == .Vulkan {
+            let context = nativeUserDataBorrow(self.context)
+            let _ = vulkanPrepareHeadlessFrame(context)
+        }
         return self.graphics.frame()
     }
 
@@ -46,7 +52,12 @@ struct GraphicsHeadless {
         if self.ready == false {
             return
         }
-        var state = nativeRecover<GraphicsAppRuntimeState>(self.context)
+        let context = nativeUserDataBorrow(self.context)
+        if self.graphics.backend == .Vulkan {
+            vulkanSubmitHeadlessFrame(context)
+            return
+        }
+        var state = nativeRecover<GraphicsAppRuntimeState>(context)
         dawnSubmitEncoder(state)
         return
     }
@@ -61,18 +72,64 @@ struct GraphicsHeadless {
         if self.ready == false {
             return
         }
-        var state = nativeRecover<GraphicsAppRuntimeState>(self.context)
+        if self.graphics.backend == .Vulkan { return }
+        let context = nativeUserDataBorrow(self.context)
+        var state = nativeRecover<GraphicsAppRuntimeState>(context)
         wgpuInstanceProcessEvents(state.dawn.instance)
         return
+    }
+
+    // Read one headless render target back as a binary PPM.
+    function capture(texture: borrow GraphicsTexture, path: borrow String) -> Bool {
+        if self.ready == false {
+            return false
+        }
+        if self.graphics.backend == .Vulkan { return false }
+        let context = nativeUserDataBorrow(self.context)
+        return dawnCaptureTexture(context, texture, path)
     }
 
     function close() {
         if self.ready == false {
             return
         }
+        let context = nativeUserDataBorrow(self.context)
+        var state = nativeRecover<GraphicsAppRuntimeState>(context)
+        if self.graphics.backend == .Vulkan {
+            vulkanShutdownState(state.vulkan)
+        } else {
+            dawnShutdown(state)
+        }
+        self.graphics.userData = nullPointer()
+        self.graphics.backendContext = nullPointer()
         self.ready = false
         return
     }
+}
+
+// Shut a device down IN PLACE, without consuming it.
+//
+// `GraphicsHeadless.close` takes the device by value, so it cannot shut down a
+// device that lives inside another struct's field — a partial move of a
+// single-owner native value is not allowed. A component that keeps its device in
+// a surface set needs to close it and keep the (now not-ready) handle, so this
+// does the same teardown through a mutable borrow. After it returns the device
+// answers `ready` false and can be reopened with `openHeadlessGraphics`.
+function closeHeadlessGraphics(device: borrow mut GraphicsHeadless) {
+    if device.ready == false {
+        return
+    }
+    let context = nativeUserDataBorrow(device.context)
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    if device.graphics.backend == .Vulkan {
+        vulkanShutdownState(state.vulkan)
+    } else {
+        dawnShutdown(state)
+    }
+    device.graphics.userData = nullPointer()
+    device.graphics.backendContext = nullPointer()
+    device.ready = false
+    return
 }
 
 // Open a device with no window.
@@ -82,9 +139,10 @@ struct GraphicsHeadless {
 // component that cannot draw should say so to the shell that started it and
 // exit, not take the desktop's compositor client down with an abort.
 function openHeadlessGraphics() -> GraphicsHeadless {
-    // Dawn only. Sokol's device is created BY its window, so there is no device
-    // to be had without one; a component on that backend falls back to being
-    // told it cannot share.
+    return openHeadlessGraphicsWithBackend(.Dawn)
+}
+
+function openHeadlessGraphicsWithBackend(backend: RenderBackendKind) -> GraphicsHeadless {
     let application = GraphicsApplication {
         title: "kira-headless",
         width: 1,
@@ -93,24 +151,38 @@ function openHeadlessGraphics() -> GraphicsHeadless {
         windowMode: .Windowed,
         transparent: false,
         opacity: 1.0,
-        backend: .Dawn
+        backend: backend
     }
     var runtimeState = nativeState(GraphicsAppRuntimeState {
         app: application,
         userData: nullPointer(),
         frameIndex: 0
     })
-    let context = nativeUserData(runtimeState)
+    let context = nativeUserDataBorrow(runtimeState)
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
-    if dawnCreateDeviceAndQueue(state, context) == false {
+    var created = false
+    if backend == .Vulkan {
+        created = vulkanCreateHeadlessDevice(state)
+    } else if backend == .Dawn {
+        created = dawnCreateDeviceAndQueue(state, context)
+    }
+    if !created {
         graphicsDiagnostic("Kira Graphics: no headless device could be created")
-        return GraphicsHeadless {}
+        return GraphicsHeadless {
+            context: move runtimeState,
+            graphics: Graphics {
+                userData: nullPointer(),
+                backend: backend,
+                backendContext: nullPointer()
+            },
+            ready: false
+        }
     }
     return GraphicsHeadless {
-        context: context,
+        context: move runtimeState,
         graphics: Graphics {
             userData: context,
-            backend: .Dawn,
+            backend: backend,
             backendContext: context
         },
         ready: true

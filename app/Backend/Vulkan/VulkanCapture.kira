@@ -66,9 +66,9 @@ function vulkanPortablePixmap(mapped: RawPtr, width: Int, height: Int, format: I
         var column = 0
         while column < width {
             let offset = U64(row * width * 4 + column * 4)
-            let first = byteAt(mapped, offset)
-            let green = byteAt(mapped, offset + U64(1))
-            let third = byteAt(mapped, offset + U64(2))
+            let first = rawByteAt(mapped, offset)
+            let green = rawByteAt(mapped, offset + U64(1))
+            let third = rawByteAt(mapped, offset + U64(2))
             bytes.append(blueFirst ? third : first)
             bytes.append(green)
             bytes.append(blueFirst ? first : third)

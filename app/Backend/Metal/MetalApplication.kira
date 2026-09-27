@@ -68,7 +68,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         runtimeUserData: runtimeUserData,
         closed: false
     })
-    let liveHandle = nativeUserData(liveStorage)
+    let liveHandle = nativeUserDataBorrow(liveStorage)
     let hostWindow: RawPtr = metalMsgSend(view, metalSel("window"))
     var resizeDelegate = nullPointer()
     if !pointerIsNull(hostWindow) {
@@ -351,7 +351,6 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     if !pointerIsNull(hostWindow) {
         metalRemoveResizeDelegate(hostWindow, resizeDelegate)
     }
-    nativeStateFree(liveStorage)
     let onCleanup: (Graphics) -> Void = app.cleanupHandler
     let cleanupGraphics = Graphics {
         userData: userData,

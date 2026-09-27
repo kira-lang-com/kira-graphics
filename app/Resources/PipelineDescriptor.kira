@@ -52,6 +52,10 @@ struct RenderPipelineDescriptor {
     var depthStencil: DepthStencilDescriptor
     var rasterization: RasterizationDescriptor
     var primitive: PrimitiveDescriptor
+    // Must match the attachments used by the render pass. Defaults to the
+    // historical single-sample path so existing pipeline descriptors remain
+    // source-compatible while backends can create real multisample pipelines.
+    var sampleCount: Int = 1
     // Metal shader-library entry-point names (default v_main/f_main; KSL-compiled
     // libraries use `{shader}__vertex__main` / `__fragment__main`). Transient — this
     // descriptor is not stored in native state, so String fields are safe here.

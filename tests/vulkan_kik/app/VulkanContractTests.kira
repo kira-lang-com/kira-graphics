@@ -13,6 +13,16 @@ construct VkCompositeAlphaUsesSupportedBits() extends Test {
     expect { return .Ok(true) }
 }
 
+construct VkSampleCountsMapToVulkanFlags() extends Test {
+    test {
+        for samples in [1, 2, 4, 8, 16, 32, 64] {
+            if vulkanSampleCount(samples) != I32(samples) { return false }
+        }
+        return vulkanSampleCount(0) == I32(0) && vulkanSampleCount(3) == I32(0)
+    }
+    expect { return .Ok(true) }
+}
+
 construct VkDynamicOffsetsFollowBindingOrder() extends Test {
     test {
         // Reflection stores uniforms before storage buffers. Vulkan orders

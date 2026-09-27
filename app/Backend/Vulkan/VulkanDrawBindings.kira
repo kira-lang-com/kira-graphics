@@ -3,8 +3,7 @@ import Foundation
 // Uniform values can change between draws, including through setUniformValues.
 // Snapshot their CPU state so each recorded draw sees the values it bound.
 @Native
-function vulkanSnapshotUniform(state: borrow mut VulkanState, uniform: borrow Uniform) -> U32 {
-    if pointerIsNull(uniform.storage) { return uniform.id }
+function vulkanSnapshotUniform(state: borrow mut VulkanState, uniform: borrow StoredUniformBindEntry) -> U32 {
     let values = nativeRecover<UniformState>(uniform.storage)
     if values.expectedFloatCount <= 0 || values.values.count != values.expectedFloatCount {
         graphicsDiagnostic("Kira Graphics: Vulkan uniform values do not match the declared size")
@@ -23,10 +22,18 @@ function vulkanSnapshotUniform(state: borrow mut VulkanState, uniform: borrow Un
 // receive its resources partitioned across the encoder's four slots.
 @Native
 function vulkanCollectGroup(collected: borrow mut BindGroupState, group: borrow BindGroup, present: Bool) {
-    if !present || pointerIsNull(group.storage) { return }
+    if !present { return }
     let source = nativeRecover<BindGroupState>(group.storage)
-    for entry in source.uniformEntries {
-        if !vulkanHasUniform(collected, entry.uniformSlot) { collected.uniformEntries.append(entry) }
+    var uniformIndex = 0
+    while uniformIndex < source.uniformEntries.count {
+        if !vulkanHasUniform(collected, source.uniformEntries[uniformIndex].uniformSlot) {
+            collected.uniformEntries.append(StoredUniformBindEntry {
+                uniformSlot: source.uniformEntries[uniformIndex].uniformSlot,
+                uniformId: source.uniformEntries[uniformIndex].uniformId,
+                storage: nativeUserData(source.uniformEntries[uniformIndex].storage)
+            })
+        }
+        uniformIndex = uniformIndex + 1
     }
     for entry in source.storageEntries {
         if !vulkanHasStorage(collected, entry.storageSlot) { collected.storageEntries.append(entry) }
@@ -60,7 +67,8 @@ function vulkanApplyBindings(
         vulkanCollectGroup(collected, group1, has1)
         vulkanCollectGroup(collected, group2, has2)
         vulkanCollectGroup(collected, group3, has3)
-        return vulkanBindDescriptorState(state, pipeline, pipeline.reflection, singleGroup, collected)
+        let bound = vulkanBindDescriptorState(state, pipeline, pipeline.reflection, singleGroup, collected)
+        return bound
     }
     if pipeline.groupCount > 0 && !vulkanBindDescriptorGroup(state, pipeline, pipeline.reflection, 0, group0, has0) { return false }
     if pipeline.groupCount > 1 && !vulkanBindDescriptorGroup(state, pipeline, pipeline.reflection, 1, group1, has1) { return false }

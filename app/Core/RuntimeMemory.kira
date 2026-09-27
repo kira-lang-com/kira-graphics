@@ -15,13 +15,19 @@ function freeBytes(ptr: RawPtr): Void
 function writeByte(ptr: RawPtr, offset: U64, value: U8): Void
 
 @FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u8_at, abi: c }
-function byteAt(ptr: RawPtr, offset: U64) -> U8
+function rawByteAt(ptr: RawPtr, offset: U64) -> U8
 
 @FFI.Extern { library: kira_runtime, symbol: kira_dynamic_write_u32_at, abi: c }
 function writeWord(ptr: RawPtr, offset: U64, value: U32): Void
 
 @FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u32_at, abi: c }
 function wordAt(ptr: RawPtr, offset: U64) -> U32
+
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_i32_at, abi: c }
+function signedWordAt(ptr: RawPtr, offset: U64) -> I32
+
+@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_f32_at, abi: c }
+function float32At(ptr: RawPtr, offset: U64) -> F32
 
 @FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u64_at, abi: c }
 function doubleWordAt(ptr: RawPtr, offset: U64) -> U64
@@ -52,7 +58,7 @@ function textFromBytes(ptr: RawPtr, count: Int) -> String {
     var text = ""
     var index = 0
     while index < count {
-        let byte = Int(byteAt(ptr, U64(index)))
+        let byte = Int(rawByteAt(ptr, U64(index)))
         if byte == 0 {
             return text
         }

@@ -1,0 +1,99 @@
+import Foundation
+
+// Create the transferable render target on the active Vulkan device itself.
+// This is the producer path: there is no cross-device memory import. The image
+// and memory stay ordinary KG-owned resources while SharedSurface owns only the
+// exported dma-buf descriptor handed to the compositor.
+@Native
+function vulkanCreateSharedTexture(context: RawPtr, width: Int, height: Int) -> SharedTexture {
+    if !vulkanHasDevice(context) || width <= 0 || height <= 0 { return SharedTexture {} }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    let record = kira_shared_surface_vulkan_create(
+        runtime.vulkan.device,
+        runtime.vulkan.physicalDevice,
+        I32(width),
+        I32(height)
+    )
+    if pointerIsNull(record) {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not create the shared render target (" + sharedSurfaceDiagnostic() + ")")
+        return SharedTexture {}
+    }
+    let image = kira_shared_surface_vulkan_import_image(record)
+    let memory = kira_shared_surface_vulkan_import_memory(record)
+    let surfaceId = SharedSurfaceId(Int(kira_shared_surface_vulkan_record_surface(record)))
+    kira_shared_surface_vulkan_import_forget(record)
+    if pointerIsNull(image) || pointerIsNull(memory) || surfaceId == SharedSurfaceId(0) {
+        return SharedTexture {}
+    }
+    let surface = sharedSurfaceAt(surfaceId)
+    let imageId = vulkanRegisterObject(runtime.vulkan, image, memory, nullPointer(),
+        kira_shared_surface_allocation_size(I32(surfaceId.raw)), vulkanFormatBgra8(), vulkanObjectKindImage())
+    if imageId == 0 {
+        vkFreeMemory(runtime.vulkan.device, memory, nullPointer())
+        vkDestroyImage(runtime.vulkan.device, image, nullPointer())
+        surface.release()
+        return SharedTexture {}
+    }
+    vulkanSetObjectLayout(runtime.vulkan, imageId, vulkanImageLayoutUndefined())
+    let colorViewId = vulkanCreateImageView(runtime.vulkan, imageId, vulkanFormatBgra8(), vulkanAspectColor())
+    if colorViewId == 0 {
+        vulkanReleaseImage(runtime.vulkan, imageId)
+        surface.release()
+        return SharedTexture {}
+    }
+    return SharedTexture {
+        texture: GraphicsTexture {
+            id: imageId,
+            colorViewId: colorViewId,
+            width: width,
+            height: height,
+            sampleCount: 1
+        },
+        surface: surface,
+        backend: .Vulkan,
+        backendContext: context
+    }
+}
+
+// Import a SharedSurface directly into the native Vulkan backend. The native
+// seam duplicates and consumes the opaque fd, recreates the allocator's exact
+// image description on this VkDevice, and returns handles this backend owns.
+@Native
+function vulkanImportSharedTexture(context: RawPtr, surface: borrow SharedSurface) -> SharedTexture {
+    if !vulkanHasDevice(context) || !surface.isValid() { return SharedTexture {} }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    let record = kira_shared_surface_vulkan_import(runtime.vulkan.device, I32(surface.id.raw))
+    if pointerIsNull(record) {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not import the shared surface (" + sharedSurfaceDiagnostic() + ")")
+        return SharedTexture {}
+    }
+    let image = kira_shared_surface_vulkan_import_image(record)
+    let memory = kira_shared_surface_vulkan_import_memory(record)
+    kira_shared_surface_vulkan_import_forget(record)
+    if pointerIsNull(image) || pointerIsNull(memory) { return SharedTexture {} }
+    let imageId = vulkanRegisterObject(runtime.vulkan, image, memory, nullPointer(),
+        kira_shared_surface_allocation_size(I32(surface.id.raw)), vulkanFormatBgra8(), vulkanObjectKindImage())
+    if imageId == 0 {
+        vkFreeMemory(runtime.vulkan.device, memory, nullPointer())
+        vkDestroyImage(runtime.vulkan.device, image, nullPointer())
+        return SharedTexture {}
+    }
+    vulkanSetObjectLayout(runtime.vulkan, imageId, vulkanImageLayoutUndefined())
+    let colorViewId = vulkanCreateImageView(runtime.vulkan, imageId, vulkanFormatBgra8(), vulkanAspectColor())
+    if colorViewId == 0 {
+        vulkanReleaseImage(runtime.vulkan, imageId)
+        return SharedTexture {}
+    }
+    return SharedTexture {
+        texture: GraphicsTexture {
+            id: imageId,
+            colorViewId: colorViewId,
+            width: surface.width,
+            height: surface.height,
+            sampleCount: 1
+        },
+        surface: surface,
+        backend: .Vulkan,
+        backendContext: context
+    }
+}

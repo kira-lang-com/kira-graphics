@@ -55,7 +55,7 @@ struct RenderEncoderState {
 }
 
 class RenderEncoder {
-    var storage: RawPtr
+    var storage: NativeState<RenderEncoderState>
 
     function setPipeline(pipeline: borrow RenderPipeline) {
         var state = nativeRecover<RenderEncoderState>(self.storage)
@@ -347,6 +347,6 @@ function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, d
         instanceCount: 1
     })
     return RenderEncoder {
-        storage: nativeUserData(state)
+        storage: move state
     }
 }

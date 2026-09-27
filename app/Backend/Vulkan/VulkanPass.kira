@@ -150,8 +150,8 @@ function vulkanDepthClearValue(depth: Float, stencil: Int) -> VkClearValue {
 }
 
 @Native
-function vulkanEnsureDepthTarget(state: borrow mut VulkanState, width: Int, height: Int) -> RawPtr {
-    if state.managedDepthId != 0 && state.managedDepthWidth == width && state.managedDepthHeight == height {
+function vulkanEnsureDepthTarget(state: borrow mut VulkanState, width: Int, height: Int, sampleCount: Int) -> RawPtr {
+    if state.managedDepthId != 0 && state.managedDepthWidth == width && state.managedDepthHeight == height && state.managedDepthSampleCount == sampleCount {
         return vulkanObject(state, state.managedDepthViewId)
     }
     if state.managedDepthViewId != 0 { vulkanReleaseImageView(state, state.managedDepthViewId) }
@@ -162,7 +162,7 @@ function vulkanEnsureDepthTarget(state: borrow mut VulkanState, width: Int, heig
         height: height,
         format: .Depth24Stencil8,
         usage: .DepthStencil,
-        sampleCount: 1,
+        sampleCount: sampleCount,
         storage: .Transient
     }
     state.managedDepthId = vulkanCreateImageHandle(state, descriptor)
@@ -170,6 +170,7 @@ function vulkanEnsureDepthTarget(state: borrow mut VulkanState, width: Int, heig
     state.managedDepthViewId = vulkanCreateImageView(state, state.managedDepthId, vulkanFormatDepth24Stencil8(), vulkanAspectDepth() | vulkanAspectStencil())
     state.managedDepthWidth = width
     state.managedDepthHeight = height
+    state.managedDepthSampleCount = sampleCount
     return vulkanObject(state, state.managedDepthViewId)
 }
 
@@ -216,7 +217,7 @@ function vulkanTransitionSwapchainImage(state: borrow mut VulkanState, image: Ra
 function vulkanWaitForFrame(state: borrow mut VulkanState) -> Bool {
     let fenceSlot = vulkanPointerSlot()
     writePointer(fenceSlot, U64(0), state.inFlightFence)
-    let waitResult = vkWaitForFences(state.device, U32(1), fenceSlot, U32(1), U64(0 - 1))
+    let waitResult = vkWaitForFences(state.device, U32(1), fenceSlot, U32(1), U64(9223372036854775807))
     freeBytes(fenceSlot)
     if waitResult != vulkanSuccess() {
         graphicsDiagnostic("Kira Graphics: Vulkan frame fence failed (" + vulkanResultName(waitResult) + ")")
@@ -234,7 +235,7 @@ function vulkanAcquireFrame(state: borrow mut VulkanState) -> Bool {
         vkResetDescriptorPool(state.device, state.descriptorPool, U32(0))
     }
     let imageIndexSlot = vulkanWordSlot()
-    let result = vkAcquireNextImageKHR(state.device, state.swapchain, U64(0 - 1), state.imageAvailable, nullPointer(), imageIndexSlot)
+    let result = vkAcquireNextImageKHR(state.device, state.swapchain, U64(9223372036854775807), state.imageAvailable, nullPointer(), imageIndexSlot)
     state.currentImageIndex = wordAt(imageIndexSlot, U64(0))
     freeBytes(imageIndexSlot)
     if result == vulkanErrorOutOfDate() {
@@ -292,6 +293,12 @@ function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow
     var height = frame.attachments.colorHeight()
     var format = state.swapchainFormat
     var swapchain = frame.attachments.color.target.kind == .Swapchain
+    var sampleCount = swapchain ? 1 : frame.attachments.colorSampleCount()
+    if sampleCount <= 0 { sampleCount = 1 }
+    if vulkanSampleCount(sampleCount) == I32(0) {
+        graphicsDiagnostic("Kira Graphics: Vulkan render pass sampleCount must be one of 1, 2, 4, 8, 16, 32 or 64")
+        return false
+    }
     var imageIndex = state.currentImageIndex
     if swapchain {
         if Int(imageIndex) >= state.swapchainImages.count { return false }
@@ -314,19 +321,46 @@ function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow
     if frame.attachments.hasDepth {
         depthImageId = frame.attachments.depth.texture.id
         if depthImageId != 0 {
+            let depthSamples = frame.attachments.depth.texture.sampleCount <= 0 ? 1 : frame.attachments.depth.texture.sampleCount
+            if depthSamples != sampleCount {
+                graphicsDiagnostic("Kira Graphics: Vulkan depth attachment sampleCount must match the colour attachment")
+                return false
+            }
             depthView = vulkanObject(state, frame.attachments.depthViewId())
         } else {
-            depthView = vulkanEnsureDepthTarget(state, width, height)
+            depthView = vulkanEnsureDepthTarget(state, width, height, sampleCount)
             depthImageId = state.managedDepthId
         }
         if pointerIsNull(depthView) { return false }
         vulkanTransitionImage(state, depthImageId, vulkanImageLayoutDepthAttachment(), vulkanStageTopOfPipe(), vulkanStageEarlyFragmentTests(), vulkanAccessNone(), vulkanAccessDepthStencilWrite(), vulkanAspectDepth() | vulkanAspectStencil())
     }
+    var resolveView = nullPointer()
+    if frame.attachments.color.hasResolveTarget {
+        if sampleCount <= 1 {
+            graphicsDiagnostic("Kira Graphics: Vulkan resolve targets require a multisampled colour attachment")
+            return false
+        }
+        let resolveTexture = frame.attachments.color.resolveTarget.texture
+        let resolveSamples = resolveTexture.sampleCount <= 0 ? 1 : resolveTexture.sampleCount
+        if resolveSamples != 1 || resolveTexture.width != width || resolveTexture.height != height {
+            graphicsDiagnostic("Kira Graphics: Vulkan resolve target must be single-sampled and match the colour attachment extent")
+            return false
+        }
+        let resolveId = resolveTexture.id
+        resolveView = vulkanObject(state, frame.attachments.resolveViewId())
+        if resolveId == 0 || pointerIsNull(resolveView) || vulkanObjectFormat(state, resolveId) != format {
+            graphicsDiagnostic("Kira Graphics: Vulkan resolve target must match the colour attachment format")
+            return false
+        }
+        vulkanTransitionImage(state, resolveId, vulkanImageLayoutColorAttachment(), vulkanStageTopOfPipe(), vulkanStageColorAttachmentOutput(), vulkanAccessNone(), vulkanAccessColorAttachmentWrite(), vulkanAspectColor())
+    }
     let colorAttachment = VkRenderingAttachmentInfo {
         sType: vulkanStructureRenderingAttachmentInfo(),
         imageView: colorView,
         imageLayout: vulkanImageLayoutColorAttachment(),
-        resolveMode: vulkanResolveNone(),
+        resolveMode: pointerIsNull(resolveView) ? vulkanResolveNone() : vulkanResolveAverage(),
+        resolveImageView: resolveView,
+        resolveImageLayout: vulkanImageLayoutColorAttachment(),
         loadOp: vulkanLoadOp(frame.attachments.color.loadAction),
         storeOp: vulkanStoreOp(frame.attachments.color.storeAction),
         clearValue: vulkanClearValue(frame.attachments.color.clearColor)
@@ -370,8 +404,10 @@ function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow
     state.passFormat = format
     state.passColorImage = colorImage
     state.passColorView = colorView
+    state.passResolveImage = pointerIsNull(resolveView) ? nullPointer() : vulkanObject(state, frame.attachments.color.resolveTarget.texture.id)
     state.passDepthImage = depthImageId == 0 ? nullPointer() : vulkanObject(state, depthImageId)
     state.passDepthView = depthView
+    state.passSampleCount = sampleCount
     state.passIsSwapchain = swapchain
     state.framePassCount = state.framePassCount + 1
     return true
@@ -395,9 +431,17 @@ function vulkanEndPassAndCommitState(state: borrow mut VulkanState) {
             vulkanTransitionImage(state, imageId, vulkanImageLayoutShaderRead(), vulkanStageColorAttachmentOutput(), vulkanStageFragmentShader() | vulkanStageComputeShader(), vulkanAccessColorAttachmentWrite(), vulkanAccessShaderRead(), vulkanAspectColor())
         }
     }
+    if !pointerIsNull(state.passResolveImage) {
+        let resolveId = frameImageId(state, state.passResolveImage)
+        if resolveId != 0 {
+            vulkanTransitionImage(state, resolveId, vulkanImageLayoutShaderRead(), vulkanStageColorAttachmentOutput(), vulkanStageFragmentShader() | vulkanStageComputeShader(), vulkanAccessColorAttachmentWrite(), vulkanAccessShaderRead(), vulkanAspectColor())
+        }
+    }
     state.passActive = false
     state.passWidth = 0
     state.passHeight = 0
+    state.passResolveImage = nullPointer()
+    state.passSampleCount = 1
     return
 }
 

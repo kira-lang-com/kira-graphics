@@ -1,0 +1,109 @@
+import Foundation
+
+// Vulkan device and command-buffer lifecycle for renderers with no native
+// window or swapchain. Offscreen passes use the same texture, pipeline and
+// encoder implementation as the windowed backend; only acquire/present differ.
+
+@Native
+function vulkanCreateHeadlessDevice(runtime: borrow mut GraphicsAppRuntimeState) -> Bool {
+    runtime.vulkan = VulkanState()
+    if !vulkanCreateInstance(runtime.vulkan, false) { return false }
+    if !vulkanChooseHeadlessPhysicalDevice(runtime.vulkan) {
+        vulkanShutdownState(runtime.vulkan)
+        return false
+    }
+    if !vulkanCreateDevice(runtime.vulkan, false) || !vulkanCreateCommandState(runtime.vulkan) {
+        vulkanShutdownState(runtime.vulkan)
+        return false
+    }
+    runtime.vulkan.initialized = true
+    return true
+}
+
+@Native
+function vulkanBeginHeadlessFrame(state: borrow mut VulkanState) -> Bool {
+    if state.frameActive { return true }
+    if !vulkanWaitForFrame(state) { return false }
+    vulkanReleasePendingUploads(state)
+    vulkanReleaseRetiredObjects(state)
+    if !pointerIsNull(state.descriptorPool) {
+        let _ = vkResetDescriptorPool(state.device, state.descriptorPool, U32(0))
+    }
+    if vkResetCommandBuffer(state.commandBuffer, U32(0)) != vulkanSuccess() { return false }
+    let beginResult = vkBeginCommandBuffer(state.commandBuffer, VkCommandBufferBeginInfo {
+        sType: vulkanStructureCommandBufferBeginInfo(),
+        flags: vulkanCommandBufferOneTime()
+    })
+    if beginResult != vulkanSuccess() {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not begin its headless command buffer (" + vulkanResultName(beginResult) + ")")
+        return false
+    }
+    state.frameActive = true
+    state.acquired = false
+    state.acquireWaitPending = false
+    state.dynamicFrame = state.dynamicFrame + 1
+    state.frameStartedAt = vulkanMonotonicNanoseconds()
+    state.framePassCount = 0
+    state.frameDrawCount = 0
+    state.frameTriangleCount = 0
+    return true
+}
+
+@Native
+function vulkanSubmitHeadlessFrame(context: RawPtr) {
+    if !vulkanHasDevice(context) { return }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    if !runtime.vulkan.frameActive { return }
+    if runtime.vulkan.passActive { vulkanEndPassAndCommitState(runtime.vulkan) }
+    if vkEndCommandBuffer(runtime.vulkan.commandBuffer) != vulkanSuccess() {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not finish its headless command buffer")
+        runtime.vulkan.frameActive = false
+        return
+    }
+    let fenceSlot = vulkanPointerSlot()
+    writePointer(fenceSlot, U64(0), runtime.vulkan.inFlightFence)
+    let resetResult = vkResetFences(runtime.vulkan.device, U32(1), fenceSlot)
+    freeBytes(fenceSlot)
+    if resetResult != vulkanSuccess() {
+        runtime.vulkan.frameActive = false
+        return
+    }
+    let commandSlot = vulkanPointerSlot()
+    writePointer(commandSlot, U64(0), runtime.vulkan.commandBuffer)
+    let submitResult = vkQueueSubmit(runtime.vulkan.queue, U32(1), VkSubmitInfo {
+        sType: vulkanStructureSubmitInfo(),
+        commandBufferCount: U32(1),
+        pCommandBuffers: commandSlot
+    }, runtime.vulkan.inFlightFence)
+    freeBytes(commandSlot)
+    if submitResult != vulkanSuccess() {
+        graphicsDiagnostic("Kira Graphics: Vulkan could not submit its headless frame (" + vulkanResultName(submitResult) + ")")
+        runtime.vulkan.frameActive = false
+        return
+    }
+    if !vulkanWaitForFrame(runtime.vulkan) {
+        graphicsDiagnostic("Kira Graphics: Vulkan headless submission did not complete")
+        runtime.vulkan.frameActive = false
+        return
+    }
+    runtime.vulkan.frameActive = false
+    let elapsed = Float(Int(vulkanMonotonicNanoseconds() - runtime.vulkan.frameStartedAt)) / 1000000000.0
+    runtime.vulkan.stats.frameSeconds = elapsed
+    runtime.vulkan.stats.cpuSeconds = elapsed
+    runtime.vulkan.stats.allocatedBytes = runtime.vulkan.allocatedBytes
+    runtime.vulkan.stats.hasAllocatedBytes = true
+    runtime.vulkan.stats.resourceCount = runtime.vulkan.resourceCount
+    runtime.vulkan.stats.passCount = runtime.vulkan.framePassCount
+    runtime.vulkan.stats.drawCount = runtime.vulkan.frameDrawCount
+    runtime.vulkan.stats.triangleCount = runtime.vulkan.frameTriangleCount
+    runtime.vulkan.stats.framesInFlight = 1
+    runtime.vulkan.stats.frameSerial = runtime.vulkan.stats.frameSerial + 1
+    return
+}
+
+@Native
+function vulkanPrepareHeadlessFrame(context: RawPtr) -> Bool {
+    if !vulkanHasDevice(context) { return false }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    return vulkanBeginHeadlessFrame(runtime.vulkan)
+}

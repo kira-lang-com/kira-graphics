@@ -362,11 +362,19 @@ function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, run
         features.append(dawnFeatureTimestampQuery())
     }
     if sharesTextures {
-        features.append(dawnFeatureSharedTextureMemoryDmaBuf())
-        // And the fence that goes with it: ending access exports one, and a
-        // surface whose access cannot be ended is a surface the other side must
-        // not read.
-        features.append(dawnAdapterFenceFeature(state.dawn.adapter))
+        // Prefer the Vulkan opaque-fd path when the adapter exposes it. Tessera's
+        // venus stack proves this exact feature pair end to end; requesting the
+        // dma-buf import feature alongside it makes Dawn reject the imported
+        // SharedTextureMemory before a texture can be created.
+        if wgpuAdapterHasFeature(state.dawn.adapter, dawnFeatureSharedTextureMemoryOpaqueFD()) != U32(0) {
+            features.append(dawnFeatureSharedTextureMemoryOpaqueFD())
+        } else if wgpuAdapterHasFeature(state.dawn.adapter, dawnFeatureSharedTextureMemoryDmaBuf()) != U32(0) {
+            features.append(dawnFeatureSharedTextureMemoryDmaBuf())
+        }
+        let sharedFence = dawnAdapterFenceFeature(state.dawn.adapter)
+        if sharedFence != I32(0) {
+            features.append(sharedFence)
+        }
     }
     state.dawn.device = dawnCreateDevice(state.dawn.adapter, DawnDeviceDescriptor {
         label: dawnText("kira-graphics-device"),

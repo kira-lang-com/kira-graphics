@@ -106,6 +106,21 @@ function sharedSurfaceAt(id: SharedSurfaceId) -> SharedSurface {
     }
 }
 
+// Create a render target whose storage can be transferred to another process.
+// Vulkan allocates it on the active device so the producer never imports memory
+// from a second Vulkan context. Other backends retain their existing paths.
+function createSharedTexture(graphics: borrow Graphics, width: Int, height: Int) -> SharedTexture {
+    if graphics.backend == .Vulkan {
+        return vulkanCreateSharedTexture(graphics.backendContext, width, height)
+    }
+    if graphics.backend == .Dawn {
+        let surface = createSharedSurface(width: width, height: height)
+        if !surface.isValid() { return SharedTexture {} }
+        return dawnImportSharedTexture(graphics.backendContext, surface)
+    }
+    return SharedTexture {}
+}
+
 // Make a texture over a surface, on whichever side of the channel holds it.
 //
 // The producer and the consumer call this identically. A backend that does not
@@ -113,10 +128,13 @@ function sharedSurfaceAt(id: SharedSurfaceId) -> SharedSurface {
 // falls back to copying the pixels -- which is slower and correct, and is what
 // a machine with no render node gets.
 function importSharedTexture(graphics: borrow Graphics, surface: borrow SharedSurface) -> SharedTexture {
-    if graphics.backend != .Dawn {
-        return SharedTexture {}
+    if graphics.backend == .Vulkan {
+        return vulkanImportSharedTexture(graphics.backendContext, surface)
     }
-    return dawnImportSharedTexture(graphics.backendContext, surface)
+    if graphics.backend == .Dawn {
+        return dawnImportSharedTexture(graphics.backendContext, surface)
+    }
+    return SharedTexture {}
 }
 
 // The same, from inside a frame.
@@ -125,10 +143,13 @@ function importSharedTexture(graphics: borrow Graphics, surface: borrow SharedSu
 // a component renders into its surface on the frame hook, and the hook is handed
 // a frame rather than a `Graphics`.
 function importSharedTextureDuringFrame(frame: borrow mut RenderFrame, surface: borrow SharedSurface) -> SharedTexture {
-    if frame.backend != .Dawn {
-        return SharedTexture {}
+    if frame.backend == .Vulkan {
+        return vulkanImportSharedTexture(frame.backendContext, surface)
     }
-    return dawnImportSharedTexture(frame.backendContext, surface)
+    if frame.backend == .Dawn {
+        return dawnImportSharedTexture(frame.backendContext, surface)
+    }
+    return SharedTexture {}
 }
 
 // A texture over a shared surface, and the memory it was made from.
@@ -145,6 +166,8 @@ struct SharedTexture {
     // an id is a table index rather than something the device understands.
     var object: RawPtr = nullPointer()
     var surface: SharedSurface = SharedSurface {}
+    var backend: RenderBackendKind = .Dawn
+    var backendContext: RawPtr = nullPointer()
 
     function isValid() -> Bool {
         return self.texture.id != U32(0)
@@ -156,6 +179,7 @@ struct SharedTexture {
     // preserving the old contents would be a transition performed for pixels
     // nobody will read.
     function beginWrite() -> Bool {
+        if self.backend == .Vulkan { return true }
         return kira_shared_texture_begin(self.memory, self.object, I32(0)) != I32(0)
     }
 
@@ -165,10 +189,12 @@ struct SharedTexture {
     // beginning as a writer does not fail, it simply discards the frame this
     // process came to composite and hands back whatever the memory held.
     function beginRead() -> Bool {
+        if self.backend == .Vulkan { return true }
         return kira_shared_texture_begin(self.memory, self.object, I32(1)) != I32(0)
     }
 
     function endAccess() -> Bool {
+        if self.backend == .Vulkan { return true }
         return kira_shared_texture_end(self.memory, self.object) != I32(0)
     }
 
@@ -181,12 +207,17 @@ struct SharedTexture {
     // nothing will sample again -- so leaking one per resize leaks as fast as
     // somebody can drag a window edge.
     function release() {
-        kira_shared_texture_release(self.memory, self.object)
+        if self.backend == .Vulkan && !pointerIsNull(self.backendContext) {
+            vulkanDestroyTexture(self.backendContext, self.texture)
+        } else {
+            kira_shared_texture_release(self.memory, self.object)
+        }
         self.memory = nullPointer()
         self.object = nullPointer()
         self.texture = emptyGraphicsTexture()
         self.surface.release()
         self.surface = SharedSurface {}
+        self.backendContext = nullPointer()
         return
     }
 }

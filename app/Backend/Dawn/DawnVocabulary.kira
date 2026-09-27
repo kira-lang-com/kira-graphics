@@ -79,7 +79,7 @@ struct DawnDeviceDescriptor {
 @FFI.Pointer { target: DawnDeviceDescriptor, ownership: borrowed }
 struct DawnDeviceDescriptorPointer {}
 
-@FFI.Extern { library: dawn, symbol: wgpuAdapterCreateDevice, abi: c }
+@FFI.Extern { library: kira_shared_surface, symbol: kira_dawn_create_device_probe, abi: c }
 function dawnCreateDevice(adapter: WGPUAdapterImpl_ptr, descriptor: DawnDeviceDescriptorPointer) -> WGPUDeviceImpl_ptr
 
 // A `WGPUStringView` over Kira text. The length is the byte count rather than

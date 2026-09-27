@@ -98,7 +98,6 @@ function vulkanDestroyUniform(context: RawPtr, uniform: borrow Uniform) {
     }
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     vulkanReleaseBuffer(state.vulkan, uniform.id)
-    if !pointerIsNull(uniform.storage) { nativeUserDataRelease(uniform.storage) }
     return
 }
 

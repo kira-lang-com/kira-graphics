@@ -13,9 +13,15 @@
 // caller adds — and a uniform entry holds a reference to the very
 // `Uniform` its caller passed in (see `Uniform.kira`), not a copy of
 // whatever it held when the entry was added.
+struct StoredUniformBindEntry {
+    var uniformSlot: Int = 0
+    var uniformId: U32 = 0
+    var storage: NativeState<UniformState>
+}
+
 struct BindGroupState {
     var label: String = ""
-    var uniformEntries: [UniformBindEntry] = []
+    var uniformEntries: [StoredUniformBindEntry] = []
     var textureEntries: [TextureBindEntry] = []
     var samplerEntries: [SamplerBindEntry] = []
     var storageEntries: [StorageBindEntry] = []
@@ -51,14 +57,17 @@ struct BindGroupState {
 }
 
 class BindGroup {
-    var storage: RawPtr
+    // Typed affine owner of the CPU-side group state. Nested uniform owners are
+    // released recursively with this state, so no raw token carries a hidden
+    // destruction obligation.
+    var storage: NativeState<BindGroupState>
     var id: U32 = 0
 }
 
 @Native
 function emptyBindGroup() -> BindGroup {
     return BindGroup {
-        storage: nativeUserData(nativeState(BindGroupState {})),
+        storage: nativeState(BindGroupState {}),
         id: 0
     }
 }
@@ -71,7 +80,7 @@ function emptyBindGroup() -> BindGroup {
 @Native
 function unboundBindGroup() -> BindGroup {
     return BindGroup {
-        storage: nullPointer(),
+        storage: nativeState(BindGroupState {}),
         id: 0
     }
 }
@@ -97,9 +106,9 @@ function sokolMaxSamplerBindSlots() -> Int { return 12 }
 @Native
 function sokolCreateBindGroupId(label: borrow String) -> BindGroup {
     return BindGroup {
-        storage: nativeUserData(nativeState(BindGroupState {
+        storage: nativeState(BindGroupState {
             label: label
-        })),
+        }),
         id: 1
     }
 }
@@ -117,9 +126,10 @@ function sokolBindGroupAddUniform(group: borrow BindGroup, uniformSlot: Int, uni
         graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' uniform slot is outside the binding range a shader group numbers into")
         return
     }
-    state.uniformEntries.append(UniformBindEntry {
+    state.uniformEntries.append(StoredUniformBindEntry {
         uniformSlot: uniformSlot,
-        uniform: uniform
+        uniformId: uniform.id,
+        storage: nativeUserData(uniform.storage)
     })
     return
 }
@@ -186,9 +196,15 @@ function sokolDestroyBindGroupId(bindGroupId: U32) {
     return
 }
 
-// The entries a `BindGroup` currently holds, for the draw path (see
-// `SokolDraw.kira`) to read.
-@Native
-function sokolBindGroupState(group: borrow BindGroup) -> BindGroupState {
-    return nativeRecover<BindGroupState>(group.storage)
+
+// Explicitly shares one bind-group state owner. BindGroup is affine by default:
+// an ordinary assignment or field extraction cannot silently duplicate the
+// NativeState it contains. Callers that intentionally need another handle spell
+// that ownership operation here, and the returned value carries the matching
+// structural release.
+function shareBindGroup(group: borrow BindGroup) -> BindGroup {
+    return BindGroup {
+        storage: nativeUserData(group.storage),
+        id: group.id
+    }
 }

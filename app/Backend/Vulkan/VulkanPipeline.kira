@@ -240,6 +240,11 @@ function vulkanCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPi
     if !vulkanHasDevice(context) || descriptor.shader.id == 0 {
         return .Error(.DeviceRefused)
     }
+    let samples = vulkanSampleCount(descriptor.sampleCount <= 0 ? 1 : descriptor.sampleCount)
+    if samples == I32(0) {
+        graphicsDiagnostic("Kira Graphics: Vulkan pipeline sampleCount must be one of 1, 2, 4, 8, 16, 32 or 64")
+        return .Error(.DeviceRefused)
+    }
     if descriptor.colorTargets.count > 1 || descriptor.vertexLayout.attributes.count > 16 {
         graphicsDiagnostic("Kira Graphics: Vulkan currently exposes one colour attachment and at most sixteen vertex attributes per pipeline")
         return .Error(.DeviceRefused)
@@ -314,7 +319,7 @@ function vulkanCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPi
     }
     let multisample = VkPipelineMultisampleStateCreateInfo {
         sType: vulkanStructurePipelineMultisampleStateCreateInfo(),
-        rasterizationSamples: vulkanSampleCount1()
+        rasterizationSamples: samples
     }
     let usesDepth = descriptor.depthStencil.depthEnabled || descriptor.depthStencil.depthWriteEnabled
     let depth = VkPipelineDepthStencilStateCreateInfo {
@@ -379,6 +384,7 @@ function vulkanCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPi
         groupLayouts: layouts,
         groupCount: layouts.count,
         reflection: shader.reflection,
+        sampleCount: descriptor.sampleCount <= 0 ? 1 : descriptor.sampleCount,
         live: true
     })
     return .Ok(RenderPipeline {

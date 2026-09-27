@@ -79,7 +79,7 @@ function metalMakeUniform(ctx: RawPtr, descriptor: borrow UniformDescriptor) -> 
     let id = metalCreateUniform(ctx, descriptor.expectedFloatCount)
     metalUpdateUniform(ctx, id, descriptor.data)
     return Uniform {
-        storage: nativeUserData(nativeState(UniformState {})),
+        storage: nativeState(UniformState {}),
         id: id
     }
 }
@@ -90,7 +90,7 @@ function metalMakeUniform(ctx: RawPtr, descriptor: borrow UniformDescriptor) -> 
 @Native
 function metalGraphicsBindGroup(id: Int) -> BindGroup {
     return BindGroup {
-        storage: nativeUserData(nativeState(BindGroupState {})),
+        storage: nativeState(BindGroupState {}),
         id: id
     }
 }
@@ -100,8 +100,11 @@ function metalCreateGraphicsBindGroup(ctx: RawPtr, descriptor: borrow BindGroupD
     let id = metalCreateBindGroup(ctx)
     var index = 0
     while index < descriptor.uniformEntries.count {
-        let entry = descriptor.uniformEntries[index]
-        metalBindGroupAddEntry(ctx, id, metalBindEntryKindUniform(), entry.uniformSlot, entry.uniform.id)
+        metalBindGroupAddEntry(
+            ctx, id, metalBindEntryKindUniform(),
+            descriptor.uniformEntries[index].uniformSlot,
+            descriptor.uniformEntries[index].uniform.id
+        )
         index = index + 1
     }
     index = 0

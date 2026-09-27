@@ -173,9 +173,6 @@ class Graphics {
     // use-after-free the box's magic word traps.
     function destroyBindGroup(bindGroup: borrow BindGroup) {
         self.renderBackend().destroyBindGroup(bindGroup)
-        if !pointerIsNull(bindGroup.storage) {
-            nativeStateFree(bindGroup.storage)
-        }
         return
     }
 
@@ -300,7 +297,6 @@ class Graphics {
             },
             hasRenderPass: false,
             renderPassActive: false,
-            currentEncoder: makeRenderEncoder(),
             passSubmitted: false,
             shouldQuit: false,
             userData: self.userData,

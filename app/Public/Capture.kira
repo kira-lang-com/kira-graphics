@@ -1,0 +1,11 @@
+import Foundation
+
+// Read a texture back through the backend that owns it and write it as a PPM.
+// Headless clients use this to prove the pixels they rendered without requiring
+// a swapchain or display server.
+function captureTexture(graphics: borrow Graphics, texture: borrow GraphicsTexture, path: borrow String) -> Bool {
+    if graphics.backend != .Dawn {
+        return false
+    }
+    return dawnCaptureTexture(graphics.backendContext, texture, path)
+}

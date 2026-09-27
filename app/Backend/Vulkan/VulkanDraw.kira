@@ -25,8 +25,10 @@ function vulkanResourceBinding(reflection: borrow KslResourceReflection, group: 
 }
 
 function vulkanHasUniform(group: borrow BindGroupState, binding: Int) -> Bool {
-    for entry in group.uniformEntries {
-        if entry.uniformSlot == binding { return true }
+    var index = 0
+    while index < group.uniformEntries.count {
+        if group.uniformEntries[index].uniformSlot == binding { return true }
+        index = index + 1
     }
     return false
 }
@@ -55,9 +57,10 @@ function vulkanHasStorage(group: borrow BindGroupState, binding: Int) -> Bool {
 @Native
 function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, binding: Int, descriptorType: I32, group: borrow BindGroupState) -> Bool {
     if descriptorType == vulkanDescriptorUniformBuffer() {
-        for entry in group.uniformEntries {
-            if entry.uniformSlot == binding {
-                let bufferId = vulkanSnapshotUniform(state, entry.uniform)
+        var index = 0
+        while index < group.uniformEntries.count {
+            if group.uniformEntries[index].uniformSlot == binding {
+                let bufferId = vulkanSnapshotUniform(state, group.uniformEntries[index])
                 let buffer = vulkanObject(state, bufferId)
                 if pointerIsNull(buffer) { return false }
                 let info = VkDescriptorBufferInfo {
@@ -74,6 +77,7 @@ function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, bindi
                 }, U32(0), nullPointer())
                 return true
             }
+            index = index + 1
         }
         return false
     }
@@ -152,10 +156,12 @@ function vulkanDynamicOffsetWords(state: borrow VulkanState, reflection: borrow 
     for binding in vulkanDescriptorBindings(reflection, groupIndex) {
         let descriptorType = binding.descriptorType
         if descriptorType == vulkanDescriptorUniformBuffer() {
-            for entry in group.uniformEntries {
-                if entry.uniformSlot == Int(binding.binding) {
-                    offsets.append(pointerIsNull(entry.uniform.storage) ? U32(vulkanObjectOffset(state, entry.uniform.id)) : U32(0))
+            var uniformIndex = 0
+            while uniformIndex < group.uniformEntries.count {
+                if group.uniformEntries[uniformIndex].uniformSlot == Int(binding.binding) {
+                    offsets.append(U32(0))
                 }
+                uniformIndex = uniformIndex + 1
             }
         } else if descriptorType == vulkanDescriptorStorageBuffer() {
             for entry in group.storageEntries {
@@ -172,7 +178,7 @@ function vulkanDynamicOffsetWords(state: borrow VulkanState, reflection: borrow 
 function vulkanBindDescriptorGroup(state: borrow mut VulkanState, pipeline: borrow VulkanPipelineRecord, reflection: borrow KslResourceReflection, groupIndex: Int, group: borrow BindGroup, present: Bool) -> Bool {
     let bindings = vulkanDescriptorBindings(reflection, groupIndex)
     if bindings.count == 0 { return true }
-    if !present || pointerIsNull(group.storage) {
+    if !present {
         graphicsDiagnostic("Kira Graphics: Vulkan draw left descriptor group " + String(groupIndex) + " unbound")
         return false
     }
@@ -262,6 +268,10 @@ function vulkanDrawWithBindings(
     if !state.vulkan.passActive || pipeline.id == 0 { return }
     let record = vulkanPipelineRecord(state.vulkan, Int(pipeline.id))
     if !record.live || pointerIsNull(record.pipeline) { return }
+    if record.sampleCount != state.vulkan.passSampleCount {
+        graphicsDiagnostic("Kira Graphics: Vulkan pipeline sampleCount must match the active render pass")
+        return
+    }
     vkCmdBindPipeline(state.vulkan.commandBuffer, vulkanPipelineGraphics(), record.pipeline)
     vkCmdSetViewport(state.vulkan.commandBuffer, U32(0), U32(1), VkViewport {
         y: F32(state.vulkan.passHeight),
@@ -326,6 +336,10 @@ function vulkanEncoderDrawIndirect(encoder: borrow RenderEncoderState, indirectB
     let pipeline = vulkanPipelineRecord(state.vulkan, Int(encoder.pipeline.id))
     let arguments = vulkanObject(state.vulkan, U32(indirectBufferId))
     if !pipeline.live || pointerIsNull(arguments) { return }
+    if pipeline.sampleCount != state.vulkan.passSampleCount {
+        graphicsDiagnostic("Kira Graphics: Vulkan pipeline sampleCount must match the active render pass")
+        return
+    }
     vkCmdBindPipeline(state.vulkan.commandBuffer, vulkanPipelineGraphics(), pipeline.pipeline)
     vkCmdSetViewport(state.vulkan.commandBuffer, U32(0), U32(1), VkViewport {
         y: F32(state.vulkan.passHeight),

@@ -62,6 +62,18 @@ int32_t kira_shared_surface_stride(kira_shared_surface surface);
 int64_t kira_shared_surface_modifier(kira_shared_surface surface);
 /* The DRM fourcc the surface was allocated in. */
 int32_t kira_shared_surface_format(kira_shared_surface surface);
+/* Producer-side Vulkan import metadata. A negative Dawn handle means this
+ * allocation uses the generic dma-buf import path instead. */
+int64_t kira_shared_surface_dawn_handle(kira_shared_surface surface);
+uint32_t kira_shared_surface_memory_type_index(kira_shared_surface surface);
+uint64_t kira_shared_surface_allocation_size(kira_shared_surface surface);
+void *kira_shared_surface_vk_image_create_info(kira_shared_surface surface);
+void *kira_shared_surface_vulkan_create(void *device, void *physical_device, int32_t width, int32_t height);
+int32_t kira_shared_surface_vulkan_record_surface(void *record);
+void *kira_shared_surface_vulkan_import(void *device, kira_shared_surface surface);
+void *kira_shared_surface_vulkan_import_image(void *import_record);
+void *kira_shared_surface_vulkan_import_memory(void *import_record);
+void kira_shared_surface_vulkan_import_forget(void *import_record);
 
 /* Whether this platform can share a surface at all. A caller asks once and
  * arranges to copy pixels instead when the answer is no. */
@@ -88,7 +100,7 @@ void kira_shared_surface_destroy(kira_shared_surface surface);
  * a memory allocator -- Windows with a DXGI resource, macOS with an IOSurface --
  * answers 0 from these, and the device's own import path is used instead. */
 void *kira_shared_texture_import_memory(void *device, kira_shared_surface surface);
-void *kira_shared_texture_create(void *memory);
+void *kira_shared_texture_create(void *memory, kira_shared_surface surface);
 
 /* Bracket every frame that touches the surface.
  *
@@ -110,5 +122,9 @@ int32_t kira_shared_texture_end(void *memory, void *texture);
 void kira_shared_texture_release(void *memory, void *texture);
 
 const char *kira_shared_texture_diagnostic(void);
+
+/* Temporary ABI microscope for Dawn device creation. It forwards the exact
+ * descriptor Kira built, while the C side prints what Dawn will receive. */
+void *kira_dawn_create_device_probe(void *adapter, void *descriptor);
 
 #endif

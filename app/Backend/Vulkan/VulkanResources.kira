@@ -130,11 +130,11 @@ function vulkanCreateUniform(context: RawPtr, descriptor: borrow UniformDescript
     vulkanSetObjectStride(state.vulkan, id, U64(slotSize))
     vulkanWriteFloats(state.vulkan, id, descriptor.data, U64(0))
     return .Ok(Uniform {
-        storage: nativeUserData(nativeState(UniformState {
+        storage: nativeState(UniformState {
             label: descriptor.label,
             expectedFloatCount: descriptor.expectedFloatCount,
             values: descriptor.data
-        })),
+        }),
         id: id
     })
 }
@@ -144,17 +144,12 @@ function vulkanUpdateUniform(context: RawPtr, uniform: borrow Uniform, data: bor
     if !vulkanHasDevice(context) || uniform.id == 0 {
         return
     }
-    var state = nativeRecover<GraphicsAppRuntimeState>(context)
-    if !pointerIsNull(uniform.storage) {
-        var uniformState = nativeRecover<UniformState>(uniform.storage)
-        if data.count != uniformState.expectedFloatCount {
-            graphicsDiagnostic("Kira Graphics: Vulkan uniform update size does not match its declaration")
-            return
-        }
-        uniformState.values = data
+    var uniformState = nativeRecover<UniformState>(uniform.storage)
+    if data.count != uniformState.expectedFloatCount {
+        graphicsDiagnostic("Kira Graphics: Vulkan uniform update size does not match its declaration")
         return
     }
-    vulkanWriteFloats(state.vulkan, uniform.id, data, vulkanObjectOffset(state.vulkan, uniform.id))
+    uniformState.values = data
     return
 }
 
@@ -189,11 +184,11 @@ function vulkanCreateSampler(context: RawPtr, descriptor: borrow SamplerDescript
 
 @Native
 function vulkanCreateImageHandle(state: borrow mut VulkanState, descriptor: borrow TextureDescriptor) -> U32 {
-    if descriptor.sampleCount > 1 {
-        graphicsDiagnostic("Kira Graphics: Vulkan multisampled textures are not implemented")
+    let samples = vulkanSampleCount(descriptor.sampleCount <= 0 ? 1 : descriptor.sampleCount)
+    if samples == I32(0) {
+        graphicsDiagnostic("Kira Graphics: Vulkan texture sampleCount must be one of 1, 2, 4, 8, 16, 32 or 64")
         return U32(0)
     }
-    let samples = vulkanSampleCount1()
     let info = VkImageCreateInfo {
         sType: vulkanStructureImageCreateInfo(),
         imageType: vulkanImageType2d(),
@@ -396,7 +391,7 @@ function vulkanUploadTexture(context: RawPtr, texture: borrow GraphicsTexture, p
     if !pointerIsNull(mapped) {
         var index = 0
         while index < byteCount {
-            let value = pointerIsNull(bytes) ? pixels[index] : byteAt(bytes, U64(index))
+            let value = pointerIsNull(bytes) ? pixels[index] : rawByteAt(bytes, U64(index))
             writeByte(mapped, U64(index), value)
             index = index + 1
         }

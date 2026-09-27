@@ -12,7 +12,7 @@ import Foundation
 // render pass, a bind group and a `TextureViewport` all take a `GraphicsTexture`,
 // and a shared one has to be exactly that or every one of them needs a second
 // path.
-// WGPUFeatureName_SharedTextureMemoryDmaBuf.
+// Dawn exposes separate Linux import features for dma-buf and Vulkan opaque fd.
 //
 // A device gets the optional features it ASKED FOR and no others, so importing a
 // dmabuf without requesting this is a validation error rather than a fallback --
@@ -20,6 +20,7 @@ import Foundation
 // every object it produces is an error object, and the first thing that reads
 // one says so instead.
 function dawnFeatureSharedTextureMemoryDmaBuf() -> I32 { return I32(0x0005001F) }
+function dawnFeatureSharedTextureMemoryOpaqueFD() -> I32 { return I32(0x00050020) }
 
 // The fence features, which sharing a texture needs as much as the memory
 // feature does.
@@ -41,13 +42,8 @@ function dawnAdapterSharesTextures(adapter: RawPtr) -> Bool {
     if pointerIsNull(adapter) {
         return false
     }
-    if wgpuAdapterHasFeature(adapter, dawnFeatureSharedTextureMemoryDmaBuf()) == U32(0) {
-        return false
-    }
-    // The memory alone is not enough to be useful: without a fence to export,
-    // access cannot be ended, and a surface whose access never ends is one the
-    // other side must not read.
-    return dawnAdapterFenceFeature(adapter) != I32(0)
+    return wgpuAdapterHasFeature(adapter, dawnFeatureSharedTextureMemoryOpaqueFD()) != U32(0) ||
+        wgpuAdapterHasFeature(adapter, dawnFeatureSharedTextureMemoryDmaBuf()) != U32(0)
 }
 
 // Whichever fence feature this adapter has, or 0 for neither.
@@ -60,11 +56,13 @@ function dawnAdapterFenceFeature(adapter: RawPtr) -> I32 {
     if pointerIsNull(adapter) {
         return I32(0)
     }
-    if wgpuAdapterHasFeature(adapter, dawnFeatureSharedFenceVkSemaphoreOpaqueFD()) != U32(0) {
-        return dawnFeatureSharedFenceVkSemaphoreOpaqueFD()
-    }
+    // SyncFD first: this is the Linux primitive venus emulates and the exact
+    // feature paired with OpaqueFD by Tessera's proven Dawn scanout path.
     if wgpuAdapterHasFeature(adapter, dawnFeatureSharedFenceSyncFD()) != U32(0) {
         return dawnFeatureSharedFenceSyncFD()
+    }
+    if wgpuAdapterHasFeature(adapter, dawnFeatureSharedFenceVkSemaphoreOpaqueFD()) != U32(0) {
+        return dawnFeatureSharedFenceVkSemaphoreOpaqueFD()
     }
     return I32(0)
 }
@@ -76,7 +74,8 @@ function dawnDeviceSharesTextures(device: RawPtr) -> Bool {
     if pointerIsNull(device) {
         return false
     }
-    return wgpuDeviceHasFeature(device, dawnFeatureSharedTextureMemoryDmaBuf()) != U32(0)
+    return wgpuDeviceHasFeature(device, dawnFeatureSharedTextureMemoryOpaqueFD()) != U32(0) ||
+        wgpuDeviceHasFeature(device, dawnFeatureSharedTextureMemoryDmaBuf()) != U32(0)
 }
 
 @Native
@@ -99,7 +98,7 @@ function dawnImportSharedTexture(context: RawPtr, surface: borrow SharedSurface)
         graphicsDiagnostic("Kira Graphics: " + kira_shared_texture_diagnostic())
         return SharedTexture {}
     }
-    let object = kira_shared_texture_create(memory)
+    let object = kira_shared_texture_create(memory, I32(surface.id.raw))
     if pointerIsNull(object) {
         graphicsDiagnostic("Kira Graphics: a shared surface imported but produced no texture")
         return SharedTexture {}
@@ -118,18 +117,16 @@ function dawnImportSharedTexture(context: RawPtr, surface: borrow SharedSurface)
             surface.width,
             surface.height,
             1,
-            // Rendered into AND sampled, because that is what a shared surface
-            // is for: one process draws it and another reads it, and which end
-            // of that this process is on is not known here. Registered as a
-            // render target alone it gets no sampled view at all -- `viewId`
-            // stays 0 -- and the consumer's draw then binds a view that does not
-            // exist, which does not fail quietly: it takes down the whole pass
-            // that named it, so a window compositing one surface loses every
-            // other thing it was drawing too.
-            .RenderTargetSampled
+            // The Tessera producer renders directly into the exported image.
+            // Venus's proven external-memory path is render-attachment-only;
+            // MosaicDisplay scans the dma-buf out through DRM rather than sampling
+            // it through Dawn in this process.
+            .RenderTarget
         ),
         memory: memory,
         object: object,
-        surface: surface
+        surface: surface,
+        backend: .Dawn,
+        backendContext: context
     }
 }

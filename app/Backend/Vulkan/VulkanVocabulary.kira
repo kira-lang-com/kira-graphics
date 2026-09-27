@@ -121,6 +121,12 @@ function vulkanCommandBufferOneTime() -> U32 { return U32(1) }
 function vulkanCommandPoolResettable() -> U32 { return U32(2) }
 function vulkanFenceSignaled() -> U32 { return U32(1) }
 function vulkanSampleCount1() -> I32 { return I32(1) }
+function vulkanSampleCount(samples: Int) -> I32 {
+    if samples == 1 || samples == 2 || samples == 4 || samples == 8 || samples == 16 || samples == 32 || samples == 64 {
+        return I32(samples)
+    }
+    return I32(0)
+}
 function vulkanPolygonFill() -> I32 { return I32(0) }
 function vulkanCullNone() -> U32 { return U32(0) }
 function vulkanCullFront() -> U32 { return U32(1) }
@@ -167,6 +173,7 @@ function vulkanLoadDontCare() -> I32 { return I32(2) }
 function vulkanStoreStore() -> I32 { return I32(0) }
 function vulkanStoreDontCare() -> I32 { return I32(1) }
 function vulkanResolveNone() -> I32 { return I32(0) }
+function vulkanResolveAverage() -> I32 { return I32(2) }
 function vulkanSubpassInline() -> I32 { return I32(0) }
 
 function vulkanFormatRgba8() -> I32 { return I32(37) }

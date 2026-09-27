@@ -4,7 +4,24 @@
 #include <stdlib.h>
 #include <string.h>
 
-int kira_vulkan_device_supported(void *physical_device) {
+#if defined(__linux__)
+// Some minimal Vulkan loader builds do not export every device-extension
+// trampoline as a linkable ELF symbol. Kira's generated core binding names the
+// prototype, so provide the standard trampoline locally and resolve the real
+// device command the Vulkan way.
+VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdPropertiesKHR(
+    VkDevice device,
+    VkExternalMemoryHandleTypeFlagBits handleType,
+    int fd,
+    VkMemoryFdPropertiesKHR *properties) {
+    PFN_vkGetMemoryFdPropertiesKHR function = (PFN_vkGetMemoryFdPropertiesKHR)
+        vkGetDeviceProcAddr(device, "vkGetMemoryFdPropertiesKHR");
+    if (function == NULL) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    return function(device, handleType, fd, properties);
+}
+#endif
+
+static int kira_vulkan_device_supported_for_mode(void *physical_device, int needs_surface) {
     VkPhysicalDevice physical = (VkPhysicalDevice)physical_device;
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(physical, &properties);
@@ -14,15 +31,23 @@ int kira_vulkan_device_supported(void *physical_device) {
     if (vkEnumerateDeviceExtensionProperties(physical, NULL, &count, NULL) != VK_SUCCESS || !count) return 0;
     VkExtensionProperties *extensions = malloc(sizeof(*extensions) * count);
     if (!extensions) return 0;
-    int swapchain = 0, dynamic_rendering = 0;
+    int swapchain = 0, dynamic_rendering = 0, external_fd = 0, dma_buf = 0;
     if (vkEnumerateDeviceExtensionProperties(physical, NULL, &count, extensions) == VK_SUCCESS) {
         for (uint32_t i = 0; i < count; ++i) {
             swapchain |= strcmp(extensions[i].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0;
             dynamic_rendering |= strcmp(extensions[i].extensionName, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME) == 0;
+#ifdef __linux__
+            external_fd |= strcmp(extensions[i].extensionName, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME) == 0;
+            dma_buf |= strcmp(extensions[i].extensionName, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME) == 0;
+#endif
         }
     }
     free(extensions);
-    if (!swapchain || !dynamic_rendering) return 0;
+    if (!dynamic_rendering) return 0;
+    if (needs_surface && !swapchain) return 0;
+#ifdef __linux__
+    if (!needs_surface && (!external_fd || !dma_buf)) return 0;
+#endif
     VkPhysicalDeviceDynamicRenderingFeatures rendering = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
     };
@@ -32,6 +57,14 @@ int kira_vulkan_device_supported(void *physical_device) {
     };
     vkGetPhysicalDeviceFeatures2(physical, &features);
     return rendering.dynamicRendering == VK_TRUE;
+}
+
+int kira_vulkan_device_supported(void *physical_device) {
+    return kira_vulkan_device_supported_for_mode(physical_device, 1);
+}
+
+int kira_vulkan_headless_device_supported(void *physical_device) {
+    return kira_vulkan_device_supported_for_mode(physical_device, 0);
 }
 
 int kira_vulkan_clip_cursor(void *window, int lock) {
@@ -99,7 +132,7 @@ void *kira_vulkan_create_win32_surface(void *instance, void *hinstance, void *wi
 }
 
 void *kira_vulkan_create_wayland_surface(void *instance, void *display, void *surface) {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(KIRA_VULKAN_HEADLESS)
     (void)instance;
     (void)display;
     (void)surface;
@@ -140,12 +173,37 @@ void *kira_vulkan_instance_extensions(int linux_platform) {
     return (void *)(linux_platform ? wayland_extensions : win32_extensions);
 }
 
-void *kira_vulkan_device_extensions(void) {
-    static const char *const extensions[] = {
+void *kira_vulkan_device_extensions(int linux_platform, int needs_surface) {
+    static const char *const window_extensions[] = {
         "VK_KHR_swapchain",
         "VK_KHR_dynamic_rendering",
     };
-    return (void *)extensions;
+#if defined(__linux__)
+    static const char *const linux_window_extensions[] = {
+        "VK_KHR_swapchain",
+        "VK_KHR_dynamic_rendering",
+        "VK_KHR_external_memory_fd",
+        "VK_EXT_external_memory_dma_buf",
+    };
+    static const char *const linux_headless_extensions[] = {
+        "VK_KHR_dynamic_rendering",
+        "VK_KHR_external_memory_fd",
+        "VK_EXT_external_memory_dma_buf",
+    };
+    if (linux_platform) return (void *)(needs_surface ? linux_window_extensions : linux_headless_extensions);
+#else
+    (void)linux_platform;
+#endif
+    return (void *)window_extensions;
+}
+
+int kira_vulkan_device_extension_count(int linux_platform, int needs_surface) {
+#if defined(__linux__)
+    if (linux_platform) return needs_surface ? 4 : 3;
+#else
+    (void)linux_platform;
+#endif
+    return 2;
 }
 
 void *kira_vulkan_queue_priority(void) {

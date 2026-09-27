@@ -25,7 +25,7 @@ function vulkanRunApplication(app: borrow GraphicsApplication, runtimeUserData: 
         kira_wayland_surface_commit(runtime.vulkan.window)
         kira_wayland_display_roundtrip(display)
     }
-    if !vulkanCreateInstance(runtime.vulkan) {
+    if !vulkanCreateInstance(runtime.vulkan, true) {
         vulkanShutdownState(runtime.vulkan)
         return
     }
@@ -35,7 +35,7 @@ function vulkanRunApplication(app: borrow GraphicsApplication, runtimeUserData: 
         vulkanShutdownState(runtime.vulkan)
         return
     }
-    if !vulkanChoosePhysicalDevice(runtime.vulkan) || !vulkanCreateDevice(runtime.vulkan) || !vulkanCreateCommandState(runtime.vulkan) || !vulkanCreateSwapchain(runtime.vulkan) {
+    if !vulkanChoosePhysicalDevice(runtime.vulkan) || !vulkanCreateDevice(runtime.vulkan, true) || !vulkanCreateCommandState(runtime.vulkan) || !vulkanCreateSwapchain(runtime.vulkan) {
         vulkanShutdownState(runtime.vulkan)
         return
     }
@@ -98,7 +98,6 @@ function vulkanDriveFrames(runtimeUserData: RawPtr) {
             captureBuffer = vulkanRecordFrameCapture(runtime.vulkan)
         }
         vulkanSubmitFrame(runtimeUserData, frame)
-        nativeUserDataRelease(frame.currentEncoder.storage)
         vulkanWriteFrameCapture(runtime.vulkan, captureBuffer, runtime.capturePath)
         if runtime.quitAfterFrames > 0 && runtime.frameIndex >= runtime.quitAfterFrames {
             return

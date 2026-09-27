@@ -19,15 +19,15 @@ Package KiraGraphics {
             // answers "cannot share" instead of failing to start.
             name: "kira_shared_surface",
             linkMode: LinkMode.Static,
-            headers: Headers { entrypoint: "NativeLibs/SharedSurface/kira_shared_surface.h", includeDirs: ["NativeLibs/SharedSurface", "NativeLibs/Dawn/x86_64-linux-gnu/include"] },
+            headers: Headers { entrypoint: "NativeLibs/SharedSurface/kira_shared_surface.h", includeDirs: ["NativeLibs/SharedSurface", "NativeLibs/Dawn/x86_64-linux-gnu/include", "NativeLibs/Dawn/aarch64-macos-none/include", "NativeLibs/Vulkan/include"] },
             sources: [
                 "NativeLibs/SharedSurface/kira_shared_surface.c",
                 "NativeLibs/SharedSurface/kira_shared_texture.c"
             ],
             autobind: Autobind { module: "sharedsurface", headers: ["NativeLibs/SharedSurface/kira_shared_surface.h"], mode: AutobindMode.AllPublic },
             nativeTargets: [
-                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["dl"] },
-                NativeTarget { triple: "aarch64-linux-gnu", systemLibs: ["dl"] },
+                NativeTarget { triple: "x86_64-linux-gnu", systemLibs: ["dl", "vulkan"] },
+                NativeTarget { triple: "aarch64-linux-gnu", systemLibs: ["dl", "vulkan"] },
                 NativeTarget { triple: "x86_64-windows-msvc", systemLibs: ["kernel32"] },
                 NativeTarget { triple: "aarch64-macos-none" },
                 NativeTarget { triple: "x86_64-macos-none" }

@@ -449,7 +449,7 @@ function dawnCollectSlot(
     if !present {
         return
     }
-    for entry in dawnBindGroupEntries(state, nativeRecover<BindGroupState>(group.storage)) {
+    for entry in dawnBindGroupEntries(state, group.storage) {
         let binding = Int(entry.binding)
         if !dawnBindingsContain(wanted, binding) {
             continue

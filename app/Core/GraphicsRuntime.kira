@@ -141,13 +141,14 @@ function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
     let selection = validateRenderBackend(app.backend, app.platform)
     if (!selection.supported) {
         graphicsDiagnostic(selection.reason)
-        nativeStateFree(runtimeState)
         return
     }
 
+    // The runtime state remains owned by this frame while the backend's
+    // synchronous application loop borrows its stable userdata token.
+    let runtimeUser = nativeUserDataBorrow(runtimeState)
     // The one backend value built with a null context: the run loop is what
     // creates the context every other member reads.
-    renderBackendFor(app.backend, nullPointer()).runApplication(app, nativeUserData(runtimeState))
-    nativeStateFree(runtimeState)
+    renderBackendFor(app.backend, nullPointer()).runApplication(app, runtimeUser)
     return
 }

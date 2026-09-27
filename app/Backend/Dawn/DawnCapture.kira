@@ -25,6 +25,41 @@ function dawnCaptureFrame(context: RawPtr, path: borrow String) {
         graphicsDiagnostic("Kira Graphics could not read the Dawn swapchain back into " + path)
         return
     }
+    let _ = dawnCaptureTextureHandle(
+        context,
+        state.dawn.frameTexture,
+        width,
+        height,
+        state.dawn.surfaceFormat,
+        path,
+    )
+    return
+}
+
+// An explicit texture as a binary PPM. Headless renderers have no swapchain, so
+// this is the same readback instrument pointed at the texture they own.
+@Native
+function dawnCaptureTexture(context: RawPtr, texture: borrow GraphicsTexture, path: borrow String) -> Bool {
+    if !dawnHasDevice(context) || texture.id == U32(0) || texture.width <= 0 || texture.height <= 0 {
+        return false
+    }
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
+    let handle = dawnObject(state, texture.id)
+    if pointerIsNull(handle) {
+        return false
+    }
+    return dawnCaptureTextureHandle(
+        context,
+        handle,
+        texture.width,
+        texture.height,
+        dawnObjectFormat(state, texture.id),
+        path,
+    )
+}
+
+function dawnCaptureTextureHandle(context: RawPtr, texture: RawPtr, width: Int, height: Int, format: I32, path: borrow String) -> Bool {
+    var state = nativeRecover<GraphicsAppRuntimeState>(context)
     let bytesPerRow = (width * 4 + dawnCopyRowAlignment() - 1) / dawnCopyRowAlignment() * dawnCopyRowAlignment()
     let byteCount = bytesPerRow * height
     let readback = wgpuDeviceCreateBuffer(state.dawn.device, WGPUBufferDescriptor {
@@ -34,7 +69,7 @@ function dawnCaptureFrame(context: RawPtr, path: borrow String) {
     })
     if pointerIsNull(readback) {
         graphicsDiagnostic("Kira Graphics could not allocate a capture buffer for " + path)
-        return
+        return false
     }
     let encoder = wgpuDeviceCreateCommandEncoder(state.dawn.device, WGPUCommandEncoderDescriptor {
         label: dawnText("kira-frame-capture-encoder")
@@ -42,7 +77,7 @@ function dawnCaptureFrame(context: RawPtr, path: borrow String) {
     wgpuCommandEncoderCopyTextureToBuffer(
         encoder,
         WGPUTexelCopyTextureInfo {
-            texture: state.dawn.frameTexture,
+            texture: texture,
             mipLevel: U32(0),
             aspect: dawnTextureAspectAll()
         },
@@ -83,19 +118,19 @@ function dawnCaptureFrame(context: RawPtr, path: borrow String) {
         graphicsDiagnostic("Kira Graphics could not map the Dawn capture buffer for " + path)
         wgpuBufferDestroy(readback)
         wgpuBufferRelease(readback)
-        return
+        return false
     }
     let mapped = wgpuBufferGetConstMappedRange(readback, U64(0), U64(byteCount))
-    let wrote = writeBytesFile(path, dawnPortablePixmap(mapped, width, height, bytesPerRow, state.dawn.surfaceFormat))
+    let wrote = writeBytesFile(path, dawnPortablePixmap(mapped, width, height, bytesPerRow, format))
     wgpuBufferUnmap(readback)
     wgpuBufferDestroy(readback)
     wgpuBufferRelease(readback)
     if wrote {
-        graphicsDiagnostic("Kira Graphics wrote the presented frame to " + path)
+        graphicsDiagnostic("Kira Graphics wrote the captured texture to " + path)
     } else {
-        graphicsDiagnostic("Kira Graphics could not write the presented frame to " + path)
+        graphicsDiagnostic("Kira Graphics could not write the captured texture to " + path)
     }
-    return
+    return wrote
 }
 
 // A binary PPM (`P6`) over the mapped rows.
@@ -118,9 +153,9 @@ function dawnPortablePixmap(mapped: RawPtr, width: Int, height: Int, bytesPerRow
         var column = 0
         while column < width {
             let pixel = base + U64(column * 4)
-            let first = byteAt(mapped, pixel)
-            let green = byteAt(mapped, pixel + U64(1))
-            let third = byteAt(mapped, pixel + U64(2))
+            let first = rawByteAt(mapped, pixel)
+            let green = rawByteAt(mapped, pixel + U64(1))
+            let third = rawByteAt(mapped, pixel + U64(2))
             bytes.append(blueFirst ? third : first)
             bytes.append(green)
             bytes.append(blueFirst ? first : third)

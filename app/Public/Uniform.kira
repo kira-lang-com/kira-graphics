@@ -17,14 +17,17 @@ struct UniformState {
 }
 
 class Uniform {
-    var storage: RawPtr
+    // Typed affine owner of the CPU-side uniform state. Copying this owner is
+    // only possible through the explicit `nativeUserData(owner)` clone
+    // operation, and ordinary structural drop releases it automatically.
+    var storage: NativeState<UniformState>
     var id: U32 = 0
 }
 
 @Native
 function emptyUniform() -> Uniform {
     return Uniform {
-        storage: nativeUserData(nativeState(UniformState {})),
+        storage: nativeState(UniformState {}),
         id: 0
     }
 }
@@ -46,11 +49,11 @@ function sokolCreateUniform(descriptor: borrow UniformDescriptor) -> Uniform {
     // 1 rather than a counter: sokol keys nothing on this id anymore, so every
     // live uniform answers the same "not empty" sentinel `uniformResult` reads.
     return Uniform {
-        storage: nativeUserData(nativeState(UniformState {
+        storage: nativeState(UniformState {
             label: descriptor.label,
             expectedFloatCount: descriptor.expectedFloatCount,
             values: descriptor.data
-        })),
+        }),
         id: 1
     }
 }
