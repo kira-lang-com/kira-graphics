@@ -76,7 +76,7 @@ class RenderFrame {
     //
     // Read rather than remembered — a user can leave fullscreen through the
     // window manager without the program hearing about it — so this is also the
-    // way to find out whether a `setWindowMode` request was honoured.
+    // way to find out whether a `setWindowMode` request was honored.
     function windowMode() -> WindowMode {
         return self.renderBackend().windowMode()
     }

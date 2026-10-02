@@ -49,7 +49,7 @@ extend Graphics {
     // A storage buffer of `floatCount` zeroed slots — what a kernel WRITES,
     // where the contents come from the dispatch rather than from the CPU.
     //
-    // Zero-filled rather than uninitialised because a kernel that writes only
+    // Zero-filled rather than uninitialized because a kernel that writes only
     // some of its slots leaves the rest readable, and a device buffer's
     // untouched bytes are whatever the allocator last had there.
     function createEmptyStorageBuffer(label: borrow String, floatCount: Int) -> BufferResult {

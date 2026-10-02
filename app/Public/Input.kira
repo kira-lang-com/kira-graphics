@@ -33,6 +33,19 @@ enum PointerButton {
     Other
 }
 
+// Where a scroll is in the gesture that made it. A trackpad's two fingers
+// report `Began`, then `Changed` while they move, then `Ended` when they lift
+// (or `Cancelled`); the glide the system adds after they lift arrives as a
+// second run of phases in `scrollMomentum`. A wheel reports `None` for both.
+enum ScrollPhase {
+    None
+    MayBegin
+    Began
+    Changed
+    Ended
+    Cancelled
+}
+
 struct ModifierState {
     let shift: Bool = false
     let control: Bool = false
@@ -57,6 +70,13 @@ struct AppEvent {
     let pointerDeltaY: Float = 0.0
     let scrollX: Float = 0.0
     let scrollY: Float = 0.0
+    let scrollPhase: ScrollPhase = .None
+    let scrollMomentum: ScrollPhase = .None
+    // Whether the deltas are points from a trackpad or tablet rather than a
+    // wheel's lines, and whether they follow the fingers ("natural" scrolling)
+    // rather than run against them.
+    let scrollPrecise: Bool = false
+    let scrollInverted: Bool = false
     let touchCount: Int = 0
     let windowWidth: Int = 0
     let windowHeight: Int = 0

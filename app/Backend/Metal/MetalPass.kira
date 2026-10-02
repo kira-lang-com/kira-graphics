@@ -99,7 +99,7 @@ function metalContextSubmitActiveFrame(ctx: RawPtr) {
     metalPacingEndPass(ctx, commandBuffer)
     // `KIRA_METAL_SYNC_FRAME=1` blocks until this frame is done on the GPU: a
     // bisection tool, not a mode anything ships in. It gives up all pipelining, so
-    // an artefact that survives it is not the CPU writing memory a running frame is
+    // an artifact that survives it is not the CPU writing memory a running frame is
     // reading — which is what the uniform ring in MetalPacing.kira now prevents by
     // construction, and what this variable proved was happening before it existed.
     if !pointerIsNull(metalGetEnv("KIRA_METAL_SYNC_FRAME")) {
@@ -176,7 +176,7 @@ function metalContextReadPixel(ctx: RawPtr, x: Int, y: Int) -> U32 {
 // texel once and folds it into a rolling modular hash (in U64 to avoid overflow; the
 // result fits in U32). Identical rendering -> identical digest, so a shell harness can
 // assert pixel-exact stability of the entire framebuffer, not just probe points.
-// The colour target, in a layout the CPU may read, with every command buffer
+// The color target, in a layout the CPU may read, with every command buffer
 // that wrote it completed.
 //
 // `getBytes:` on a lossless-compressed texture faults inside the driver (AGX

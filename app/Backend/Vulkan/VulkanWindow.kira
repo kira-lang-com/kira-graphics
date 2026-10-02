@@ -17,7 +17,7 @@ function vulkanEndRendering(device: RawPtr, commandBuffer: RawPtr) -> Void
 
 // Only surface creation is Vulkan-specific. Window creation stays on the same
 // native Win32 and Wayland implementations Dawn already uses, so both backends
-// get identical sizing, input and close behaviour.
+// get identical sizing, input and close behavior.
 
 @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_create_win32_surface, abi: c }
 function vulkanCreateWin32Surface(instance: RawPtr, hinstance: RawPtr, window: RawPtr) -> RawPtr

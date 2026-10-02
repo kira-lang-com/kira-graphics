@@ -63,7 +63,7 @@ struct SharedSurface {
 //
 // Asked once. A machine with no render node, a driver with no export support, a
 // container with no `/dev/dri`: all of them answer false, and a caller copies
-// pixels instead rather than failing to start. Zero-copy is an optimisation over
+// pixels instead rather than failing to start. Zero-copy is an optimization over
 // copying, not a requirement to run.
 function sharedSurfacesAvailable() -> Bool {
     return kira_shared_surface_supported() != I32(0)
@@ -156,7 +156,7 @@ function importSharedTextureDuringFrame(frame: borrow mut RenderFrame, surface: 
 //
 // The memory is kept beside the texture because ACCESS is begun and ended on the
 // memory while drawing happens through the texture: shared memory is not shared
-// synchronisation, and a frame that skipped the bracket would let a compositor
+// synchronization, and a frame that skipped the bracket would let a compositor
 // sample halfway through a producer's paint.
 struct SharedTexture {
     var texture: GraphicsTexture = emptyGraphicsTexture()

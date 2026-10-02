@@ -40,7 +40,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
 
     // On-screen: create a window + CAMetalLayer, run the frame loop until the app
     // requests quit or the window is closed.
-    let view = metalCreateWindow(app.width, app.height, app.title, app.windowMode)
+    let view = metalCreateWindow(app.width, app.height, app.title, app.windowMode, app.titlebar)
     metalContextSetHighDpi(ctxPtr, app.highDpi)
     // Launch harness: capture destination, the frame to take it on, and how many
     // frames the run lasts — the same knobs the sokol and Dawn loops resolve, so
@@ -48,6 +48,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     // this one.
     let harness = metalHarnessKnobs(app)
     metalContextAttachLayerToView(ctxPtr, view, app.width, app.height, harness.capturePath.count > 0)
+    metalWindowApplyCornerRadius(view, app.cornerRadius)
     let nsApp = metalSharedApp()
     kiraGraphicsLiveBackendInitialized()
 
@@ -81,6 +82,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     // consume it, but re-taking it from the app each frame would move its
     // captured environment out and leave later fetches dangling.
     let onWindowEvent: (borrow AppEvent) -> Void = app.eventHandler
+    let windowDragRegion: (Float, Float) -> Bool = app.windowDragRegion
     // Same synthetic-event scripts the offscreen harness honors, so on-screen
     // crashes reproduce deterministically under a debugger.
     var onClicks: [Int] = []
@@ -98,6 +100,27 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     let onDragEnv = metalGetEnv("KIRA_UI_DRAG_SCRIPT")
     if !pointerIsNull(onDragEnv) {
         onDrags = metalEnvInts(onDragEnv)
+    }
+    // Key script (frame, keyCode, downFlag) and text script (frame, codepoint),
+    // the same tuples the offscreen harness honors: a click can only focus a
+    // field, and these are what type into it.
+    var onKeys: [Int] = []
+    let onKeyEnv = metalGetEnv("KIRA_UI_KEY_SCRIPT")
+    if !pointerIsNull(onKeyEnv) {
+        onKeys = metalEnvInts(onKeyEnv)
+    }
+    var onTexts: [Int] = []
+    let onTextEnv = metalGetEnv("KIRA_UI_TEXT_SCRIPT")
+    if !pointerIsNull(onTextEnv) {
+        onTexts = metalEnvInts(onTextEnv)
+    }
+    // Swipe script (frame, x, y, dx, dy, steps): two fingers on a trackpad at
+    // (x, y), moved (dx, dy) over `steps` frames -- a scroll that begins, changes
+    // a frame at a time, and ends, its deltas following the fingers.
+    var onSwipes: [Int] = []
+    let onSwipeEnv = metalGetEnv("KIRA_UI_SWIPE_SCRIPT")
+    if !pointerIsNull(onSwipeEnv) {
+        onSwipes = metalEnvInts(onSwipeEnv)
     }
     // Programmatic window resize (frame, w, h triples) — drives the REAL AppKit
     // resize path (windowDidResize, drawable sync) for deterministic testing.
@@ -241,6 +264,57 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             }
             odi = odi + 7
         }
+        var oki = 0
+        while oki + 3 <= onKeys.count {
+            if onKeys[oki] == onFrameIndex {
+                onWindowEvent(AppEvent {
+                    kind: onKeys[oki + 2] == 1 ? .KeyDown : .KeyUp,
+                    keyCode: onKeys[oki + 1]
+                })
+            }
+            oki = oki + 3
+        }
+        var oti = 0
+        while oti + 2 <= onTexts.count {
+            if onTexts[oti] == onFrameIndex {
+                onWindowEvent(AppEvent {
+                    kind: .TextInput,
+                    textCodepoint: onTexts[oti + 1]
+                })
+            }
+            oti = oti + 2
+        }
+        var osi = 0
+        while osi + 6 <= onSwipes.count {
+            let swipeStart = onSwipes[osi]
+            let swipeSteps = onSwipes[osi + 5] > 1 ? onSwipes[osi + 5] : 1
+            if onFrameIndex >= swipeStart && onFrameIndex <= swipeStart + swipeSteps + 1 {
+                var phase: ScrollPhase = .Changed
+                var sdx = Float(onSwipes[osi + 3]) / Float(swipeSteps)
+                var sdy = Float(onSwipes[osi + 4]) / Float(swipeSteps)
+                if onFrameIndex == swipeStart {
+                    phase = .Began
+                    sdx = 0.0
+                    sdy = 0.0
+                }
+                if onFrameIndex == swipeStart + swipeSteps + 1 {
+                    phase = .Ended
+                    sdx = 0.0
+                    sdy = 0.0
+                }
+                onWindowEvent(AppEvent {
+                    kind: .Scroll,
+                    pointerX: Float(onSwipes[osi + 1]),
+                    pointerY: Float(onSwipes[osi + 2]),
+                    scrollX: sdx,
+                    scrollY: sdy,
+                    scrollPhase: phase,
+                    scrollPrecise: true,
+                    scrollInverted: true
+                })
+            }
+            osi = osi + 6
+        }
         var ori = 0
         while ori + 3 <= onResizes.count {
             if onResizes[ori] == onFrameIndex {
@@ -253,7 +327,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         onFrameIndex = onFrameIndex + 1
         // Dispatch queued window/input events first (activation, title-bar buttons,
         // live resize); translated AppEvents come back for the app handler.
-        let windowEvents = metalPumpEvents(nsApp, view, ctxPtr)
+        let windowEvents = metalPumpEvents(nsApp, view, ctxPtr, windowDragRegion)
         for wei in 0..windowEvents.count {
             onWindowEvent(windowEvents[wei])
         }

@@ -78,11 +78,59 @@ function metalCreateIndexBuffer(ctx: RawPtr, data: borrow [U32]) -> Int {
     return id
 }
 
-// MTLBlendFactor / MTLBlendOperation constants used by the premultiplied-alpha
-// compositing path (UI). Premultiplied: srcRGB*One + dstRGB*(1-srcA).
+// MTLBlendFactor / MTLBlendOperation raw values.
+function metalBlendFactorZero() -> U64 { return 0 }
 function metalBlendFactorOne() -> U64 { return 1 }
+function metalBlendFactorSourceAlpha() -> U64 { return 4 }
 function metalBlendFactorOneMinusSourceAlpha() -> U64 { return 5 }
 function metalBlendOperationAdd() -> U64 { return 0 }
+function metalBlendOperationReverseSubtract() -> U64 { return 2 }
+
+// One color attachment's blending, set to what `blend` names.
+function metalApplyBlend(colorAttachment: RawPtr, blend: borrow BlendState) {
+    if !blend.enabled {
+        return
+    }
+    var operation = metalBlendOperationAdd()
+    var sourceRgb = metalBlendFactorOne()
+    var destinationRgb = metalBlendFactorOneMinusSourceAlpha()
+    var sourceAlpha = metalBlendFactorOne()
+    var destinationAlpha = metalBlendFactorOneMinusSourceAlpha()
+    match blend.preset {
+        Replace -> {
+            destinationRgb = metalBlendFactorZero()
+            destinationAlpha = metalBlendFactorZero()
+        }
+        Alpha -> {
+            sourceRgb = metalBlendFactorSourceAlpha()
+        }
+        PremultipliedAlpha -> {}
+        Additive -> {
+            sourceRgb = metalBlendFactorSourceAlpha()
+            destinationRgb = metalBlendFactorOne()
+            destinationAlpha = metalBlendFactorOne()
+        }
+        PremultipliedAdditive -> {
+            destinationRgb = metalBlendFactorOne()
+            sourceAlpha = metalBlendFactorZero()
+            destinationAlpha = metalBlendFactorOne()
+        }
+        PremultipliedSubtractive -> {
+            operation = metalBlendOperationReverseSubtract()
+            destinationRgb = metalBlendFactorOne()
+            sourceAlpha = metalBlendFactorZero()
+            destinationAlpha = metalBlendFactorOne()
+        }
+    }
+    metalMsgSend(colorAttachment, metalSel("setBlendingEnabled:"), true)
+    metalMsgSend(colorAttachment, metalSel("setRgbBlendOperation:"), operation)
+    metalMsgSend(colorAttachment, metalSel("setAlphaBlendOperation:"), operation)
+    metalMsgSend(colorAttachment, metalSel("setSourceRGBBlendFactor:"), sourceRgb)
+    metalMsgSend(colorAttachment, metalSel("setSourceAlphaBlendFactor:"), sourceAlpha)
+    metalMsgSend(colorAttachment, metalSel("setDestinationRGBBlendFactor:"), destinationRgb)
+    metalMsgSend(colorAttachment, metalSel("setDestinationAlphaBlendFactor:"), destinationAlpha)
+    return
+}
 
 // Build an MTLRenderPipelineState from a shader library and a color pixel format,
 // and register it.
@@ -97,7 +145,8 @@ function metalCreateRenderPipeline(ctx: RawPtr, shaderId: Int, colorFormat: U64,
 function metalCreateRenderPipelineBlended(ctx: RawPtr, shaderId: Int, colorFormat: U64, depthEnabled: Bool, blendEnabled: Bool) -> Int {
     var noFmt: [Int] = []
     var noOff: [Int] = []
-    return metalCreateRenderPipelineWithEntries(ctx, shaderId, colorFormat, depthEnabled, blendEnabled, "v_main", "f_main", 0, noFmt, noOff)
+    let blend = BlendState { enabled: blendEnabled, preset: .PremultipliedAlpha }
+    return metalCreateRenderPipelineWithEntries(ctx, shaderId, colorFormat, depthEnabled, blend, "v_main", "f_main", 0, noFmt, noOff)
 }
 
 // Map a KiraGraphics vertex format (Constants.kira) to an MTLVertexFormat raw value.
@@ -113,7 +162,7 @@ function metalVertexFormat(kiraFormat: Int) -> U64 {
 // pipeline (entries `{shader}__vertex__main` / `__fragment__main`). Buffer-indexing
 // shaders (self-tests, UI) pass an empty layout and skip the descriptor.
 @Native
-function metalCreateRenderPipelineWithEntries(ctx: RawPtr, shaderId: Int, colorFormat: U64, depthEnabled: Bool, blendEnabled: Bool, vertexEntry: borrow String, fragmentEntry: borrow String, stride: Int, attrFormats: borrow [Int], attrOffsets: borrow [Int]) -> Int {
+function metalCreateRenderPipelineWithEntries(ctx: RawPtr, shaderId: Int, colorFormat: U64, depthEnabled: Bool, blend: borrow BlendState, vertexEntry: borrow String, fragmentEntry: borrow String, stride: Int, attrFormats: borrow [Int], attrOffsets: borrow [Int]) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let library = metalLookup(ctx, shaderId)
     let vname: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), vertexEntry)
@@ -144,15 +193,7 @@ function metalCreateRenderPipelineWithEntries(ctx: RawPtr, shaderId: Int, colorF
 
     let colorAttachment: RawPtr = metalMsgSend(metalMsgSend(desc, metalSel("colorAttachments")), metalSel("objectAtIndexedSubscript:"), 0)
     metalMsgSend(colorAttachment, metalSel("setPixelFormat:"), colorFormat)
-    if blendEnabled {
-        metalMsgSend(colorAttachment, metalSel("setBlendingEnabled:"), true)
-        metalMsgSend(colorAttachment, metalSel("setRgbBlendOperation:"), metalBlendOperationAdd())
-        metalMsgSend(colorAttachment, metalSel("setAlphaBlendOperation:"), metalBlendOperationAdd())
-        metalMsgSend(colorAttachment, metalSel("setSourceRGBBlendFactor:"), metalBlendFactorOne())
-        metalMsgSend(colorAttachment, metalSel("setSourceAlphaBlendFactor:"), metalBlendFactorOne())
-        metalMsgSend(colorAttachment, metalSel("setDestinationRGBBlendFactor:"), metalBlendFactorOneMinusSourceAlpha())
-        metalMsgSend(colorAttachment, metalSel("setDestinationAlphaBlendFactor:"), metalBlendFactorOneMinusSourceAlpha())
-    }
+    metalApplyBlend(colorAttachment, blend)
     if depthEnabled {
         metalMsgSend(desc, metalSel("setDepthAttachmentPixelFormat:"), metalPixelFormatDepth32Float())
     }

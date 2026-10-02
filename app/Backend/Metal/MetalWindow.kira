@@ -27,7 +27,7 @@ function metalActivateApp(): Void {
 
 // Create the application + window and return the content view to render into.
 @Native
-function metalCreateWindow(width: Int, height: Int, title: borrow String, mode: borrow WindowMode) -> RawPtr {
+function metalCreateWindow(width: Int, height: Int, title: borrow String, mode: borrow WindowMode, titlebar: borrow WindowTitlebar) -> RawPtr {
     let app: RawPtr = metalMsgSend(metalObjcGetClass("NSApplication"), metalSel("sharedApplication"))
     metalMsgSend(app, metalSel("setActivationPolicy:"), metalActivationPolicyRegular())
     metalMsgSend(app, metalSel("activateIgnoringOtherApps:"), true)
@@ -37,9 +37,37 @@ function metalCreateWindow(width: Int, height: Int, title: borrow String, mode: 
     let window: RawPtr = metalMsgSend(windowAlloc, metalSel("initWithContentRect:styleMask:backing:defer:"), 120.0, 120.0, Float(width), Float(height), metalWindowStyleMask(), metalWindowBackingBuffered(), false)
     let nsTitle: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), title)
     metalMsgSend(window, metalSel("setTitle:"), nsTitle)
+    metalWindowApplyTitlebar(window, titlebar)
     metalMsgSend(window, metalSel("makeKeyAndOrderFront:"), metalObjcGetClass("NSObject"))
     metalWindowApplyStartMode(window, mode)
-    return metalMsgSend(window, metalSel("contentView"))
+    let view: RawPtr = metalMsgSend(window, metalSel("contentView"))
+    metalViewKeepPresses(view)
+    return view
+}
+
+// Every press on the content view is the application's. The content runs
+// under the title bar, and in a window laid out that way AppKit moves the
+// window from a press anywhere on the bar unless the view under it claims the
+// bar as its own: the view's rectangle that is opaque to a window move there.
+// The private `-_opaqueRectForWindowMoveWhenInTitlebar` asks for it, and
+// NSView answers an empty one. The content view answers its bounds — the
+// whole view is the application's — by taking NSView's own `-bounds`, which
+// has the same signature. A press on a control drawn on the bar is then the
+// control's, and the part the application draws as bare title bar still moves
+// the window, through the drag region the event pump hands the window.
+@Native
+function metalViewKeepPresses(view: RawPtr): Void {
+    var cls = metalObjcGetClass("KiraMetalContentView")
+    if pointerIsNull(cls) {
+        cls = metalObjcAllocateClassPair(metalObjectGetClass(view), "KiraMetalContentView", 0)
+        let bounds = metalClassGetMethodImplementation(metalObjcGetClass("NSView"), metalSel("bounds"))
+        let added = metalClassAddMethodImplementation(cls, metalSel("_opaqueRectForWindowMoveWhenInTitlebar"), bounds, "{CGRect={CGPoint=dd}{CGSize=dd}}@:")
+        let ignored = added
+        metalObjcRegisterClassPair(cls)
+    }
+    let previous = metalObjectSetClass(view, cls)
+    let ignoredPrevious = previous
+    return
 }
 
 // Pump the main run loop for `seconds` so Core Animation / timers run between frames.
@@ -165,7 +193,7 @@ function metalResizeImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr): Voi
     return
 }
 
-// Closing is distinct from hiding or minimising: hidden windows deliberately keep
+// Closing is distinct from hiding or minimizing: hidden windows deliberately keep
 // rendering at half display cadence, while a real close terminates the app loop.
 @Native
 function metalWindowCloseImp(selfObj: RawPtr, cmd: RawPtr, notification: RawPtr): Void {
@@ -235,7 +263,7 @@ function metalViewWindowVisible(view: RawPtr) -> Bool {
 }
 
 // 1 = focused and visible, 2 = unfocused but still visible/unoccluded,
-// 3 = hidden, minimised, or occluded. Both visible states run at full display
+// 3 = hidden, minimized, or occluded. Both visible states run at full display
 // cadence; only state 3 is throttled.
 @Native
 function metalViewWindowState(view: RawPtr) -> Int {

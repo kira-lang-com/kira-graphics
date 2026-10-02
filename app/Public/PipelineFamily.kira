@@ -35,7 +35,7 @@ struct VertexStream {
     var attributes: [VertexAttributeSpec]
 }
 
-// How a pipeline's colour output combines with what is already there.
+// How a pipeline's color output combines with what is already there.
 @Derive(Equatable, Clone)
 struct Blending {
     var enabled: Bool = true

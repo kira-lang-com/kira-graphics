@@ -100,7 +100,7 @@ function swapchainRenderTarget() -> RenderTarget {
 //
 // This is what a program with no window of its own presents through: a component
 // whose pixels are composited by another process renders into shared memory, and
-// the only difference from drawing into a swapchain is which image the colour
+// the only difference from drawing into a swapchain is which image the color
 // attachment names. Everything above it -- the batch, the pipelines, the
 // glyph atlas -- is unchanged, which is the property worth having: a view does
 // not know, and cannot know, whether it is being drawn for a window.

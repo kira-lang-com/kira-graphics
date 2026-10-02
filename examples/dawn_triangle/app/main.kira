@@ -20,8 +20,8 @@ struct TriangleState {
     var vertices: GraphicsBuffer
 }
 
-// Position and colour per vertex, so the frame carries more than one flat fill:
-// a triangle of one colour cannot tell a working fragment stage from a clear.
+// Position and color per vertex, so the frame carries more than one flat fill:
+// a triangle of one color cannot tell a working fragment stage from a clear.
 function dawnTriangleVertices() -> [F32] {
     return [
         0.0, 0.55, 0.95, 0.35, 0.25,

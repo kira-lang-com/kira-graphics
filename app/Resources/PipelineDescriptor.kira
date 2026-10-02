@@ -30,7 +30,7 @@ struct DepthStencilDescriptor {
     // pass being drawn into — a backend may enforce this — so a pipeline naming a depth format
     // is a pipeline that can only be used in a pass carrying that attachment.
     // Defaulting to a real format made every pipeline claim one, and a pipeline
-    // drawn into an offscreen colour target with no depth was then refused at
+    // drawn into an offscreen color target with no depth was then refused at
     // the draw with nothing in its descriptor to say why.
     var format: TextureFormat = .None
 }

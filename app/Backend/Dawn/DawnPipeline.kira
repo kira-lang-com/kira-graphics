@@ -2,7 +2,7 @@ import Foundation
 // Render pipelines on WebGPU.
 //
 // A `WGPURenderPipeline` is built from the two shader modules, one vertex buffer
-// layout, the colour targets and — when the caller asked for one — a depth
+// layout, the color targets and — when the caller asked for one — a depth
 // state. Its layout is left NULL, which is WebGPU's "derive it from the
 // modules": that is what makes `wgpuRenderPipelineGetBindGroupLayout` answer at
 // draw time, and it is the only thing that lets a `BindGroup` built before any
@@ -13,7 +13,7 @@ import Foundation
 // comparing `id` against zero reads the same answer on every backend.
 
 // The C extents the descriptor arrays are written into. A Kira array shorter
-// than the extent zero-fills the rest, and the count travelling beside the
+// than the extent zero-fills the rest, and the count traveling beside the
 // pointer is what says how many WebGPU reads — so these are ceilings, not
 // sizes, and only a caller that exceeds one is refused.
 @FFI.Array { element: WGPUVertexAttribute, count: 16 }
@@ -41,7 +41,7 @@ function dawnCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPipe
         return .Error(.DeviceRefused)
     }
     if descriptor.colorTargets.count > dawnMaxColorTargets() {
-        graphicsDiagnostic("Kira Graphics: pipeline '" + descriptor.label + "' declares more colour targets than WebGPU accepts")
+        graphicsDiagnostic("Kira Graphics: pipeline '" + descriptor.label + "' declares more color targets than WebGPU accepts")
         return .Error(.DeviceRefused)
     }
     var attributes: [WGPUVertexAttribute] = []
@@ -85,7 +85,7 @@ function dawnCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPipe
     })
 }
 
-// One colour target: its format with the swapchain sentinel resolved, and a
+// One color target: its format with the swapchain sentinel resolved, and a
 // blend state only where the caller asked for one — a NULL blend is WebGPU's
 // "write the fragment through", which is what a disabled blend means.
 @Native

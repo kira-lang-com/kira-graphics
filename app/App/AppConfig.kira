@@ -43,8 +43,16 @@ struct GraphicsApplication {
     // given; a fullscreen window takes the display's size instead, so a program
     // that starts there reads its viewport back off the frame.
     var windowMode: WindowMode = .Windowed
+    // What the window's title bar is. See Public/WindowTitlebar.kira.
+    var titlebar: WindowTitlebar = .Standard
+    // The radius a decorated window's corners are rounded to, in points. Zero
+    // keeps the platform's own corner; a larger one rounds the window by its
+    // content -- the window shows through past the curve, and its shadow
+    // follows -- for a toolkit drawing another platform's windows. A backend
+    // that cannot shape its window keeps its own corner.
+    var cornerRadius: Float = 0.0
     // A window the desktop shows through: every pixel left at
-    // `graphicsTransparentKey()` is a hole rather than a colour, so the
+    // `graphicsTransparentKey()` is a hole rather than a color, so the
     // application's own drawing is the window's shape. See
     // Public/WindowComposition.kira.
     var transparent: Bool = false

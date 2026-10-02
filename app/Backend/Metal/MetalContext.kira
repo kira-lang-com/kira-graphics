@@ -460,7 +460,7 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     // A drawable is write-only by default, which is exactly right for a window and
     // exactly wrong for proving one draws: nothing may read back what was presented.
     // A run that is going to capture or dump a frame opts out of that; every other
-    // run keeps framebufferOnly, which is a real optimisation (it lets Core
+    // run keeps framebufferOnly, which is a real optimization (it lets Core
     // Animation pick a lossless-compressed texture) and costs a window nobody is
     // verifying nothing.
     if readable || !pointerIsNull(metalGetEnv("KIRA_METAL_ONSCREEN_DUMP")) {

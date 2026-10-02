@@ -143,7 +143,7 @@ function dawnPresentModeFromEnvironment() -> I32 {
 // it says the surface should be reconfigured, which a resize already does.
 function dawnSurfaceTextureOptimal() -> I32 { return I32(1) }
 function dawnSurfaceTextureSuboptimal() -> I32 { return I32(2) }
-// `WGPU_DEPTH_SLICE_UNDEFINED`, which a 2D colour attachment must carry: a zero
+// `WGPU_DEPTH_SLICE_UNDEFINED`, which a 2D color attachment must carry: a zero
 // there names slice 0 of a 3D texture and is refused for a 2D one.
 function dawnDepthSliceUndefined() -> U32 { return U32(4294967295) }
 
@@ -311,25 +311,29 @@ function dawnAddressMode(mode: borrow AddressMode) -> I32 {
 }
 
 // The blend state a preset names, as WebGPU's factors and operation. Add is the
-// operation in every one of them; what differs is the pair of factors.
+// operation in all but one of them; `PremultipliedSubtractive` takes the
+// fragment away from the target instead.
 function dawnBlendState(preset: borrow BlendPreset) -> WGPUBlendState {
     match preset {
         Replace -> return dawnBlendPair(I32(2), I32(1), I32(2), I32(1))
         Alpha -> return dawnBlendPair(I32(5), I32(6), I32(2), I32(6))
         PremultipliedAlpha -> return dawnBlendPair(I32(2), I32(6), I32(2), I32(6))
         Additive -> return dawnBlendPair(I32(5), I32(2), I32(2), I32(2))
+        PremultipliedAdditive -> return dawnBlendPair(I32(2), I32(2), I32(1), I32(2))
+        PremultipliedSubtractive -> return dawnBlendPair(I32(2), I32(2), I32(1), I32(2), I32(3))
     }
 }
 
-function dawnBlendPair(colorSource: I32, colorDestination: I32, alphaSource: I32, alphaDestination: I32) -> WGPUBlendState {
+// WebGPU's operation codes: 1 adds, 3 subtracts the fragment from the target.
+function dawnBlendPair(colorSource: I32, colorDestination: I32, alphaSource: I32, alphaDestination: I32, operation: I32 = I32(1)) -> WGPUBlendState {
     return WGPUBlendState {
         color: WGPUBlendComponent {
-            operation: I32(1),
+            operation: operation,
             srcFactor: colorSource,
             dstFactor: colorDestination
         },
         alpha: WGPUBlendComponent {
-            operation: I32(1),
+            operation: operation,
             srcFactor: alphaSource,
             dstFactor: alphaDestination
         }

@@ -19,7 +19,7 @@ import Foundation
 //
 // A texture's slot also remembers its WebGPU format. That is the one fact about
 // a texture that Kira's `GraphicsTexture` does not carry and that both a view
-// and a pipeline's colour target need.
+// and a pipeline's color target need.
 
 struct DawnState {
     // --- the window ------------------------------------------------------
@@ -97,7 +97,7 @@ struct DawnState {
     var passActive: Bool = false
     var passWidth: Int = 0
     var passHeight: Int = 0
-    // The colour format the open pass writes, so a pipeline built with the
+    // The color format the open pass writes, so a pipeline built with the
     // `Swapchain` sentinel resolves to what this pass actually has.
     var passFormat: I32 = 0
     var passIsSwapchain: Bool = false
@@ -309,7 +309,7 @@ function dawnDeviceLost(device: RawPtr, reason: I32, message: WGPUStringViewPoin
 //
 // This is the difference between a blank frame and a diagnosis. A WGSL shader
 // Dawn rejects still answers with a shader module object; a bind group that does
-// not match its layout still encodes; a pipeline whose colour format differs
+// not match its layout still encodes; a pipeline whose color format differs
 // from the pass's is refused at the draw. All three arrive here and nowhere
 // else.
 function dawnUncapturedError(device: RawPtr, kind: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
@@ -398,10 +398,10 @@ function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, run
     //
     // BGRA8 is what every Windows swapchain presents and what Dawn's D3D12
     // backend reports first in its capabilities, so naming it keeps a pipeline's
-    // `Swapchain` colour target and the surface in agreement without a query per
+    // `Swapchain` color target and the surface in agreement without a query per
     // pipeline. Settling it here rather than in `dawnCreateWindowSurface` is what
     // makes the sentinel mean anything to a device that has NO surface: a
-    // headless device resolved it to Undefined, which Dawn rejects a colour
+    // headless device resolved it to Undefined, which Dawn rejects a color
     // target for -- so every offscreen pipeline it built was invalid, and every
     // draw into a shared texture was dropped at validation with the texture left
     // holding whatever it held.

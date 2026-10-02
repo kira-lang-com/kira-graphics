@@ -153,6 +153,7 @@ function vulkanBlendOneMinusSrcAlpha() -> I32 { return I32(7) }
 function vulkanBlendDstAlpha() -> I32 { return I32(8) }
 function vulkanBlendOneMinusDstAlpha() -> I32 { return I32(9) }
 function vulkanBlendAdd() -> I32 { return I32(0) }
+function vulkanBlendReverseSubtract() -> I32 { return I32(2) }
 function vulkanDescriptorSampler() -> I32 { return I32(0) }
 function vulkanDescriptorCombinedImageSampler() -> I32 { return I32(1) }
 function vulkanDescriptorSampledImage() -> I32 { return I32(2) }

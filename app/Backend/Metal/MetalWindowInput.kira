@@ -220,6 +220,10 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> AppEve
         let boundsH = metalDoubleBitsToFloat(metalMemReadU64(buf, 24))
         var sx = 0.0
         var sy = 0.0
+        var phase: ScrollPhase = .None
+        var momentum: ScrollPhase = .None
+        var precise = false
+        var inverted = false
         if etype == metalNsScroll() {
             let sxKey: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "scrollingDeltaX")
             metalKvcValueInto(event, sxKey, buf)
@@ -227,6 +231,10 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> AppEve
             let syKey: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "scrollingDeltaY")
             metalKvcValueInto(event, syKey, buf)
             sy = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+            phase = metalScrollPhase(Int(metalMsgSendCount(event, metalSel("phase"))))
+            momentum = metalScrollPhase(Int(metalMsgSendCount(event, metalSel("momentumPhase"))))
+            precise = metalMsgSend(event, metalSel("hasPreciseScrollingDeltas"))
+            inverted = metalMsgSend(event, metalSel("isDirectionInvertedFromDevice"))
         }
         // A locked pointer does not move, so `locationInWindow` stops changing
         // and every consumer that works in positions — which is all of them,
@@ -271,6 +279,10 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> AppEve
             pointerY: boundsH - py,
             scrollX: sx,
             scrollY: sy,
+            scrollPhase: phase,
+            scrollMomentum: momentum,
+            scrollPrecise: precise,
+            scrollInverted: inverted,
             modifiers: metalModifiersFromFlags(flags)
         }
     }
@@ -350,7 +362,7 @@ function metalClickOwnsSurface(app: RawPtr, view: RawPtr, event: RawPtr) {
 // Dispatch every pending NSEvent. Running the bare NSRunLoop only services run-loop
 // SOURCES; it does not dequeue NSApplication's event queue or call -sendEvent:, so
 // without this the window never receives mouse/keyboard/resize events — it never
-// becomes the active key window (its traffic lights stay greyed) and the resize
+// becomes the active key window (its traffic lights stay grayed) and the resize
 // control does nothing. Each event is ALSO translated into a AppEvent and
 // RETURNED to the caller (pointer, scroll, keys): the caller owns the app's event
 // handler closure, which must be bound exactly once — moving it into this function
@@ -360,7 +372,7 @@ function metalClickOwnsSurface(app: RawPtr, view: RawPtr, event: RawPtr) {
 // behavior, except key-downs (kept from the window so the unhandled-key beep
 // never fires).
 @Native
-function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr) -> [AppEvent] {
+function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr, dragRegion: borrow (Float, Float) -> Bool) -> [AppEvent] {
     var out: [AppEvent] = []
     let distantPast: RawPtr = metalMsgSend(metalObjcGetClass("NSDate"), metalSel("distantPast"))
     let mode: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "kCFRunLoopDefaultMode")
@@ -392,6 +404,17 @@ function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr) -> [AppEvent] {
                 nativeChildHasKey = !pointerIsNull(responder) && metalPointersDiffer(responder, view)
             }
             let translated = metalTranslateEvent(event, view, ctx)
+            // A press on the part of the window the app draws as its title bar
+            // moves the window, as the title bar it replaced did; a double
+            // press zooms it. The window owns the gesture from here, so the
+            // app never sees the press.
+            if etype == metalNsLeftDown() && translated.kind == .PointerDown {
+                let isDragRegion: borrow (Float, Float) -> Bool = dragRegion
+                if isDragRegion(translated.pointerX, translated.pointerY) {
+                    metalWindowBeginTitlebarGesture(view, event)
+                    continue
+                }
+            }
             if translated.kind != .None {
                 let keyOwnedByPage = nativeChildHasKey && (translated.kind == .KeyDown || translated.kind == .KeyUp)
                 if keyOwnedByPage == false {
@@ -435,4 +458,62 @@ function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr) -> [AppEvent] {
         }
     }
     return move out
+}
+
+// What a press on a drawn title bar does: a double press does what the user
+// set a title bar's double click to do (System Settings > Desktop & Dock), and
+// anything else hands the drag to the window server, which tracks it without
+// this loop.
+@Native
+function metalWindowBeginTitlebarGesture(view: RawPtr, event: RawPtr) {
+    let window: RawPtr = metalMsgSend(view, metalSel("window"))
+    if pointerIsNull(window) {
+        return
+    }
+    if Int(metalMsgSendCount(event, metalSel("clickCount"))) == 2 {
+        let defaults: RawPtr = metalMsgSend(metalObjcGetClass("NSUserDefaults"), metalSel("standardUserDefaults"))
+        let key: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "AppleActionOnDoubleClick")
+        let action: RawPtr = metalMsgSend(defaults, metalSel("stringForKey:"), key)
+        if metalStringEquals(action, "Minimize") {
+            metalMsgSend(window, metalSel("performMiniaturize:"), nullPointer())
+        } else if !metalStringEquals(action, "None") {
+            metalMsgSend(window, metalSel("performZoom:"), nullPointer())
+        }
+        return
+    }
+    metalMsgSend(window, metalSel("performWindowDragWithEvent:"), event)
+    return
+}
+
+@Native
+function metalStringEquals(string: RawPtr, literal: String) -> Bool {
+    if pointerIsNull(string) {
+        return false
+    }
+    let other: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), literal)
+    // A BOOL comes back in the result register: zero for NO, nonzero for YES.
+    let equal: RawPtr = metalMsgSend(string, metalSel("isEqualToString:"), other)
+    return !pointerIsNull(equal)
+}
+
+// AppKit's `NSEventPhase` bits as the phase of a scroll: began 1, stationary
+// 2, changed 4, ended 8, cancelled 16, may begin 32. A finger resting still
+// mid-gesture is still the gesture changing.
+function metalScrollPhase(bits: Int) -> ScrollPhase {
+    if bits == 1 {
+        return .Began
+    }
+    if bits == 2 || bits == 4 {
+        return .Changed
+    }
+    if bits == 8 {
+        return .Ended
+    }
+    if bits == 16 {
+        return .Cancelled
+    }
+    if bits == 32 {
+        return .MayBegin
+    }
+    return .None
 }

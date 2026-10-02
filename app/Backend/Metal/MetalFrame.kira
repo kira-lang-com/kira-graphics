@@ -15,7 +15,7 @@ function metalMapLoadAction(publicLoadAction: Int) -> U64 {
     }
     // Discard, which the public layer spells 3. A pass whose first draw covers
     // every pixel opaquely has nothing to keep and nothing to clear: a clear
-    // writes the colour into every tile so the next draw can overwrite all of it.
+    // writes the color into every tile so the next draw can overwrite all of it.
     if publicLoadAction == 3 {
         return metalLoadActionDontCare()
     }
@@ -129,7 +129,7 @@ function metalReportBenchWorst(frameNs: Int, cpuNs: Int, gpuNs: Int) {
 // presented drawable every frame, nothing offscreen — for N measured frames
 // after warmup, then prints a percentile summary per series. The GPU series is
 // command-buffer residency (GPUStartTime to GPUEndTime): it includes every
-// stall and neighbour on the GPU timeline, so read it as a ceiling; the
+// stall and neighbor on the GPU timeline, so read it as a ceiling; the
 // per-encoder truth needs a Metal System Trace (docs/frame-cost.md).
 
 function metalBenchDigit(digit: Int) -> String {

@@ -119,7 +119,7 @@ function createWindowHandle(exStyle: U32, className: CString, title: CString, st
 @FFI.Extern { library: user32, symbol: DestroyWindow, abi: c }
 function destroyWindowHandle(window: RawPtr) -> I32
 
-// A layered window's composition: `key` is the colour the desktop shows
+// A layered window's composition: `key` is the color the desktop shows
 // through, `alpha` is how opaque the whole window is composited, and `flags`
 // says which of the two the call is setting.
 @FFI.Extern { library: user32, symbol: SetLayeredWindowAttributes, abi: c }
@@ -217,7 +217,7 @@ function dawnClipChildrenStyle() -> U32 { return U32(33554432) }
 // blitted, which is what lets some of its pixels be missing.
 function dawnLayeredExStyle() -> U32 { return U32(524288) }
 
-// `LWA_COLORKEY` and `LWA_ALPHA` — the desktop shows through the key colour,
+// `LWA_COLORKEY` and `LWA_ALPHA` — the desktop shows through the key color,
 // and the whole window is composited at the alpha.
 function dawnLayeredColorKeyFlag() -> U32 { return U32(1) }
 function dawnLayeredAlphaFlag() -> U32 { return U32(2) }
@@ -361,7 +361,7 @@ function dawnOpenWindow(
     height: Int,
     mode: borrow WindowMode,
     // What the desktop does with this window's pixels. `transparent` makes the
-    // key colour a hole the desktop shows through — the application clears to
+    // key color a hole the desktop shows through — the application clears to
     // it and paints only what it wants seen — and `opacity` composites the
     // whole window at less than full strength.
     transparent: Bool,
@@ -420,13 +420,13 @@ function dawnOpenWindow(
 // behind the window, and to draw it there.
 //
 // This is what a platform sidebar is made of. The window's own pixels are drawn
-// over it, so the parts an interface leaves as holes (see the key colour) show
+// over it, so the parts an interface leaves as holes (see the key color) show
 // the blur and the parts it paints stay crisp — which is exactly the material a
 // macOS sidebar has and the one an application cannot produce for itself,
 // because what it needs to blur is not something it can see.
 //
 // `ACCENT_ENABLE_ACRYLICBLURBEHIND` is the accent state that does it; the
-// gradient colour is the tint the compositor mixes over the blur, in
+// gradient color is the tint the compositor mixes over the blur, in
 // `0xAABBGGRR`, and a dark low-alpha tint is what keeps a bright desktop from
 // washing the chrome out.
 @Native

@@ -323,7 +323,7 @@ function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow
         if depthImageId != 0 {
             let depthSamples = frame.attachments.depth.texture.sampleCount <= 0 ? 1 : frame.attachments.depth.texture.sampleCount
             if depthSamples != sampleCount {
-                graphicsDiagnostic("Kira Graphics: Vulkan depth attachment sampleCount must match the colour attachment")
+                graphicsDiagnostic("Kira Graphics: Vulkan depth attachment sampleCount must match the color attachment")
                 return false
             }
             depthView = vulkanObject(state, frame.attachments.depthViewId())
@@ -337,19 +337,19 @@ function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow
     var resolveView = nullPointer()
     if frame.attachments.color.hasResolveTarget {
         if sampleCount <= 1 {
-            graphicsDiagnostic("Kira Graphics: Vulkan resolve targets require a multisampled colour attachment")
+            graphicsDiagnostic("Kira Graphics: Vulkan resolve targets require a multisampled color attachment")
             return false
         }
         let resolveTexture = frame.attachments.color.resolveTarget.texture
         let resolveSamples = resolveTexture.sampleCount <= 0 ? 1 : resolveTexture.sampleCount
         if resolveSamples != 1 || resolveTexture.width != width || resolveTexture.height != height {
-            graphicsDiagnostic("Kira Graphics: Vulkan resolve target must be single-sampled and match the colour attachment extent")
+            graphicsDiagnostic("Kira Graphics: Vulkan resolve target must be single-sampled and match the color attachment extent")
             return false
         }
         let resolveId = resolveTexture.id
         resolveView = vulkanObject(state, frame.attachments.resolveViewId())
         if resolveId == 0 || pointerIsNull(resolveView) || vulkanObjectFormat(state, resolveId) != format {
-            graphicsDiagnostic("Kira Graphics: Vulkan resolve target must match the colour attachment format")
+            graphicsDiagnostic("Kira Graphics: Vulkan resolve target must match the color attachment format")
             return false
         }
         vulkanTransitionImage(state, resolveId, vulkanImageLayoutColorAttachment(), vulkanStageTopOfPipe(), vulkanStageColorAttachmentOutput(), vulkanAccessNone(), vulkanAccessColorAttachmentWrite(), vulkanAspectColor())

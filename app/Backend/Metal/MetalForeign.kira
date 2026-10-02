@@ -235,7 +235,7 @@ function metalMsgSend(obj: RawPtr, op: RawPtr, mask: U64, untilDate: RawPtr, mod
 
 // Objective-C autorelease pool (C functions in libobjc). The Metal shader compiler
 // and NSString helpers create many autoreleased temporaries; without a pool that is
-// undefined behaviour, so resource creation runs inside push/pop.
+// undefined behavior, so resource creation runs inside push/pop.
 @FFI.Extern { library: kira_metal, symbol: objc_autoreleasePoolPush, abi: c }
 function metalAutoreleasePoolPush(): RawPtr
 @FFI.Extern { library: kira_metal, symbol: objc_autoreleasePoolPop, abi: c }
@@ -263,6 +263,16 @@ struct metalImpCallback {}
 
 @FFI.Extern { library: kira_metal, symbol: class_addMethod, abi: c }
 function metalClassAddMethod(cls: RawPtr, name: RawPtr, imp: metalImpCallback, types: CString): Bool
+
+// An IMP the runtime already has, attached to a class under another name.
+@FFI.Extern { library: kira_metal, symbol: class_getMethodImplementation, abi: c }
+function metalClassGetMethodImplementation(cls: RawPtr, name: RawPtr): RawPtr
+@FFI.Extern { library: kira_metal, symbol: class_addMethod, abi: c }
+function metalClassAddMethodImplementation(cls: RawPtr, name: RawPtr, imp: RawPtr, types: CString): Bool
+@FFI.Extern { library: kira_metal, symbol: object_getClass, abi: c }
+function metalObjectGetClass(obj: RawPtr): RawPtr
+@FFI.Extern { library: kira_metal, symbol: object_setClass, abi: c }
+function metalObjectSetClass(obj: RawPtr, cls: RawPtr): RawPtr
 
 // ---------------------------------------------------------------------------
 // Metal C entry point (the only non-Objective-C Metal symbol)

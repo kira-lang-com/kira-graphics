@@ -12,7 +12,7 @@
 // for. `WindowedBorderless` is the same window with its title bar and frame
 // removed. `Fullscreen` covers the display the window is on, and the size the
 // application asked for stops applying — read `viewportWidth`/`viewportHeight`
-// off the frame rather than assuming it was honoured.
+// off the frame rather than assuming it was honored.
 //
 // A backend that has one undecorated window and no separate borderless state
 // says so by what `windowMode` reads back: see `sokolWindowMode`.

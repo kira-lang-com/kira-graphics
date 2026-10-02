@@ -16,7 +16,7 @@
 // is a question about the pass, not about the attachment's own contents.
 //
 // The methods below are the reads every backend does — a view id out of an
-// attachment's texture, the colour target's extent, the image a later sample
+// attachment's texture, the color target's extent, the image a later sample
 // will read. Each is one place rather than a field a caller has to know is a
 // *view* id and not an image id.
 struct PassAttachments {
@@ -33,7 +33,7 @@ struct PassAttachments {
         return self.color.target.kind == .Texture
     }
 
-    // Whether the pass keeps what its colour target already holds. A backend
+    // Whether the pass keeps what its color target already holds. A backend
     // whose framebuffer row order differs from an upload's has to correct the
     // stored rows before a load, or the pass loads them mirrored.
     function loadsColor() -> Bool {
@@ -59,7 +59,7 @@ struct PassAttachments {
         return self.stencil.texture.depthViewId
     }
 
-    // The colour target's extent, which sizes the pass and any managed depth
+    // The color target's extent, which sizes the pass and any managed depth
     // buffer provisioned to match it.
     function colorWidth() -> Int {
         return self.color.target.texture.width

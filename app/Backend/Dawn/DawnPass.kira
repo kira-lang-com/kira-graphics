@@ -65,7 +65,7 @@ function dawnSurfaceStatusIsUsable(status: I32) -> Bool {
 // The managed depth-stencil view for a pass of this size, built on first use and
 // rebuilt when the size changes.
 //
-// WebGPU has no implicit depth buffer — a swapchain is colour and nothing else —
+// WebGPU has no implicit depth buffer — a swapchain is color and nothing else —
 // so a pass that asks for depth without naming a texture gets this. Its format
 // is what every depth-enabled pipeline bakes in, so the pass and the pipeline
 // agree.
@@ -156,7 +156,7 @@ function dawnBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bool
             height = frame.attachments.colorHeight()
             format = dawnObjectFormat(state, frame.attachments.colorViewId())
             if pointerIsNull(colorView) {
-                graphicsDiagnostic("Kira Graphics: offscreen render pass needs a colour texture with an attachment view")
+                graphicsDiagnostic("Kira Graphics: offscreen render pass needs a color texture with an attachment view")
                 return false
             }
         }

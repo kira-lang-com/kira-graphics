@@ -63,7 +63,7 @@ rather than the residency.
 
 Do not re-investigate these without new evidence; each cost a cycle.
 
-**The clear is not the cost.** Switching the swapchain colour attachment to
+**The clear is not the cost.** Switching the swapchain color attachment to
 `DontCare` behind an opaque fullscreen background measured 2.80/2.88/2.85
 against 2.97/2.83/2.72 — no change. A tile-based GPU initializes the tile
 rather than writing the clear to memory. The change was reverted: it risks

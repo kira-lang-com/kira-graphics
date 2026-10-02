@@ -193,7 +193,7 @@ construct DawnWindowWayland() extends DawnWindow {
     function scale(window: RawPtr) -> Float { return 1.0 }
 
     // A client does not resize its own surface: it acknowledges a configure and
-    // draws at the size that carried. This becomes that acknowledgement.
+    // draws at the size that carried. This becomes that acknowledgment.
     function resize(window: RawPtr, width: Int, height: Int) {
         return
     }

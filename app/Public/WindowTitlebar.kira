@@ -1,0 +1,16 @@
+// What a decorated window's title bar is.
+//
+// `Standard` is the platform's own bar: the title drawn by the window manager,
+// the application's content starting underneath it.
+//
+// `Unified` is the bar a toolkit draws its own chrome into, the way a macOS
+// window with a unified toolbar is built. The content runs the full height of
+// the window and under the bar; the bar itself draws nothing — no title, no
+// background — and the platform's window controls stay where they belong, sized
+// and placed for a toolbar-height band. What goes in that band is the
+// application's to draw. A backend whose windows have no such bar treats it as
+// `Standard`.
+enum WindowTitlebar {
+    Standard
+    Unified
+}

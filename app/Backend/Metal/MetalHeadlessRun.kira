@@ -24,7 +24,7 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
 
     // Deterministic frame-time benchmark: KIRA_METAL_BENCH runs the frame handler
     // many times offscreen and reports average ms + implied FPS, so VM hot-path
-    // optimisation can be measured without the on-screen present/vsync loop.
+    // optimization can be measured without the on-screen present/vsync loop.
     let benchEnv = metalGetEnv("KIRA_METAL_BENCH")
     if !pointerIsNull(benchEnv) {
         // 180 frames is a throughput sample. A run that has to expose a periodic

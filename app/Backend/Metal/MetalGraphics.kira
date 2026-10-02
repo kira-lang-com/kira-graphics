@@ -16,9 +16,9 @@ function metalCreateGraphicsShader(ctx: RawPtr, source: borrow String) -> Graphi
 
 @Native
 function metalCreateGraphicsRenderPipeline(ctx: RawPtr, descriptor: borrow RenderPipelineDescriptor) -> RenderPipeline {
-    var blendEnabled = false
+    var blend = BlendState {}
     if descriptor.colorTargets.count > 0 {
-        blendEnabled = descriptor.colorTargets[0].blend.enabled
+        blend = descriptor.colorTargets[0].blend
     }
     var attrFormats: [Int] = []
     var attrOffsets: [Int] = []
@@ -32,7 +32,7 @@ function metalCreateGraphicsRenderPipeline(ctx: RawPtr, descriptor: borrow Rende
     if descriptor.colorTargets.count > 0 {
         colorFmt = metalPixelFormatForTexture(textureFormatCode(descriptor.colorTargets[0].format))
     }
-    let id = metalCreateRenderPipelineWithEntries(ctx, descriptor.shader.id, colorFmt, descriptor.depthStencil.depthEnabled, blendEnabled, descriptor.vertexEntry, descriptor.fragmentEntry, descriptor.vertexLayout.stride, attrFormats, attrOffsets)
+    let id = metalCreateRenderPipelineWithEntries(ctx, descriptor.shader.id, colorFmt, descriptor.depthStencil.depthEnabled, blend, descriptor.vertexEntry, descriptor.fragmentEntry, descriptor.vertexLayout.stride, attrFormats, attrOffsets)
     return RenderPipeline {
         id: id
     }

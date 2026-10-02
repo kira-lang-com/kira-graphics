@@ -18,7 +18,7 @@ enum TextureFormat {
     Rgba16Float
     Depth24Stencil8
     R32Uint
-    // Whatever the swapchain's colour format turns out to be. A pipeline created
+    // Whatever the swapchain's color format turns out to be. A pipeline created
     // with it bakes in that format, so a target sampled by that pipeline has to
     // resolve the sentinel the same way rather than assume RGBA8.
     Swapchain
@@ -53,12 +53,19 @@ function vertexFormatCode(format: VertexFormat) -> Int {
     }
 }
 
+// How a fragment meets what is already in the target. `Additive` adds the
+// color weighted by its alpha. The premultiplied pair add an already-weighted
+// color to the target or take it away, leaving the target's alpha as it was —
+// linear dodge and linear burn, for a shader that writes `color` for the one
+// and `1 - color` for the other.
 @Derive(Equatable, Clone)
 enum BlendPreset {
     Replace
     Alpha
     PremultipliedAlpha
     Additive
+    PremultipliedAdditive
+    PremultipliedSubtractive
 }
 
 function blendPresetCode(preset: BlendPreset) -> Int {
@@ -67,6 +74,8 @@ function blendPresetCode(preset: BlendPreset) -> Int {
         Alpha -> return 2
         PremultipliedAlpha -> return 3
         Additive -> return 4
+        PremultipliedAdditive -> return 5
+        PremultipliedSubtractive -> return 6
     }
 }
 

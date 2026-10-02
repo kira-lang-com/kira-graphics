@@ -9,13 +9,13 @@ struct GraphicsTexture {
     var id: U32 = 0
     // The view a shader samples through, for a texture whose usage is sampled.
     var viewId: U32 = 0
-    // The view a pass writes colour through, for a render target.
+    // The view a pass writes color through, for a render target.
     var colorViewId: U32 = 0
     // The view a pass writes depth and stencil through.
     var depthViewId: U32 = 0
     // The view a compute kernel writes through, for a texture whose usage asks
     // for a storage image. Distinct from `colorViewId`: an image binding and a
-    // colour attachment are different view kinds even over the same pixels.
+    // color attachment are different view kinds even over the same pixels.
     var storageViewId: U32 = 0
     // The extent the pixels cover, and how many samples each holds.
     //
