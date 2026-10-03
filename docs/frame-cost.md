@@ -110,8 +110,15 @@ alternate ~0.4 ms and ~5 ms, and an instantaneous FPS readout swings between
 30 and 300 — that oscillation is presentation, not the renderer.
 
 Even frame *intervals* are only reachable by pacing the loop or presenting on
-change. A visible window is deliberately uncapped here (`setDisplaySyncEnabled:
-false`), so what can be held steady is **work per frame**, and that already is.
+change. A visible window was deliberately uncapped here (`setDisplaySyncEnabled:
+false`), so what could be held steady was **work per frame**.
+
+Since 2026-10-03 a visible window presents on the display's beat. On a 60 Hz
+4.5K iMac the KiraUI navigation app, uncapped, read p50 14.3 / p90 24.2 ms
+frames with 32 ms of GPU residency; on the beat, 16.7 / 25.3 ms with 10.4 ms.
+Uncapped, the compositor's work on every extra surface lands in the next
+frame, so the frames are both slower and uneven. `KIRA_METAL_UNCAPPED=1`
+restores the old loop for measuring work.
 
 ## Measuring it
 
@@ -125,8 +132,9 @@ KIRA_METAL_ONSCREEN_BENCH=N     the real-window percentile bench: N measured
                                 frames on the live, presenting window (after a
                                 30-frame warmup), then one summary — p50/p75/
                                 p90/p95/p99/p999/max for frame interval, CPU,
-                                and GPU residency. Combine with
-                                KIRA_METAL_VSYNC=1 for the production pacing.
+                                and GPU residency, under the production
+                                pacing. Combine with KIRA_METAL_UNCAPPED=1 to
+                                measure the work rather than the pacing.
 KIRA_METAL_ONSCREEN_TRACE=1     per-frame frame/CPU/GPU ns, on screen
 KIRA_METAL_ONSCREEN_FRAMES=N    bounded run
 KIRA_METAL_WINDOW_STATE=1       force focused/visible; an occluded window

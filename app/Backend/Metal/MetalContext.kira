@@ -482,12 +482,15 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
         print(717171)
         print(Int(metalMsgSendCount(layer, metalSel("maximumDrawableCount"))))
     }
-    // Visible windows are uncapped by default: do not make CAMetalLayer wait for
-    // the display beam. KIRA_METAL_VSYNC=1 remains available to hosts that prefer
-    // presentation pacing over maximum throughput.
-    var displaySync = false
-    if !pointerIsNull(metalGetEnv("KIRA_METAL_VSYNC")) {
-        displaySync = true
+    // Visible windows present on the display's beat. Uncapped, a window hands
+    // the compositor a surface for every frame it can draw, and compositing
+    // them shares the GPU the next frame needs: on a 60 Hz 4.5K panel that
+    // contention is most of a frame, and the frames come unevenly, 14 ms then
+    // 24. KIRA_METAL_UNCAPPED=1 lifts the beat for measuring what a frame costs
+    // rather than how it is paced; see docs/frame-cost.md.
+    var displaySync = true
+    if !pointerIsNull(metalGetEnv("KIRA_METAL_UNCAPPED")) {
+        displaySync = false
     }
     metalMsgSend(layer, metalSel("setDisplaySyncEnabled:"), displaySync)
     // Order matters: assign the layer FIRST, then turn on wantsLayer. This makes the

@@ -144,11 +144,10 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     var running = true
     var liveFramePresented = false
     var nextFrameDeadlineNs: U64 = 0
-    // A visible window stays UNCAPPED. Pacing the loop to the display would make
-    // every frame even, but only by refusing to let the app run: it caps the
-    // measurement at the refresh period, so a frame that costs 1.5 ms and one
-    // that costs 16 ms both read as 16.7 ms. A renderer is judged on the work a
-    // frame takes, and a limiter is the one change guaranteed to hide it.
+    // A visible window is paced by its layer, which presents on the display's
+    // beat (see `metalContextAttachLayer`); the loop adds no limiter of its
+    // own. Paced, a frame that costs 1.5 ms and one that costs 16 ms both read
+    // as 16.7 ms, so measuring the work takes KIRA_METAL_UNCAPPED=1.
     //
     // An app that genuinely wants a cadence sets `targetFrameDurationNs`.
     let framePacingNs = app.targetFrameDurationNs
