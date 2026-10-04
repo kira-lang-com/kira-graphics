@@ -1,60 +1,60 @@
 import Foundation
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_device_supported, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_device_supported, abi: c }
 function vulkanDeviceSupported(physicalDevice: RawPtr) -> I32
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_headless_device_supported, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_headless_device_supported, abi: c }
 function vulkanHeadlessDeviceSupported(physicalDevice: RawPtr) -> I32
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_has_dynamic_rendering, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_has_dynamic_rendering, abi: c }
 function vulkanHasDynamicRendering(device: RawPtr) -> I32
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_begin_rendering, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_begin_rendering, abi: c }
 function vulkanBeginRendering(device: RawPtr, commandBuffer: RawPtr, info: VkRenderingInfo_ptr) -> Void
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_end_rendering, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_end_rendering, abi: c }
 function vulkanEndRendering(device: RawPtr, commandBuffer: RawPtr) -> Void
 
 // Only surface creation is Vulkan-specific. Window creation stays on the same
 // native Win32 and Wayland implementations Dawn already uses, so both backends
 // get identical sizing, input and close behavior.
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_create_win32_surface, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_create_win32_surface, abi: c }
 function vulkanCreateWin32Surface(instance: RawPtr, hinstance: RawPtr, window: RawPtr) -> RawPtr
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_create_wayland_surface, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_create_wayland_surface, abi: c }
 function vulkanCreateWaylandSurface(instance: RawPtr, display: RawPtr, surface: RawPtr) -> RawPtr
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_destroy_surface, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_destroy_surface, abi: c }
 function vulkanDestroySurface(instance: RawPtr, surface: RawPtr) -> Void
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_clip_cursor, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_clip_cursor, abi: c }
 function vulkanClipCursor(window: RawPtr, lock: I32) -> I32
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_instance_extensions, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_instance_extensions, abi: c }
 function vulkanInstanceExtensions(linuxPlatform: I32) -> RawPtr
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_device_extensions, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_device_extensions, abi: c }
 function vulkanDeviceExtensions(linuxPlatform: I32, needsSurface: I32) -> RawPtr
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_device_extension_count, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_device_extension_count, abi: c }
 function vulkanDeviceExtensionCount(linuxPlatform: I32, needsSurface: I32) -> I32
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_queue_priority, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_queue_priority, abi: c }
 function vulkanQueuePriority() -> RawPtr
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_dynamic_rendering_features, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_dynamic_rendering_features, abi: c }
 function vulkanDynamicRenderingFeatures() -> RawPtr
 
-@FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_pipeline_rendering_info, abi: c }
+public @FFI.Extern { library: kira_vulkan_surface, symbol: kira_vulkan_pipeline_rendering_info, abi: c }
 function vulkanPipelineRenderingInfo(colorFormat: I32, depthFormat: I32, stencilFormat: I32) -> RawPtr
 
-enum VulkanWindowPlatform {
+public enum VulkanWindowPlatform {
     Windows
     Linux
 }
 
-function vulkanWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: Int) -> Int {
+public function vulkanWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam: Int) -> Int {
     if message == dawnMessageClose() {
         destroyWindowHandle(window)
         return 0
@@ -66,7 +66,7 @@ function vulkanWindowProcedure(window: RawPtr, message: U32, wparam: U64, lparam
     return defaultWindowProcedure(window, message, wparam, lparam)
 }
 
-@Native
+public @Native
 function vulkanRegisterWindowClass(instance: RawPtr, className: borrow String) -> Bool {
     return registerWindowClass(WindowClass {
         byteSize: U32(80),
@@ -78,7 +78,7 @@ function vulkanRegisterWindowClass(instance: RawPtr, className: borrow String) -
     }) != U16(0)
 }
 
-construct VulkanWindow {
+public construct VulkanWindow {
     requires {
         function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr
         function clientWidth(window: RawPtr) -> Int
@@ -90,7 +90,7 @@ construct VulkanWindow {
     }
 }
 
-construct VulkanWindowWin32() extends VulkanWindow {
+public construct VulkanWindowWin32() extends VulkanWindow {
     function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr {
         let instance = moduleHandle("")
         if !vulkanRegisterWindowClass(instance, "KiraGraphicsVulkanWindow") {
@@ -114,7 +114,7 @@ construct VulkanWindowWin32() extends VulkanWindow {
     }
 }
 
-construct VulkanWindowWayland() extends VulkanWindow {
+public construct VulkanWindowWayland() extends VulkanWindow {
     function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr {
         return DawnWindowWayland().open(title, width, height, mode, transparent, opacity)
     }
@@ -133,14 +133,14 @@ construct VulkanWindowWayland() extends VulkanWindow {
     }
 }
 
-function vulkanWindowFor(platform: borrow VulkanWindowPlatform) -> Any VulkanWindow {
+public function vulkanWindowFor(platform: borrow VulkanWindowPlatform) -> Any VulkanWindow {
     match platform {
         Windows -> return VulkanWindowWin32()
         Linux -> return VulkanWindowWayland()
     }
 }
 
-function vulkanWindowPlatformForHost() -> VulkanWindowPlatform {
+public function vulkanWindowPlatformForHost() -> VulkanWindowPlatform {
     if hostPlatform() == .Linux {
         return .Linux
     }

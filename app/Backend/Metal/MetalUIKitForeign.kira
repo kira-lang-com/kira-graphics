@@ -1,0 +1,58 @@
+comptime macro metalUsesUIKit {
+    kind { function }
+    expand(input: Syntax) -> Syntax {
+        let _ = input
+        if Build.platform() == "ios" { return quote { true } }
+        return quote { false }
+    }
+}
+
+public @FFI.Extern { library: kira_uikit, symbol: UIApplicationMain, abi: c }
+function metalUIApplicationMain(argc: I32, argv: RawPtr, principal: RawPtr, delegate: RawPtr) -> I32
+
+public @FFI.Callback { abi: c, params: [RawPtr, RawPtr, RawPtr, RawPtr], result: Bool }
+struct MetalUIKitLaunchCallback {}
+
+public @FFI.Callback { abi: c, params: [RawPtr, RawPtr, RawPtr, RawPtr], result: Void }
+struct MetalUIKitTouchCallback {}
+
+public @FFI.Extern { library: kira_metal, symbol: class_addMethod, abi: c }
+function metalUIKitAddLaunchMethod(cls: RawPtr, name: RawPtr, callback: MetalUIKitLaunchCallback, types: CString) -> Bool
+
+public @FFI.Extern { library: kira_metal, symbol: class_addMethod, abi: c }
+function metalUIKitAddTouchMethod(cls: RawPtr, name: RawPtr, callback: MetalUIKitTouchCallback, types: CString) -> Bool
+
+public @FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(object: RawPtr, selector: RawPtr, x: Float, y: Float, width: Float, height: Float) -> RawPtr
+
+public @FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(object: RawPtr, selector: RawPtr, view: RawPtr) -> MetalNSPoint
+
+public @FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(object: RawPtr, selector: RawPtr, interval: Float, target: RawPtr, action: RawPtr, userInfo: RawPtr, repeats: Bool) -> RawPtr
+
+public @FFI.Callback { abi: c, params: [RawPtr, RawPtr, RawPtr, RawPtr, RawPtr], result: Void }
+struct MetalUIKitSceneCallback {}
+
+public @FFI.Extern { library: kira_metal, symbol: class_addMethod, abi: c }
+function metalUIKitAddSceneMethod(cls: RawPtr, name: RawPtr, callback: MetalUIKitSceneCallback, types: CString) -> Bool
+
+public @FFI.Extern { library: kira_metal, symbol: objc_getProtocol, abi: c }
+function metalUIKitGetProtocol(name: CString) -> RawPtr
+
+public @FFI.Extern { library: kira_metal, symbol: class_addProtocol, abi: c }
+function metalUIKitAddProtocol(cls: RawPtr, protocol: RawPtr) -> Bool
+
+public @FFI.Struct { layout: c }
+struct MetalUIKitInsets {
+    var top: Float
+    var left: Float
+    var bottom: Float
+    var right: Float
+}
+
+public @FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(object: RawPtr, selector: RawPtr) -> MetalUIKitInsets
+
+public @FFI.Extern { library: kira_metal, symbol: objc_msgSend, abi: c }
+function metalMsgSend(object: RawPtr, selector: RawPtr, argument: RawPtr) -> Bool

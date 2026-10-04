@@ -10,7 +10,7 @@ import Foundation
 //
 // The one method that names no backend is `createTextureFromFile`, because
 // decoding an image is not a backend's work.
-class Graphics {
+public class Graphics {
     var userData: RawPtr
     var backend: RenderBackendKind = .Dawn
     // The backend's own per-run context: Metal's context object, and Dawn's
@@ -233,6 +233,14 @@ class Graphics {
     // and a backend may impose a once-per-frame upload limit.
     function updateTextureBytes(texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) {
         self.renderBackend().updateTextureBytes(texture, bytes, byteCount)
+        return
+    }
+
+    // `updateTextureBytes` for an image of which only `rowCount` rows from
+    // `firstRow` changed: a glyph atlas gains a few glyphs on a shelf or two,
+    // and sending the whole image again for them costs more than the frame.
+    function updateTextureRows(texture: borrow GraphicsTexture, bytes: RawPtr, firstRow: Int, rowCount: Int) {
+        self.renderBackend().updateTextureRows(texture, bytes, firstRow, rowCount)
         return
     }
 

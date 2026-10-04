@@ -2,7 +2,7 @@
 // floats and an index is a 32-bit unsigned integer on every backend here, so
 // saying `[Float]` would claim a precision that is narrowed away before the
 // data reaches a buffer — silently, and in C.
-struct BufferDescriptor {
+public struct BufferDescriptor {
     var label: String = ""
     var usage: BufferUsage = .Vertex
     var data: [F32]
@@ -10,7 +10,7 @@ struct BufferDescriptor {
 
 // An index buffer's usage is its name, so it carries none: `sg_buffer_desc`
 // takes the flag from the call that makes it, and Metal has no usage at all.
-struct IndexBufferDescriptor {
+public struct IndexBufferDescriptor {
     var label: String = ""
     var data: [U32]
 }

@@ -1,4 +1,4 @@
-struct GraphicsAppRuntimeState {
+public struct GraphicsAppRuntimeState {
     var app: GraphicsApplication
     var userData: RawPtr
     var frameIndex: Int = 0

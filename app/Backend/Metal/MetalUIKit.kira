@@ -1,0 +1,212 @@
+// UIKit owns application launch. The delegate returns before the rendering
+// loop starts, so iOS can complete launch and deliver input between frames.
+struct MetalUIKitApplication {
+    var app: GraphicsApplication
+    var runtimeUserData: RawPtr
+    var delegate: RawPtr = RawPtr(0)
+    var window: RawPtr = RawPtr(0)
+    var view: RawPtr = RawPtr(0)
+    var events: [AppEvent] = []
+    var activeTouch: RawPtr = RawPtr(0)
+    var renderFrame: () -> Bool = { in return false }
+    var cleanup: () -> Void = { in return }
+    var displayLink: RawPtr = RawPtr(0)
+    var renderStarted: Bool = false
+    var liveState: NativeState<MetalLiveState> = nativeState(MetalLiveState {
+        ctx: RawPtr(0), userData: RawPtr(0), runtimeUserData: RawPtr(0), closed: false
+    })
+}
+
+@Native
+function metalUIKitApplicationPointer() -> RawPtr {
+    let cls = metalObjcGetClass("KiraMetalApplicationDelegate")
+    if pointerIsNull(cls) { return RawPtr(0) }
+    let value = metalObjcGetAssociatedObject(cls, metalSel("kiraApplication"))
+    return metalMsgSend(value, metalSel("pointerValue"))
+}
+
+@Native
+function metalUIKitLaunchApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Bool {
+    if !pointerIsNull(metalUIKitApplicationPointer()) {
+        return false
+    }
+    let cls = metalObjcAllocateClassPair(metalObjcGetClass("NSObject"), "KiraMetalApplicationDelegate", 0)
+    let _ = metalUIKitAddLaunchMethod(cls, metalSel("application:didFinishLaunchingWithOptions:"), metalUIKitDidFinishLaunching, "B@:@@")
+    let _ = metalClassAddMethod(cls, metalSel("runKiraApplication:"), metalUIKitRunApplication, "v@:@")
+    let _ = metalUIKitAddProtocol(cls, metalUIKitGetProtocol("UIApplicationDelegate"))
+    metalObjcRegisterClassPair(cls)
+    let sceneClass = metalObjcAllocateClassPair(metalObjcGetClass("NSObject"), "KiraMetalSceneDelegate", 0)
+    let _ = metalUIKitAddSceneMethod(sceneClass, metalSel("scene:willConnectToSession:options:"), metalUIKitConnectScene, "v@:@@@")
+    let _ = metalClassAddMethod(sceneClass, metalSel("runKiraApplication:"), metalUIKitRunApplication, "v@:@")
+    let _ = metalUIKitAddProtocol(sceneClass, metalUIKitGetProtocol("UISceneDelegate"))
+    let _ = metalClassAddMethod(sceneClass, metalSel("renderKiraFrame:"), metalUIKitRenderFrame, "v@:@")
+    metalObjcRegisterClassPair(sceneClass)
+    let storage = nativeState(MetalUIKitApplication { app: app, runtimeUserData: runtimeUserData })
+    let pointer = nativeUserDataBorrow(storage)
+    let value: RawPtr = metalMsgSend(metalObjcGetClass("NSValue"), metalSel("valueWithPointer:"), pointer)
+    metalObjcSetAssociatedObject(cls, metalSel("kiraApplication"), value, 1)
+    let name: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "KiraMetalApplicationDelegate")
+    let _ = metalUIApplicationMain(I32(0), RawPtr(0), RawPtr(0), name)
+    return true
+}
+
+@Native
+function metalUIKitDidFinishLaunching(delegate: RawPtr, selector: RawPtr, application: RawPtr, options: RawPtr) -> Bool {
+    let _ = selector
+    let _ = application
+    let _ = options
+    return true
+}
+
+@Native
+function metalUIKitConnectScene(delegate: RawPtr, selector: RawPtr, scene: RawPtr, session: RawPtr, options: RawPtr) {
+    let _ = selector
+    let _ = session
+    let _ = options
+    let cls = metalObjcAllocateClassPair(metalObjcGetClass("UIView"), "KiraMetalContentView", 0)
+    let _ = metalUIKitAddTouchMethod(cls, metalSel("touchesBegan:withEvent:"), metalUIKitTouchesBegan, "v@:@@")
+    let _ = metalUIKitAddTouchMethod(cls, metalSel("touchesMoved:withEvent:"), metalUIKitTouchesMoved, "v@:@@")
+    let _ = metalUIKitAddTouchMethod(cls, metalSel("touchesEnded:withEvent:"), metalUIKitTouchesEnded, "v@:@@")
+    let _ = metalUIKitAddTouchMethod(cls, metalSel("touchesCancelled:withEvent:"), metalUIKitTouchesCancelled, "v@:@@")
+    metalObjcRegisterClassPair(cls)
+    let screen: RawPtr = metalMsgSend(metalObjcGetClass("UIScreen"), metalSel("mainScreen"))
+    let bounds: MetalCGRect = metalMsgSend(screen, metalSel("bounds"))
+    let window: RawPtr = metalMsgSend(metalMsgSend(metalObjcGetClass("UIWindow"), metalSel("alloc")), metalSel("initWithWindowScene:"), scene)
+    let view: RawPtr = metalMsgSend(metalMsgSend(cls, metalSel("alloc")), metalSel("initWithFrame:"), 0.0, 0.0, bounds.width, bounds.height)
+    metalMsgSend(view, metalSel("setAutoresizingMask:"), U64(18))
+    let controller: RawPtr = metalMsgSend(metalMsgSend(metalObjcGetClass("UIViewController"), metalSel("alloc")), metalSel("init"))
+    metalMsgSend(controller, metalSel("setView:"), view)
+    metalMsgSend(window, metalSel("setRootViewController:"), controller)
+    var state = nativeRecover<MetalUIKitApplication>(metalUIKitApplicationPointer())
+    state.delegate = delegate
+    state.window = window
+    state.view = view
+    metalMsgSend(window, metalSel("makeKeyAndVisible"))
+    let _ = metalMsgSend(metalObjcGetClass("NSTimer"), metalSel("scheduledTimerWithTimeInterval:target:selector:userInfo:repeats:"), 0.0, delegate, metalSel("runKiraApplication:"), RawPtr(0), false)
+    return
+}
+
+@Native
+function metalUIKitRunApplication(delegate: RawPtr, selector: RawPtr, timer: RawPtr) {
+    let _ = delegate
+    let _ = selector
+    let _ = timer
+    var state = nativeRecover<MetalUIKitApplication>(metalUIKitApplicationPointer())
+    metalRunApplication(state.app, state.runtimeUserData)
+    return
+}
+
+@Native
+function metalUIKitContentView() -> RawPtr {
+    var state = nativeRecover<MetalUIKitApplication>(metalUIKitApplicationPointer())
+    return state.view
+}
+
+@Native
+function metalUIKitAppendTouch(view: RawPtr, touches: RawPtr, kind: AppEventKind) {
+    var state = nativeRecover<MetalUIKitApplication>(metalUIKitApplicationPointer())
+    if kind == .TouchesBegan {
+        if !pointerIsNull(state.activeTouch) { return }
+        state.activeTouch = metalMsgSend(touches, metalSel("anyObject"))
+    } else {
+        if pointerIsNull(state.activeTouch) { return }
+        let contains: Bool = metalMsgSend(touches, metalSel("containsObject:"), state.activeTouch)
+        if !contains { return }
+    }
+    let point: MetalNSPoint = metalMsgSend(state.activeTouch, metalSel("locationInView:"), view)
+    state.events.append(AppEvent { kind: kind, touchCount: 1, pointerX: point.x, pointerY: point.y })
+    if kind == .TouchesEnded || kind == .TouchesCancelled { state.activeTouch = RawPtr(0) }
+    return
+}
+
+@Native
+function metalUIKitTouchesBegan(view: RawPtr, selector: RawPtr, touches: RawPtr, event: RawPtr) {
+    let _ = selector
+    let _ = event
+    metalUIKitAppendTouch(view, touches, .TouchesBegan)
+    return
+}
+
+@Native
+function metalUIKitTouchesMoved(view: RawPtr, selector: RawPtr, touches: RawPtr, event: RawPtr) {
+    let _ = selector
+    let _ = event
+    metalUIKitAppendTouch(view, touches, .TouchesMoved)
+    return
+}
+
+@Native
+function metalUIKitTouchesEnded(view: RawPtr, selector: RawPtr, touches: RawPtr, event: RawPtr) {
+    let _ = selector
+    let _ = event
+    metalUIKitAppendTouch(view, touches, .TouchesEnded)
+    return
+}
+
+@Native
+function metalUIKitTakeEvents() -> [AppEvent] {
+    var state = nativeRecover<MetalUIKitApplication>(metalUIKitApplicationPointer())
+    let events = move state.events
+    state.events = []
+    return move events
+}
+
+public @Native
+function metalUIKitSafeAreaInsets() -> ViewportInsets {
+    if !metalUsesUIKit!() { return ViewportInsets {} }
+    let view = metalUIKitContentView()
+    let insets: MetalUIKitInsets = metalMsgSend(view, metalSel("safeAreaInsets"))
+    return ViewportInsets { top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right }
+}
+
+@Native
+function metalUIKitTouchesCancelled(view: RawPtr, selector: RawPtr, touches: RawPtr, event: RawPtr) {
+    let _ = selector
+    let _ = event
+    metalUIKitAppendTouch(view, touches, .TouchesCancelled)
+    return
+}
+
+// UIKit's event loop owns the thread between display ticks. Rendering never
+// pumps a nested run loop, so touch delivery and presentation share its cadence.
+public @Native
+function metalUIKitStartFrames(renderFrame: () -> Bool, cleanup: () -> Void, liveState: NativeState<MetalLiveState>) {
+    var state = nativeRecover<MetalUIKitApplication>(metalUIKitApplicationPointer())
+    state.liveState = move liveState
+    state.renderFrame = move renderFrame
+    state.cleanup = move cleanup
+    let link: RawPtr = metalMsgSend(metalObjcGetClass("CADisplayLink"), metalSel("displayLinkWithTarget:selector:"), state.delegate, metalSel("renderKiraFrame:"))
+    state.displayLink = link
+    if pointerIsNull(link) { graphicsDiagnostic("UIKit could not create its display link") }
+    if pointerIsNull(state.delegate) { graphicsDiagnostic("UIKit display link has no scene delegate") }
+    metalMsgSend(link, metalSel("setPreferredFramesPerSecond:"), U64(metalViewMaximumFramesPerSecond(state.view)))
+    // Run loops recognize the common-modes set by the identity of the
+    // `kCFRunLoopCommonModes` constant, so a string spelled the same names an
+    // ordinary mode nothing ever runs. Ordinary modes are found by name: the
+    // link joins the two the main run loop sits in, at rest and while a touch
+    // is being tracked.
+    let runLoop: RawPtr = metalMsgSend(metalObjcGetClass("NSRunLoop"), metalSel("mainRunLoop"))
+    let defaultMode: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "kCFRunLoopDefaultMode")
+    let trackingMode: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "UITrackingRunLoopMode")
+    metalMsgSend(link, metalSel("addToRunLoop:forMode:"), runLoop, defaultMode)
+    metalMsgSend(link, metalSel("addToRunLoop:forMode:"), runLoop, trackingMode)
+    return
+}
+
+@Native
+function metalUIKitRenderFrame(delegate: RawPtr, selector: RawPtr, link: RawPtr) {
+    let _ = delegate
+    let _ = selector
+    var state = nativeRecover<MetalUIKitApplication>(metalUIKitApplicationPointer())
+    if !state.renderStarted {
+        state.renderStarted = true
+        graphicsDiagnostic("UIKit entered its first display-link frame")
+    }
+    if !state.renderFrame() {
+        graphicsDiagnostic("UIKit frame handler requested completion")
+        metalMsgSend(link, metalSel("invalidate"))
+        state.displayLink = RawPtr(0)
+        state.cleanup()
+    }
+    return
+}

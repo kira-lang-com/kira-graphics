@@ -4,7 +4,7 @@ import Foundation
 // still allocated per draw, because public bind groups intentionally exist before
 // a pipeline and Vulkan layouts are pipeline-owned.
 
-function vulkanShaderStageFlags(mask: Int) -> U32 {
+public function vulkanShaderStageFlags(mask: Int) -> U32 {
     var flags = U32(0)
     if (mask & 1) != 0 { flags = flags | U32(1) }
     if (mask & 2) != 0 { flags = flags | U32(16) }
@@ -12,7 +12,7 @@ function vulkanShaderStageFlags(mask: Int) -> U32 {
     return flags
 }
 
-function vulkanReflectionGroupCount(reflection: borrow KslResourceReflection) -> Int {
+public function vulkanReflectionGroupCount(reflection: borrow KslResourceReflection) -> Int {
     var count = 0
     for block in reflection.uniforms {
         if block.stageMask != 0 && block.group + 1 > count { count = block.group + 1 }
@@ -32,7 +32,7 @@ function vulkanReflectionGroupCount(reflection: borrow KslResourceReflection) ->
     return count > 4 ? 4 : count
 }
 
-function vulkanHasBinding(bindings: borrow [VkDescriptorSetLayoutBinding], binding: Int) -> Bool {
+public function vulkanHasBinding(bindings: borrow [VkDescriptorSetLayoutBinding], binding: Int) -> Bool {
     for item in bindings {
         if Int(item.binding) == binding {
             return true
@@ -41,7 +41,7 @@ function vulkanHasBinding(bindings: borrow [VkDescriptorSetLayoutBinding], bindi
     return false
 }
 
-function vulkanAddBinding(bindings: borrow mut [VkDescriptorSetLayoutBinding], binding: Int, descriptorType: I32, stageMask: Int) {
+public function vulkanAddBinding(bindings: borrow mut [VkDescriptorSetLayoutBinding], binding: Int, descriptorType: I32, stageMask: Int) {
     if binding < 0 || vulkanHasBinding(bindings, binding) || bindings.count >= 32 {
         return
     }
@@ -54,7 +54,7 @@ function vulkanAddBinding(bindings: borrow mut [VkDescriptorSetLayoutBinding], b
     return
 }
 
-function vulkanDescriptorBindings(reflection: borrow KslResourceReflection, group: Int) -> [VkDescriptorSetLayoutBinding] {
+public function vulkanDescriptorBindings(reflection: borrow KslResourceReflection, group: Int) -> [VkDescriptorSetLayoutBinding] {
     var bindings: [VkDescriptorSetLayoutBinding] = []
     for block in reflection.uniforms {
         if block.group == group && block.stageMask != 0 {
@@ -97,7 +97,7 @@ function vulkanDescriptorBindings(reflection: borrow KslResourceReflection, grou
     return bindings
 }
 
-@Native
+public @Native
 function vulkanCreateDescriptorSetLayouts(state: borrow mut VulkanState, reflection: borrow KslResourceReflection) -> [RawPtr] {
     let groupCount = vulkanReflectionGroupCount(reflection)
     var layouts: [RawPtr] = []
@@ -125,7 +125,7 @@ function vulkanCreateDescriptorSetLayouts(state: borrow mut VulkanState, reflect
     return layouts
 }
 
-@Native
+public @Native
 function vulkanRecordPipeline(state: borrow mut VulkanState, record: VulkanPipelineRecord) -> Int {
     for index in 0..state.pipelines.count {
         if !state.pipelines[index].live {
@@ -139,7 +139,7 @@ function vulkanRecordPipeline(state: borrow mut VulkanState, record: VulkanPipel
     return state.pipelines.count
 }
 
-@Native
+public @Native
 function vulkanPipelineRecord(state: borrow VulkanState, id: Int) -> VulkanPipelineRecord {
     let index = id - 1
     if index < 0 || index >= state.pipelines.count {
@@ -152,7 +152,7 @@ function vulkanPipelineRecord(state: borrow VulkanState, id: Int) -> VulkanPipel
     return state.pipelines[index]
 }
 
-@Native
+public @Native
 function vulkanCreatePipelineLayout(state: borrow mut VulkanState, layouts: borrow [RawPtr]) -> RawPtr {
     let layoutPointers = vulkanPointerSlotArray(layouts)
     let info = VkPipelineLayoutCreateInfo {
@@ -171,7 +171,7 @@ function vulkanCreatePipelineLayout(state: borrow mut VulkanState, layouts: borr
     return layout
 }
 
-@Native
+public @Native
 function vulkanPointerSlotArray(values: borrow [RawPtr]) -> RawPtr {
     let storage = allocateBytes(U64(values.count * 8))
     for index in 0..values.count {
@@ -180,7 +180,7 @@ function vulkanPointerSlotArray(values: borrow [RawPtr]) -> RawPtr {
     return storage
 }
 
-function vulkanPipelineColorFormat(descriptor: borrow RenderPipelineDescriptor, state: borrow VulkanState) -> I32 {
+public function vulkanPipelineColorFormat(descriptor: borrow RenderPipelineDescriptor, state: borrow VulkanState) -> I32 {
     if descriptor.colorTargets.count == 0 {
         return state.swapchainFormat
     }
@@ -191,7 +191,7 @@ function vulkanPipelineColorFormat(descriptor: borrow RenderPipelineDescriptor, 
     return vulkanTextureFormat(format)
 }
 
-function vulkanBuildBlend(preset: borrow BlendPreset) -> VkPipelineColorBlendAttachmentState {
+public function vulkanBuildBlend(preset: borrow BlendPreset) -> VkPipelineColorBlendAttachmentState {
     match preset {
         Replace -> return VkPipelineColorBlendAttachmentState {
             srcColorBlendFactor: vulkanBlendOne(),
@@ -255,7 +255,7 @@ function vulkanBuildBlend(preset: borrow BlendPreset) -> VkPipelineColorBlendAtt
     }
 }
 
-@Native
+public @Native
 function vulkanCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPipelineDescriptor) -> PipelineResult {
     if !vulkanHasDevice(context) || descriptor.shader.id == 0 {
         return .Error(.DeviceRefused)
@@ -418,7 +418,7 @@ function vulkanCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPi
     })
 }
 
-@Native
+public @Native
 function vulkanDestroyPipeline(context: RawPtr, pipeline: borrow RenderPipeline) {
     if !vulkanHasDevice(context) || pipeline.id == 0 {
         return
@@ -438,7 +438,7 @@ function vulkanDestroyPipeline(context: RawPtr, pipeline: borrow RenderPipeline)
     vulkanReleasePipeline(state.vulkan, index)
 }
 
-@Native
+public @Native
 function vulkanReleasePipeline(state: borrow mut VulkanState, index: Int) {
     if index < 0 || index >= state.pipelines.count || !state.pipelines[index].live { return }
     vkQueueWaitIdle(state.queue)

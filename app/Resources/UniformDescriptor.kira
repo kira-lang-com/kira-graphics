@@ -1,27 +1,27 @@
-struct UniformDescriptor {
+public struct UniformDescriptor {
     var label: String = ""
     var expectedFloatCount: Int = 0
     var data: [F32]
 }
 
-struct UniformBindEntry {
+public struct UniformBindEntry {
     var uniformSlot: Int = 0
     var uniform: Uniform
 }
 
-struct TextureBindEntry {
+public struct TextureBindEntry {
     var textureSlot: Int = 0
     var texture: GraphicsTexture
 }
 
-struct SamplerBindEntry {
+public struct SamplerBindEntry {
     var samplerSlot: Int = 0
     var sampler: GraphicsSampler
 }
 
 // A storage buffer bound at a shader slot, held by the public buffer id. Vulkan
 // and Dawn resolve that id to their own device-side view at draw time.
-struct StorageBindEntry {
+public struct StorageBindEntry {
     var storageSlot: Int = 0
     var viewId: U32 = 0
     // How many bytes of the buffer the shader reads.
@@ -32,7 +32,7 @@ struct StorageBindEntry {
     var byteSize: Int = 0
 }
 
-struct BindGroupDescriptor {
+public struct BindGroupDescriptor {
     var label: String = ""
     var uniformEntries: [UniformBindEntry]
     var textureEntries: [TextureBindEntry]

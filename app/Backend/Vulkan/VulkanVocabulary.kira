@@ -4,38 +4,38 @@ import Foundation
 // that representation at the FFI edge; the public API remains the typed Kira
 // enums from `Formats` and `PassVocabulary`.
 
-@FFI.Array { element: U32, count: 4 }
+public @FFI.Array { element: U32, count: 4 }
 struct VulkanWordArray4 {}
 
-@FFI.Array { element: VkPipelineShaderStageCreateInfo, count: 2 }
+public @FFI.Array { element: VkPipelineShaderStageCreateInfo, count: 2 }
 struct VulkanShaderStageArray2 {}
 
-@FFI.Array { element: VkVertexInputAttributeDescription, count: 16 }
+public @FFI.Array { element: VkVertexInputAttributeDescription, count: 16 }
 struct VulkanVertexAttributeArray16 {}
 
-@FFI.Array { element: VkVertexInputBindingDescription, count: 1 }
+public @FFI.Array { element: VkVertexInputBindingDescription, count: 1 }
 struct VulkanVertexBindingArray1 {}
 
-@FFI.Array { element: VkPipelineColorBlendAttachmentState, count: 1 }
+public @FFI.Array { element: VkPipelineColorBlendAttachmentState, count: 1 }
 struct VulkanBlendAttachmentArray1 {}
 
-@FFI.Array { element: VkDescriptorSetLayoutBinding, count: 32 }
+public @FFI.Array { element: VkDescriptorSetLayoutBinding, count: 32 }
 struct VulkanDescriptorBindingArray32 {}
 
-@FFI.Array { element: VkDescriptorPoolSize, count: 5 }
+public @FFI.Array { element: VkDescriptorPoolSize, count: 5 }
 struct VulkanDescriptorPoolSizeArray5 {}
 
-@FFI.Struct { layout: c }
+public @FFI.Struct { layout: c }
 struct VkClearColorValue {
     var words: VulkanWordArray4
 }
 
-@FFI.Struct { layout: c }
+public @FFI.Struct { layout: c }
 struct VkClearValue {
     var color: VkClearColorValue
 }
 
-@FFI.Struct { layout: c }
+public @FFI.Struct { layout: c }
 struct VkRenderingAttachmentInfo {
     var sType: I32
     var pNext: RawPtr
@@ -49,183 +49,183 @@ struct VkRenderingAttachmentInfo {
     var clearValue: VkClearValue
 }
 
-function vulkanSuccess() -> I32 { return I32(0) }
-function vulkanNotReady() -> I32 { return I32(1) }
-function vulkanTimeout() -> I32 { return I32(2) }
-function vulkanIncomplete() -> I32 { return I32(5) }
-function vulkanErrorOutOfHostMemory() -> I32 { return I32(0 - 1) }
-function vulkanErrorOutOfDeviceMemory() -> I32 { return I32(0 - 2) }
-function vulkanErrorInitializationFailed() -> I32 { return I32(0 - 3) }
-function vulkanErrorDeviceLost() -> I32 { return I32(0 - 4) }
-function vulkanErrorExtensionNotPresent() -> I32 { return I32(0 - 7) }
-function vulkanErrorFeatureNotPresent() -> I32 { return I32(0 - 8) }
-function vulkanErrorIncompatibleDriver() -> I32 { return I32(0 - 9) }
-function vulkanErrorFormatNotSupported() -> I32 { return I32(0 - 11) }
-function vulkanErrorSurfaceLost() -> I32 { return I32(0 - 1000000000) }
-function vulkanErrorOutOfDate() -> I32 { return I32(0 - 1000001004) }
-function vulkanSuboptimal() -> I32 { return I32(1000001003) }
+public function vulkanSuccess() -> I32 { return I32(0) }
+public function vulkanNotReady() -> I32 { return I32(1) }
+public function vulkanTimeout() -> I32 { return I32(2) }
+public function vulkanIncomplete() -> I32 { return I32(5) }
+public function vulkanErrorOutOfHostMemory() -> I32 { return I32(0 - 1) }
+public function vulkanErrorOutOfDeviceMemory() -> I32 { return I32(0 - 2) }
+public function vulkanErrorInitializationFailed() -> I32 { return I32(0 - 3) }
+public function vulkanErrorDeviceLost() -> I32 { return I32(0 - 4) }
+public function vulkanErrorExtensionNotPresent() -> I32 { return I32(0 - 7) }
+public function vulkanErrorFeatureNotPresent() -> I32 { return I32(0 - 8) }
+public function vulkanErrorIncompatibleDriver() -> I32 { return I32(0 - 9) }
+public function vulkanErrorFormatNotSupported() -> I32 { return I32(0 - 11) }
+public function vulkanErrorSurfaceLost() -> I32 { return I32(0 - 1000000000) }
+public function vulkanErrorOutOfDate() -> I32 { return I32(0 - 1000001004) }
+public function vulkanSuboptimal() -> I32 { return I32(1000001003) }
 
-function vulkanStructureApplicationInfo() -> I32 { return I32(0) }
-function vulkanStructureInstanceCreateInfo() -> I32 { return I32(1) }
-function vulkanStructureDeviceQueueCreateInfo() -> I32 { return I32(2) }
-function vulkanStructureDeviceCreateInfo() -> I32 { return I32(3) }
-function vulkanStructureSubmitInfo() -> I32 { return I32(4) }
-function vulkanStructureMemoryAllocateInfo() -> I32 { return I32(5) }
-function vulkanStructureMappedMemoryRange() -> I32 { return I32(6) }
-function vulkanStructureImageMemoryBarrier() -> I32 { return I32(45) }
-function vulkanStructureFenceCreateInfo() -> I32 { return I32(8) }
-function vulkanStructureSemaphoreCreateInfo() -> I32 { return I32(9) }
-function vulkanStructureBufferCreateInfo() -> I32 { return I32(12) }
-function vulkanStructureImageCreateInfo() -> I32 { return I32(14) }
-function vulkanStructureImageViewCreateInfo() -> I32 { return I32(15) }
-function vulkanStructureShaderModuleCreateInfo() -> I32 { return I32(16) }
-function vulkanStructurePipelineShaderStageCreateInfo() -> I32 { return I32(18) }
-function vulkanStructurePipelineVertexInputStateCreateInfo() -> I32 { return I32(19) }
-function vulkanStructurePipelineInputAssemblyStateCreateInfo() -> I32 { return I32(20) }
-function vulkanStructurePipelineViewportStateCreateInfo() -> I32 { return I32(22) }
-function vulkanStructurePipelineRasterizationStateCreateInfo() -> I32 { return I32(23) }
-function vulkanStructurePipelineMultisampleStateCreateInfo() -> I32 { return I32(24) }
-function vulkanStructurePipelineDepthStencilStateCreateInfo() -> I32 { return I32(25) }
-function vulkanStructurePipelineColorBlendStateCreateInfo() -> I32 { return I32(26) }
-function vulkanStructurePipelineDynamicStateCreateInfo() -> I32 { return I32(27) }
-function vulkanStructureGraphicsPipelineCreateInfo() -> I32 { return I32(28) }
-function vulkanStructureComputePipelineCreateInfo() -> I32 { return I32(29) }
-function vulkanStructurePipelineLayoutCreateInfo() -> I32 { return I32(30) }
-function vulkanStructureSamplerCreateInfo() -> I32 { return I32(31) }
-function vulkanStructureDescriptorSetLayoutCreateInfo() -> I32 { return I32(32) }
-function vulkanStructureDescriptorPoolCreateInfo() -> I32 { return I32(33) }
-function vulkanStructureDescriptorSetAllocateInfo() -> I32 { return I32(34) }
-function vulkanStructureWriteDescriptorSet() -> I32 { return I32(35) }
-function vulkanStructureCommandPoolCreateInfo() -> I32 { return I32(39) }
-function vulkanStructureCommandBufferAllocateInfo() -> I32 { return I32(40) }
-function vulkanStructureCommandBufferBeginInfo() -> I32 { return I32(42) }
-function vulkanStructureRenderPassBeginInfo() -> I32 { return I32(43) }
-function vulkanStructureFramebufferCreateInfo() -> I32 { return I32(37) }
-function vulkanStructureSwapchainCreateInfo() -> I32 { return I32(1000001000) }
-function vulkanStructurePresentInfo() -> I32 { return I32(1000001001) }
-function vulkanStructurePipelineRenderingCreateInfo() -> I32 { return I32(1000044002) }
-function vulkanStructureDynamicRenderingFeatures() -> I32 { return I32(1000044003) }
-function vulkanStructureRenderingInfo() -> I32 { return I32(1000044000) }
-function vulkanStructureRenderingAttachmentInfo() -> I32 { return I32(1000044001) }
-function vulkanStructureWaylandSurfaceCreateInfo() -> I32 { return I32(1000006000) }
-function vulkanStructureWin32SurfaceCreateInfo() -> I32 { return I32(1000009000) }
+public function vulkanStructureApplicationInfo() -> I32 { return I32(0) }
+public function vulkanStructureInstanceCreateInfo() -> I32 { return I32(1) }
+public function vulkanStructureDeviceQueueCreateInfo() -> I32 { return I32(2) }
+public function vulkanStructureDeviceCreateInfo() -> I32 { return I32(3) }
+public function vulkanStructureSubmitInfo() -> I32 { return I32(4) }
+public function vulkanStructureMemoryAllocateInfo() -> I32 { return I32(5) }
+public function vulkanStructureMappedMemoryRange() -> I32 { return I32(6) }
+public function vulkanStructureImageMemoryBarrier() -> I32 { return I32(45) }
+public function vulkanStructureFenceCreateInfo() -> I32 { return I32(8) }
+public function vulkanStructureSemaphoreCreateInfo() -> I32 { return I32(9) }
+public function vulkanStructureBufferCreateInfo() -> I32 { return I32(12) }
+public function vulkanStructureImageCreateInfo() -> I32 { return I32(14) }
+public function vulkanStructureImageViewCreateInfo() -> I32 { return I32(15) }
+public function vulkanStructureShaderModuleCreateInfo() -> I32 { return I32(16) }
+public function vulkanStructurePipelineShaderStageCreateInfo() -> I32 { return I32(18) }
+public function vulkanStructurePipelineVertexInputStateCreateInfo() -> I32 { return I32(19) }
+public function vulkanStructurePipelineInputAssemblyStateCreateInfo() -> I32 { return I32(20) }
+public function vulkanStructurePipelineViewportStateCreateInfo() -> I32 { return I32(22) }
+public function vulkanStructurePipelineRasterizationStateCreateInfo() -> I32 { return I32(23) }
+public function vulkanStructurePipelineMultisampleStateCreateInfo() -> I32 { return I32(24) }
+public function vulkanStructurePipelineDepthStencilStateCreateInfo() -> I32 { return I32(25) }
+public function vulkanStructurePipelineColorBlendStateCreateInfo() -> I32 { return I32(26) }
+public function vulkanStructurePipelineDynamicStateCreateInfo() -> I32 { return I32(27) }
+public function vulkanStructureGraphicsPipelineCreateInfo() -> I32 { return I32(28) }
+public function vulkanStructureComputePipelineCreateInfo() -> I32 { return I32(29) }
+public function vulkanStructurePipelineLayoutCreateInfo() -> I32 { return I32(30) }
+public function vulkanStructureSamplerCreateInfo() -> I32 { return I32(31) }
+public function vulkanStructureDescriptorSetLayoutCreateInfo() -> I32 { return I32(32) }
+public function vulkanStructureDescriptorPoolCreateInfo() -> I32 { return I32(33) }
+public function vulkanStructureDescriptorSetAllocateInfo() -> I32 { return I32(34) }
+public function vulkanStructureWriteDescriptorSet() -> I32 { return I32(35) }
+public function vulkanStructureCommandPoolCreateInfo() -> I32 { return I32(39) }
+public function vulkanStructureCommandBufferAllocateInfo() -> I32 { return I32(40) }
+public function vulkanStructureCommandBufferBeginInfo() -> I32 { return I32(42) }
+public function vulkanStructureRenderPassBeginInfo() -> I32 { return I32(43) }
+public function vulkanStructureFramebufferCreateInfo() -> I32 { return I32(37) }
+public function vulkanStructureSwapchainCreateInfo() -> I32 { return I32(1000001000) }
+public function vulkanStructurePresentInfo() -> I32 { return I32(1000001001) }
+public function vulkanStructurePipelineRenderingCreateInfo() -> I32 { return I32(1000044002) }
+public function vulkanStructureDynamicRenderingFeatures() -> I32 { return I32(1000044003) }
+public function vulkanStructureRenderingInfo() -> I32 { return I32(1000044000) }
+public function vulkanStructureRenderingAttachmentInfo() -> I32 { return I32(1000044001) }
+public function vulkanStructureWaylandSurfaceCreateInfo() -> I32 { return I32(1000006000) }
+public function vulkanStructureWin32SurfaceCreateInfo() -> I32 { return I32(1000009000) }
 
-function vulkanApiVersion12() -> U32 { return U32(4202496) }
-function vulkanQueueGraphics() -> U32 { return U32(1) }
-function vulkanQueueCompute() -> U32 { return U32(2) }
-function vulkanImageType2d() -> I32 { return I32(1) }
-function vulkanImageViewType2d() -> I32 { return I32(1) }
-function vulkanSharingExclusive() -> I32 { return I32(0) }
-function vulkanCommandBufferPrimary() -> I32 { return I32(0) }
-function vulkanCommandBufferOneTime() -> U32 { return U32(1) }
-function vulkanCommandPoolResettable() -> U32 { return U32(2) }
-function vulkanFenceSignaled() -> U32 { return U32(1) }
-function vulkanSampleCount1() -> I32 { return I32(1) }
-function vulkanSampleCount(samples: Int) -> I32 {
+public function vulkanApiVersion12() -> U32 { return U32(4202496) }
+public function vulkanQueueGraphics() -> U32 { return U32(1) }
+public function vulkanQueueCompute() -> U32 { return U32(2) }
+public function vulkanImageType2d() -> I32 { return I32(1) }
+public function vulkanImageViewType2d() -> I32 { return I32(1) }
+public function vulkanSharingExclusive() -> I32 { return I32(0) }
+public function vulkanCommandBufferPrimary() -> I32 { return I32(0) }
+public function vulkanCommandBufferOneTime() -> U32 { return U32(1) }
+public function vulkanCommandPoolResettable() -> U32 { return U32(2) }
+public function vulkanFenceSignaled() -> U32 { return U32(1) }
+public function vulkanSampleCount1() -> I32 { return I32(1) }
+public function vulkanSampleCount(samples: Int) -> I32 {
     if samples == 1 || samples == 2 || samples == 4 || samples == 8 || samples == 16 || samples == 32 || samples == 64 {
         return I32(samples)
     }
     return I32(0)
 }
-function vulkanPolygonFill() -> I32 { return I32(0) }
-function vulkanCullNone() -> U32 { return U32(0) }
-function vulkanCullFront() -> U32 { return U32(1) }
-function vulkanCullBack() -> U32 { return U32(2) }
-function vulkanFrontCounterClockwise() -> I32 { return I32(0) }
-function vulkanFrontClockwise() -> I32 { return I32(1) }
-function vulkanTopologyTriangleList() -> I32 { return I32(3) }
-function vulkanTopologyTriangleStrip() -> I32 { return I32(4) }
-function vulkanTopologyLineList() -> I32 { return I32(1) }
-function vulkanInputRateVertex() -> I32 { return I32(0) }
-function vulkanIndexUint16() -> I32 { return I32(0) }
-function vulkanIndexUint32() -> I32 { return I32(1) }
-function vulkanCompareNever() -> I32 { return I32(0) }
-function vulkanCompareLess() -> I32 { return I32(1) }
-function vulkanCompareLessEqual() -> I32 { return I32(3) }
-function vulkanCompareEqual() -> I32 { return I32(2) }
-function vulkanCompareGreaterEqual() -> I32 { return I32(6) }
-function vulkanCompareGreater() -> I32 { return I32(4) }
-function vulkanCompareAlways() -> I32 { return I32(7) }
-function vulkanBlendZero() -> I32 { return I32(0) }
-function vulkanBlendOne() -> I32 { return I32(1) }
-function vulkanBlendSrcAlpha() -> I32 { return I32(6) }
-function vulkanBlendOneMinusSrcAlpha() -> I32 { return I32(7) }
-function vulkanBlendDstAlpha() -> I32 { return I32(8) }
-function vulkanBlendOneMinusDstAlpha() -> I32 { return I32(9) }
-function vulkanBlendAdd() -> I32 { return I32(0) }
-function vulkanBlendReverseSubtract() -> I32 { return I32(2) }
-function vulkanDescriptorSampler() -> I32 { return I32(0) }
-function vulkanDescriptorCombinedImageSampler() -> I32 { return I32(1) }
-function vulkanDescriptorSampledImage() -> I32 { return I32(2) }
-function vulkanDescriptorStorageImage() -> I32 { return I32(3) }
-function vulkanDescriptorUniformBuffer() -> I32 { return I32(8) }
-function vulkanDescriptorStorageBuffer() -> I32 { return I32(9) }
-function vulkanPipelineGraphics() -> I32 { return I32(0) }
-function vulkanPipelineCompute() -> I32 { return I32(1) }
-function vulkanFilterNearest() -> I32 { return I32(0) }
-function vulkanFilterLinear() -> I32 { return I32(1) }
-function vulkanSamplerAddressRepeat() -> I32 { return I32(0) }
-function vulkanSamplerAddressClamp() -> I32 { return I32(2) }
-function vulkanMipmapNearest() -> I32 { return I32(0) }
-function vulkanMipmapLinear() -> I32 { return I32(1) }
-function vulkanLoadLoad() -> I32 { return I32(0) }
-function vulkanLoadClear() -> I32 { return I32(1) }
-function vulkanLoadDontCare() -> I32 { return I32(2) }
-function vulkanStoreStore() -> I32 { return I32(0) }
-function vulkanStoreDontCare() -> I32 { return I32(1) }
-function vulkanResolveNone() -> I32 { return I32(0) }
-function vulkanResolveAverage() -> I32 { return I32(2) }
-function vulkanSubpassInline() -> I32 { return I32(0) }
+public function vulkanPolygonFill() -> I32 { return I32(0) }
+public function vulkanCullNone() -> U32 { return U32(0) }
+public function vulkanCullFront() -> U32 { return U32(1) }
+public function vulkanCullBack() -> U32 { return U32(2) }
+public function vulkanFrontCounterClockwise() -> I32 { return I32(0) }
+public function vulkanFrontClockwise() -> I32 { return I32(1) }
+public function vulkanTopologyTriangleList() -> I32 { return I32(3) }
+public function vulkanTopologyTriangleStrip() -> I32 { return I32(4) }
+public function vulkanTopologyLineList() -> I32 { return I32(1) }
+public function vulkanInputRateVertex() -> I32 { return I32(0) }
+public function vulkanIndexUint16() -> I32 { return I32(0) }
+public function vulkanIndexUint32() -> I32 { return I32(1) }
+public function vulkanCompareNever() -> I32 { return I32(0) }
+public function vulkanCompareLess() -> I32 { return I32(1) }
+public function vulkanCompareLessEqual() -> I32 { return I32(3) }
+public function vulkanCompareEqual() -> I32 { return I32(2) }
+public function vulkanCompareGreaterEqual() -> I32 { return I32(6) }
+public function vulkanCompareGreater() -> I32 { return I32(4) }
+public function vulkanCompareAlways() -> I32 { return I32(7) }
+public function vulkanBlendZero() -> I32 { return I32(0) }
+public function vulkanBlendOne() -> I32 { return I32(1) }
+public function vulkanBlendSrcAlpha() -> I32 { return I32(6) }
+public function vulkanBlendOneMinusSrcAlpha() -> I32 { return I32(7) }
+public function vulkanBlendDstAlpha() -> I32 { return I32(8) }
+public function vulkanBlendOneMinusDstAlpha() -> I32 { return I32(9) }
+public function vulkanBlendAdd() -> I32 { return I32(0) }
+public function vulkanBlendReverseSubtract() -> I32 { return I32(2) }
+public function vulkanDescriptorSampler() -> I32 { return I32(0) }
+public function vulkanDescriptorCombinedImageSampler() -> I32 { return I32(1) }
+public function vulkanDescriptorSampledImage() -> I32 { return I32(2) }
+public function vulkanDescriptorStorageImage() -> I32 { return I32(3) }
+public function vulkanDescriptorUniformBuffer() -> I32 { return I32(8) }
+public function vulkanDescriptorStorageBuffer() -> I32 { return I32(9) }
+public function vulkanPipelineGraphics() -> I32 { return I32(0) }
+public function vulkanPipelineCompute() -> I32 { return I32(1) }
+public function vulkanFilterNearest() -> I32 { return I32(0) }
+public function vulkanFilterLinear() -> I32 { return I32(1) }
+public function vulkanSamplerAddressRepeat() -> I32 { return I32(0) }
+public function vulkanSamplerAddressClamp() -> I32 { return I32(2) }
+public function vulkanMipmapNearest() -> I32 { return I32(0) }
+public function vulkanMipmapLinear() -> I32 { return I32(1) }
+public function vulkanLoadLoad() -> I32 { return I32(0) }
+public function vulkanLoadClear() -> I32 { return I32(1) }
+public function vulkanLoadDontCare() -> I32 { return I32(2) }
+public function vulkanStoreStore() -> I32 { return I32(0) }
+public function vulkanStoreDontCare() -> I32 { return I32(1) }
+public function vulkanResolveNone() -> I32 { return I32(0) }
+public function vulkanResolveAverage() -> I32 { return I32(2) }
+public function vulkanSubpassInline() -> I32 { return I32(0) }
 
-function vulkanFormatRgba8() -> I32 { return I32(37) }
-function vulkanFormatBgra8() -> I32 { return I32(44) }
-function vulkanFormatRgba16Float() -> I32 { return I32(97) }
-function vulkanFormatR32Uint() -> I32 { return I32(98) }
-function vulkanFormatDepth24Stencil8() -> I32 { return I32(129) }
+public function vulkanFormatRgba8() -> I32 { return I32(37) }
+public function vulkanFormatBgra8() -> I32 { return I32(44) }
+public function vulkanFormatRgba16Float() -> I32 { return I32(97) }
+public function vulkanFormatR32Uint() -> I32 { return I32(98) }
+public function vulkanFormatDepth24Stencil8() -> I32 { return I32(129) }
 
-function vulkanImageUsageTransferSource() -> U32 { return U32(1) }
-function vulkanImageUsageTransferDestination() -> U32 { return U32(2) }
-function vulkanImageUsageSampled() -> U32 { return U32(4) }
-function vulkanImageUsageStorage() -> U32 { return U32(8) }
-function vulkanImageUsageColorAttachment() -> U32 { return U32(16) }
-function vulkanImageUsageDepthAttachment() -> U32 { return U32(32) }
-function vulkanBufferUsageTransferSource() -> U32 { return U32(1) }
-function vulkanBufferUsageTransferDestination() -> U32 { return U32(2) }
-function vulkanBufferUsageUniform() -> U32 { return U32(16) }
-function vulkanBufferUsageStorage() -> U32 { return U32(32) }
-function vulkanBufferUsageIndex() -> U32 { return U32(64) }
-function vulkanBufferUsageVertex() -> U32 { return U32(128) }
-function vulkanBufferUsageIndirect() -> U32 { return U32(256) }
-function vulkanMemoryHostVisible() -> U32 { return U32(2) }
-function vulkanMemoryHostCoherent() -> U32 { return U32(4) }
-function vulkanMemoryDeviceLocal() -> U32 { return U32(1) }
-function vulkanImageLayoutUndefined() -> I32 { return I32(0) }
-function vulkanImageLayoutGeneral() -> I32 { return I32(1) }
-function vulkanImageLayoutColorAttachment() -> I32 { return I32(2) }
-function vulkanImageLayoutDepthAttachment() -> I32 { return I32(3) }
-function vulkanImageLayoutShaderRead() -> I32 { return I32(5) }
-function vulkanImageLayoutTransferSource() -> I32 { return I32(6) }
-function vulkanImageLayoutTransferDestination() -> I32 { return I32(7) }
-function vulkanImageLayoutPresent() -> I32 { return I32(1000001002) }
-function vulkanAspectColor() -> U32 { return U32(1) }
-function vulkanAspectDepth() -> U32 { return U32(2) }
-function vulkanAspectStencil() -> U32 { return U32(4) }
-function vulkanStageTopOfPipe() -> U32 { return U32(1) }
-function vulkanStageTransfer() -> U32 { return U32(4096) }
-function vulkanStageFragmentShader() -> U32 { return U32(128) }
-function vulkanStageComputeShader() -> U32 { return U32(2048) }
-function vulkanStageColorAttachmentOutput() -> U32 { return U32(1024) }
-function vulkanStageEarlyFragmentTests() -> U32 { return U32(256) }
-function vulkanStageBottomOfPipe() -> U32 { return U32(8192) }
-function vulkanAccessNone() -> U32 { return U32(0) }
-function vulkanAccessTransferRead() -> U32 { return U32(2048) }
-function vulkanAccessTransferWrite() -> U32 { return U32(4096) }
-function vulkanAccessShaderRead() -> U32 { return U32(32) }
-function vulkanAccessShaderWrite() -> U32 { return U32(64) }
-function vulkanAccessColorAttachmentWrite() -> U32 { return U32(256) }
-function vulkanAccessDepthStencilWrite() -> U32 { return U32(1024) }
+public function vulkanImageUsageTransferSource() -> U32 { return U32(1) }
+public function vulkanImageUsageTransferDestination() -> U32 { return U32(2) }
+public function vulkanImageUsageSampled() -> U32 { return U32(4) }
+public function vulkanImageUsageStorage() -> U32 { return U32(8) }
+public function vulkanImageUsageColorAttachment() -> U32 { return U32(16) }
+public function vulkanImageUsageDepthAttachment() -> U32 { return U32(32) }
+public function vulkanBufferUsageTransferSource() -> U32 { return U32(1) }
+public function vulkanBufferUsageTransferDestination() -> U32 { return U32(2) }
+public function vulkanBufferUsageUniform() -> U32 { return U32(16) }
+public function vulkanBufferUsageStorage() -> U32 { return U32(32) }
+public function vulkanBufferUsageIndex() -> U32 { return U32(64) }
+public function vulkanBufferUsageVertex() -> U32 { return U32(128) }
+public function vulkanBufferUsageIndirect() -> U32 { return U32(256) }
+public function vulkanMemoryHostVisible() -> U32 { return U32(2) }
+public function vulkanMemoryHostCoherent() -> U32 { return U32(4) }
+public function vulkanMemoryDeviceLocal() -> U32 { return U32(1) }
+public function vulkanImageLayoutUndefined() -> I32 { return I32(0) }
+public function vulkanImageLayoutGeneral() -> I32 { return I32(1) }
+public function vulkanImageLayoutColorAttachment() -> I32 { return I32(2) }
+public function vulkanImageLayoutDepthAttachment() -> I32 { return I32(3) }
+public function vulkanImageLayoutShaderRead() -> I32 { return I32(5) }
+public function vulkanImageLayoutTransferSource() -> I32 { return I32(6) }
+public function vulkanImageLayoutTransferDestination() -> I32 { return I32(7) }
+public function vulkanImageLayoutPresent() -> I32 { return I32(1000001002) }
+public function vulkanAspectColor() -> U32 { return U32(1) }
+public function vulkanAspectDepth() -> U32 { return U32(2) }
+public function vulkanAspectStencil() -> U32 { return U32(4) }
+public function vulkanStageTopOfPipe() -> U32 { return U32(1) }
+public function vulkanStageTransfer() -> U32 { return U32(4096) }
+public function vulkanStageFragmentShader() -> U32 { return U32(128) }
+public function vulkanStageComputeShader() -> U32 { return U32(2048) }
+public function vulkanStageColorAttachmentOutput() -> U32 { return U32(1024) }
+public function vulkanStageEarlyFragmentTests() -> U32 { return U32(256) }
+public function vulkanStageBottomOfPipe() -> U32 { return U32(8192) }
+public function vulkanAccessNone() -> U32 { return U32(0) }
+public function vulkanAccessTransferRead() -> U32 { return U32(2048) }
+public function vulkanAccessTransferWrite() -> U32 { return U32(4096) }
+public function vulkanAccessShaderRead() -> U32 { return U32(32) }
+public function vulkanAccessShaderWrite() -> U32 { return U32(64) }
+public function vulkanAccessColorAttachmentWrite() -> U32 { return U32(256) }
+public function vulkanAccessDepthStencilWrite() -> U32 { return U32(1024) }
 
-function vulkanTextureFormat(format: borrow TextureFormat) -> I32 {
+public function vulkanTextureFormat(format: borrow TextureFormat) -> I32 {
     match format {
         Rgba8Unorm -> return vulkanFormatRgba8()
         Rgba16Float -> return vulkanFormatRgba16Float()
@@ -236,7 +236,7 @@ function vulkanTextureFormat(format: borrow TextureFormat) -> I32 {
     }
 }
 
-function vulkanVertexFormat(format: borrow VertexFormat) -> I32 {
+public function vulkanVertexFormat(format: borrow VertexFormat) -> I32 {
     match format {
         Float -> return I32(100)
         Float2 -> return I32(103)
@@ -245,7 +245,7 @@ function vulkanVertexFormat(format: borrow VertexFormat) -> I32 {
     }
 }
 
-function vulkanVertexFormatBytes(format: borrow VertexFormat) -> Int {
+public function vulkanVertexFormatBytes(format: borrow VertexFormat) -> Int {
     match format {
         Float -> return 4
         Float2 -> return 8
@@ -254,7 +254,7 @@ function vulkanVertexFormatBytes(format: borrow VertexFormat) -> Int {
     }
 }
 
-function vulkanBufferUsage(usage: borrow BufferUsage) -> U32 {
+public function vulkanBufferUsage(usage: borrow BufferUsage) -> U32 {
     let common = vulkanBufferUsageTransferDestination() | vulkanBufferUsageTransferSource()
     match usage {
         Vertex -> return common | vulkanBufferUsageVertex()
@@ -264,7 +264,7 @@ function vulkanBufferUsage(usage: borrow BufferUsage) -> U32 {
     }
 }
 
-function vulkanImageUsage(usage: borrow TextureUsage) -> U32 {
+public function vulkanImageUsage(usage: borrow TextureUsage) -> U32 {
     match usage {
         Sampled -> return vulkanImageUsageTransferDestination() | vulkanImageUsageSampled()
         SampledStreaming -> return vulkanImageUsageTransferDestination() | vulkanImageUsageSampled()
@@ -275,14 +275,14 @@ function vulkanImageUsage(usage: borrow TextureUsage) -> U32 {
     }
 }
 
-function vulkanImageAspectFor(usage: borrow TextureUsage) -> U32 {
+public function vulkanImageAspectFor(usage: borrow TextureUsage) -> U32 {
     if usage == .DepthStencil {
         return vulkanAspectDepth() | vulkanAspectStencil()
     }
     return vulkanAspectColor()
 }
 
-function vulkanCompareFunction(compare: borrow CompareFunction) -> I32 {
+public function vulkanCompareFunction(compare: borrow CompareFunction) -> I32 {
     match compare {
         Never -> return vulkanCompareNever()
         Less -> return vulkanCompareLess()
@@ -294,7 +294,7 @@ function vulkanCompareFunction(compare: borrow CompareFunction) -> I32 {
     }
 }
 
-function vulkanCullMode(mode: borrow CullMode) -> U32 {
+public function vulkanCullMode(mode: borrow CullMode) -> U32 {
     match mode {
         None -> return vulkanCullNone()
         Front -> return vulkanCullFront()
@@ -302,14 +302,14 @@ function vulkanCullMode(mode: borrow CullMode) -> U32 {
     }
 }
 
-function vulkanFrontFace(face: borrow FrontFace) -> I32 {
+public function vulkanFrontFace(face: borrow FrontFace) -> I32 {
     match face {
         CounterClockwise -> return vulkanFrontCounterClockwise()
         Clockwise -> return vulkanFrontClockwise()
     }
 }
 
-function vulkanTopology(topology: borrow PrimitiveTopology) -> I32 {
+public function vulkanTopology(topology: borrow PrimitiveTopology) -> I32 {
     match topology {
         TriangleList -> return vulkanTopologyTriangleList()
         TriangleStrip -> return vulkanTopologyTriangleStrip()
@@ -317,7 +317,7 @@ function vulkanTopology(topology: borrow PrimitiveTopology) -> I32 {
     }
 }
 
-function vulkanLoadOp(action: borrow LoadAction) -> I32 {
+public function vulkanLoadOp(action: borrow LoadAction) -> I32 {
     match action {
         Clear -> return vulkanLoadClear()
         Load -> return vulkanLoadLoad()
@@ -325,21 +325,21 @@ function vulkanLoadOp(action: borrow LoadAction) -> I32 {
     }
 }
 
-function vulkanStoreOp(action: borrow StoreAction) -> I32 {
+public function vulkanStoreOp(action: borrow StoreAction) -> I32 {
     match action {
         Store -> return vulkanStoreStore()
         DontCare -> return vulkanStoreDontCare()
     }
 }
 
-function vulkanSamplerFilter(filter: borrow TextureFilter) -> I32 {
+public function vulkanSamplerFilter(filter: borrow TextureFilter) -> I32 {
     match filter {
         Nearest -> return vulkanFilterNearest()
         Linear -> return vulkanFilterLinear()
     }
 }
 
-function vulkanAddressMode(mode: borrow AddressMode) -> I32 {
+public function vulkanAddressMode(mode: borrow AddressMode) -> I32 {
     match mode {
         ClampToEdge -> return vulkanSamplerAddressClamp()
         Repeat -> return vulkanSamplerAddressRepeat()

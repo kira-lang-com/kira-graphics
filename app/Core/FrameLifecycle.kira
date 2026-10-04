@@ -1,4 +1,4 @@
-function graphicsSubmitFrame(frame: borrow RenderFrame) {
+public function graphicsSubmitFrame(frame: borrow RenderFrame) {
     frame.renderBackend().submitFrame(frame)
     // Submission is the end of the frame. `currentEncoder` owns its callback
     // state directly, so the frame's ordinary lifetime releases it.

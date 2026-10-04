@@ -13,7 +13,7 @@ import Foundation
 // state until the pipeline, the slot or its entries change.
 
 // Whether a draw issued through this runtime may proceed.
-@Native
+public @Native
 function dawnPassIsActive(runtime: RawPtr) -> Bool {
     if pointerIsNull(runtime) {
         return false
@@ -27,7 +27,7 @@ function dawnPassIsActive(runtime: RawPtr) -> Bool {
 // a partition of it, so they are merged and bound at index 0. A pipeline built
 // from WGSL a caller wrote has whatever groups that caller declared, so each
 // slot is bound at its own index. Answers whether the draw may proceed.
-@Native
+public @Native
 function dawnApplyBindings(
     state: borrow mut GraphicsAppRuntimeState,
     pipelineHandle: RawPtr,
@@ -60,7 +60,7 @@ function dawnApplyBindings(
 }
 
 // Binds one group at `slot`, if the encoder has one there.
-@Native
+public @Native
 function dawnApplyBindGroup(state: borrow mut GraphicsAppRuntimeState, pipelineHandle: RawPtr, pipelineId: U32, slot: Int, group: borrow BindGroup, present: Bool) {
     if !present {
         return
@@ -78,7 +78,7 @@ function dawnApplyBindGroup(state: borrow mut GraphicsAppRuntimeState, pipelineH
     return
 }
 
-@Native
+public @Native
 function dawnDrawWithBindings(
     runtime: RawPtr,
     hasScissor: Bool,
@@ -171,7 +171,7 @@ function dawnDrawWithBindings(
 
 // A GPU-driven draw: the vertex and instance counts come out of a buffer a
 // compute pass wrote rather than from the CPU.
-@Native
+public @Native
 function dawnEncoderDrawIndirect(encoder: borrow RenderEncoderState, indirectBufferId: Int) {
     if !dawnPassIsActive(encoder.dawnRuntime) {
         return
@@ -209,7 +209,7 @@ function dawnEncoderDrawIndirect(encoder: borrow RenderEncoderState, indirectBuf
 }
 
 // Counts one draw and the primitives it rasterized, for `frame.statistics()`.
-@Native
+public @Native
 function dawnNoteDraw(state: borrow mut GraphicsAppRuntimeState, elementCount: Int) {
     state.dawn.stats.drawCount = state.dawn.stats.drawCount + 1
     state.dawn.stats.triangleCount = state.dawn.stats.triangleCount + elementCount / 3

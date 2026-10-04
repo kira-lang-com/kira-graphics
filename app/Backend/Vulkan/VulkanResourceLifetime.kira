@@ -2,7 +2,7 @@ import Foundation
 
 // Resource retirement and public destruction entry points.
 
-@Native
+public @Native
 function vulkanDeferObjectRelease(state: borrow mut VulkanState, id: U32) -> Bool {
     if !state.frameActive { return false }
     for pending in state.pendingRetireObjects {
@@ -12,7 +12,7 @@ function vulkanDeferObjectRelease(state: borrow mut VulkanState, id: U32) -> Boo
     return true
 }
 
-@Native
+public @Native
 function vulkanReleaseRetiredObjects(state: borrow mut VulkanState) {
     for id in state.pendingRetireObjects {
         let kind = state.objectKinds[Int(id) - 1]
@@ -29,7 +29,7 @@ function vulkanReleaseRetiredObjects(state: borrow mut VulkanState) {
     state.pendingRetirePipelines = []
 }
 
-@Native
+public @Native
 function vulkanReleaseBuffer(state: borrow mut VulkanState, id: U32) {
     let buffer = vulkanObject(state, id)
     if pointerIsNull(buffer) {
@@ -51,7 +51,7 @@ function vulkanReleaseBuffer(state: borrow mut VulkanState, id: U32) {
     return
 }
 
-@Native
+public @Native
 function vulkanReleaseImageView(state: borrow mut VulkanState, id: U32) {
     let view = vulkanObject(state, id)
     if pointerIsNull(view) {
@@ -64,7 +64,7 @@ function vulkanReleaseImageView(state: borrow mut VulkanState, id: U32) {
     return
 }
 
-@Native
+public @Native
 function vulkanReleaseImage(state: borrow mut VulkanState, id: U32) {
     let image = vulkanObject(state, id)
     if pointerIsNull(image) {
@@ -81,7 +81,7 @@ function vulkanReleaseImage(state: borrow mut VulkanState, id: U32) {
     return
 }
 
-@Native
+public @Native
 function vulkanDestroyBuffer(context: RawPtr, buffer: borrow GraphicsBuffer) {
     if !vulkanHasDevice(context) {
         return
@@ -91,7 +91,7 @@ function vulkanDestroyBuffer(context: RawPtr, buffer: borrow GraphicsBuffer) {
     return
 }
 
-@Native
+public @Native
 function vulkanDestroyUniform(context: RawPtr, uniform: borrow Uniform) {
     if !vulkanHasDevice(context) {
         return
@@ -101,7 +101,7 @@ function vulkanDestroyUniform(context: RawPtr, uniform: borrow Uniform) {
     return
 }
 
-@Native
+public @Native
 function vulkanDestroySampler(context: RawPtr, sampler: borrow GraphicsSampler) {
     if !vulkanHasDevice(context) || sampler.id == 0 {
         return
@@ -111,7 +111,7 @@ function vulkanDestroySampler(context: RawPtr, sampler: borrow GraphicsSampler) 
     return
 }
 
-@Native
+public @Native
 function vulkanReleaseSampler(state: borrow mut VulkanState, id: U32) {
     let handle = vulkanObject(state, id)
     if !pointerIsNull(handle) {
@@ -123,7 +123,7 @@ function vulkanReleaseSampler(state: borrow mut VulkanState, id: U32) {
     return
 }
 
-@Native
+public @Native
 function vulkanDestroyTexture(context: RawPtr, texture: borrow GraphicsTexture) {
     if !vulkanHasDevice(context) || texture.id == 0 {
         return

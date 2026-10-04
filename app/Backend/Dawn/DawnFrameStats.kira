@@ -16,19 +16,19 @@ import Foundation
 // `QueryPerformanceCounter` and its frequency. A monotonic clock is a platform
 // call — Kira has no clock of its own — and this is Windows', read through the
 // same `LARGE_INTEGER` out-parameter shape the window messages use.
-@FFI.Extern { library: kernel32, symbol: QueryPerformanceCounter, abi: c }
+public @FFI.Extern { library: kernel32, symbol: QueryPerformanceCounter, abi: c }
 function performanceCounter(value: RawPtr) -> I32
 
-@FFI.Extern { library: kernel32, symbol: QueryPerformanceFrequency, abi: c }
+public @FFI.Extern { library: kernel32, symbol: QueryPerformanceFrequency, abi: c }
 function performanceFrequency(value: RawPtr) -> I32
 
-@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u64_at, abi: c }
+public @FFI.Extern { library: kira_runtime, symbol: kira_dynamic_read_u64_at, abi: c }
 function readDoubleWord(ptr: RawPtr, offset: U64) -> U64
 
-@FFI.Extern { library: kira_runtime, symbol: kira_dynamic_write_u64_at, abi: c }
+public @FFI.Extern { library: kira_runtime, symbol: kira_dynamic_write_u64_at, abi: c }
 function writeDoubleWord(ptr: RawPtr, offset: U64, value: U64) -> Void
 
-struct DawnFrameStats {
+public struct DawnFrameStats {
     // The frame being recorded.
     var drawCount: Int = 0
     var triangleCount: Int = 0
@@ -51,7 +51,7 @@ struct DawnFrameStats {
 // Whole seconds and the remainder are scaled separately. Multiplying the raw
 // tick count by a billion first would overflow a 64-bit word after about two
 // hours of uptime on a 10 MHz counter, and the answer would go backwards.
-@Native
+public @Native
 function dawnMonotonicNanoseconds() -> U64 {
     let ticks = Int(dawnPerformanceTicks())
     let perSecond = Int(dawnPerformanceTicksPerSecond())
@@ -59,7 +59,7 @@ function dawnMonotonicNanoseconds() -> U64 {
 }
 
 // The counter's current tick and the ticks-per-second beside it.
-@Native
+public @Native
 function dawnPerformanceTicks() -> U64 {
     // A monotonic clock is a platform call, and this is the one the graphics
     // library already carries on every target it builds for. Windows keeps its
@@ -80,7 +80,7 @@ function dawnPerformanceTicks() -> U64 {
     return ticks
 }
 
-@Native
+public @Native
 function dawnPerformanceTicksPerSecond() -> U64 {
     // Microseconds, matching the tick above.
     if hostPlatform() != .Windows {
@@ -102,7 +102,7 @@ function dawnPerformanceTicksPerSecond() -> U64 {
 }
 
 // Opens a frame's counters.
-@Native
+public @Native
 function dawnBeginFrameStats(state: borrow mut GraphicsAppRuntimeState) {
     state.dawn.stats.drawCount = 0
     state.dawn.stats.triangleCount = 0
@@ -113,7 +113,7 @@ function dawnBeginFrameStats(state: borrow mut GraphicsAppRuntimeState) {
 }
 
 // Closes them, moving what the frame cost to where a HUD may read it.
-@Native
+public @Native
 function dawnEndFrameStats(state: borrow mut GraphicsAppRuntimeState) {
     let elapsed = dawnPerformanceTicks() - state.dawn.stats.startedAt
     state.dawn.stats.lastFrameSeconds = Float(Int(elapsed)) / Float(Int(dawnPerformanceTicksPerSecond()))
@@ -125,7 +125,7 @@ function dawnEndFrameStats(state: borrow mut GraphicsAppRuntimeState) {
     return
 }
 
-@Native
+public @Native
 function dawnFrameStatistics(context: RawPtr) -> FrameStatistics {
     if pointerIsNull(context) {
         return FrameStatistics {}
@@ -153,13 +153,13 @@ function dawnFrameStatistics(context: RawPtr) -> FrameStatistics {
 // A number to one decimal place, without a float formatter. The frame rate is
 // the one measurement whose whole point is comparing two runs, and rounding 59.6
 // to 60 hides exactly the difference being looked for.
-@Native
+public @Native
 function dawnTenths(value: Float) -> String {
     let tenths = Int(value * 10.0 + 0.5)
     return String(tenths / 10) + "." + String(tenths % 10)
 }
 
-@Native
+public @Native
 function dawnLogFrameRate(state: borrow mut GraphicsAppRuntimeState) {
     if !state.logFps {
         return

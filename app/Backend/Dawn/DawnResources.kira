@@ -17,7 +17,7 @@ import Foundation
 
 // A buffer's size in bytes, rounded up to the 4-byte multiple WebGPU requires of
 // both a buffer's size and a queue write's length.
-function dawnAlignedSize(byteCount: Int) -> Int {
+public function dawnAlignedSize(byteCount: Int) -> Int {
     if byteCount <= 0 {
         return 4
     }
@@ -26,7 +26,7 @@ function dawnAlignedSize(byteCount: Int) -> Int {
 
 // Creates a device buffer of `byteCount` bytes with `usage`, and answers the id
 // it was recorded under.
-@Native
+public @Native
 function dawnMakeBuffer(state: borrow mut GraphicsAppRuntimeState, label: borrow String, usage: U64, byteCount: Int) -> U32 {
     let size = dawnAlignedSize(byteCount)
     let buffer = wgpuDeviceCreateBuffer(state.dawn.device, WGPUBufferDescriptor {
@@ -41,7 +41,7 @@ function dawnMakeBuffer(state: borrow mut GraphicsAppRuntimeState, label: borrow
     return dawnRegisterObject(state, buffer, dawnFormatUndefined())
 }
 
-@Native
+public @Native
 function dawnCreateBuffer(context: RawPtr, descriptor: borrow BufferDescriptor) -> BufferResult {
     if !dawnHasDevice(context) {
         return .Error(.DeviceRefused)
@@ -61,7 +61,7 @@ function dawnCreateBuffer(context: RawPtr, descriptor: borrow BufferDescriptor) 
     })
 }
 
-@Native
+public @Native
 function dawnCreateIndexBuffer(context: RawPtr, descriptor: borrow IndexBufferDescriptor) -> BufferResult {
     if !dawnHasDevice(context) {
         return .Error(.DeviceRefused)
@@ -84,7 +84,7 @@ function dawnCreateIndexBuffer(context: RawPtr, descriptor: borrow IndexBufferDe
 // A buffer whose payload is 32-bit WORDS rather than floats — a kernel's
 // parameter block is counts and flags, and handing those over as floats would
 // give the shader different numbers than the caller wrote.
-@Native
+public @Native
 function dawnCreateStorageBufferWords(context: RawPtr, label: borrow String, data: borrow [U32]) -> BufferResult {
     if !dawnHasDevice(context) {
         return .Error(.DeviceRefused)
@@ -110,7 +110,7 @@ function dawnCreateStorageBufferWords(context: RawPtr, label: borrow String, dat
 // the same stream is a vertex buffer in one pipeline and a storage array indexed
 // by vertex id in the next, and a buffer created without the bit the shader
 // wants is refused at the draw with nothing in the descriptor to say why.
-@Native
+public @Native
 function dawnCreateDynamicBuffer(context: RawPtr, label: borrow String, floatCapacity: Int) -> DynamicBufferResult {
     if !dawnHasDevice(context) || floatCapacity <= 0 {
         return .Error(.DeviceRefused)
@@ -142,7 +142,7 @@ function dawnCreateDynamicBuffer(context: RawPtr, label: borrow String, floatCap
     })
 }
 
-@Native
+public @Native
 function dawnCommitDynamicBuffer(context: RawPtr, buffer: borrow GraphicsBuffer, contents: RawPtr, floatCount: Int) {
     if !dawnHasDevice(context) || buffer.id == 0 || pointerIsNull(contents) || floatCount <= 0 {
         return
@@ -156,7 +156,7 @@ function dawnCommitDynamicBuffer(context: RawPtr, buffer: borrow GraphicsBuffer,
     return
 }
 
-@Native
+public @Native
 function dawnDestroyBufferId(state: borrow mut GraphicsAppRuntimeState, id: U32) {
     let buffer = dawnObject(state, id)
     if pointerIsNull(buffer) {
@@ -176,7 +176,7 @@ function dawnDestroyBufferId(state: borrow mut GraphicsAppRuntimeState, id: U32)
 // pump the instance until the map completes, read, unmap. The pump is bounded —
 // a map that never completes is a device that has stopped, and spinning on it
 // forever would hang a gate whose whole job is to report.
-@Native
+public @Native
 function dawnReadBufferWord(context: RawPtr, buffer: borrow GraphicsBuffer, index: Int) -> U32 {
     if !dawnHasDevice(context) || buffer.id == 0 || index < 0 {
         return U32(0)
@@ -237,7 +237,7 @@ function dawnReadBufferWord(context: RawPtr, buffer: borrow GraphicsBuffer, inde
 
 // The answer to `wgpuBufferMapAsync`, recorded on the runtime state the readback
 // spin is watching.
-function dawnBufferMapped(status: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
+public function dawnBufferMapped(status: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
     var state = nativeRecover<GraphicsAppRuntimeState>(userdata1)
     state.dawn.mapResolved = true
     state.dawn.mapSucceeded = status == dawnMapSucceeded()
@@ -252,7 +252,7 @@ function dawnBufferMapped(status: I32, message: WGPUStringViewPointer, userdata1
 // The WebGPU format a descriptor names, with the `Swapchain` sentinel resolved
 // against the surface this run configured. A pipeline drawing into such a
 // texture bakes the same answer in, so pass and pipeline agree.
-@Native
+public @Native
 function dawnResolvedFormat(state: borrow GraphicsAppRuntimeState, format: borrow TextureFormat) -> I32 {
     if format == .Swapchain {
         return state.dawn.surfaceFormat
@@ -268,7 +268,7 @@ function dawnResolvedFormat(state: borrow GraphicsAppRuntimeState, format: borro
 // are minted follows the usage: an attachment view for anything a pass writes,
 // a sampled view for anything a shader reads, a storage view for anything a
 // kernel writes.
-@Native
+public @Native
 function dawnCreateTexture(context: RawPtr, descriptor: borrow TextureDescriptor) -> TextureResult {
     if !dawnHasDevice(context) || descriptor.width <= 0 || descriptor.height <= 0 {
         return .Error(.DeviceRefused)
@@ -303,7 +303,7 @@ function dawnCreateTexture(context: RawPtr, descriptor: borrow TextureDescriptor
 }
 
 // Mints the views `usage` calls for and assembles the `GraphicsTexture`.
-@Native
+public @Native
 function dawnTextureWithViews(state: borrow mut GraphicsAppRuntimeState, id: U32, texture: RawPtr, format: I32, width: Int, height: Int, samples: Int, usage: borrow TextureUsage) -> GraphicsTexture {
     var sampledId = U32(0)
     var colorId = U32(0)
@@ -333,7 +333,7 @@ function dawnTextureWithViews(state: borrow mut GraphicsAppRuntimeState, id: U32
     }
 }
 
-function dawnUsageIsSampled(usage: borrow TextureUsage) -> Bool {
+public function dawnUsageIsSampled(usage: borrow TextureUsage) -> Bool {
     match usage {
         Sampled -> return true
         SampledStreaming -> return true
@@ -344,7 +344,7 @@ function dawnUsageIsSampled(usage: borrow TextureUsage) -> Bool {
     }
 }
 
-function dawnUsageIsColorTarget(usage: borrow TextureUsage) -> Bool {
+public function dawnUsageIsColorTarget(usage: borrow TextureUsage) -> Bool {
     match usage {
         Sampled -> return false
         SampledStreaming -> return false
@@ -355,7 +355,7 @@ function dawnUsageIsColorTarget(usage: borrow TextureUsage) -> Bool {
     }
 }
 
-@Native
+public @Native
 function dawnMakeView(texture: RawPtr, format: I32, role: borrow String) -> RawPtr {
     return wgpuTextureCreateView(texture, WGPUTextureViewDescriptor {
         label: dawnText("kira-texture-view-" + role),
@@ -369,7 +369,7 @@ function dawnMakeView(texture: RawPtr, format: I32, role: borrow String) -> RawP
     })
 }
 
-@Native
+public @Native
 function dawnCreateTextureFromPixels(context: RawPtr, descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
     match dawnCreateTexture(context, descriptor) {
         Error(reason) -> return .Error(reason)
@@ -381,7 +381,7 @@ function dawnCreateTextureFromPixels(context: RawPtr, descriptor: borrow Texture
 }
 
 // Whole-image upload, which is the shape the portable surface has.
-@Native
+public @Native
 function dawnWriteTexturePixels(context: RawPtr, texture: borrow GraphicsTexture, pixels: borrow [U8]) {
     if !dawnHasDevice(context) || texture.id == 0 || pixels.count <= 0 {
         return
@@ -416,7 +416,7 @@ function dawnWriteTexturePixels(context: RawPtr, texture: borrow GraphicsTexture
 
 // The same upload from raw memory the caller already owns — a glyph atlas, whose
 // CPU side has to exist anyway so a new glyph can be packed beside the old ones.
-@Native
+public @Native
 function dawnWriteTextureBytes(context: RawPtr, texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) {
     if !dawnHasDevice(context) || texture.id == 0 || pointerIsNull(bytes) || byteCount <= 0 {
         return
@@ -449,7 +449,7 @@ function dawnWriteTextureBytes(context: RawPtr, texture: borrow GraphicsTexture,
     return
 }
 
-@Native
+public @Native
 function dawnDestroyTexture(context: RawPtr, texture: borrow GraphicsTexture) {
     if !dawnHasDevice(context) {
         return
@@ -471,7 +471,7 @@ function dawnDestroyTexture(context: RawPtr, texture: borrow GraphicsTexture) {
     return
 }
 
-@Native
+public @Native
 function dawnReleaseView(state: borrow mut GraphicsAppRuntimeState, id: U32) {
     let view = dawnObject(state, id)
     if pointerIsNull(view) {
@@ -484,7 +484,7 @@ function dawnReleaseView(state: borrow mut GraphicsAppRuntimeState, id: U32) {
 
 // --- samplers ------------------------------------------------------------
 
-@Native
+public @Native
 function dawnCreateSampler(context: RawPtr, descriptor: borrow SamplerDescriptor) -> SamplerResult {
     if !dawnHasDevice(context) {
         return .Error(.DeviceRefused)
@@ -510,7 +510,7 @@ function dawnCreateSampler(context: RawPtr, descriptor: borrow SamplerDescriptor
     })
 }
 
-@Native
+public @Native
 function dawnDestroySampler(context: RawPtr, sampler: borrow GraphicsSampler) {
     if !dawnHasDevice(context) {
         return

@@ -20,7 +20,7 @@ import Foundation
 // optional, this machine's adapter is not asked for it, and the drain needs no
 // feature at all.
 
-struct DawnGpuTrace {
+public struct DawnGpuTrace {
     var enabled: Bool = false
     var workDone: Bool = false
     // The tick the last drained segment ended on.
@@ -37,14 +37,14 @@ struct DawnGpuTrace {
     var totalWorst: Float = 0.0
 }
 
-@Native
+public @Native
 function dawnReadGpuTraceKnob(state: borrow mut GraphicsAppRuntimeState) {
     let value = environmentValue("KIRA_GRAPHICS_GPU_TRACE")
     state.dawn.trace.enabled = value.count > 0 && value != "0"
     return
 }
 
-function dawnWorkDone(status: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
+public function dawnWorkDone(status: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
     if pointerIsNull(userdata1) {
         return
     }
@@ -54,7 +54,7 @@ function dawnWorkDone(status: I32, message: WGPUStringViewPointer, userdata1: Ra
 }
 
 // Submits whatever the frame has recorded and waits for the queue to finish it.
-@Native
+public @Native
 function dawnDrainQueue(context: RawPtr, state: borrow mut GraphicsAppRuntimeState) {
     dawnSubmitEncoder(state)
     state.dawn.trace.workDone = false
@@ -73,7 +73,7 @@ function dawnDrainQueue(context: RawPtr, state: borrow mut GraphicsAppRuntimeSta
 }
 
 // Opens a frame's trace: nothing recorded yet, and the clock starts here.
-@Native
+public @Native
 function dawnTraceBeginFrame(state: borrow mut GraphicsAppRuntimeState) {
     if !state.dawn.trace.enabled {
         return
@@ -93,7 +93,7 @@ function dawnTraceBeginFrame(state: borrow mut GraphicsAppRuntimeState) {
 // what it reports is not the GPU time it claims to be. The segment a caller
 // reads should be the recorded work, so the mark moves to where the recording
 // starts.
-@Native
+public @Native
 function dawnTraceOpenSegment(state: borrow mut GraphicsAppRuntimeState) {
     if !state.dawn.trace.enabled {
         return
@@ -107,7 +107,7 @@ function dawnTraceOpenSegment(state: borrow mut GraphicsAppRuntimeState) {
 // `isComposite` separates the swapchain pass — where the glass surfaces are
 // actually shaded — from everything the effect does to prepare its backdrop, so
 // a reader can see which of the two owns the frame.
-@Native
+public @Native
 function dawnTraceSegment(context: RawPtr, state: borrow mut GraphicsAppRuntimeState, name: borrow String, isComposite: Bool) {
     if !state.dawn.trace.enabled {
         return
@@ -126,7 +126,7 @@ function dawnTraceSegment(context: RawPtr, state: borrow mut GraphicsAppRuntimeS
 }
 
 // Reports the frame and folds it into the run's totals.
-@Native
+public @Native
 function dawnTraceEndFrame(state: borrow mut GraphicsAppRuntimeState) {
     if !state.dawn.trace.enabled || state.dawn.trace.line.count == 0 {
         return
@@ -154,7 +154,7 @@ function dawnTraceEndFrame(state: borrow mut GraphicsAppRuntimeState) {
     return
 }
 
-@Native
+public @Native
 function dawnReportGpuTrace(state: borrow GraphicsAppRuntimeState) {
     if !state.dawn.trace.enabled || state.dawn.trace.frames == 0 {
         return

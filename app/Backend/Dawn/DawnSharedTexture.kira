@@ -19,8 +19,8 @@ import Foundation
 // which is exactly what it looks like the first time: the import "succeeds",
 // every object it produces is an error object, and the first thing that reads
 // one says so instead.
-function dawnFeatureSharedTextureMemoryDmaBuf() -> I32 { return I32(0x0005001F) }
-function dawnFeatureSharedTextureMemoryOpaqueFD() -> I32 { return I32(0x00050020) }
+public function dawnFeatureSharedTextureMemoryDmaBuf() -> I32 { return I32(0x0005001F) }
+public function dawnFeatureSharedTextureMemoryOpaqueFD() -> I32 { return I32(0x00050020) }
 
 // The fence features, which sharing a texture needs as much as the memory
 // feature does.
@@ -31,14 +31,14 @@ function dawnFeatureSharedTextureMemoryOpaqueFD() -> I32 { return I32(0x00050020
 // rather than letting a compositor sample a half-drawn frame -- which is right,
 // and which is why this is requested beside the memory feature rather than
 // discovered later by a torn surface.
-function dawnFeatureSharedFenceVkSemaphoreOpaqueFD() -> I32 { return I32(0x00050026) }
-function dawnFeatureSharedFenceSyncFD() -> I32 { return I32(0x00050027) }
+public function dawnFeatureSharedFenceVkSemaphoreOpaqueFD() -> I32 { return I32(0x00050026) }
+public function dawnFeatureSharedFenceSyncFD() -> I32 { return I32(0x00050027) }
 
 // Whether this adapter can import shared memory as a texture.
 //
 // Asked before the device is created, because that is when the answer can still
 // change anything: a feature not requested there cannot be turned on later.
-function dawnAdapterSharesTextures(adapter: RawPtr) -> Bool {
+public function dawnAdapterSharesTextures(adapter: RawPtr) -> Bool {
     if pointerIsNull(adapter) {
         return false
     }
@@ -52,7 +52,7 @@ function dawnAdapterSharesTextures(adapter: RawPtr) -> Bool {
 // sync fd -- and a driver may offer either. Asking for the one it has rather
 // than for both keeps a device from being refused over a feature it was never
 // going to use.
-function dawnAdapterFenceFeature(adapter: RawPtr) -> I32 {
+public function dawnAdapterFenceFeature(adapter: RawPtr) -> I32 {
     if pointerIsNull(adapter) {
         return I32(0)
     }
@@ -70,7 +70,7 @@ function dawnAdapterFenceFeature(adapter: RawPtr) -> I32 {
 // Whether the DEVICE ended up with it. The adapter having a feature and the
 // device having asked for it are different facts, and this is the one an import
 // depends on.
-function dawnDeviceSharesTextures(device: RawPtr) -> Bool {
+public function dawnDeviceSharesTextures(device: RawPtr) -> Bool {
     if pointerIsNull(device) {
         return false
     }
@@ -78,7 +78,7 @@ function dawnDeviceSharesTextures(device: RawPtr) -> Bool {
         wgpuDeviceHasFeature(device, dawnFeatureSharedTextureMemoryDmaBuf()) != U32(0)
 }
 
-@Native
+public @Native
 function dawnImportSharedTexture(context: RawPtr, surface: borrow SharedSurface) -> SharedTexture {
     if !dawnHasDevice(context) || surface.isValid() == false {
         return SharedTexture {}

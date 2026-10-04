@@ -13,10 +13,10 @@ import Foundation
 // the render passes around them — see `DawnPass.kira` for why the frame is one
 // command buffer and not one per pass.
 
-@FFI.Array { element: WGPUBindGroupEntry, count: 12 }
+public @FFI.Array { element: WGPUBindGroupEntry, count: 12 }
 struct WGPUBindGroupEntryArray12 {}
 
-@Native
+public @Native
 function dawnCreateComputePipeline(context: RawPtr, label: borrow String, shader: borrow GraphicsShader, entryName: borrow String) -> Int {
     if !dawnHasDevice(context) {
         return 0
@@ -48,7 +48,7 @@ function dawnCreateComputePipeline(context: RawPtr, label: borrow String, shader
 // as it is recorded: a WebGPU command encoder retains what it references, so the
 // group stays alive as long as the command buffer needs it, and the entries
 // differ per call by construction so there is nothing to cache.
-@Native
+public @Native
 function dawnDispatch(state: borrow mut GraphicsAppRuntimeState, pipelineId: Int, entries: borrow [WGPUBindGroupEntry], groupsX: Int, groupsY: Int) {
     dawnTraceOpenSegment(state)
     let pipeline = dawnObject(state, U32(pipelineId))
@@ -97,7 +97,7 @@ function dawnDispatch(state: borrow mut GraphicsAppRuntimeState, pipelineId: Int
 }
 
 // How many workgroups cover `extent` threads at `perGroup` threads each.
-function dawnWorkgroupCount(extent: Int, perGroup: Int) -> Int {
+public function dawnWorkgroupCount(extent: Int, perGroup: Int) -> Int {
     let size = perGroup <= 0 ? 1 : perGroup
     if extent <= 0 {
         return 1
@@ -114,7 +114,7 @@ function dawnWorkgroupCount(extent: Int, perGroup: Int) -> Int {
 // outputs. Both halves read two — the horizontal one blends a crossfade as it
 // filters, the vertical one reads the two levels the horizontal one wrote — so
 // one layout serves the pair.
-@Native
+public @Native
 function dawnDispatchTextureComputePair(
     context: RawPtr,
     horizontalPipeline: Int,
@@ -158,7 +158,7 @@ function dawnDispatchTextureComputePair(
 // Floats throughout, including the extent: the kernel's only uses of it are the
 // tail-thread bounds test and the texel step it divides out of it, both exact in
 // a float at any extent a texture can have.
-@Native
+public @Native
 function dawnBlurExtentBuffer(state: borrow mut GraphicsAppRuntimeState, width: Int, height: Int, blend: Float) -> RawPtr {
     if state.dawn.blurExtentBufferId == 0 {
         state.dawn.blurExtentBufferId = dawnMakeBuffer(state, "kira-blur-extent", dawnBufferUsage(.Uniform), 16)
@@ -174,7 +174,7 @@ function dawnBlurExtentBuffer(state: borrow mut GraphicsAppRuntimeState, width: 
 
 // One half's bindings: the target extent, the sampler the filter reads through,
 // the two textures it reads, and the two levels it writes.
-@Native
+public @Native
 function dawnBlurEntries(state: borrow GraphicsAppRuntimeState, extent: RawPtr, sampler: borrow GraphicsSampler, firstSource: borrow GraphicsTexture, secondSource: borrow GraphicsTexture, near: borrow GraphicsTexture, far: borrow GraphicsTexture) -> [WGPUBindGroupEntry] {
     let sources: [GraphicsTexture] = [firstSource, secondSource]
     var entries: [WGPUBindGroupEntry] = []
@@ -209,7 +209,7 @@ function dawnBlurEntries(state: borrow GraphicsAppRuntimeState, extent: RawPtr, 
 
 // A kernel over buffers. The ids bind in order at binding 0, 1, … which is how a
 // KSL kernel numbers its own storage arguments.
-@Native
+public @Native
 function dawnDispatchComputeBuffers(context: RawPtr, pipeline: Int, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
     if !dawnHasDevice(context) {
         return
@@ -221,7 +221,7 @@ function dawnDispatchComputeBuffers(context: RawPtr, pipeline: Int, bufferIds: b
 
 // The same dispatch with a depth texture bound ahead of the buffers, for a
 // kernel that reads the depth a pass just rasterized.
-@Native
+public @Native
 function dawnDispatchDepthComputeBuffers(context: RawPtr, pipeline: Int, depth: borrow GraphicsTexture, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
     if !dawnHasDevice(context) {
         return
@@ -245,7 +245,7 @@ function dawnDispatchDepthComputeBuffers(context: RawPtr, pipeline: Int, depth: 
     return
 }
 
-@Native
+public @Native
 function dawnBufferEntries(state: borrow GraphicsAppRuntimeState, bufferIds: borrow [U32], firstBinding: Int) -> [WGPUBindGroupEntry] {
     var entries: [WGPUBindGroupEntry] = []
     var index = 0

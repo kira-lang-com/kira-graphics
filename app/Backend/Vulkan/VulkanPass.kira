@@ -4,36 +4,36 @@ import Foundation
 // framebuffer. Each pass still owns explicit image-layout transitions, which is
 // the Vulkan rule that makes pass ordering visible to the driver.
 
-@Native
+public @Native
 function vulkanWindowScale(context: RawPtr) -> Float {
     if !vulkanHasDevice(context) { return 1.0 }
     let state = nativeRecover<GraphicsAppRuntimeState>(context)
     return vulkanWindowFor(vulkanWindowPlatformForHost()).scale(state.vulkan.window)
 }
 
-@Native
+public @Native
 function vulkanContextWidth(context: RawPtr) -> Int {
     if !vulkanHasDevice(context) { return 0 }
     return nativeRecover<GraphicsAppRuntimeState>(context).vulkan.swapchainWidth
 }
 
-@Native
+public @Native
 function vulkanContextHeight(context: RawPtr) -> Int {
     if !vulkanHasDevice(context) { return 0 }
     return nativeRecover<GraphicsAppRuntimeState>(context).vulkan.swapchainHeight
 }
 
-@Native
+public @Native
 function vulkanViewportWidth(context: RawPtr) -> Float {
     return Float(vulkanContextWidth(context)) / (vulkanWindowScale(context) <= 0.0 ? 1.0 : vulkanWindowScale(context))
 }
 
-@Native
+public @Native
 function vulkanViewportHeight(context: RawPtr) -> Float {
     return Float(vulkanContextHeight(context)) / (vulkanWindowScale(context) <= 0.0 ? 1.0 : vulkanWindowScale(context))
 }
 
-@Native
+public @Native
 function vulkanWindowMode(context: RawPtr) -> WindowMode {
     if !vulkanHasDevice(context) { return .Windowed }
     let state = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -43,7 +43,7 @@ function vulkanWindowMode(context: RawPtr) -> WindowMode {
     return .Windowed
 }
 
-@Native
+public @Native
 function vulkanSetWindowMode(context: RawPtr, mode: borrow WindowMode) {
     if !vulkanHasDevice(context) || hostPlatform() != .Windows { return }
     let state = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -51,7 +51,7 @@ function vulkanSetWindowMode(context: RawPtr, mode: borrow WindowMode) {
     return
 }
 
-@Native
+public @Native
 function vulkanMinimizeWindow(context: RawPtr) {
     if hostPlatform() == .Windows && vulkanHasDevice(context) {
         let runtime = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -64,7 +64,7 @@ function vulkanMinimizeWindow(context: RawPtr) {
     return
 }
 
-@Native
+public @Native
 function vulkanToggleMaximizeWindow(context: RawPtr) {
     if hostPlatform() == .Windows && vulkanHasDevice(context) {
         let runtime = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -81,7 +81,7 @@ function vulkanToggleMaximizeWindow(context: RawPtr) {
     return
 }
 
-@Native
+public @Native
 function vulkanShowMouse(context: RawPtr, show: Bool) {
     if !vulkanHasDevice(context) { return }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -92,14 +92,14 @@ function vulkanShowMouse(context: RawPtr, show: Bool) {
     return
 }
 
-@Native
+public @Native
 function vulkanMouseShown(context: RawPtr) -> Bool {
     if !vulkanHasDevice(context) { return true }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
     return runtime.vulkan.mouseVisible
 }
 
-@Native
+public @Native
 function vulkanLockMouse(context: RawPtr, lock: Bool) {
     if !vulkanHasDevice(context) || hostPlatform() != .Windows { return }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -110,13 +110,13 @@ function vulkanLockMouse(context: RawPtr, lock: Bool) {
     return
 }
 
-@Native
+public @Native
 function vulkanMouseLocked(context: RawPtr) -> Bool {
     if !vulkanHasDevice(context) { return false }
     return nativeRecover<GraphicsAppRuntimeState>(context).vulkan.mouseLocked
 }
 
-@Native
+public @Native
 function vulkanClearValue(color: borrow Color) -> VkClearValue {
     let bits = allocateBytes(U64(16))
     writeFloat32(bits, U64(0), color.r)
@@ -134,7 +134,7 @@ function vulkanClearValue(color: borrow Color) -> VkClearValue {
     return value
 }
 
-@Native
+public @Native
 function vulkanDepthClearValue(depth: Float, stencil: Int) -> VkClearValue {
     let bits = allocateBytes(U64(4))
     writeFloat32(bits, U64(0), depth)
@@ -149,7 +149,7 @@ function vulkanDepthClearValue(depth: Float, stencil: Int) -> VkClearValue {
     return value
 }
 
-@Native
+public @Native
 function vulkanEnsureDepthTarget(state: borrow mut VulkanState, width: Int, height: Int, sampleCount: Int) -> RawPtr {
     if state.managedDepthId != 0 && state.managedDepthWidth == width && state.managedDepthHeight == height && state.managedDepthSampleCount == sampleCount {
         return vulkanObject(state, state.managedDepthViewId)
@@ -174,7 +174,7 @@ function vulkanEnsureDepthTarget(state: borrow mut VulkanState, width: Int, heig
     return vulkanObject(state, state.managedDepthViewId)
 }
 
-@Native
+public @Native
 function vulkanTransitionSwapchainImage(state: borrow mut VulkanState, image: RawPtr, index: U32, newLayout: I32, srcStage: U32, dstStage: U32, srcAccess: U32, dstAccess: U32) {
     if pointerIsNull(image) { return }
     let oldLayout = state.swapchainLayouts[Int(index)]
@@ -213,7 +213,7 @@ function vulkanTransitionSwapchainImage(state: borrow mut VulkanState, image: Ra
     return
 }
 
-@Native
+public @Native
 function vulkanWaitForFrame(state: borrow mut VulkanState) -> Bool {
     let fenceSlot = vulkanPointerSlot()
     writePointer(fenceSlot, U64(0), state.inFlightFence)
@@ -226,7 +226,7 @@ function vulkanWaitForFrame(state: borrow mut VulkanState) -> Bool {
     return true
 }
 
-@Native
+public @Native
 function vulkanAcquireFrame(state: borrow mut VulkanState) -> Bool {
     if !vulkanWaitForFrame(state) { return false }
     vulkanReleasePendingUploads(state)
@@ -264,7 +264,7 @@ function vulkanAcquireFrame(state: borrow mut VulkanState) -> Bool {
     return true
 }
 
-@Native
+public @Native
 function vulkanReleasePendingUploads(state: borrow mut VulkanState) {
     for buffer in state.pendingUploadBuffers {
         vulkanReleaseBuffer(state, buffer)
@@ -273,7 +273,7 @@ function vulkanReleasePendingUploads(state: borrow mut VulkanState) {
     return
 }
 
-@Native
+public @Native
 function vulkanBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bool {
     if !vulkanHasDevice(context) {
         return false
@@ -282,7 +282,7 @@ function vulkanBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bo
     return vulkanBeginRenderPassState(runtime.vulkan, frame)
 }
 
-@Native
+public @Native
 function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow RenderFrame) -> Bool {
     if !state.frameActive || state.passActive || !frame.attachments.hasColor {
         return false
@@ -413,7 +413,7 @@ function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow
     return true
 }
 
-@Native
+public @Native
 function vulkanEndPassAndCommit(context: RawPtr) {
     if !vulkanHasDevice(context) { return }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -421,7 +421,7 @@ function vulkanEndPassAndCommit(context: RawPtr) {
     return
 }
 
-@Native
+public @Native
 function vulkanEndPassAndCommitState(state: borrow mut VulkanState) {
     if !state.passActive { return }
     vulkanEndRendering(state.device, state.commandBuffer)
@@ -445,7 +445,7 @@ function vulkanEndPassAndCommitState(state: borrow mut VulkanState) {
     return
 }
 
-function frameImageId(state: borrow VulkanState, image: RawPtr) -> U32 {
+public function frameImageId(state: borrow VulkanState, image: RawPtr) -> U32 {
     for index in 0..state.objects.count {
         if state.objects[index] == image && state.objectKinds[index] == vulkanObjectKindImage() {
             return U32(index + 1)

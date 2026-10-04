@@ -1,4 +1,4 @@
-struct TextureDescriptor {
+public struct TextureDescriptor {
     var label: String = ""
     var width: Int = 1
     var height: Int = 1
@@ -8,7 +8,7 @@ struct TextureDescriptor {
     var storage: AttachmentStorage = .Persistent
 }
 
-struct SamplerDescriptor {
+public struct SamplerDescriptor {
     var label: String = ""
     var minFilter: TextureFilter = .Nearest
     var magFilter: TextureFilter = .Nearest

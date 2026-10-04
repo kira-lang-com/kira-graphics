@@ -3,7 +3,7 @@ import Foundation
 // Vulkan's answers to `RenderBackend`. The implementation is split by ownership:
 // context and lifetime, resources, pipelines, binding, passes, draws, compute and
 // the run loop each have one home. This file remains the readable dispatch table.
-construct VulkanRenderBackend(context: RawPtr) extends RenderBackend {
+public construct VulkanRenderBackend(context: RawPtr) extends RenderBackend {
     function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult {
         return vulkanCreateShaderFromSources(context, descriptor)
     }
@@ -104,6 +104,10 @@ construct VulkanRenderBackend(context: RawPtr) extends RenderBackend {
         vulkanUpdateTextureBytes(context, texture, bytes, byteCount)
         return
     }
+    function updateTextureRows(texture: borrow GraphicsTexture, bytes: RawPtr, firstRow: Int, rowCount: Int) -> Void {
+        vulkanUpdateTextureBytes(context, texture, bytes, texture.width * texture.height * 4)
+        return
+    }
     function destroyTexture(texture: borrow GraphicsTexture) -> Void {
         vulkanDestroyTexture(context, texture)
         return
@@ -131,6 +135,10 @@ construct VulkanRenderBackend(context: RawPtr) extends RenderBackend {
     function viewportHeight() -> Float {
         return vulkanViewportHeight(context)
     }
+    function safeAreaInsets() -> ViewportInsets {
+        return ViewportInsets {}
+    }
+
     function windowMode() -> WindowMode {
         return vulkanWindowMode(context)
     }

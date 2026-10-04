@@ -1,4 +1,4 @@
-struct ShaderSource {
+public struct ShaderSource {
     var vertexSource: String = ""
     var fragmentSource: String = ""
     var vertexPath: String = ""

@@ -16,16 +16,16 @@ import Foundation
 // than the extent zero-fills the rest, and the count traveling beside the
 // pointer is what says how many WebGPU reads — so these are ceilings, not
 // sizes, and only a caller that exceeds one is refused.
-@FFI.Array { element: WGPUVertexAttribute, count: 16 }
+public @FFI.Array { element: WGPUVertexAttribute, count: 16 }
 struct WGPUVertexAttributeArray16 {}
 
-@FFI.Array { element: WGPUColorTargetState, count: 8 }
+public @FFI.Array { element: WGPUColorTargetState, count: 8 }
 struct WGPUColorTargetStateArray8 {}
 
-function dawnMaxVertexAttributes() -> Int { return 16 }
-function dawnMaxColorTargets() -> Int { return 8 }
+public function dawnMaxVertexAttributes() -> Int { return 16 }
+public function dawnMaxColorTargets() -> Int { return 8 }
 
-@Native
+public @Native
 function dawnCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPipelineDescriptor) -> PipelineResult {
     if !dawnHasDevice(context) {
         return .Error(.DeviceRefused)
@@ -88,7 +88,7 @@ function dawnCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPipe
 // One color target: its format with the swapchain sentinel resolved, and a
 // blend state only where the caller asked for one — a NULL blend is WebGPU's
 // "write the fragment through", which is what a disabled blend means.
-@Native
+public @Native
 function dawnColorTarget(state: borrow GraphicsAppRuntimeState, target: borrow ColorTargetDescriptor) -> WGPUColorTargetState {
     if !target.blend.enabled {
         return WGPUColorTargetState {
@@ -105,7 +105,7 @@ function dawnColorTarget(state: borrow GraphicsAppRuntimeState, target: borrow C
 
 // The descriptor itself, split out so the two depth cases read as the two shapes
 // they are rather than as one literal with a conditional member.
-@Native
+public @Native
 function dawnBuildPipeline(state: borrow GraphicsAppRuntimeState, descriptor: borrow RenderPipelineDescriptor, shader: borrow DawnShaderRecord, attributes: borrow [WGPUVertexAttribute], targets: borrow [WGPUColorTargetState]) -> RawPtr {
     let vertex = WGPUVertexState {
         module: shader.vertexModule,
@@ -165,7 +165,7 @@ function dawnBuildPipeline(state: borrow GraphicsAppRuntimeState, descriptor: bo
 // Both stencil faces are written out with `Always`: WebGPU refuses a stencil
 // comparison left at its zero, which names no function at all, and a pipeline
 // that declares depth still has to say what it does about stencil.
-@Native
+public @Native
 function dawnDepthState(state: borrow GraphicsAppRuntimeState, depth: borrow DepthStencilDescriptor) -> WGPUDepthStencilState {
     let keep = WGPUStencilFaceState {
         compare: dawnCompareFunction(.Always),
@@ -184,7 +184,7 @@ function dawnDepthState(state: borrow GraphicsAppRuntimeState, depth: borrow Dep
     }
 }
 
-@Native
+public @Native
 function dawnDestroyPipeline(context: RawPtr, pipeline: borrow RenderPipeline) {
     if !dawnHasDevice(context) || pipeline.id == 0 {
         return

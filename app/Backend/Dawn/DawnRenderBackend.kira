@@ -11,7 +11,7 @@ import Foundation
 // the member says in its own body what it does instead. Nothing answers "this
 // backend cannot" — a capability a backend lacks is `KSEM234` at build time in
 // this family, not a `Result` a caller branches on.
-construct DawnRenderBackend(context: RawPtr) extends RenderBackend {
+public construct DawnRenderBackend(context: RawPtr) extends RenderBackend {
     // --- shaders ---------------------------------------------------------
     function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult {
         return dawnCreateShaderFromSources(context, descriptor)
@@ -149,6 +149,11 @@ construct DawnRenderBackend(context: RawPtr) extends RenderBackend {
         return
     }
 
+    function updateTextureRows(texture: borrow GraphicsTexture, bytes: RawPtr, firstRow: Int, rowCount: Int) -> Void {
+        dawnWriteTextureBytes(context, texture, bytes, texture.width * texture.height * 4)
+        return
+    }
+
     function destroyTexture(texture: borrow GraphicsTexture) -> Void {
         dawnDestroyTexture(context, texture)
         return
@@ -201,6 +206,10 @@ construct DawnRenderBackend(context: RawPtr) extends RenderBackend {
         }
         let state = nativeRecover<GraphicsAppRuntimeState>(context)
         return Float(state.dawn.surfaceHeight) / dawnWindowFor(dawnPlatformForHost()).scale(state.dawn.window)
+    }
+
+    function safeAreaInsets() -> ViewportInsets {
+        return ViewportInsets {}
     }
 
     function windowMode() -> WindowMode {

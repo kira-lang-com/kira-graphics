@@ -18,13 +18,13 @@
 
 // The compositor pings; a client that never pongs is one it may call
 // unresponsive and stop drawing.
-function waylandOnPing(data: RawPtr, shell: RawPtr, serial: U32) {
+public function waylandOnPing(data: RawPtr, shell: RawPtr, serial: U32) {
     kira_wayland_shell_pong(shell, serial)
     return
 }
 
 // A surface is not shown until the serial its configure carried is acknowledged.
-function waylandOnConfigure(data: RawPtr, xdgSurface: RawPtr, serial: U32) {
+public function waylandOnConfigure(data: RawPtr, xdgSurface: RawPtr, serial: U32) {
     kira_wayland_surface_ack_configure(xdgSurface, serial)
     return
 }
@@ -36,14 +36,14 @@ function waylandOnConfigure(data: RawPtr, xdgSurface: RawPtr, serial: U32) {
 // window opens two registries and gives each its own handler. A client may open
 // as many as it likes and every one replays the whole list, so this costs one
 // extra replay at startup and buys a handler that stores without writing.
-function waylandOnCompositorGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
+public function waylandOnCompositorGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
     if waylandNameEquals(interface, "wl_compositor") == I32(0) {
         kira_wayland_proxy_set_user_data(registry, kira_wayland_registry_bind_compositor(registry, name, U32(4)))
     }
     return
 }
 
-function waylandOnShellGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
+public function waylandOnShellGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
     if waylandNameEquals(interface, "xdg_wm_base") == I32(0) {
         kira_wayland_proxy_set_user_data(registry, kira_wayland_registry_bind_shell(registry, name, U32(1)))
     }
@@ -53,7 +53,7 @@ function waylandOnShellGlobal(data: RawPtr, registry: RawPtr, name: U32, interfa
 // The decoration manager, on a registry of its own for the same reason the other
 // two have theirs: one user-data word per proxy, and a handler that reports by
 // setting it.
-function waylandOnDecorationGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
+public function waylandOnDecorationGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
     if waylandNameEquals(interface, "zxdg_decoration_manager_v1") == I32(0) {
         kira_wayland_proxy_set_user_data(
             registry,
@@ -65,11 +65,11 @@ function waylandOnDecorationGlobal(data: RawPtr, registry: RawPtr, name: U32, in
 
 // A global going away matters to a client holding one. This window binds only
 // the compositor and the shell, and neither leaves while a window is open.
-function waylandOnGlobalRemove(data: RawPtr, registry: RawPtr, name: U32) {
+public function waylandOnGlobalRemove(data: RawPtr, registry: RawPtr, name: U32) {
     return
 }
 
-construct DawnWindowWayland() extends DawnWindow {
+public construct DawnWindowWayland() extends DawnWindow {
     function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr {
         let display = kira_wayland_display_connect()
         if pointerIsNull(display) {
@@ -221,7 +221,7 @@ construct DawnWindowWayland() extends DawnWindow {
 // seam performs prepare-read/poll(0)/read-events/dispatch as one operation, so
 // newly arrived motion is decoded without blocking an idle frame or racing a
 // packet that arrives between checking pending events and reading the socket.
-function dawnPumpWayland(window: RawPtr) {
+public function dawnPumpWayland(window: RawPtr) {
     if pointerIsNull(window) {
         return
     }

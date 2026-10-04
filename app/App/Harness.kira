@@ -10,59 +10,59 @@ import Foundation
 
 // The monotonic clock, from `NativeLibs/Support`. See `DawnFrameStats.kira` for
 // why Windows keeps its own counter instead.
-@FFI.Extern { library: graphics_support, symbol: kg_monotonic_seconds, abi: c }
+public @FFI.Extern { library: graphics_support, symbol: kg_monotonic_seconds, abi: c }
 function kgMonotonicSeconds() -> Float
 
 // The live-reload hooks. Weak no-ops unless a live-reload runner defines them,
 // which is the only place they do anything.
-@FFI.Extern { library: graphics_support, symbol: kira_live_emit_log_line, abi: c }
+public @FFI.Extern { library: graphics_support, symbol: kira_live_emit_log_line, abi: c }
 function kiraLiveEmitLogLine(line: CString): Void
 
-@FFI.Extern { library: graphics_support, symbol: kira_live_emit_first_frame, abi: c }
+public @FFI.Extern { library: graphics_support, symbol: kira_live_emit_first_frame, abi: c }
 function kiraLiveEmitFirstFrame(): Void
 
-@FFI.Extern { library: graphics_support, symbol: kira_live_take_reload, abi: c }
+public @FFI.Extern { library: graphics_support, symbol: kira_live_take_reload, abi: c }
 function kiraLiveTakeReload(): Bool
 
 // Whether a live-reload runner asked for a reload this frame.
-@Native
+public @Native
 function kiraGraphicsLiveReloadPending(): Bool {
     return kiraLiveTakeReload()
 }
 
 // The stages a run reports for the live-reload runner to watch. Each is a log
 // line the runner greps for; with no runner the weak C no-op drops them.
-@Native
+public @Native
 function kiraGraphicsLiveUiFoundationAppStarted(): Void {
     kiraLiveEmitLogLine("live.ui_foundation.app.started")
     return
 }
 
-@Native
+public @Native
 function kiraGraphicsLiveUiFoundationTreeBuilt(): Void {
     kiraLiveEmitLogLine("live.ui_foundation.tree.built")
     return
 }
 
-@Native
+public @Native
 function kiraGraphicsLiveUiFoundationRetainedTreeReady(): Void {
     kiraLiveEmitLogLine("live.ui_foundation.retained_tree.ready")
     return
 }
 
-@Native
+public @Native
 function kiraGraphicsLiveUiFoundationLayoutNonEmpty(): Void {
     kiraLiveEmitLogLine("live.ui_foundation.layout.non_empty")
     return
 }
 
-@Native
+public @Native
 function kiraGraphicsLiveUiFoundationRenderCommandsGenerated(): Void {
     kiraLiveEmitLogLine("live.ui_foundation.render_commands.generated")
     return
 }
 
-@Native
+public @Native
 function kiraGraphicsLiveVisibleContentSubmitted(): Void {
     kiraLiveEmitLogLine("live.kira_graphics.visible_content.submitted")
     kiraLiveEmitLogLine("KIRA_UI_DRAW_COMMANDS_SUBMITTED")
@@ -71,14 +71,14 @@ function kiraGraphicsLiveVisibleContentSubmitted(): Void {
 }
 
 // A backend reports where a frame reached, for the live-reload runner to watch.
-@Native
+public @Native
 function kiraGraphicsLiveFramePresented(): Void {
     kiraLiveEmitLogLine("live.kira_graphics.frame.submitted")
     kiraLiveEmitFirstFrame()
     return
 }
 
-@Native
+public @Native
 function kiraGraphicsLiveBackendInitialized(): Void {
     kiraLiveEmitLogLine("live.kira_graphics.backend.initialized")
     return
@@ -89,7 +89,7 @@ function kiraGraphicsLiveBackendInitialized(): Void {
 // KIRA_UI_CLICK_SCRIPT and its siblings use `frame@x,y;frame@x,y`. Every
 // integer is parsed in order, so separators are deliberately insignificant and
 // negative coordinates stay useful for input tests that verify misses.
-@Native
+public @Native
 function harnessEnvInts(value: borrow String) -> [Int] {
     var out: [Int] = []
     var i = 0
@@ -148,7 +148,7 @@ function harnessEnvInts(value: borrow String) -> [Int] {
 
 // A run handed a harness value takes its knobs from there; otherwise it reads
 // the environment. Both backends resolve their knobs through here.
-@Native
+public @Native
 function readHarnessKnobs(state: borrow mut GraphicsAppRuntimeState) {
     if state.app.harness.configured {
         applyHarnessConfig(state)
@@ -198,7 +198,7 @@ function readHarnessKnobs(state: borrow mut GraphicsAppRuntimeState) {
 }
 
 // A harness value, copied into the run's knobs.
-@Native
+public @Native
 function applyHarnessConfig(state: borrow mut GraphicsAppRuntimeState) {
     let h = state.app.harness
     state.quitAfterFrames = h.quitAfterFrames
@@ -227,7 +227,7 @@ function applyHarnessConfig(state: borrow mut GraphicsAppRuntimeState) {
 
 // Replays the key and text scripts for one frame through the ordinary event
 // handler, so a driven run and a real one take the same path.
-@Native
+public @Native
 function driveTypingScripts(state: borrow mut GraphicsAppRuntimeState, scriptFrame: Int) {
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     var keyIndex = 0

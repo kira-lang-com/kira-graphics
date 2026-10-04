@@ -3,7 +3,7 @@ import Foundation
 // Host-visible buffer allocation and the mapped writes shared by vertex,
 // uniform, storage and staging resources.
 
-@Native
+public @Native
 function vulkanFindMemoryType(state: borrow VulkanState, typeBits: U32, required: U32) -> U32 {
     let properties = allocateBytes(U64(520))
     vkGetPhysicalDeviceMemoryProperties(state.physicalDevice, properties)
@@ -20,7 +20,7 @@ function vulkanFindMemoryType(state: borrow VulkanState, typeBits: U32, required
     return U32(4294967295)
 }
 
-@Native
+public @Native
 function vulkanCreateBufferHandle(state: borrow mut VulkanState, label: borrow String, usage: U32, byteSize: Int, memoryFlags: U32) -> U32 {
     if byteSize <= 0 || pointerIsNull(state.device) {
         return U32(0)
@@ -90,7 +90,7 @@ function vulkanCreateBufferHandle(state: borrow mut VulkanState, label: borrow S
     return id
 }
 
-@Native
+public @Native
 function vulkanWriteFloats(state: borrow VulkanState, bufferId: U32, data: borrow [F32], offset: U64) {
     let mapped = vulkanObjectExtra(state, bufferId)
     if pointerIsNull(mapped) {

@@ -9,7 +9,7 @@
 // depth attachment cleared to 1.0 and a less/write depth-stencil state bound. Builds
 // the MTLRenderPassDescriptor, attachments, command buffer and render-command
 // encoder, leaving the encoder recorded on the context.
-@Native
+public @Native
 function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: Float, g: Float, b: Float, a: Float, depthEnabled: Bool) {
     metalContextCountPass(ctx)
     // In layer mode, acquire the next CAMetalLayer drawable and render into its
@@ -69,7 +69,7 @@ function metalContextBeginClear(ctx: RawPtr, loadAction: U64, r: Float, g: Float
 
 // End only the current render encoder. Every pass in a logical frame shares the
 // active command buffer; texture dependencies are ordered by encoder boundaries.
-@Native
+public @Native
 function metalContextEndPass(ctx: RawPtr) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     if !pointerIsNull(encoder) {
@@ -80,7 +80,7 @@ function metalContextEndPass(ctx: RawPtr) {
 }
 
 // Commit the logical frame once after its final pass.
-@Native
+public @Native
 function metalContextSubmitActiveFrame(ctx: RawPtr) {
     let commandBuffer = metalMemReadPtr(ctx, metalOffsetActiveCommandBuffer())
     if pointerIsNull(commandBuffer) {
@@ -127,14 +127,14 @@ function metalContextSubmitActiveFrame(ctx: RawPtr) {
 }
 
 // One-shot compatibility for backend self-tests and direct Metal helpers.
-@Native
+public @Native
 function metalContextEndAndCommit(ctx: RawPtr) {
     metalContextEndPass(ctx)
     metalContextSubmitActiveFrame(ctx)
     return
 }
 
-@Native
+public @Native
 function metalContextWaitForGpu(ctx: RawPtr) {
     let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
     if !pointerIsNull(pending) {
@@ -147,7 +147,7 @@ function metalContextWaitForGpu(ctx: RawPtr) {
 // one little-endian U32, i.e. (A << 24) | (R << 16) | (G << 8) | B, so callers can
 // unpack without extra FFI round-trips and we avoid any width-casting in the hot
 // readback path.
-@Native
+public @Native
 function metalContextReadPixel(ctx: RawPtr, x: Int, y: Int) -> U32 {
     // Block on the last submitted command buffer before reading its output (the
     // per-frame wait was removed from metalContextEndAndCommit so offscreen frames
@@ -187,7 +187,7 @@ function metalContextReadPixel(ctx: RawPtr, x: Int, y: Int) -> U32 {
 // `optimizeContentsForGPUAccess:` the glass path already runs over its blur
 // targets, and committing it here orders the read after everything on the
 // queue, which waiting on the pending command buffer alone does not.
-function metalContextReadableColorTexture(ctx: RawPtr) -> RawPtr {
+public function metalContextReadableColorTexture(ctx: RawPtr) -> RawPtr {
     let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
     if !pointerIsNull(pending) {
         metalMsgSend(pending, metalSel("waitUntilCompleted"))
@@ -206,7 +206,7 @@ function metalContextReadableColorTexture(ctx: RawPtr) -> RawPtr {
     return texture
 }
 
-@Native
+public @Native
 function metalContextImageDigest(ctx: RawPtr, width: Int, height: Int) -> U32 {
     let texture = metalContextReadableColorTexture(ctx)
     if pointerIsNull(texture) {
@@ -241,7 +241,7 @@ function metalContextImageDigest(ctx: RawPtr, width: Int, height: Int) -> U32 {
 // width*4 bytes per row, no header) to `path` for visual verification of a rendered
 // frame. Dimensions are known to the harness, so a raw blob keeps the writer trivial;
 // opt-in via KIRA_METAL_IMAGE_DUMP (the env VALUE is the destination path).
-@Native
+public @Native
 function metalContextImageDump(ctx: RawPtr, width: Int, height: Int, path: RawPtr) {
     let texture = metalContextReadableColorTexture(ctx)
     if pointerIsNull(texture) {

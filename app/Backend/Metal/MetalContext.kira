@@ -71,60 +71,60 @@
 // 368  highDpi          (U64; 1 uses backing pixels, 0 uses logical pixels)
 // 376  machTimeNumer    (U64; mach tick -> nanosecond numerator)
 // 384  machTimeDenom    (U64; mach tick -> nanosecond denominator)
-function metalContextSize() -> U64 { return 392 }
-function metalOffsetDevice() -> U64 { return 0 }
-function metalOffsetQueue() -> U64 { return 8 }
-function metalOffsetColorTexture() -> U64 { return 16 }
-function metalOffsetCommandBuffer() -> U64 { return 24 }
-function metalOffsetEncoder() -> U64 { return 32 }
-function metalOffsetWidth() -> U64 { return 40 }
-function metalOffsetHeight() -> U64 { return 48 }
-function metalOffsetLayer() -> U64 { return 56 }
-function metalOffsetDrawable() -> U64 { return 64 }
-function metalOffsetRegistry() -> U64 { return 72 }
-function metalOffsetNextId() -> U64 { return 80 }
-function metalOffsetDepthTexture() -> U64 { return 88 }
-function metalOffsetDepthState() -> U64 { return 96 }
-function metalOffsetHostView() -> U64 { return 104 }
-function metalOffsetLastFrameNs() -> U64 { return 112 }
-function metalOffsetFrameDurationNs() -> U64 { return 120 }
-function metalOffsetPhysicalWidth() -> U64 { return 128 }
-function metalOffsetRegistryKinds() -> U64 { return 136 }
-function metalOffsetLockSeeded() -> U64 { return 144 }
-function metalOffsetLockedX() -> U64 { return 152 }
-function metalOffsetLockedY() -> U64 { return 160 }
-function metalOffsetRegistryCap() -> U64 { return 168 }
-function metalOffsetFreeId() -> U64 { return 176 }
-function metalOffsetRaceProbe() -> U64 { return 184 }
-function metalOffsetRaceOverlaps() -> U64 { return 192 }
-function metalOffsetRaceWrites() -> U64 { return 200 }
-function metalOffsetSlotRing() -> U64 { return 208 }
-function metalOffsetFrameRing() -> U64 { return 216 }
-function metalOffsetFrameIndex() -> U64 { return 224 }
-function metalOffsetCpuFrameStartNs() -> U64 { return 232 }
-function metalOffsetCpuFrameDurationNs() -> U64 { return 240 }
-function metalOffsetLogicalFrameSerial() -> U64 { return 248 }
-function metalOffsetGpuAccumSerial() -> U64 { return 256 }
-function metalOffsetGpuAccumDurationNs() -> U64 { return 264 }
-function metalOffsetGpuFrameDurationNs() -> U64 { return 272 }
-function metalOffsetCurrentPasses() -> U64 { return 280 }
-function metalOffsetCurrentDraws() -> U64 { return 288 }
-function metalOffsetCurrentTriangles() -> U64 { return 296 }
-function metalOffsetLastPasses() -> U64 { return 304 }
-function metalOffsetLastDraws() -> U64 { return 312 }
-function metalOffsetLastTriangles() -> U64 { return 320 }
-function metalOffsetWindowState() -> U64 { return 328 }
-function metalOffsetHiddenTexture() -> U64 { return 336 }
-function metalOffsetHiddenTextureWidth() -> U64 { return 344 }
-function metalOffsetHiddenTextureHeight() -> U64 { return 352 }
-function metalOffsetActiveCommandBuffer() -> U64 { return 360 }
-function metalOffsetHighDpi() -> U64 { return 368 }
-function metalOffsetMachTimeNumer() -> U64 { return 376 }
-function metalOffsetMachTimeDenom() -> U64 { return 384 }
+public function metalContextSize() -> U64 { return 392 }
+public function metalOffsetDevice() -> U64 { return 0 }
+public function metalOffsetQueue() -> U64 { return 8 }
+public function metalOffsetColorTexture() -> U64 { return 16 }
+public function metalOffsetCommandBuffer() -> U64 { return 24 }
+public function metalOffsetEncoder() -> U64 { return 32 }
+public function metalOffsetWidth() -> U64 { return 40 }
+public function metalOffsetHeight() -> U64 { return 48 }
+public function metalOffsetLayer() -> U64 { return 56 }
+public function metalOffsetDrawable() -> U64 { return 64 }
+public function metalOffsetRegistry() -> U64 { return 72 }
+public function metalOffsetNextId() -> U64 { return 80 }
+public function metalOffsetDepthTexture() -> U64 { return 88 }
+public function metalOffsetDepthState() -> U64 { return 96 }
+public function metalOffsetHostView() -> U64 { return 104 }
+public function metalOffsetLastFrameNs() -> U64 { return 112 }
+public function metalOffsetFrameDurationNs() -> U64 { return 120 }
+public function metalOffsetPhysicalWidth() -> U64 { return 128 }
+public function metalOffsetRegistryKinds() -> U64 { return 136 }
+public function metalOffsetLockSeeded() -> U64 { return 144 }
+public function metalOffsetLockedX() -> U64 { return 152 }
+public function metalOffsetLockedY() -> U64 { return 160 }
+public function metalOffsetRegistryCap() -> U64 { return 168 }
+public function metalOffsetFreeId() -> U64 { return 176 }
+public function metalOffsetRaceProbe() -> U64 { return 184 }
+public function metalOffsetRaceOverlaps() -> U64 { return 192 }
+public function metalOffsetRaceWrites() -> U64 { return 200 }
+public function metalOffsetSlotRing() -> U64 { return 208 }
+public function metalOffsetFrameRing() -> U64 { return 216 }
+public function metalOffsetFrameIndex() -> U64 { return 224 }
+public function metalOffsetCpuFrameStartNs() -> U64 { return 232 }
+public function metalOffsetCpuFrameDurationNs() -> U64 { return 240 }
+public function metalOffsetLogicalFrameSerial() -> U64 { return 248 }
+public function metalOffsetGpuAccumSerial() -> U64 { return 256 }
+public function metalOffsetGpuAccumDurationNs() -> U64 { return 264 }
+public function metalOffsetGpuFrameDurationNs() -> U64 { return 272 }
+public function metalOffsetCurrentPasses() -> U64 { return 280 }
+public function metalOffsetCurrentDraws() -> U64 { return 288 }
+public function metalOffsetCurrentTriangles() -> U64 { return 296 }
+public function metalOffsetLastPasses() -> U64 { return 304 }
+public function metalOffsetLastDraws() -> U64 { return 312 }
+public function metalOffsetLastTriangles() -> U64 { return 320 }
+public function metalOffsetWindowState() -> U64 { return 328 }
+public function metalOffsetHiddenTexture() -> U64 { return 336 }
+public function metalOffsetHiddenTextureWidth() -> U64 { return 344 }
+public function metalOffsetHiddenTextureHeight() -> U64 { return 352 }
+public function metalOffsetActiveCommandBuffer() -> U64 { return 360 }
+public function metalOffsetHighDpi() -> U64 { return 368 }
+public function metalOffsetMachTimeNumer() -> U64 { return 376 }
+public function metalOffsetMachTimeDenom() -> U64 { return 384 }
 
 
 // Allocate the context block and create the device + command queue.
-@Native
+public @Native
 function metalContextAlloc() -> RawPtr {
     let ctx = metalMemAlloc(metalContextSize())
     let device = metalCreateSystemDefaultDevice()
@@ -196,7 +196,7 @@ function metalContextAlloc() -> RawPtr {
 // in the on-screen integration. Switching a context to layer mode makes each pass
 // acquire and present a CAMetalLayer drawable instead of rendering to a fixed
 // offscreen texture.
-@Native
+public @Native
 function metalContextAttachLayer(ctx: RawPtr, width: Int, height: Int) {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let layerClass = metalObjcGetClass("CAMetalLayer")
@@ -205,7 +205,7 @@ function metalContextAttachLayer(ctx: RawPtr, width: Int, height: Int) {
     metalMsgSend(layer, metalSel("setDevice:"), device)
     metalMsgSend(layer, metalSel("setPixelFormat:"), metalPixelFormatBGRA8Unorm())
     metalMsgSend(layer, metalSel("setFramebufferOnly:"), false)
-    metalMsgSend(layer, metalSel("setDisplaySyncEnabled:"), false)
+    if !metalUsesUIKit!() { metalMsgSend(layer, metalSel("setDisplaySyncEnabled:"), false) }
     metalMsgSend(layer, metalSel("setDrawableSize:"), Float(width), Float(height))
     metalMemWritePtr(ctx, metalOffsetLayer(), layer)
     metalMemWriteU64(ctx, metalOffsetWidth(), width)
@@ -219,7 +219,7 @@ function metalContextAttachLayer(ctx: RawPtr, width: Int, height: Int) {
 // shutdown (metalRunApplication) so these process-lifetime objects — the render/
 // compute pipelines, shader libraries, buffers, textures, samplers, the command
 // queue and its dispatch sources, and the device — do not survive to `leaks --atExit`.
-@Native
+public @Native
 function metalContextFree(ctx: RawPtr) {
     // First: wait out every frame still in flight and drop the pacing state. Nothing
     // below may release a buffer or texture a running frame is reading.
@@ -295,16 +295,16 @@ function metalContextFree(ctx: RawPtr) {
     return
 }
 
-function metalPixelFormatR32Uint() -> U64 { return 53 }
+public function metalPixelFormatR32Uint() -> U64 { return 53 }
 
 // Map a KiraGraphics texture format (Constants.kira) to an MTLPixelFormat.
-function metalPixelFormatForTexture(kiraFormat: Int) -> U64 {
+public function metalPixelFormatForTexture(kiraFormat: Int) -> U64 {
     if kiraFormat == 10 { return metalPixelFormatR32Uint() }   // textureFormatR32Uint
     return metalPixelFormatBGRA8Unorm()                        // swapchain / default
 }
 
 // Allocate an offscreen BGRA8 render target and make it the context's color target.
-@Native
+public @Native
 function metalContextAttachOffscreen(ctx: RawPtr, width: Int, height: Int) {
     metalContextAttachOffscreenFormat(ctx, width, height, metalPixelFormatBGRA8Unorm())
     return
@@ -318,7 +318,7 @@ function metalContextAttachOffscreen(ctx: RawPtr, width: Int, height: Int) {
 // width/height stay in points, the color target is points x scale physical
 // pixels, and physicalWidth records the factor — the same shape the on-screen
 // layer path produces, so scale-dependent rendering bugs reproduce offscreen.
-@Native
+public @Native
 function metalContextAttachOffscreenFormat(ctx: RawPtr, width: Int, height: Int, pixelFormat: U64) {
     var scaleFactor = 1
     let scaleEnv = metalGetEnv("KIRA_METAL_OFFSCREEN_SCALE")
@@ -351,7 +351,7 @@ function metalContextAttachOffscreenFormat(ctx: RawPtr, width: Int, height: Int,
 // (usage = RenderTarget | ShaderRead), registered so it can be targeted by a pass
 // and bound to a later pass. Enables multi-pass rendering (e.g. deferred resolve:
 // pass 1 -> visibility texture, pass 2 samples it -> final color).
-@Native
+public @Native
 function metalCreateColorTargetTexture(ctx: RawPtr, width: Int, height: Int, pixelFormat: U64, storage: Int) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
@@ -373,7 +373,7 @@ function metalCreateColorTargetTexture(ctx: RawPtr, width: Int, height: Int, pix
 // offscreen color texture). Used for intermediate passes in multi-pass rendering. Does
 // not touch the context colorTexture slot, so a later swapchain pass + readback still
 // see the final image.
-@Native
+public @Native
 function metalContextBeginClearTarget(ctx: RawPtr, textureId: Int, loadAction: U64, r: Float, g: Float, b: Float, a: Float, depthEnabled: Bool) {
     metalContextCountPass(ctx)
     let texture = metalLookup(ctx, textureId)
@@ -411,7 +411,7 @@ function metalContextBeginClearTarget(ctx: RawPtr, textureId: Int, loadAction: U
 // context (sized to the current color target, in physical pixels, like the
 // offscreen target it pairs with — sizing it in points left Retina depth at
 // half resolution under a full-resolution color buffer).
-@Native
+public @Native
 function metalContextAttachDepth(ctx: RawPtr) {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     var width = metalContextPhysicalWidth(ctx)
@@ -445,7 +445,7 @@ function metalContextAttachDepth(ctx: RawPtr) {
 // each pass acquires and presents a drawable from the on-screen layer. macOS sets
 // the view layer-backed via setWantsLayer:/setLayer:; on iOS a UIView is already
 // layer-backed and the layer is added as a sublayer by the runner.
-@Native
+public @Native
 function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int, height: Int, readable: Bool) {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let layerClass = metalObjcGetClass("CAMetalLayer")
@@ -456,7 +456,7 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     // view: kCALayerWidthSizable|kCALayerHeightSizable = 2|16. We do NOT pin
     // drawableSize, so CAMetalLayer keeps it at bounds x contentsScale and updates it
     // on resize; the actual pixel size is read back from the drawable's texture.
-    metalMsgSend(layer, metalSel("setAutoresizingMask:"), 18)
+    if !metalUsesUIKit!() { metalMsgSend(layer, metalSel("setAutoresizingMask:"), 18) }
     // A drawable is write-only by default, which is exactly right for a window and
     // exactly wrong for proving one draws: nothing may read back what was presented.
     // A run that is going to capture or dump a frame opts out of that; every other
@@ -492,13 +492,18 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
     if !pointerIsNull(metalGetEnv("KIRA_METAL_UNCAPPED")) {
         displaySync = false
     }
-    metalMsgSend(layer, metalSel("setDisplaySyncEnabled:"), displaySync)
+    if !metalUsesUIKit!() { metalMsgSend(layer, metalSel("setDisplaySyncEnabled:"), displaySync) }
     // Order matters: assign the layer FIRST, then turn on wantsLayer. This makes the
     // view layer-HOSTING (the CAMetalLayer is ours to drive) rather than layer-backed
     // (where AppKit owns the layer and would draw the view's opaque background over our
     // rendered content on every display pass, blanking the frame).
-    metalMsgSend(viewPtr, metalSel("setLayer:"), layer)
-    metalMsgSend(viewPtr, metalSel("setWantsLayer:"), true)
+    if metalUsesUIKit!() {
+        let hostLayer: RawPtr = metalMsgSend(viewPtr, metalSel("layer"))
+        metalMsgSend(hostLayer, metalSel("addSublayer:"), layer)
+    } else {
+        metalMsgSend(viewPtr, metalSel("setLayer:"), layer)
+        metalMsgSend(viewPtr, metalSel("setWantsLayer:"), true)
+    }
     metalMemWritePtr(ctx, metalOffsetLayer(), layer)
     metalMemWritePtr(ctx, metalOffsetHostView(), viewPtr)
     metalMemWriteU64(ctx, metalOffsetWidth(), width)
@@ -509,7 +514,7 @@ function metalContextAttachLayerToView(ctx: RawPtr, viewPtr: RawPtr, width: Int,
 // An occluded/hidden window may stop vending CAMetalLayer drawables. Keep ticking
 // the application against one private render target instead; when the window is
 // visible again the next frame returns to the layer and this fallback is released.
-@Native
+public @Native
 function metalContextHiddenTarget(ctx: RawPtr) -> RawPtr {
     var width = metalMemReadU64(ctx, metalOffsetPhysicalWidth())
     if width == 0 {
@@ -541,7 +546,7 @@ function metalContextHiddenTarget(ctx: RawPtr) -> RawPtr {
     return texture
 }
 
-@Native
+public @Native
 function metalContextReleaseHiddenTarget(ctx: RawPtr) {
     let texture = metalMemReadPtr(ctx, metalOffsetHiddenTexture())
     if !pointerIsNull(texture) {

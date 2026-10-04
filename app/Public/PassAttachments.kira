@@ -19,7 +19,7 @@
 // attachment's texture, the color target's extent, the image a later sample
 // will read. Each is one place rather than a field a caller has to know is a
 // *view* id and not an image id.
-struct PassAttachments {
+public struct PassAttachments {
     var hasColor: Bool = false
     var color: ColorAttachment
     var hasDepth: Bool = false

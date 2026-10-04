@@ -12,26 +12,26 @@ import Foundation
 
 // All event types (every real NSEvent type is a low bit; this covers bits 0-62, well
 // above the highest NSEventType, standing in for NSEventMaskAny == NSUIntegerMax).
-function metalEventMaskAny() -> U64 { return 9223372036854775807 }
+public function metalEventMaskAny() -> U64 { return 9223372036854775807 }
 
 // NSEventType values (AppKit stable ABI).
-function metalNsLeftDown() -> Int { return 1 }
-function metalNsLeftUp() -> Int { return 2 }
-function metalNsRightDown() -> Int { return 3 }
-function metalNsRightUp() -> Int { return 4 }
-function metalNsMoved() -> Int { return 5 }
-function metalNsLeftDragged() -> Int { return 6 }
-function metalNsRightDragged() -> Int { return 7 }
-function metalNsKeyDown() -> Int { return 10 }
-function metalNsKeyUp() -> Int { return 11 }
-function metalNsScroll() -> Int { return 22 }
+public function metalNsLeftDown() -> Int { return 1 }
+public function metalNsLeftUp() -> Int { return 2 }
+public function metalNsRightDown() -> Int { return 3 }
+public function metalNsRightUp() -> Int { return 4 }
+public function metalNsMoved() -> Int { return 5 }
+public function metalNsLeftDragged() -> Int { return 6 }
+public function metalNsRightDragged() -> Int { return 7 }
+public function metalNsKeyDown() -> Int { return 10 }
+public function metalNsKeyUp() -> Int { return 11 }
+public function metalNsScroll() -> Int { return 22 }
 
 // macOS virtual keycodes -> the neutral key codes the UI layer expects for the
 // special keys it acts on (GLFW-style, matching the offscreen input scripts):
 // Return / keypad-Enter -> 257 (submit), Delete/Backspace -> 259. Character keys
 // keep their raw code (foundationKeyBit maps those to held-key bits) and ALSO
 // emit a TextInput event carrying the typed codepoint (see metalPumpEvents).
-function metalMapKeyCode(raw: Int) -> Int {
+public function metalMapKeyCode(raw: Int) -> Int {
     if raw == 36 { return 257 }    // Return -> Enter (submit)
     if raw == 76 { return 257 }    // keypad Enter
     if raw == 51 { return 259 }    // Delete -> Backspace
@@ -45,15 +45,15 @@ function metalMapKeyCode(raw: Int) -> Int {
     if raw == 53 { return 256 }    // Escape
     return raw
 }
-function metalNsOtherDown() -> Int { return 25 }
-function metalNsOtherUp() -> Int { return 26 }
-function metalNsOtherDragged() -> Int { return 27 }
+public function metalNsOtherDown() -> Int { return 25 }
+public function metalNsOtherUp() -> Int { return 26 }
+public function metalNsOtherDragged() -> Int { return 27 }
 
 // KVC fetch of a geometry/scalar property into a caller buffer: -valueForKey:
 // boxes NSPoint/NSRect/CGFloat as NSValue/NSNumber (a pointer return, which
 // marshals), and -getValue: writes the raw doubles into `buf`. A null boxed
 // value leaves the buffer's first slot zeroed so stale reads decode to 0.
-@Native
+public @Native
 function metalKvcValueInto(obj: RawPtr, key: RawPtr, buf: RawPtr) {
     metalMemWriteU64(buf, 0, 0)
     metalMemWriteU64(buf, 8, 0)
@@ -79,7 +79,7 @@ function metalKvcValueInto(obj: RawPtr, key: RawPtr, buf: RawPtr) {
 // mismatch against our own -windowNumber means the pointer is over someone else.
 // `mouseLocation` is used rather than the event's own location because the answer
 // has to be in screen space, and it is the current cursor position either way.
-@Native
+public @Native
 function metalWindowIsUnderCursor(app: RawPtr, window: RawPtr) -> Bool {
     // System-posted moves can carry no window; the key window is the one they
     // would have been delivered to, so it is what the comparison is against.
@@ -118,7 +118,7 @@ function metalWindowIsUnderCursor(app: RawPtr, window: RawPtr) -> Bool {
 
 // Modifier state from -[NSEvent modifierFlags] (bit 17 shift, 18 control,
 // 19 option, 20 command), extracted with div/mod (no bitwise ops needed).
-@Native
+public @Native
 function metalModifiersFromFlags(flags: Int) -> ModifierState {
     return ModifierState {
         shift: (flags / 131072) - ((flags / 131072) / 2) * 2 == 1,
@@ -132,7 +132,7 @@ function metalModifiersFromFlags(flags: Int) -> ModifierState {
 // carries nothing for the app). Pointer coordinates convert from window space
 // (bottom-left origin, points) to view-local top-left via the content view's
 // bounds height.
-@Native
+public @Native
 function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> AppEvent {
     let etype = Int(metalMsgSendCount(event, metalSel("type")))
     var kind: AppEventKind = .None
@@ -249,7 +249,7 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> AppEve
         // reports no jump.
         var px = locX
         var py = locY
-        if metalCursorIsVisible() {
+        if metalPlatformCursorIsVisible!() {
             metalMemWriteU64(ctx, metalOffsetLockSeeded(), 0)
         } else {
             let dxKey: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "deltaX")
@@ -317,7 +317,7 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> AppEve
 // Whether two pointers name the same object. RawPtr admits no `==`, so the
 // question goes through memory: write each beside the other, read them back
 // as integers, compare.
-function metalPointersDiffer(a: RawPtr, b: RawPtr) -> Bool {
+public function metalPointersDiffer(a: RawPtr, b: RawPtr) -> Bool {
     let slot = metalMemAlloc(U64(16))
     metalMemWritePtr(slot, U64(0), a)
     metalMemWritePtr(slot, U64(8), b)
@@ -337,7 +337,7 @@ function metalPointersDiffer(a: RawPtr, b: RawPtr) -> Bool {
 // first responder on click and the child would otherwise hold the keyboard
 // forever. Hit testing is the whole of the decision. Mouse types 1, 2 and 3
 // are left, right and other mouse-down.
-@Native
+public @Native
 function metalClickOwnsSurface(app: RawPtr, view: RawPtr, event: RawPtr) {
     let etype = Int(metalMsgSendCount(event, metalSel("type")))
     if etype != 1 && etype != 2 && etype != 3 {
@@ -371,8 +371,11 @@ function metalClickOwnsSurface(app: RawPtr, view: RawPtr, event: RawPtr) {
 // nativeRecover). The window still gets -sendEvent: for activation/title-bar
 // behavior, except key-downs (kept from the window so the unhandled-key beep
 // never fires).
-@Native
+public @Native
 function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr, dragRegion: borrow (Float, Float) -> Bool) -> [AppEvent] {
+    if metalUsesUIKit!() {
+        return metalUIKitTakeEvents()
+    }
     var out: [AppEvent] = []
     let distantPast: RawPtr = metalMsgSend(metalObjcGetClass("NSDate"), metalSel("distantPast"))
     let mode: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "kCFRunLoopDefaultMode")
@@ -464,7 +467,7 @@ function metalPumpEvents(app: RawPtr, view: RawPtr, ctx: RawPtr, dragRegion: bor
 // set a title bar's double click to do (System Settings > Desktop & Dock), and
 // anything else hands the drag to the window server, which tracks it without
 // this loop.
-@Native
+public @Native
 function metalWindowBeginTitlebarGesture(view: RawPtr, event: RawPtr) {
     let window: RawPtr = metalMsgSend(view, metalSel("window"))
     if pointerIsNull(window) {
@@ -485,7 +488,7 @@ function metalWindowBeginTitlebarGesture(view: RawPtr, event: RawPtr) {
     return
 }
 
-@Native
+public @Native
 function metalStringEquals(string: RawPtr, literal: String) -> Bool {
     if pointerIsNull(string) {
         return false
@@ -499,7 +502,7 @@ function metalStringEquals(string: RawPtr, literal: String) -> Bool {
 // AppKit's `NSEventPhase` bits as the phase of a scroll: began 1, stationary
 // 2, changed 4, ended 8, cancelled 16, may begin 32. A finger resting still
 // mid-gesture is still the gesture changing.
-function metalScrollPhase(bits: Int) -> ScrollPhase {
+public function metalScrollPhase(bits: Int) -> ScrollPhase {
     if bits == 1 {
         return .Began
     }

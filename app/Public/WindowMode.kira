@@ -16,7 +16,7 @@
 //
 // A backend that has one undecorated window and no separate borderless state
 // says so by what `windowMode` reads back: see `sokolWindowMode`.
-enum WindowMode {
+public enum WindowMode {
     Windowed
     WindowedBorderless
     Fullscreen

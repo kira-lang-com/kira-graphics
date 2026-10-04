@@ -27,7 +27,7 @@
 // run time. A reason here is something the *device* or the *asset* did.
 import Foundation
 
-enum ResourceFailure {
+public enum ResourceFailure {
     // The backend was asked correctly and said no: an allocation it would not
     // make, a view it would not mint. Out of memory, past a device limit, or a
     // descriptor the driver rejected.
@@ -44,7 +44,7 @@ enum ResourceFailure {
 // branch. The ONE place a reason is turned into words: every `*OrReport` below
 // routes its failure through here rather than naming the reasons itself, so a
 // fourth reason is one arm added in one function.
-@Native
+public @Native
 function resourceFailureReason(failure: ResourceFailure) -> String {
     match failure {
         DeviceRefused -> return "the device refused it"
@@ -56,21 +56,21 @@ function resourceFailureReason(failure: ResourceFailure) -> String {
 // The outcomes the surface answers with. Named rather than written out at every
 // signature, so a reader sees one vocabulary instead of a generic instantiation
 // spelled six ways.
-type TextureResult = Result<GraphicsTexture, ResourceFailure>
-type BufferResult = Result<GraphicsBuffer, ResourceFailure>
-type DynamicBufferResult = Result<DynamicBuffer, ResourceFailure>
-type ShaderResult = Result<GraphicsShader, ResourceFailure>
-type PipelineResult = Result<RenderPipeline, ResourceFailure>
-type SamplerResult = Result<GraphicsSampler, ResourceFailure>
-type BindGroupResult = Result<BindGroup, ResourceFailure>
-type UniformResult = Result<Uniform, ResourceFailure>
+public type TextureResult = Result<GraphicsTexture, ResourceFailure>
+public type BufferResult = Result<GraphicsBuffer, ResourceFailure>
+public type DynamicBufferResult = Result<DynamicBuffer, ResourceFailure>
+public type ShaderResult = Result<GraphicsShader, ResourceFailure>
+public type PipelineResult = Result<RenderPipeline, ResourceFailure>
+public type SamplerResult = Result<GraphicsSampler, ResourceFailure>
+public type BindGroupResult = Result<BindGroup, ResourceFailure>
+public type UniformResult = Result<Uniform, ResourceFailure>
 
 // Lifting a backend's id into an outcome.
 //
 // The backends answer with a resource whose id is 0 when the device declined —
 // that is the protocol they already speak, and it stays theirs. These are the
 // one place it becomes a reason.
-@Native
+public @Native
 function shaderResult(shader: GraphicsShader) -> ShaderResult {
     if shader.id == 0 {
         return .Error(.DeviceRefused)
@@ -78,7 +78,7 @@ function shaderResult(shader: GraphicsShader) -> ShaderResult {
     return .Ok(shader)
 }
 
-@Native
+public @Native
 function pipelineResult(pipeline: RenderPipeline) -> PipelineResult {
     if pipeline.id == 0 {
         return .Error(.DeviceRefused)
@@ -86,7 +86,7 @@ function pipelineResult(pipeline: RenderPipeline) -> PipelineResult {
     return .Ok(pipeline)
 }
 
-@Native
+public @Native
 function bufferResult(buffer: GraphicsBuffer) -> BufferResult {
     if buffer.id == 0 {
         return .Error(.DeviceRefused)
@@ -94,7 +94,7 @@ function bufferResult(buffer: GraphicsBuffer) -> BufferResult {
     return .Ok(buffer)
 }
 
-@Native
+public @Native
 function uniformResult(uniform: Uniform) -> UniformResult {
     if uniform.id == 0 {
         return .Error(.DeviceRefused)
@@ -102,7 +102,7 @@ function uniformResult(uniform: Uniform) -> UniformResult {
     return .Ok(uniform)
 }
 
-@Native
+public @Native
 function bindGroupResult(group: BindGroup) -> BindGroupResult {
     if group.id == 0 {
         return .Error(.DeviceRefused)
@@ -110,7 +110,7 @@ function bindGroupResult(group: BindGroup) -> BindGroupResult {
     return .Ok(group)
 }
 
-@Native
+public @Native
 function samplerResult(sampler: GraphicsSampler) -> SamplerResult {
     if sampler.id == 0 {
         return .Error(.DeviceRefused)
@@ -133,7 +133,7 @@ function samplerResult(sampler: GraphicsSampler) -> SamplerResult {
 // eight of these sites and did the same thing in every arm — 24 arms whose only
 // content was which reason to hand to `resourceFailureReason`. `Error(failure)`
 // binds the reason instead, so the eight sites carry none of them.
-@Native
+public @Native
 function textureOrReport(outcome: TextureResult, what: borrow String) -> GraphicsTexture {
     match outcome {
         Ok(texture) -> return texture
@@ -144,7 +144,7 @@ function textureOrReport(outcome: TextureResult, what: borrow String) -> Graphic
     }
 }
 
-@Native
+public @Native
 function shaderOrReport(outcome: ShaderResult, what: borrow String) -> GraphicsShader {
     match outcome {
         Ok(shader) -> return shader
@@ -155,7 +155,7 @@ function shaderOrReport(outcome: ShaderResult, what: borrow String) -> GraphicsS
     }
 }
 
-@Native
+public @Native
 function pipelineOrReport(outcome: PipelineResult, what: borrow String) -> RenderPipeline {
     match outcome {
         Ok(pipeline) -> return pipeline
@@ -166,7 +166,7 @@ function pipelineOrReport(outcome: PipelineResult, what: borrow String) -> Rende
     }
 }
 
-@Native
+public @Native
 function bufferOrReport(outcome: BufferResult, what: borrow String) -> GraphicsBuffer {
     match outcome {
         Ok(buffer) -> return buffer
@@ -177,7 +177,7 @@ function bufferOrReport(outcome: BufferResult, what: borrow String) -> GraphicsB
     }
 }
 
-@Native
+public @Native
 function dynamicBufferOrReport(outcome: DynamicBufferResult, what: borrow String) -> DynamicBuffer {
     match outcome {
         Ok(buffer) -> return buffer
@@ -191,7 +191,7 @@ function dynamicBufferOrReport(outcome: DynamicBufferResult, what: borrow String
     }
 }
 
-@Native
+public @Native
 function uniformOrReport(outcome: UniformResult, what: borrow String) -> Uniform {
     match outcome {
         Ok(uniform) -> return uniform
@@ -202,7 +202,7 @@ function uniformOrReport(outcome: UniformResult, what: borrow String) -> Uniform
     }
 }
 
-@Native
+public @Native
 function bindGroupOrReport(outcome: BindGroupResult, what: borrow String) -> BindGroup {
     match outcome {
         Ok(group) -> return group
@@ -213,7 +213,7 @@ function bindGroupOrReport(outcome: BindGroupResult, what: borrow String) -> Bin
     }
 }
 
-@Native
+public @Native
 function samplerOrReport(outcome: SamplerResult, what: borrow String) -> GraphicsSampler {
     match outcome {
         Ok(sampler) -> return sampler
@@ -224,7 +224,7 @@ function samplerOrReport(outcome: SamplerResult, what: borrow String) -> Graphic
     }
 }
 
-@Native
+public @Native
 function reportMissingResource(what: borrow String, failure: ResourceFailure) {
     graphicsDiagnostic("Kira Graphics: no " + what + " — " + resourceFailureReason(move failure))
     return

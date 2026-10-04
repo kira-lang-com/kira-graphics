@@ -4,7 +4,7 @@ import Foundation
 // window or swapchain. Offscreen passes use the same texture, pipeline and
 // encoder implementation as the windowed backend; only acquire/present differ.
 
-@Native
+public @Native
 function vulkanCreateHeadlessDevice(runtime: borrow mut GraphicsAppRuntimeState) -> Bool {
     runtime.vulkan = VulkanState()
     if !vulkanCreateInstance(runtime.vulkan, false) { return false }
@@ -20,7 +20,7 @@ function vulkanCreateHeadlessDevice(runtime: borrow mut GraphicsAppRuntimeState)
     return true
 }
 
-@Native
+public @Native
 function vulkanBeginHeadlessFrame(state: borrow mut VulkanState) -> Bool {
     if state.frameActive { return true }
     if !vulkanWaitForFrame(state) { return false }
@@ -49,7 +49,7 @@ function vulkanBeginHeadlessFrame(state: borrow mut VulkanState) -> Bool {
     return true
 }
 
-@Native
+public @Native
 function vulkanSubmitHeadlessFrame(context: RawPtr) {
     if !vulkanHasDevice(context) { return }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -101,7 +101,7 @@ function vulkanSubmitHeadlessFrame(context: RawPtr) {
     return
 }
 
-@Native
+public @Native
 function vulkanPrepareHeadlessFrame(context: RawPtr) -> Bool {
     if !vulkanHasDevice(context) { return false }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)

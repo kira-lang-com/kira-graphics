@@ -2,7 +2,7 @@ import Foundation
 
 // Uniform values can change between draws, including through setUniformValues.
 // Snapshot their CPU state so each recorded draw sees the values it bound.
-@Native
+public @Native
 function vulkanSnapshotUniform(state: borrow mut VulkanState, uniform: borrow StoredUniformBindEntry) -> U32 {
     let values = nativeRecover<UniformState>(uniform.storage)
     if values.expectedFloatCount <= 0 || values.values.count != values.expectedFloatCount {
@@ -20,7 +20,7 @@ function vulkanSnapshotUniform(state: borrow mut VulkanState, uniform: borrow St
 
 // Match the portable binding contract: a shader with one resource group may
 // receive its resources partitioned across the encoder's four slots.
-@Native
+public @Native
 function vulkanCollectGroup(collected: borrow mut BindGroupState, group: borrow BindGroup, present: Bool) {
     if !present { return }
     let source = nativeRecover<BindGroupState>(group.storage)
@@ -46,7 +46,7 @@ function vulkanCollectGroup(collected: borrow mut BindGroupState, group: borrow 
     }
 }
 
-@Native
+public @Native
 function vulkanApplyBindings(
     state: borrow mut VulkanState, pipeline: borrow VulkanPipelineRecord,
     group0: borrow BindGroup, has0: Bool, group1: borrow BindGroup, has1: Bool,

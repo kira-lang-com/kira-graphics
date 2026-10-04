@@ -57,7 +57,7 @@ import Foundation
 // Kept beside the pipeline rather than on it because `RenderPipeline` is the
 // public handle every backend shares and carries no shader id to look one up
 // with.
-struct DawnPipelineBindings {
+public struct DawnPipelineBindings {
     var pipelineId: U32 = 0
     var bindings: [Int] = []
     // The group each entry of `bindings` sits in, index-aligned with it. A
@@ -67,7 +67,7 @@ struct DawnPipelineBindings {
 }
 
 // One resource a shader's layout declares.
-struct DawnShaderBinding {
+public struct DawnShaderBinding {
     var group: Int = 0
     var binding: Int = 0
 }
@@ -78,7 +78,7 @@ struct DawnShaderBinding {
 // is everything the group's contents depend on: a WebGPU bind group is immutable
 // and is created against one pipeline's layout, and an entry list changes only
 // when one of the four groups is rebound.
-struct DawnMergedBindGroup {
+public struct DawnMergedBindGroup {
     var pipelineId: U32 = 0
     var identity0: Int = 0
     var identity1: Int = 0
@@ -99,14 +99,14 @@ struct DawnMergedBindGroup {
 // safe at any moment — Dawn holds its own reference to a bind group a recorded
 // command names, which is why a dispatch can release one immediately after
 // binding it.
-function dawnMaxMergedBindGroups() -> Int { return 256 }
+public function dawnMaxMergedBindGroups() -> Int { return 256 }
 
 // The resources `digest` says some stage uses.
 //
 // Empty for a shader whose resources are all unused, which is also the answer
 // for a shader that has none — the two want the same thing from a draw, which is
 // no bind group at all.
-@Native
+public @Native
 function dawnUsedBindings(digest: borrow String) -> [DawnShaderBinding] {
     let reflection = kslParseResourceReflection(digest)
     var used: [DawnShaderBinding] = []
@@ -139,7 +139,7 @@ function dawnUsedBindings(digest: borrow String) -> [DawnShaderBinding] {
 }
 
 // The bindings a shader declares in `group`, in the order the digest gave them.
-@Native
+public @Native
 function dawnBindingsOfGroup(bindings: borrow [Int], groups: borrow [Int], group: Int) -> [Int] {
     var out: [Int] = []
     var index = 0
@@ -153,7 +153,7 @@ function dawnBindingsOfGroup(bindings: borrow [Int], groups: borrow [Int], group
 }
 
 // How many distinct groups a shader's layout spans.
-@Native
+public @Native
 function dawnDistinctGroupCount(groups: borrow [Int]) -> Int {
     var seen: [Int] = []
     for group in groups {
@@ -164,7 +164,7 @@ function dawnDistinctGroupCount(groups: borrow [Int]) -> Int {
     return seen.count
 }
 
-@Native
+public @Native
 function dawnBindingsContain(bindings: borrow [Int], binding: Int) -> Bool {
     for candidate in bindings {
         if candidate == binding {
@@ -175,7 +175,7 @@ function dawnBindingsContain(bindings: borrow [Int], binding: Int) -> Bool {
 }
 
 // Remembers what a pipeline's layout declares, so a draw can filter to it.
-@Native
+public @Native
 function dawnRecordPipelineBindings(state: borrow mut GraphicsAppRuntimeState, pipelineId: U32, used: borrow [DawnShaderBinding]) {
     dawnForgetPipelineBindings(state, pipelineId)
     var bindings: [Int] = []
@@ -192,7 +192,7 @@ function dawnRecordPipelineBindings(state: borrow mut GraphicsAppRuntimeState, p
     return
 }
 
-@Native
+public @Native
 function dawnForgetPipelineBindings(state: borrow mut GraphicsAppRuntimeState, pipelineId: U32) {
     var kept: [DawnPipelineBindings] = []
     for held in state.dawn.pipelineBindings {
@@ -206,7 +206,7 @@ function dawnForgetPipelineBindings(state: borrow mut GraphicsAppRuntimeState, p
 
 // Where `pipelineId`'s bindings sit in the table, or -1 when it has none — which
 // is the answer for every pipeline built from a shader with no reflection.
-@Native
+public @Native
 function dawnPipelineBindingSlot(state: borrow GraphicsAppRuntimeState, pipelineId: U32) -> Int {
     for index in 0..state.dawn.pipelineBindings.count {
         if state.dawn.pipelineBindings[index].pipelineId == pipelineId {
@@ -217,7 +217,7 @@ function dawnPipelineBindingSlot(state: borrow GraphicsAppRuntimeState, pipeline
 }
 
 // What tells one bind group apart from another, minted on first use.
-@Native
+public @Native
 function dawnGroupIdentity(state: borrow mut GraphicsAppRuntimeState, group: borrow BindGroup, present: Bool) -> Int {
     if !present {
         return 0
@@ -230,7 +230,7 @@ function dawnGroupIdentity(state: borrow mut GraphicsAppRuntimeState, group: bor
     return groupState.identity
 }
 
-@Native
+public @Native
 function dawnGroupRevision(group: borrow BindGroup, present: Bool) -> Int {
     if !present {
         return 0
@@ -239,7 +239,7 @@ function dawnGroupRevision(group: borrow BindGroup, present: Bool) -> Int {
 }
 
 // The cached merged group for this combination, or 0 when none is held.
-@Native
+public @Native
 function dawnCachedMergedGroup(state: borrow GraphicsAppRuntimeState, key: borrow DawnMergedBindGroup) -> U32 {
     for index in 0..state.dawn.mergedGroups.count {
         let held = state.dawn.mergedGroups[index]
@@ -258,7 +258,7 @@ function dawnCachedMergedGroup(state: borrow GraphicsAppRuntimeState, key: borro
     return U32(0)
 }
 
-@Native
+public @Native
 function dawnReleaseMergedGroups(state: borrow mut GraphicsAppRuntimeState) {
     for held in state.dawn.mergedGroups {
         let handle = dawnObject(state, held.groupId)
@@ -273,7 +273,7 @@ function dawnReleaseMergedGroups(state: borrow mut GraphicsAppRuntimeState) {
 
 // Merges the encoder's four slots, filters to what the pipeline reads, and binds
 // the result at group 0. Answers whether the draw may proceed.
-@Native
+public @Native
 function dawnBindMergedGroup(
     state: borrow mut GraphicsAppRuntimeState,
     pipelineHandle: RawPtr,
@@ -348,7 +348,7 @@ function dawnBindMergedGroup(
 // so nothing has to be mapped — what a slot needs is the subset of its own
 // group's bindings, which the merge path cannot express because it holds one
 // flat list for the whole pipeline.
-@Native
+public @Native
 function dawnBindPerGroup(
     state: borrow mut GraphicsAppRuntimeState,
     pipelineHandle: RawPtr,
@@ -378,7 +378,7 @@ function dawnBindPerGroup(
 }
 
 // One group's bind group, built from the slot of the same index.
-@Native
+public @Native
 function dawnBindOneGroup(
     state: borrow mut GraphicsAppRuntimeState,
     pipelineHandle: RawPtr,
@@ -438,7 +438,7 @@ function dawnBindOneGroup(
 // caller assigns each resource one slot — so a second entry for a binding is a
 // caller's mistake, and taking the first keeps the answer the same whichever
 // order the slots are walked in.
-@Native
+public @Native
 function dawnCollectSlot(
     state: borrow GraphicsAppRuntimeState,
     collected: borrow mut [WGPUBindGroupEntry],

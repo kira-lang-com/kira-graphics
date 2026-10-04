@@ -1,5 +1,5 @@
 import Foundation
-struct RenderEncoderState {
+public struct RenderEncoderState {
     var pipeline: RenderPipeline
     var hasPipeline: Bool = false
     var passActive: Bool = false
@@ -54,7 +54,7 @@ struct RenderEncoderState {
     var scissorHeight: Int = 0
 }
 
-class RenderEncoder {
+public class RenderEncoder {
     var storage: NativeState<RenderEncoderState>
 
     function setPipeline(pipeline: borrow RenderPipeline) {
@@ -271,7 +271,7 @@ class RenderEncoder {
 //
 // One function rather than the same twenty arguments written out at each of the
 // five draw methods — the Metal arm above predates it and still does.
-function dawnEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
+public function dawnEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
     dawnDrawWithBindings(
         state.dawnRuntime,
         state.hasScissor, state.scissorX, state.scissorY, state.scissorWidth, state.scissorHeight,
@@ -291,7 +291,7 @@ function dawnEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
     return
 }
 
-function vulkanEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
+public function vulkanEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
     vulkanDrawWithBindings(
         state.vulkanRuntime,
         state.hasScissor, state.scissorX, state.scissorY, state.scissorWidth, state.scissorHeight,
@@ -311,12 +311,12 @@ function vulkanEncoderIssue(state: borrow RenderEncoderState, firstIndex: Int) {
     return
 }
 
-@Native
+public @Native
 function makeRenderEncoder() -> RenderEncoder {
     return makeRenderEncoderForBackend(false, nullPointer(), nullPointer(), nullPointer())
 }
 
-function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, dawnRuntime: RawPtr, vulkanRuntime: RawPtr) -> RenderEncoder {
+public function makeRenderEncoderForBackend(passActive: Bool, backendContext: RawPtr, dawnRuntime: RawPtr, vulkanRuntime: RawPtr) -> RenderEncoder {
     // The empty slots carry no state box: every read of a slot is gated on its
     // `has` flag, so a group that was never set needs no storage — and giving
     // it some, as this once did, allocated four boxes per encoder that nothing

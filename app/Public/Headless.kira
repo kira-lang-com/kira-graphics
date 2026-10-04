@@ -25,7 +25,7 @@ import Foundation
 // The frame is made and submitted by the caller because a component's pace is
 // its own: a browser draws when a page moves and an assistant draws when a token
 // arrives, and neither is a display refresh.
-struct GraphicsHeadless {
+public struct GraphicsHeadless {
     // The headless device state is an ordinary typed owner. `Graphics` keeps
     // only borrowed raw callback words into it; this field is the lifetime.
     var context: NativeState<GraphicsAppRuntimeState>
@@ -115,7 +115,7 @@ struct GraphicsHeadless {
 // a surface set needs to close it and keep the (now not-ready) handle, so this
 // does the same teardown through a mutable borrow. After it returns the device
 // answers `ready` false and can be reopened with `openHeadlessGraphics`.
-function closeHeadlessGraphics(device: borrow mut GraphicsHeadless) {
+public function closeHeadlessGraphics(device: borrow mut GraphicsHeadless) {
     if device.ready == false {
         return
     }
@@ -138,11 +138,11 @@ function closeHeadlessGraphics(device: borrow mut GraphicsHeadless) {
 // GPU, a backend that has no headless path -- rather than trapping, because a
 // component that cannot draw should say so to the shell that started it and
 // exit, not take the desktop's compositor client down with an abort.
-function openHeadlessGraphics() -> GraphicsHeadless {
+public function openHeadlessGraphics() -> GraphicsHeadless {
     return openHeadlessGraphicsWithBackend(.Dawn)
 }
 
-function openHeadlessGraphicsWithBackend(backend: RenderBackendKind) -> GraphicsHeadless {
+public function openHeadlessGraphicsWithBackend(backend: RenderBackendKind) -> GraphicsHeadless {
     let application = GraphicsApplication {
         title: "kira-headless",
         width: 1,

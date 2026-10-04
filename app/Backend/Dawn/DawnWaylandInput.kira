@@ -21,7 +21,7 @@ import Foundation
 // A pointer arriving over the surface. Its position, in surface-local
 // coordinates, is carried as `wl_fixed_t` here and on motion -- and nowhere
 // else, a button press having none -- so the last one seen is where a press is.
-function waylandOnPointerEnter(data: RawPtr, pointer: RawPtr, serial: U32, surface: RawPtr, sx: I32, sy: I32) {
+public function waylandOnPointerEnter(data: RawPtr, pointer: RawPtr, serial: U32, surface: RawPtr, sx: I32, sy: I32) {
     var state = nativeRecover<GraphicsAppRuntimeState>(data)
     state.dawn.pointerResizeEdge = U32(0)
     state.dawn.pointerSurfaceOffsetX = 0.0
@@ -53,7 +53,7 @@ function waylandOnPointerEnter(data: RawPtr, pointer: RawPtr, serial: U32, surfa
     return
 }
 
-function waylandOnPointerLeave(data: RawPtr, pointer: RawPtr, serial: U32, surface: RawPtr) {
+public function waylandOnPointerLeave(data: RawPtr, pointer: RawPtr, serial: U32, surface: RawPtr) {
     var state = nativeRecover<GraphicsAppRuntimeState>(data)
     state.dawn.hasPointer = false
     state.dawn.pointerResizeEdge = U32(0)
@@ -68,7 +68,7 @@ function waylandOnPointerLeave(data: RawPtr, pointer: RawPtr, serial: U32, surfa
     return
 }
 
-function waylandOnPointerMotion(data: RawPtr, pointer: RawPtr, time: U32, sx: I32, sy: I32) {
+public function waylandOnPointerMotion(data: RawPtr, pointer: RawPtr, time: U32, sx: I32, sy: I32) {
     var state = nativeRecover<GraphicsAppRuntimeState>(data)
     let x = waylandFixedToFloat(sx)
     let y = waylandFixedToFloat(sy)
@@ -94,7 +94,7 @@ function waylandOnPointerMotion(data: RawPtr, pointer: RawPtr, time: U32, sx: I3
 
 // A Linux input event code, not a button index: left is 0x110 and the others
 // follow it.
-function waylandPointerButtonOf(code: U32) -> PointerButton {
+public function waylandPointerButtonOf(code: U32) -> PointerButton {
     if code == waylandButtonLeft() {
         return .Left
     }
@@ -107,7 +107,7 @@ function waylandPointerButtonOf(code: U32) -> PointerButton {
     return .Other
 }
 
-function waylandResizeEdge(state: borrow GraphicsAppRuntimeState, x: Float, y: Float) -> U32 {
+public function waylandResizeEdge(state: borrow GraphicsAppRuntimeState, x: Float, y: Float) -> U32 {
     if state.dawn.pointerResizeEdge != U32(0) {
         return state.dawn.pointerResizeEdge
     }
@@ -131,7 +131,7 @@ function waylandResizeEdge(state: borrow GraphicsAppRuntimeState, x: Float, y: F
     return U32(0)
 }
 
-function waylandOnPointerButton(data: RawPtr, pointer: RawPtr, serial: U32, time: U32, button: U32, buttonState: U32) {
+public function waylandOnPointerButton(data: RawPtr, pointer: RawPtr, serial: U32, time: U32, button: U32, buttonState: U32) {
     var state = nativeRecover<GraphicsAppRuntimeState>(data)
     if button == waylandButtonLeft() && buttonState == waylandButtonPressed() &&
         pointerIsNull(state.dawn.seat) == false && pointerIsNull(state.dawn.toplevel) == false {
@@ -160,7 +160,7 @@ function waylandOnPointerButton(data: RawPtr, pointer: RawPtr, serial: U32, time
     return
 }
 
-function waylandOnToplevelConfigure(data: RawPtr, toplevel: RawPtr, width: I32, height: I32, states: RawPtr) {
+public function waylandOnToplevelConfigure(data: RawPtr, toplevel: RawPtr, width: I32, height: I32, states: RawPtr) {
     var state = nativeRecover<GraphicsAppRuntimeState>(data)
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     state.dawn.maximized = kira_wayland_toplevel_states_contains(
@@ -209,14 +209,14 @@ function waylandOnToplevelConfigure(data: RawPtr, toplevel: RawPtr, width: I32, 
 
 // Client-side titlebar actions. xdg-shell keeps the policy in the compositor:
 // these are requests, and configure events above are the authoritative state.
-function dawnWaylandMinimize(state: borrow GraphicsAppRuntimeState) {
+public function dawnWaylandMinimize(state: borrow GraphicsAppRuntimeState) {
     if pointerIsNull(state.dawn.toplevel) == false {
         kira_wayland_toplevel_set_minimized(state.dawn.toplevel)
     }
     return
 }
 
-function dawnWaylandToggleMaximize(state: borrow GraphicsAppRuntimeState) {
+public function dawnWaylandToggleMaximize(state: borrow GraphicsAppRuntimeState) {
     if pointerIsNull(state.dawn.toplevel) {
         return
     }
@@ -228,7 +228,7 @@ function dawnWaylandToggleMaximize(state: borrow GraphicsAppRuntimeState) {
     return
 }
 
-function waylandOnToplevelClose(data: RawPtr, toplevel: RawPtr) {
+public function waylandOnToplevelClose(data: RawPtr, toplevel: RawPtr) {
     var state = nativeRecover<GraphicsAppRuntimeState>(data)
     state.dawn.quitRequested = true
     if state.app.backend == .Vulkan {
@@ -239,15 +239,15 @@ function waylandOnToplevelClose(data: RawPtr, toplevel: RawPtr) {
     return
 }
 
-function waylandOnToplevelConfigureBounds(data: RawPtr, toplevel: RawPtr, width: I32, height: I32) { return }
-function waylandOnToplevelWmCapabilities(data: RawPtr, toplevel: RawPtr, capabilities: RawPtr) { return }
+public function waylandOnToplevelConfigureBounds(data: RawPtr, toplevel: RawPtr, width: I32, height: I32) { return }
+public function waylandOnToplevelWmCapabilities(data: RawPtr, toplevel: RawPtr, capabilities: RawPtr) { return }
 
 // A wheel turn, as a distance rather than a count of notches: Wayland reports
 // how far the surface should scroll, and one detent is conventionally ten
 // surface units. The sign is the other way round from Win32 -- positive is
 // downward here and away from the person there -- and everything above this
 // seam is written against the Win32 convention.
-function waylandOnPointerAxis(data: RawPtr, pointer: RawPtr, time: U32, axis: U32, value: I32) {
+public function waylandOnPointerAxis(data: RawPtr, pointer: RawPtr, time: U32, axis: U32, value: I32) {
     var state = nativeRecover<GraphicsAppRuntimeState>(data)
     let notches = 0.0 - waylandFixedToFloat(value) / 10.0
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
@@ -273,26 +273,26 @@ function waylandOnPointerAxis(data: RawPtr, pointer: RawPtr, time: U32, axis: U3
 // They are handled rather than left out because a listener is indexed by the
 // event's opcode: a struct with fewer members than the interface has events is
 // read past the first time one of the missing ones arrives.
-function waylandOnPointerFrame(data: RawPtr, pointer: RawPtr) {
+public function waylandOnPointerFrame(data: RawPtr, pointer: RawPtr) {
     return
 }
 
-function waylandOnPointerAxisSource(data: RawPtr, pointer: RawPtr, source: U32) {
+public function waylandOnPointerAxisSource(data: RawPtr, pointer: RawPtr, source: U32) {
     return
 }
 
-function waylandOnPointerAxisStop(data: RawPtr, pointer: RawPtr, time: U32, axis: U32) {
+public function waylandOnPointerAxisStop(data: RawPtr, pointer: RawPtr, time: U32, axis: U32) {
     return
 }
 
-function waylandOnPointerAxisDiscrete(data: RawPtr, pointer: RawPtr, axis: U32, discrete: I32) {
+public function waylandOnPointerAxisDiscrete(data: RawPtr, pointer: RawPtr, axis: U32, discrete: I32) {
     return
 }
 
 // What the seat has. A pointer appears here and not before: the capability is
 // an event, and asking a seat with no mouse behind it for a `wl_pointer` is a
 // protocol error the compositor disconnects for.
-function waylandOnSeatCapabilities(data: RawPtr, seat: RawPtr, capabilities: U32) {
+public function waylandOnSeatCapabilities(data: RawPtr, seat: RawPtr, capabilities: U32) {
     if (capabilities & waylandSeatPointerCapability()) == U32(0) {
         return
     }
@@ -328,14 +328,14 @@ function waylandOnSeatCapabilities(data: RawPtr, seat: RawPtr, capabilities: U32
     return
 }
 
-function waylandOnSeatName(data: RawPtr, seat: RawPtr, name: RawPtr) {
+public function waylandOnSeatName(data: RawPtr, seat: RawPtr, name: RawPtr) {
     return
 }
 
 // The seat, out of a registry of its own -- for the same reason the compositor
 // and the shell each have one: a handler reports what it bound by setting the
 // registry's single user-data word, and one word holds one global.
-function waylandOnSeatGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
+public function waylandOnSeatGlobal(data: RawPtr, registry: RawPtr, name: U32, interface: RawPtr, version: U32) {
     if waylandNameEquals(interface, "wl_seat") != I32(0) {
         return
     }
@@ -366,7 +366,7 @@ function waylandOnSeatGlobal(data: RawPtr, registry: RawPtr, name: U32, interfac
 // Called once, after the window exists and the run state is in hand -- the run
 // state being what the handlers are given, and what `open` has no way to pass
 // them.
-@Native
+public @Native
 function dawnWaylandAttachInput(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
     var current = state
     if pointerIsNull(current.dawn.window) {

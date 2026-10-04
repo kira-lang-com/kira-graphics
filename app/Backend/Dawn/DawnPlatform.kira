@@ -23,7 +23,7 @@
 // puts the one partial step — a host that is none of these — at the single
 // boundary in `dawnPlatformFor` instead of in every match.
 
-enum DawnPlatform {
+public enum DawnPlatform {
     Windows
     Linux
 }
@@ -35,7 +35,7 @@ enum DawnPlatform {
 // least alike, and what the application layer actually consumes is `AppEvent`,
 // which is already platform-neutral. So a window translates its own events and
 // the layer above never learns which one it was talking to.
-construct DawnWindow {
+public construct DawnWindow {
     requires {
         // The native handle a surface is made from, or a null pointer when the
         // window did not open.
@@ -67,7 +67,7 @@ construct DawnWindow {
 
 // Total over `DawnPlatform`. This is the compile-time check: a new variant
 // breaks here, and there is no arm to hide it in.
-function dawnWindowFor(platform: borrow DawnPlatform) -> Any DawnWindow {
+public function dawnWindowFor(platform: borrow DawnPlatform) -> Any DawnWindow {
     match platform {
         Windows -> return DawnWindowWin32()
         Linux -> return DawnWindowWayland()
@@ -81,7 +81,7 @@ function dawnWindowFor(platform: borrow DawnPlatform) -> Any DawnWindow {
 // backend is chosen, so a host that reaches here is one of these two. A host
 // that somehow did not would try to open a Win32 window and fail saying so,
 // which is the same answer by a longer road.
-function dawnPlatformForHost() -> DawnPlatform {
+public function dawnPlatformForHost() -> DawnPlatform {
     if hostPlatform() == .Linux {
         return .Linux
     }

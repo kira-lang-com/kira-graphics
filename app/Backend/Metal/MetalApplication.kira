@@ -12,11 +12,14 @@
 // verification (the kik Test harness asserts pixels through the same paths via the
 // MetalSelfTest entry points).
 
-@Native
+public @Native
 function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr): Void {
     // Become a foreground GUI app BEFORE creating the Metal device. The device
     // (MTLCreateSystemDefaultDevice) and the window both need a WindowServer
     // connection; establishing the app up front keeps the ordering explicit.
+    if metalUsesUIKit!() {
+        if metalUIKitLaunchApplication(app, runtimeUserData) { return }
+    }
     metalActivateApp()
     // One autorelease pool around the whole run; per-frame pools drain inside the
     // loop. The Metal shader compiler and Foundation helpers create many autoreleased
@@ -46,7 +49,7 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
     // frames the run lasts — the same knobs the sokol and Dawn loops resolve, so
     // `--capture` means the same thing on every backend rather than nothing on
     // this one.
-    let harness = metalHarnessKnobs(app)
+    var harness = metalHarnessKnobs(app)
     metalContextAttachLayerToView(ctxPtr, view, app.width, app.height, harness.capturePath.count > 0)
     metalWindowApplyCornerRadius(view, app.cornerRadius)
     let nsApp = metalSharedApp()
@@ -195,7 +198,8 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             windowStateOverride = parsedWindowState
         }
     }
-    while running {
+    let renderNextFrame: () -> Bool = { in
+        if metalUsesUIKit!() && onFrameIndex == 0 { graphicsDiagnostic("UIKit rendering its first frame") }
         let frameStartNs = metalClockNs(metalClockUptimeRaw())
         let framePool = metalAutoreleasePoolPush()
         var oci = 0
@@ -350,6 +354,9 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
         if harness.capturePath.count > 0 && onFrameIndex == harness.captureAtFrame {
             capturedTexture = metalContextDrawableTexture(ctxPtr)
         }
+        // Whether the frame drew anything: an app with nothing new to show
+        // records no pass, and then nothing is presented.
+        let presenting = !pointerIsNull(metalMemReadPtr(ctxPtr, metalOffsetActiveCommandBuffer()))
         graphicsSubmitFrame(frame)
         if !pointerIsNull(capturedTexture) {
             let captureW = metalContextPhysicalWidth(ctxPtr)
@@ -391,13 +398,13 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             running = false
         }
         metalAutoreleasePoolPop(framePool)
-        if windowState == 3 {
+        if !metalUsesUIKit!() && windowState == 3 {
             let remainingInterval = metalWindowRemainingInterval(frameStartNs, windowState, metalViewMaximumFramesPerSecond(view))
             if remainingInterval > 0.0 {
                 metalSpinRunLoop(remainingInterval)
             }
             nextFrameDeadlineNs = 0
-        } else if framePacingNs > 0 {
+        } else if !metalUsesUIKit!() && framePacingNs > 0 {
             if nextFrameDeadlineNs == 0 {
                 nextFrameDeadlineNs = frameStartNs + U64(framePacingNs)
             }
@@ -415,23 +422,45 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
             if nextFrameDeadlineNs < pacedNow {
                 nextFrameDeadlineNs = pacedNow + U64(framePacingNs)
             }
+        } else if !metalUsesUIKit!() && !presenting {
+            // A frame that presented nothing never waited on a drawable, which
+            // is what holds the loop to the display. It waits out the rest of
+            // the display's frame itself, pumping events meanwhile, instead of
+            // asking an idle app for its next frame at once.
+            let refresh = Float(metalViewMaximumFramesPerSecond(view))
+            let spent = Float(metalClockNs(metalClockUptimeRaw()) - frameStartNs) / 1000000000.0
+            let remaining = 1.0 / refresh - spent
+            if remaining > 0.0 {
+                metalSpinRunLoop(remaining)
+            }
         }
+        return running
     }
 
-    if benchFrames > 0 {
-        metalBenchReport(ctxPtr, benchFrameNs, benchCpuNs, benchGpuNs)
-    }
-    if !pointerIsNull(hostWindow) {
-        metalRemoveResizeDelegate(hostWindow, resizeDelegate)
-    }
     let onCleanup: (Graphics) -> Void = app.cleanupHandler
-    let cleanupGraphics = Graphics {
-        userData: userData,
-        backend: .Metal,
-        backendContext: ctxPtr
+    let cleanup: () -> Void = { in
+        if benchFrames > 0 {
+            metalBenchReport(ctxPtr, benchFrameNs, benchCpuNs, benchGpuNs)
+        }
+        if !pointerIsNull(hostWindow) {
+            metalRemoveResizeDelegate(hostWindow, resizeDelegate)
+        }
+        let cleanupGraphics = Graphics {
+            userData: userData,
+            backend: .Metal,
+            backendContext: ctxPtr
+        }
+        onCleanup(move cleanupGraphics)
+        metalContextFree(ctxPtr)
+        if !metalUsesUIKit!() { metalAutoreleasePoolPop(pool) }
+        return
     }
-    onCleanup(move cleanupGraphics)
-    metalContextFree(ctxPtr)
-    metalAutoreleasePoolPop(pool)
+    if metalUsesUIKit!() {
+        metalAutoreleasePoolPop(pool)
+        metalUIKitStartFrames(move renderNextFrame, move cleanup, move liveStorage)
+        return
+    }
+    while renderNextFrame() {}
+    cleanup()
     return
 }

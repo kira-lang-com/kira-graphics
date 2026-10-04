@@ -16,14 +16,14 @@ import Foundation
 // why it is zero and not a flag of its own. FullScreen is a bit AppKit sets on
 // the window when it enters the space — read, never written; `toggleFullScreen:`
 // is what moves the window.
-function metalWindowStyleBorderless() -> U64 { return 0 }
-function metalWindowStyleTitledBit() -> U64 { return 1 }
-function metalWindowStyleFullScreenBit() -> U64 { return 16384 }
-function metalWindowStyleFullSizeContentBit() -> U64 { return 32768 }
+public function metalWindowStyleBorderless() -> U64 { return 0 }
+public function metalWindowStyleTitledBit() -> U64 { return 1 }
+public function metalWindowStyleFullScreenBit() -> U64 { return 16384 }
+public function metalWindowStyleFullSizeContentBit() -> U64 { return 32768 }
 
 // NSWindowTitleVisibility and NSWindowToolbarStyle.
-function metalWindowTitleHidden() -> U64 { return 1 }
-function metalWindowToolbarStyleUnified() -> U64 { return 3 }
+public function metalWindowTitleHidden() -> U64 { return 1 }
+public function metalWindowToolbarStyleUnified() -> U64 { return 3 }
 
 // A unified title bar, built the way AppKit builds one: the content view runs
 // under a transparent bar, the window's own title is hidden, and an empty
@@ -32,7 +32,7 @@ function metalWindowToolbarStyleUnified() -> U64 { return 3 }
 // everything the band shows. The window does not move itself from the band
 // either: the application says where the band is bare, and the event pump
 // starts the window's drag there itself.
-@Native
+public @Native
 function metalWindowApplyTitlebar(window: RawPtr, titlebar: borrow WindowTitlebar): Void {
     if titlebar == .Standard {
         return
@@ -55,8 +55,9 @@ function metalWindowApplyTitlebar(window: RawPtr, titlebar: borrow WindowTitleba
 // the desktop. A see-through window takes its shadow from what it draws, so
 // the shadow rounds with it. The window's own corner is smaller than any
 // radius worth asking for, so the curve drawn here is the one that shows.
-@Native
+public @Native
 function metalWindowApplyCornerRadius(view: RawPtr, radius: Float): Void {
+    if metalUsesUIKit!() { return }
     if radius <= 0.0 {
         return
     }
@@ -77,7 +78,7 @@ function metalWindowApplyCornerRadius(view: RawPtr, radius: Float): Void {
 // opened with. The bit rides along through borderless as well — it means
 // nothing on an untitled window — so a unified title bar's content still runs
 // under the bar once the window is decorated again.
-@Native
+public @Native
 function metalWindowDecoratedMask(window: RawPtr, mask: U64) -> U64 {
     let current: U64 = metalMsgSend(window, metalSel("styleMask"))
     if metalWindowStyleBitSet(current, metalWindowStyleFullSizeContentBit()) {
@@ -86,7 +87,7 @@ function metalWindowDecoratedMask(window: RawPtr, mask: U64) -> U64 {
     return mask
 }
 
-function metalWindowStyleMaskFor(mode: borrow WindowMode) -> U64 {
+public function metalWindowStyleMaskFor(mode: borrow WindowMode) -> U64 {
     match mode {
         Windowed -> return metalWindowStyleMask()
         WindowedBorderless -> return metalWindowStyleBorderless()
@@ -96,7 +97,7 @@ function metalWindowStyleMaskFor(mode: borrow WindowMode) -> U64 {
     }
 }
 
-function metalWindowWantsFullScreen(mode: borrow WindowMode) -> Bool {
+public function metalWindowWantsFullScreen(mode: borrow WindowMode) -> Bool {
     match mode {
         Windowed -> return false
         WindowedBorderless -> return false
@@ -107,11 +108,11 @@ function metalWindowWantsFullScreen(mode: borrow WindowMode) -> Bool {
 // One bit of a style mask. Higher bits are set on real windows
 // (FullSizeContentView, HUDWindow), so a bit test has to divide down and take
 // the remainder rather than compare the whole mask.
-function metalWindowStyleBitSet(mask: U64, bit: U64) -> Bool {
+public function metalWindowStyleBitSet(mask: U64, bit: U64) -> Bool {
     return (mask / bit) - ((mask / bit) / U64(2)) * U64(2) == U64(1)
 }
 
-@Native
+public @Native
 function metalWindowIsFullScreen(window: RawPtr) -> Bool {
     return metalWindowStyleBitSet(metalMsgSend(window, metalSel("styleMask")), metalWindowStyleFullScreenBit())
 }
@@ -119,7 +120,7 @@ function metalWindowIsFullScreen(window: RawPtr) -> Bool {
 // Put a freshly created window into the mode the application asked for. The
 // window is already decorated and on screen; only a fullscreen request has
 // anything left to do.
-@Native
+public @Native
 function metalWindowApplyStartMode(window: RawPtr, mode: borrow WindowMode): Void {
     if metalWindowWantsFullScreen(mode) {
         metalMsgSend(window, metalSel("toggleFullScreen:"), nullPointer())
@@ -129,8 +130,9 @@ function metalWindowApplyStartMode(window: RawPtr, mode: borrow WindowMode): Voi
     return
 }
 
-@Native
+public @Native
 function metalViewWindowMode(view: RawPtr) -> WindowMode {
+    if metalUsesUIKit!() { return .Fullscreen }
     let window: RawPtr = metalMsgSend(view, metalSel("window"))
     if pointerIsNull(window) {
         return .Windowed
@@ -145,8 +147,9 @@ function metalViewWindowMode(view: RawPtr) -> WindowMode {
     return .WindowedBorderless
 }
 
-@Native
+public @Native
 function metalViewSetWindowMode(view: RawPtr, mode: borrow WindowMode): Void {
+    if metalUsesUIKit!() { return }
     let window: RawPtr = metalMsgSend(view, metalSel("window"))
     if pointerIsNull(window) {
         return

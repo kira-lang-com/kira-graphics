@@ -1,20 +1,20 @@
-function graphicsApplicationDefaultInit(graphics: Graphics) {
+public function graphicsApplicationDefaultInit(graphics: Graphics) {
     return
 }
 
-function graphicsApplicationDefaultFrame(frame: borrow mut RenderFrame) {
+public function graphicsApplicationDefaultFrame(frame: borrow mut RenderFrame) {
     return
 }
 
-function graphicsApplicationDefaultEvent(event: borrow AppEvent) {
+public function graphicsApplicationDefaultEvent(event: borrow AppEvent) {
     return
 }
 
-function graphicsApplicationDefaultCleanup(graphics: Graphics) {
+public function graphicsApplicationDefaultCleanup(graphics: Graphics) {
     return
 }
 
-function graphicsApplicationNoWindowDragRegion(x: Float, y: Float) -> Bool {
+public function graphicsApplicationNoWindowDragRegion(x: Float, y: Float) -> Bool {
     return false
 }
 
@@ -24,11 +24,11 @@ function graphicsApplicationNoWindowDragRegion(x: Float, y: Float) -> Bool {
 // four points are also the top resize edge on Wayland, so twelve leaves an
 // eight-point move handle instead of the effectively two-point handle a six-
 // point strip produced.
-function graphicsApplicationFallbackWindowDragRegion(x: Float, y: Float) -> Bool {
+public function graphicsApplicationFallbackWindowDragRegion(x: Float, y: Float) -> Bool {
     return x >= 0.0 && y >= 0.0 && y < 12.0
 }
 
-struct GraphicsApplication {
+public struct GraphicsApplication {
     var title: String = "Kira Graphics"
     var width: Int = 640
     var height: Int = 480

@@ -7,6 +7,14 @@ Package KiraGraphics {
     let allowThinFfiShim = true
     let nativeLibraries = [
         NativeLibrary {
+            name: "kira_uikit",
+            availability: Availability.Optional,
+            nativeTargets: [
+                NativeTarget { triple: "aarch64-ios-none", frameworks: ["UIKit"] },
+                NativeTarget { triple: "aarch64-ios-sim", frameworks: ["UIKit"] }
+            ]
+        },
+        NativeLibrary {
             // Memory two processes can both render from and sample.
             //
             // Dawn imports shared memory and cannot allocate any, so the buffer
@@ -30,7 +38,9 @@ Package KiraGraphics {
                 NativeTarget { triple: "aarch64-linux-gnu", systemLibs: ["dl", "vulkan"] },
                 NativeTarget { triple: "x86_64-windows-msvc", systemLibs: ["kernel32"] },
                 NativeTarget { triple: "aarch64-macos-none" },
-                NativeTarget { triple: "x86_64-macos-none" }
+                NativeTarget { triple: "x86_64-macos-none" },
+                NativeTarget { triple: "aarch64-ios-none" },
+                NativeTarget { triple: "aarch64-ios-sim" }
             ]
         },
         NativeLibrary {
@@ -49,6 +59,7 @@ Package KiraGraphics {
                 NativeTarget { triple: "aarch64-macos-none" },
                 NativeTarget { triple: "x86_64-macos-none" },
                 NativeTarget { triple: "aarch64-ios-none" },
+                NativeTarget { triple: "aarch64-ios-sim" },
                 NativeTarget { triple: "wasm32-emscripten-unknown" }
             ]
         },
@@ -98,6 +109,11 @@ Package KiraGraphics {
             // executable instead of linking it.
             name: "dawn",
             linkMode: LinkMode.Dynamic,
+            // Dawn is not an Apple-mobile dependency. iOS uses the native Metal
+            // backend, and there is no iOS Dawn artifact in this package. Keep
+            // Dawn present on targets with a declared slice and exclude its FFI
+            // bindings on targets such as iOS that intentionally have none.
+            availability: Availability.Optional,
             //
             // `WGPU_SKIP_PROCS` leaves out the function-pointer typedefs a
             // dynamic loader would use, which nothing here does — and with them
@@ -255,6 +271,7 @@ Package KiraGraphics {
             nativeTargets: [
                 NativeTarget { triple: "aarch64-macos-none", dynamicLib: "" },
                 NativeTarget { triple: "aarch64-ios-none", dynamicLib: "" },
+                NativeTarget { triple: "aarch64-ios-sim", dynamicLib: "" },
                 NativeTarget { triple: "x86_64-linux-gnu", dynamicLib: "" },
                 NativeTarget { triple: "aarch64-linux-gnu", dynamicLib: "" },
                 NativeTarget { triple: "x86_64-windows-msvc", dynamicLib: "" },
@@ -276,6 +293,7 @@ Package KiraGraphics {
             nativeTargets: [
                 NativeTarget { triple: "aarch64-macos-none", frameworks: ["Foundation", "QuartzCore", "Metal", "AppKit"], systemLibs: ["objc"] },
                 NativeTarget { triple: "aarch64-ios-none", frameworks: ["Foundation", "QuartzCore", "Metal", "UIKit"], systemLibs: ["objc"] },
+                NativeTarget { triple: "aarch64-ios-sim", frameworks: ["Foundation", "QuartzCore", "Metal", "UIKit"], systemLibs: ["objc"] },
                 NativeTarget { triple: "wasm32-emscripten-unknown", dynamicLib: "", linkerFlags: ["-sERROR_ON_UNDEFINED_SYMBOLS=0"] }
             ],
         }

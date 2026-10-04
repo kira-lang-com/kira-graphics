@@ -5,7 +5,7 @@
 // own `kg_shader_records` table, keyed by id. They live here now, on the value
 // every caller already threads through pipeline creation — so a pipeline built
 // from this shader copies them rather than looking them up.
-struct GraphicsShader {
+public struct GraphicsShader {
     var id: U32 = 0
     var hasPositionAttribute: Bool = false
     var hasNormalAttribute: Bool = false
@@ -14,7 +14,7 @@ struct GraphicsShader {
     var uniformBlocks: [UniformBlockDescriptor] = []
 }
 
-@Native
+public @Native
 function emptyGraphicsShader() -> GraphicsShader {
     return GraphicsShader {
         id: 0

@@ -12,11 +12,11 @@ import Foundation
 // this. The copy's rows are padded to the 256-byte multiple WebGPU requires of
 // `bytesPerRow`, so the reader walks rows rather than one flat run.
 
-function dawnCopyRowAlignment() -> Int { return 256 }
+public function dawnCopyRowAlignment() -> Int { return 256 }
 
 // The presented frame as a binary PPM at `path`, taken before the present so the
 // texture is still this frame's.
-@Native
+public @Native
 function dawnCaptureFrame(context: RawPtr, path: borrow String) {
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     let width = state.dawn.surfaceWidth
@@ -38,7 +38,7 @@ function dawnCaptureFrame(context: RawPtr, path: borrow String) {
 
 // An explicit texture as a binary PPM. Headless renderers have no swapchain, so
 // this is the same readback instrument pointed at the texture they own.
-@Native
+public @Native
 function dawnCaptureTexture(context: RawPtr, texture: borrow GraphicsTexture, path: borrow String) -> Bool {
     if !dawnHasDevice(context) || texture.id == U32(0) || texture.width <= 0 || texture.height <= 0 {
         return false
@@ -58,7 +58,7 @@ function dawnCaptureTexture(context: RawPtr, texture: borrow GraphicsTexture, pa
     )
 }
 
-function dawnCaptureTextureHandle(context: RawPtr, texture: RawPtr, width: Int, height: Int, format: I32, path: borrow String) -> Bool {
+public function dawnCaptureTextureHandle(context: RawPtr, texture: RawPtr, width: Int, height: Int, format: I32, path: borrow String) -> Bool {
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     let bytesPerRow = (width * 4 + dawnCopyRowAlignment() - 1) / dawnCopyRowAlignment() * dawnCopyRowAlignment()
     let byteCount = bytesPerRow * height
@@ -140,7 +140,7 @@ function dawnCaptureTextureHandle(context: RawPtr, texture: RawPtr, width: Int, 
 // two outer channels swap. Writing the bytes in the wrong order would produce a
 // picture that looks plausible and compares as different everywhere, which is
 // the worst possible answer from an instrument.
-@Native
+public @Native
 function dawnPortablePixmap(mapped: RawPtr, width: Int, height: Int, bytesPerRow: Int, format: I32) -> [U8] {
     let blueFirst = format == dawnFormatBgra8Unorm()
     var bytes: [U8] = []
@@ -168,7 +168,7 @@ function dawnPortablePixmap(mapped: RawPtr, width: Int, height: Int, bytesPerRow
 
 // The bytes of a header line. The header is ASCII by the format's own
 // definition, so one byte per scalar.
-@Native
+public @Native
 function dawnAsciiBytes(text: borrow String) -> [U8] {
     var bytes: [U8] = []
     var index = 0

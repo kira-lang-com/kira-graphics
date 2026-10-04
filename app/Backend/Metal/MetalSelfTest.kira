@@ -5,17 +5,17 @@
 
 // Expected center pixel (0xAARRGGBB little-endian read as one U32) for a clear to
 // (0.25, 0.5, 0.75, 1.0): B=191, G=128, R=64, A=255.
-function metalSelfTestClearExpected() -> U32 { return 4282417343 }
+public function metalSelfTestClearExpected() -> U32 { return 4282417343 }
 
 // Expected center pixel for the triangle fragment color (1.0, 0.4, 0.1, 1.0):
 // B=26, G=102, R=255, A=255.
-function metalSelfTestTriangleExpected() -> U32 { return 4294927898 }
+public function metalSelfTestTriangleExpected() -> U32 { return 4294927898 }
 
-function metalSelfTestTriangleSource() -> String {
+public function metalSelfTestTriangleSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main() { return float4(1.0, 0.4, 0.1, 1.0); }\n"
 }
 
-function metalSelfTestTriangleVertices() -> [F32] {
+public function metalSelfTestTriangleVertices() -> [F32] {
     return [
         0.0, 0.7,
         0.7, -0.7,
@@ -24,7 +24,7 @@ function metalSelfTestTriangleVertices() -> [F32] {
 }
 
 // Render an offscreen clear and return the center pixel.
-@Native
+public @Native
 function metalSelfTestClearPixel() -> U32 {
     let ctx = metalContextAlloc()
     metalContextAttachOffscreen(ctx, 8, 8)
@@ -36,7 +36,7 @@ function metalSelfTestClearPixel() -> U32 {
 }
 
 // Render an offscreen shader-driven triangle and return the center pixel.
-@Native
+public @Native
 function metalSelfTestTrianglePixel() -> U32 {
     let pool = metalAutoreleasePoolPush()
     let ctx = metalContextAlloc()
@@ -53,7 +53,7 @@ function metalSelfTestTrianglePixel() -> U32 {
     return packed
 }
 
-function metalSelfTestQuadVertices() -> [F32] {
+public function metalSelfTestQuadVertices() -> [F32] {
     return [
         -0.7, -0.7,
         0.7, -0.7,
@@ -62,12 +62,12 @@ function metalSelfTestQuadVertices() -> [F32] {
     ]
 }
 
-function metalSelfTestQuadIndices() -> [U32] {
+public function metalSelfTestQuadIndices() -> [U32] {
     return [0, 1, 2, 0, 2, 3]
 }
 
 // Render an offscreen indexed quad (two triangles) and return the center pixel.
-@Native
+public @Native
 function metalSelfTestIndexedPixel() -> U32 {
     let pool = metalAutoreleasePoolPush()
     let ctx = metalContextAlloc()
@@ -87,19 +87,19 @@ function metalSelfTestIndexedPixel() -> U32 {
 
 // Expected center pixel for a uniform fragment color (0.2, 0.6, 0.9, 1.0):
 // B=229, G=153, R=51, A=255 (Metal rounds 0.9*255=229.5 to 229).
-function metalSelfTestUniformExpected() -> U32 { return 4281571813 }
+public function metalSelfTestUniformExpected() -> U32 { return 4281571813 }
 
-function metalSelfTestUniformSource() -> String {
+public function metalSelfTestUniformSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main(constant float4& color [[buffer(0)]]) { return color; }\n"
 }
 
-function metalSelfTestUniformData() -> [F32] {
+public function metalSelfTestUniformData() -> [F32] {
     return [0.2, 0.6, 0.9, 1.0]
 }
 
 // Render an offscreen triangle whose fragment color comes from a uniform buffer,
 // and return the center pixel — proving uniform upload + fragment binding.
-@Native
+public @Native
 function metalSelfTestUniformPixel() -> U32 {
     let pool = metalAutoreleasePoolPush()
     let ctx = metalContextAlloc()
@@ -123,13 +123,13 @@ function metalSelfTestUniformPixel() -> U32 {
 // it. With depth testing the far blue fails the less-than test and the center stays
 // red; without depth the later blue would overwrite it. Expected center = red
 // (1,0,0,1): B=0, G=0, R=255, A=255.
-function metalSelfTestDepthExpected() -> U32 { return 4294901760 }
+public function metalSelfTestDepthExpected() -> U32 { return 4294901760 }
 
-function metalSelfTestDepthSource() -> String {
+public function metalSelfTestDepthSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant packed_float3* verts [[buffer(0)]]) { VOut o; o.pos = float4(float3(verts[vid]), 1.0); return o; }\nfragment float4 f_main(constant float4& color [[buffer(0)]]) { return color; }\n"
 }
 
-function metalSelfTestNearVertices() -> [F32] {
+public function metalSelfTestNearVertices() -> [F32] {
     return [
         0.0, 0.7, 0.2,
         0.7, -0.7, 0.2,
@@ -137,7 +137,7 @@ function metalSelfTestNearVertices() -> [F32] {
     ]
 }
 
-function metalSelfTestFarVertices() -> [F32] {
+public function metalSelfTestFarVertices() -> [F32] {
     return [
         0.0, 0.7, 0.8,
         0.7, -0.7, 0.8,
@@ -145,7 +145,7 @@ function metalSelfTestFarVertices() -> [F32] {
     ]
 }
 
-@Native
+public @Native
 function metalSelfTestDepthPixel() -> U32 {
     let pool = metalAutoreleasePoolPush()
     let ctx = metalContextAlloc()
@@ -173,17 +173,17 @@ function metalSelfTestDepthPixel() -> U32 {
 
 // Texture: a 1x1 RGBA8 texture (R=50,G=150,B=250,A=255) sampled in the fragment
 // shader, written to the BGRA8 target -> center pixel B=250,G=150,R=50,A=255.
-function metalSelfTestTextureExpected() -> U32 { return 4281505530 }
+public function metalSelfTestTextureExpected() -> U32 { return 4281505530 }
 
-function metalSelfTestTextureSource() -> String {
+public function metalSelfTestTextureSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main(texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) { return tex.sample(smp, float2(0.5, 0.5)); }\n"
 }
 
-function metalSelfTestTexturePixels() -> [U8] {
+public function metalSelfTestTexturePixels() -> [U8] {
     return [50, 150, 250, 255]
 }
 
-@Native
+public @Native
 function metalSelfTestTexturePixel() -> U32 {
     let pool = metalAutoreleasePoolPush()
     let ctx = metalContextAlloc()
@@ -207,7 +207,7 @@ function metalSelfTestTexturePixel() -> U32 {
 
 // Bind group: same uniform color path as the uniform test, but bound through a
 // bind-group block (create + add entry + apply) — proving the bind-group glue.
-@Native
+public @Native
 function metalSelfTestBindGroupPixel() -> U32 {
     let pool = metalAutoreleasePoolPush()
     let ctx = metalContextAlloc()
@@ -234,13 +234,13 @@ function metalSelfTestBindGroupPixel() -> U32 {
 // 1). The matrix translates X by +2, moving the whole triangle off-screen, so the
 // center clears to black. If the vertex uniform were not applied the center would be
 // the triangle color — so this proves the vertex-stage uniform path end to end.
-function metalSelfTestVertexUniformExpected() -> U32 { return 4278190080 }
+public function metalSelfTestVertexUniformExpected() -> U32 { return 4278190080 }
 
-function metalSelfTestVertexUniformSource() -> String {
+public function metalSelfTestVertexUniformSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]], constant float4x4& mvp [[buffer(1)]]) { VOut o; o.pos = mvp * float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main() { return float4(1.0, 0.4, 0.1, 1.0); }\n"
 }
 
-function metalSelfTestTranslateMatrix() -> [F32] {
+public function metalSelfTestTranslateMatrix() -> [F32] {
     return [
         1.0, 0.0, 0.0, 0.0,
         0.0, 1.0, 0.0, 0.0,
@@ -249,7 +249,7 @@ function metalSelfTestTranslateMatrix() -> [F32] {
     ]
 }
 
-@Native
+public @Native
 function metalSelfTestVertexUniformPixel() -> U32 {
     let pool = metalAutoreleasePoolPush()
     let ctx = metalContextAlloc()
@@ -275,13 +275,13 @@ function metalSelfTestVertexUniformPixel() -> U32 {
 // a persistent shared buffer's `contents` (the UI compositor's hot path — no per-frame
 // Kira array, no upload call), then drawn. The fragment is solid blue (0,0,1,1) so the
 // center reads back B=255,G=0,R=0,A=255.
-function metalSelfTestDynamicExpected() -> U32 { return 4278190335 }
+public function metalSelfTestDynamicExpected() -> U32 { return 4278190335 }
 
-function metalSelfTestDynamicSource() -> String {
+public function metalSelfTestDynamicSource() -> String {
     return "#include <metal_stdlib>\nusing namespace metal;\nstruct VOut { float4 pos [[position]]; };\nvertex VOut v_main(uint vid [[vertex_id]], constant float2* verts [[buffer(0)]]) { VOut o; o.pos = float4(verts[vid], 0.0, 1.0); return o; }\nfragment float4 f_main() { return float4(0.0, 0.0, 1.0, 1.0); }\n"
 }
 
-@Native
+public @Native
 function metalSelfTestDynamicPixel() -> U32 {
     let pool = metalAutoreleasePoolPush()
     let ctx = metalContextAlloc()
@@ -314,47 +314,47 @@ function metalSelfTestDynamicPixel() -> U32 {
 }
 
 // Verdicts the kik Test harness asserts.
-@Native
+public @Native
 function metalSelfTestDynamicOk() -> Bool {
     return metalSelfTestDynamicPixel() == metalSelfTestDynamicExpected()
 }
 
-@Native
+public @Native
 function metalSelfTestClearOk() -> Bool {
     return metalSelfTestClearPixel() == metalSelfTestClearExpected()
 }
 
-@Native
+public @Native
 function metalSelfTestVertexUniformOk() -> Bool {
     return metalSelfTestVertexUniformPixel() == metalSelfTestVertexUniformExpected()
 }
 
-@Native
+public @Native
 function metalSelfTestBindGroupOk() -> Bool {
     return metalSelfTestBindGroupPixel() == metalSelfTestUniformExpected()
 }
 
-@Native
+public @Native
 function metalSelfTestTextureOk() -> Bool {
     return metalSelfTestTexturePixel() == metalSelfTestTextureExpected()
 }
 
-@Native
+public @Native
 function metalSelfTestDepthOk() -> Bool {
     return metalSelfTestDepthPixel() == metalSelfTestDepthExpected()
 }
 
-@Native
+public @Native
 function metalSelfTestUniformOk() -> Bool {
     return metalSelfTestUniformPixel() == metalSelfTestUniformExpected()
 }
 
-@Native
+public @Native
 function metalSelfTestIndexedOk() -> Bool {
     return metalSelfTestIndexedPixel() == metalSelfTestTriangleExpected()
 }
 
-@Native
+public @Native
 function metalSelfTestTriangleOk() -> Bool {
     return metalSelfTestTrianglePixel() == metalSelfTestTriangleExpected()
 }

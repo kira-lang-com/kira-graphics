@@ -9,7 +9,7 @@
 // plus the shader reflection fields below, replaces the Sokol backend's old
 // `kg_pipeline_records` table, keyed by a public id this struct's own `id`
 // now is.
-struct RenderPipeline {
+public struct RenderPipeline {
     var id: U32 = 0
     var drawPipelineId: U32 = 0
     var indexedPipelineId: U32 = 0
@@ -20,7 +20,7 @@ struct RenderPipeline {
     var uniformBlocks: [UniformBlockDescriptor] = []
 }
 
-@Native
+public @Native
 function emptyRenderPipeline() -> RenderPipeline {
     return RenderPipeline {
         id: 0

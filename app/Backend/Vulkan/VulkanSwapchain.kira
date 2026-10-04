@@ -4,14 +4,14 @@ import Foundation
 // swapchain, so only their views live in the run state; application textures use
 // the normal object table.
 
-function vulkanCompositeAlpha(capabilities: borrow VkSurfaceCapabilitiesKHR) -> I32 {
+public function vulkanCompositeAlpha(capabilities: borrow VkSurfaceCapabilitiesKHR) -> I32 {
     if (capabilities.supportedCompositeAlpha & U32(1)) != U32(0) { return I32(1) }
     if (capabilities.supportedCompositeAlpha & U32(2)) != U32(0) { return I32(2) }
     if (capabilities.supportedCompositeAlpha & U32(4)) != U32(0) { return I32(4) }
     return I32(8)
 }
 
-@Native
+public @Native
 function vulkanSurfaceExtent(state: borrow VulkanState, capabilities: RawPtr) -> VkExtent2D {
     if wordAt(capabilities, U64(8)) != U32(4294967295) {
         return VkExtent2D {
@@ -38,7 +38,7 @@ function vulkanSurfaceExtent(state: borrow VulkanState, capabilities: RawPtr) ->
     }
 }
 
-@Native
+public @Native
 function vulkanChooseSurfaceFormat(state: borrow VulkanState, count: Int, formats: RawPtr) -> VkSurfaceFormatKHR {
     var selected = VkSurfaceFormatKHR {
         format: vulkanFormatBgra8()
@@ -64,7 +64,7 @@ function vulkanChooseSurfaceFormat(state: borrow VulkanState, count: Int, format
     return selected
 }
 
-@Native
+public @Native
 function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
     let capabilities = allocateBytes(U64(52))
     let capabilitiesResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(state.physicalDevice, state.surface, capabilities)
@@ -197,7 +197,7 @@ function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
     return true
 }
 
-@Native
+public @Native
 function vulkanDestroySwapchain(state: borrow mut VulkanState) {
     for semaphore in state.swapchainPresentSemaphores {
         vkDestroySemaphore(state.device, semaphore, nullPointer())
@@ -216,7 +216,7 @@ function vulkanDestroySwapchain(state: borrow mut VulkanState) {
     return
 }
 
-@Native
+public @Native
 function vulkanRecreateSwapchain(state: borrow mut VulkanState) -> Bool {
     vkDeviceWaitIdle(state.device)
     vulkanDestroySwapchain(state)

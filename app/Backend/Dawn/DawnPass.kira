@@ -25,7 +25,7 @@ import Foundation
 // up on: it is the compositor saying the surface no longer matches the window,
 // which is what a resize does. Reconfiguring and asking again is the answer, and
 // only a second refusal is worth a line.
-@Native
+public @Native
 function dawnAcquireSurfaceTexture(state: borrow mut GraphicsAppRuntimeState) -> Bool {
     if !pointerIsNull(state.dawn.frameView) {
         return true
@@ -58,7 +58,7 @@ function dawnAcquireSurfaceTexture(state: borrow mut GraphicsAppRuntimeState) ->
     return !pointerIsNull(state.dawn.frameView)
 }
 
-function dawnSurfaceStatusIsUsable(status: I32) -> Bool {
+public function dawnSurfaceStatusIsUsable(status: I32) -> Bool {
     return status == dawnSurfaceTextureOptimal() || status == dawnSurfaceTextureSuboptimal()
 }
 
@@ -69,7 +69,7 @@ function dawnSurfaceStatusIsUsable(status: I32) -> Bool {
 // so a pass that asks for depth without naming a texture gets this. Its format
 // is what every depth-enabled pipeline bakes in, so the pass and the pipeline
 // agree.
-@Native
+public @Native
 function dawnEnsureDepthTarget(state: borrow mut GraphicsAppRuntimeState, width: Int, height: Int) -> U32 {
     if width <= 0 || height <= 0 {
         return U32(0)
@@ -108,7 +108,7 @@ function dawnEnsureDepthTarget(state: borrow mut GraphicsAppRuntimeState, width:
     return state.dawn.depthViewId
 }
 
-@Native
+public @Native
 function dawnReleaseDepthTarget(state: borrow mut GraphicsAppRuntimeState) {
     dawnReleaseView(state, state.dawn.depthViewId)
     state.dawn.depthViewId = 0
@@ -125,7 +125,7 @@ function dawnReleaseDepthTarget(state: borrow mut GraphicsAppRuntimeState) {
 }
 
 // Begins the pass the frame describes.
-@Native
+public @Native
 function dawnBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bool {
     if !dawnHasDevice(context) {
         graphicsDiagnostic("Kira Graphics skipped a render pass because the frame carries no Dawn device")
@@ -261,7 +261,7 @@ function dawnBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bool
 
 // The frame's command encoder, opened on first use. Every pass of the frame —
 // and every compute dispatch between them — records into this one.
-@Native
+public @Native
 function dawnFrameEncoder(state: borrow mut GraphicsAppRuntimeState) -> RawPtr {
     if pointerIsNull(state.dawn.encoder) {
         state.dawn.encoder = wgpuDeviceCreateCommandEncoder(state.dawn.device, WGPUCommandEncoderDescriptor {
@@ -272,7 +272,7 @@ function dawnFrameEncoder(state: borrow mut GraphicsAppRuntimeState) -> RawPtr {
 }
 
 // Ends the pass. The commands stay on the frame's encoder until it is submitted.
-@Native
+public @Native
 function dawnEndPassAndCommit(context: RawPtr) {
     if !dawnHasDevice(context) {
         return
@@ -295,7 +295,7 @@ function dawnEndPassAndCommit(context: RawPtr) {
 }
 
 // Finishes whatever the frame's encoder holds and submits it.
-@Native
+public @Native
 function dawnSubmitEncoder(state: borrow mut GraphicsAppRuntimeState) {
     if pointerIsNull(state.dawn.encoder) {
         return
@@ -316,7 +316,7 @@ function dawnSubmitEncoder(state: borrow mut GraphicsAppRuntimeState) {
 // A frame that never acquired a surface texture — one that only filled offscreen
 // targets — presents nothing, which is the honest answer rather than an empty
 // swap.
-@Native
+public @Native
 function dawnPresentFrame(context: RawPtr, capturePath: borrow String) {
     if !dawnHasDevice(context) {
         return

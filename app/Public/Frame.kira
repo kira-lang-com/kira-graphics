@@ -7,7 +7,7 @@ import Foundation
 // encoder that pass handed out, and whether the application asked to quit.
 //
 // Everything a backend does with a frame it does through `renderBackend()`.
-class RenderFrame {
+public class RenderFrame {
     var attachments: PassAttachments
 
     var hasRenderPass: Bool = false
@@ -51,6 +51,11 @@ class RenderFrame {
 
     function viewportHeight() -> Float {
         return self.renderBackend().viewportHeight()
+    }
+
+    // Viewport edges reserved for system controls, in logical points.
+    function safeAreaInsets() -> ViewportInsets {
+        return self.renderBackend().safeAreaInsets()
     }
 
     // The drawable in DEVICE pixels, and how many of them one point buys.
@@ -262,7 +267,7 @@ class RenderFrame {
     }
 }
 
-function drawPass(frame: borrow mut RenderFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, vertexCount: Int) {
+public function drawPass(frame: borrow mut RenderFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, vertexCount: Int) {
     var encoder = frame.beginRenderPass(descriptor)
     encoder.setPipeline(pipeline)
     encoder.setVertexBuffer(vertexBuffer)
@@ -271,7 +276,7 @@ function drawPass(frame: borrow mut RenderFrame, descriptor: borrow RenderPassDe
     return
 }
 
-function drawPassWithBindGroups(frame: borrow mut RenderFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, bindGroup0: borrow BindGroup, bindGroup1: borrow BindGroup, vertexCount: Int) {
+public function drawPassWithBindGroups(frame: borrow mut RenderFrame, descriptor: borrow RenderPassDescriptor, pipeline: borrow RenderPipeline, vertexBuffer: borrow GraphicsBuffer, bindGroup0: borrow BindGroup, bindGroup1: borrow BindGroup, vertexCount: Int) {
     var encoder = frame.beginRenderPass(descriptor)
     encoder.setPipeline(pipeline)
     encoder.setVertexBuffer(vertexBuffer)

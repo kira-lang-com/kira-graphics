@@ -5,7 +5,7 @@ import Foundation
 // instrument, not a rendering path: a finite capture is what lets a test inspect
 // actual pixels instead of trusting draw counters.
 
-@Native
+public @Native
 function vulkanRecordFrameCapture(state: borrow mut VulkanState) -> U32 {
     if !state.captureSupported || !state.frameActive || !state.acquired || state.swapchainImages.count == 0 {
         graphicsDiagnostic("Kira Graphics: Vulkan cannot capture this swapchain")
@@ -34,7 +34,7 @@ function vulkanRecordFrameCapture(state: borrow mut VulkanState) -> U32 {
     return staging
 }
 
-@Native
+public @Native
 function vulkanWriteFrameCapture(state: borrow mut VulkanState, staging: U32, path: borrow String) {
     if staging == 0 { return }
     if vkQueueWaitIdle(state.queue) != vulkanSuccess() {
@@ -54,7 +54,7 @@ function vulkanWriteFrameCapture(state: borrow mut VulkanState, staging: U32, pa
     return
 }
 
-@Native
+public @Native
 function vulkanPortablePixmap(mapped: RawPtr, width: Int, height: Int, format: I32) -> [U8] {
     let blueFirst = format == vulkanFormatBgra8()
     var bytes: [U8] = []

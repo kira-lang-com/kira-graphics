@@ -5,7 +5,7 @@
 // group, a UI draw and a pass attachment each take — so the ids it mints travel
 // here with the image rather than in a table keyed on it. A caller passes a
 // `GraphicsTexture` and never learns which of the two shapes it has.
-struct GraphicsTexture {
+public struct GraphicsTexture {
     var id: U32 = 0
     // The view a shader samples through, for a texture whose usage is sampled.
     var viewId: U32 = 0
@@ -37,7 +37,7 @@ struct GraphicsTexture {
 // Binding is all it is for. Uploading to a texture needs the image id, and
 // attaching a pass to one needs the attachment views; neither can be recovered
 // from a sampled view.
-@Native
+public @Native
 function sampledTextureFromViewId(viewId: U32) -> GraphicsTexture {
     return GraphicsTexture {
         id: viewId,
@@ -45,7 +45,7 @@ function sampledTextureFromViewId(viewId: U32) -> GraphicsTexture {
     }
 }
 
-@Native
+public @Native
 function emptyGraphicsTexture() -> GraphicsTexture {
     return GraphicsTexture {
         id: 0

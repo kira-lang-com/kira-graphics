@@ -5,7 +5,7 @@
 // The public descriptor layer uses Sokol-style load-action constants
 // (clear = 1, load = 2, dontCare = 3). Metal's MTLLoadAction values differ
 // (clear = 2, load = 1, dontCare = 0), so translate at the boundary.
-@Native
+public @Native
 function metalMapLoadAction(publicLoadAction: Int) -> U64 {
     if publicLoadAction == 1 {
         return metalLoadActionClear()
@@ -24,7 +24,7 @@ function metalMapLoadAction(publicLoadAction: Int) -> U64 {
 
 // Begin the frame's render pass on the Metal context. Today this drives the
 // color clear; pipeline/buffer/draw encoding lands in later phases.
-@Native
+public @Native
 function metalBeginRenderPassFromFrame(frame: borrow RenderFrame, ctxPtr: RawPtr) -> Bool {
     let color = frame.attachments.color
     let load = metalMapLoadAction(loadActionCode(color.loadAction))
@@ -39,14 +39,14 @@ function metalBeginRenderPassFromFrame(frame: borrow RenderFrame, ctxPtr: RawPtr
 }
 
 // End this pass's encoder. The frame hook commits all pass encoders together.
-@Native
+public @Native
 function metalEndPassAndCommit(ctxPtr: RawPtr) {
     metalContextEndPass(ctxPtr)
     return
 }
 
 // Submit the complete logical frame as one Metal command buffer.
-@Native
+public @Native
 function metalSubmitFrame(frame: borrow RenderFrame) {
     metalContextSubmitActiveFrame(frame.backendContext)
     return
@@ -54,7 +54,7 @@ function metalSubmitFrame(frame: borrow RenderFrame) {
 
 // Headless verification: report the center pixel the GPU actually produced for
 // the frame, so an offscreen run proves real Kira-owned rendering (not a marker).
-@Native
+public @Native
 function metalReportCenterPixel(ctxPtr: RawPtr, width: Int, height: Int) {
     let cx = width / 2
     let cy = height / 2
@@ -70,7 +70,7 @@ function metalReportCenterPixel(ctxPtr: RawPtr, width: Int, height: Int) {
 // carrying distinct per-primitive ids that resolve to distinct materials). Printed
 // in addition to the center pixel, so single-value readback assertions are
 // unaffected; only callers that opt in (KIRA_METAL_READBACK_POINTS) read these.
-@Native
+public @Native
 function metalReportProbePixels(ctxPtr: RawPtr, width: Int, height: Int) {
     let my = height / 2
     let left = metalContextReadPixel(ctxPtr, width / 4, my)
@@ -83,7 +83,7 @@ function metalReportProbePixels(ctxPtr: RawPtr, width: Int, height: Int) {
 // Golden-image report: prints a sentinel (313131) then a deterministic digest of the
 // whole framebuffer, so a shell harness can assert pixel-exact stability of the entire
 // rendered image. Opt-in (KIRA_METAL_IMAGE_DIGEST); does not affect other readback.
-@Native
+public @Native
 function metalReportImageDigest(ctxPtr: RawPtr, width: Int, height: Int) {
     let digest = metalContextImageDigest(ctxPtr, width, height)
     print(313131)
@@ -94,7 +94,7 @@ function metalReportImageDigest(ctxPtr: RawPtr, width: Int, height: Int) {
 // Frame-time benchmark report: prints a sentinel then nanoseconds-per-frame, so a
 // shell harness can derive ms/FPS without on-screen present/vsync. Integer-only to
 // avoid float/FFI marshalling edge cases.
-@Native
+public @Native
 function metalReportBench(totalNs: Int, frames: Int) {
     print(424242)
     print(totalNs / frames)
@@ -105,7 +105,7 @@ function metalReportBench(totalNs: Int, frames: Int) {
 // gate; this trace exposes queue bursts instead of averaging them away. GPU time
 // is the newest completed logical frame and therefore trails the CPU sample by the
 // configured in-flight depth.
-@Native
+public @Native
 function metalReportBenchFrame(ctxPtr: RawPtr, frameIndex: Int) {
     print(434343)
     print(frameIndex)
@@ -115,7 +115,7 @@ function metalReportBenchFrame(ctxPtr: RawPtr, frameIndex: Int) {
     return
 }
 
-@Native
+public @Native
 function metalReportBenchWorst(frameNs: Int, cpuNs: Int, gpuNs: Int) {
     print(444444)
     print(frameNs)
@@ -132,7 +132,7 @@ function metalReportBenchWorst(frameNs: Int, cpuNs: Int, gpuNs: Int) {
 // stall and neighbor on the GPU timeline, so read it as a ceiling; the
 // per-encoder truth needs a Metal System Trace (docs/frame-cost.md).
 
-function metalBenchDigit(digit: Int) -> String {
+public function metalBenchDigit(digit: Int) -> String {
     if digit == 1 { return "1" }
     if digit == 2 { return "2" }
     if digit == 3 { return "3" }
@@ -145,7 +145,7 @@ function metalBenchDigit(digit: Int) -> String {
     return "0"
 }
 
-function metalBenchInt(value: Int) -> String {
+public function metalBenchInt(value: Int) -> String {
     if value <= 0 {
         return "0"
     }
@@ -159,7 +159,7 @@ function metalBenchInt(value: Int) -> String {
 }
 
 // Nanoseconds as milliseconds with three decimals ("1.234").
-function metalBenchMs(ns: Int) -> String {
+public function metalBenchMs(ns: Int) -> String {
     let micros = (ns + 500) / 1000
     var frac = metalBenchInt(micros % 1000)
     while frac.count < 3 {
@@ -170,7 +170,7 @@ function metalBenchMs(ns: Int) -> String {
 
 // In-place insertion sort: a bench window is a few thousand samples, sorted
 // once at exit — no allocation, no dependency.
-function metalBenchSort(samples: borrow mut [Int]) {
+public function metalBenchSort(samples: borrow mut [Int]) {
     var i = 1
     while i < samples.count {
         let value = samples[i]
@@ -185,7 +185,7 @@ function metalBenchSort(samples: borrow mut [Int]) {
     return
 }
 
-function metalBenchPercentile(sorted: borrow [Int], num: Int, den: Int) -> Int {
+public function metalBenchPercentile(sorted: borrow [Int], num: Int, den: Int) -> Int {
     if sorted.count == 0 {
         return 0
     }
@@ -196,7 +196,7 @@ function metalBenchPercentile(sorted: borrow [Int], num: Int, den: Int) -> Int {
     return sorted[index]
 }
 
-function metalBenchReportSeries(name: String, samples: borrow mut [Int]) {
+public function metalBenchReportSeries(name: String, samples: borrow mut [Int]) {
     if samples.count == 0 {
         return
     }
@@ -215,7 +215,7 @@ function metalBenchReportSeries(name: String, samples: borrow mut [Int]) {
 
 // Collect one frame's samples (called after end-frame timing; the GPU sample
 // trails the CPU one by the in-flight depth, which percentiles do not mind).
-@Native
+public @Native
 function metalBenchCollect(ctxPtr: RawPtr, frameNs: borrow mut [Int], cpuNs: borrow mut [Int], gpuNs: borrow mut [Int]) {
     frameNs.append(Int(metalMemReadU64(ctxPtr, metalOffsetFrameDurationNs())))
     cpuNs.append(Int(metalMemReadU64(ctxPtr, metalOffsetCpuFrameDurationNs())))
@@ -223,7 +223,7 @@ function metalBenchCollect(ctxPtr: RawPtr, frameNs: borrow mut [Int], cpuNs: bor
     return
 }
 
-@Native
+public @Native
 function metalBenchReport(ctxPtr: RawPtr, frameNs: borrow mut [Int], cpuNs: borrow mut [Int], gpuNs: borrow mut [Int]) {
     let pxW = metalContextPhysicalWidth(ctxPtr)
     let pxH = metalContextPhysicalHeight(ctxPtr)

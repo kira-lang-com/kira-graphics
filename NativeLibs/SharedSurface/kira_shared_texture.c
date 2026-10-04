@@ -307,6 +307,10 @@ void *kira_dawn_create_device_probe(void *adapter, void *descriptor_raw) {
 #else
 
 #if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+#if defined(__APPLE__) && TARGET_OS_OSX
 #include <dawn/webgpu.h>
 
 /* The headless device path (openHeadlessGraphics is Dawn on Apple) needs the
@@ -321,6 +325,16 @@ void *kira_dawn_create_device_probe(void *adapter, void *descriptor_raw) {
         return 0;
     }
     return (void *)wgpuAdapterCreateDevice((WGPUAdapter)adapter, descriptor);
+}
+#elif defined(__APPLE__)
+/* iOS is Metal-only. Keep the exported probe symbol because the Kira FFI
+ * surface is shared across Apple builds, but never pull Dawn into a mobile
+ * link. A null result makes the headless-Dawn path unavailable while the
+ * actual iOS renderer continues through kira_metal. */
+void *kira_dawn_create_device_probe(void *adapter, void *descriptor_raw) {
+    (void)adapter;
+    (void)descriptor_raw;
+    return 0;
 }
 #endif
 

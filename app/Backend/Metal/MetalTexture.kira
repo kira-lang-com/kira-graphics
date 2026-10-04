@@ -1,15 +1,15 @@
 // Metal texture and sampler resources, built from Objective-C messages via FFI and
 // registered in the context's id->pointer table.
 
-function metalPixelFormatRGBA8Unorm() -> U64 { return 70 }
-function metalTextureUsageShaderRead() -> U64 { return 1 }
-function metalSamplerFilterNearest() -> U64 { return 0 }
-function metalSamplerFilterLinear() -> U64 { return 1 }
-function metalSamplerAddressClampToEdge() -> U64 { return 0 }
+public function metalPixelFormatRGBA8Unorm() -> U64 { return 70 }
+public function metalTextureUsageShaderRead() -> U64 { return 1 }
+public function metalSamplerFilterNearest() -> U64 { return 0 }
+public function metalSamplerFilterLinear() -> U64 { return 1 }
+public function metalSamplerAddressClampToEdge() -> U64 { return 0 }
 
 // Create an RGBA8 sampled texture (shared storage so pixels can be uploaded from
 // the CPU) and register it.
-@Native
+public @Native
 function metalCreateTexture(ctx: RawPtr, width: Int, height: Int) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let descClass = metalObjcGetClass("MTLTextureDescriptor")
@@ -24,7 +24,7 @@ function metalCreateTexture(ctx: RawPtr, width: Int, height: Int) -> Int {
 // which backend minted the id. Metal has one object where sokol has an image
 // and separate views onto it, so the view fields repeat the texture rather than
 // sit at zero: code that reads `viewId` gets something that works on both.
-@Native
+public @Native
 function metalGraphicsTexture(textureId: Int) -> GraphicsTexture {
     let id = U32(textureId)
     return GraphicsTexture {
@@ -38,7 +38,7 @@ function metalGraphicsTexture(textureId: Int) -> GraphicsTexture {
 
 // Render-target-capable and sampled, in the requested format — what a
 // multi-pass renderer needs, e.g. the deferred-resolve visibility texture.
-@Native
+public @Native
 function metalCreateGraphicsTexture(ctx: RawPtr, descriptor: borrow TextureDescriptor) -> TextureResult {
     return metalTextureResult(metalCreateColorTargetTexture(
         ctx,
@@ -56,7 +56,7 @@ function metalCreateGraphicsTexture(ctx: RawPtr, descriptor: borrow TextureDescr
 // sized to this target, a managed depth buffer matched to it and a whole-image
 // upload into it all need the numbers, and asking Metal for them later means an
 // Objective-C round trip for something the caller just said.
-@Native
+public @Native
 function metalTextureResult(textureId: Int, width: Int, height: Int) -> TextureResult {
     if textureId == 0 {
         return .Error(.DeviceRefused)
@@ -72,7 +72,7 @@ function metalTextureResult(textureId: Int, width: Int, height: Int) -> TextureR
 // The upload needs the CPU-writable linear rows a shared-storage texture has,
 // and every later sample would keep paying for that layout — so one blit
 // re-tiles it afterwards, which is the right trade for contents loaded once.
-@Native
+public @Native
 function metalCreateGraphicsTextureFromPixels(ctx: RawPtr, descriptor: borrow TextureDescriptor, pixels: borrow [U8]) -> TextureResult {
     let textureId = metalCreateTexture(ctx, descriptor.width, descriptor.height)
     if textureId == 0 {
@@ -91,14 +91,14 @@ function metalCreateGraphicsTextureFromPixels(ctx: RawPtr, descriptor: borrow Te
 // No re-tiling here, unlike the create path: a texture being updated is one
 // that will be updated again — a glyph atlas — and optimizing it would undo the
 // linear layout the next upload needs.
-@Native
+public @Native
 function metalUpdateGraphicsTexture(ctx: RawPtr, texture: borrow GraphicsTexture, width: Int, height: Int, pixels: borrow [U8]) {
     metalUpdateTexture(ctx, Int(texture.id), width, height, pixels)
     return
 }
 
 // Upload RGBA8 pixel bytes (row-major, 4 bytes/pixel) into a texture region.
-@Native
+public @Native
 function metalUpdateTexture(ctx: RawPtr, textureId: Int, width: Int, height: Int, data: borrow [U8]) {
     let texture = metalLookup(ctx, textureId)
     let count = data.count
@@ -129,7 +129,7 @@ function metalUpdateTexture(ctx: RawPtr, textureId: Int, width: Int, height: Int
 // atlas, whose CPU side has to exist anyway so a new glyph can be packed beside
 // the old ones, and copying it into an array to hand it back would cost a
 // megabyte-scale loop on every frame that adds a glyph.
-@Native
+public @Native
 function metalUpdateTextureBytes(ctx: RawPtr, textureId: Int, width: Int, height: Int, bytes: RawPtr, byteCount: Int) {
     if textureId == 0 || byteCount <= 0 || width <= 0 || height <= 0 {
         return
@@ -147,6 +147,34 @@ function metalUpdateTextureBytes(ctx: RawPtr, textureId: Int, width: Int, height
     return
 }
 
+// Replace `rowCount` rows of a texture from `firstRow`, out of the whole image
+// at `bytes`. `replaceRegion:` reads the region's first row from where it is
+// handed, so the address is moved down to that row first.
+public @Native
+function metalUpdateTextureRows(ctx: RawPtr, textureId: Int, width: Int, height: Int, bytes: RawPtr, firstRow: Int, rowCount: Int) {
+    if textureId == 0 || width <= 0 || firstRow < 0 || rowCount <= 0 || firstRow + rowCount > height {
+        return
+    }
+    let texture = metalLookup(ctx, textureId)
+    let region = metalMemAlloc(48)
+    metalMemWriteU64(region, 0, 0)
+    metalMemWriteU64(region, 8, U64(firstRow))
+    metalMemWriteU64(region, 16, 0)
+    metalMemWriteU64(region, 24, U64(width))
+    metalMemWriteU64(region, 32, U64(rowCount))
+    metalMemWriteU64(region, 40, 1)
+    // The row's address: written as a pointer, read back as a word, moved, and
+    // read as a pointer again.
+    let slot = metalMemAlloc(8)
+    metalMemWritePtr(slot, 0, bytes)
+    metalMemWriteU64(slot, 0, metalMemReadU64(slot, 0) + U64(firstRow * width * 4))
+    let start = metalMemReadPtr(slot, 0)
+    metalMsgSend(texture, metalSel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), region, 0, start, width * 4)
+    metalMemFree(slot)
+    metalMemFree(region)
+    return
+}
+
 // Re-tile a sampled texture's contents into the GPU-optimal layout. A
 // shared-storage texture keeps the CPU-writable linear rows `replaceRegion:`
 // needs, and every sample of it pays for that layout. After the last CPU
@@ -154,7 +182,7 @@ function metalUpdateTextureBytes(ctx: RawPtr, textureId: Int, width: Int, height
 // compress them on Apple GPUs). One-shot and synchronous, so a caller can
 // treat the upload as complete when this returns; wrong for textures that
 // keep taking CPU writes, like the glyph atlas.
-@Native
+public @Native
 function metalOptimizeTextureForGpu(ctx: RawPtr, textureId: Int) {
     let texture = metalLookup(ctx, textureId)
     let queue = metalMemReadPtr(ctx, metalOffsetQueue())
@@ -171,7 +199,7 @@ function metalOptimizeTextureForGpu(ctx: RawPtr, textureId: Int) {
 // buffer, ordered after whatever the frame already encoded — the shape a
 // mid-frame producer (the blur compute) needs, where a separate committed
 // buffer would race the uncommitted writes it must follow.
-@Native
+public @Native
 function metalContextOptimizeTextureInFrame(ctx: RawPtr, textureId: Int) {
     let commandBuffer = metalContextActiveCommandBuffer(ctx)
     let blit: RawPtr = metalMsgSend(commandBuffer, metalSel("blitCommandEncoder"))
@@ -181,7 +209,7 @@ function metalContextOptimizeTextureInFrame(ctx: RawPtr, textureId: Int) {
 }
 
 // Create an MTLSamplerState with the given min/mag filters and address mode.
-@Native
+public @Native
 function metalCreateSampler(ctx: RawPtr, minFilter: U64, magFilter: U64, addressMode: U64) -> Int {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     let descClass = metalObjcGetClass("MTLSamplerDescriptor")
@@ -198,7 +226,7 @@ function metalCreateSampler(ctx: RawPtr, minFilter: U64, magFilter: U64, address
 }
 
 // Bind a texture / sampler to a fragment-shader slot on the active encoder.
-@Native
+public @Native
 function metalEncoderBindFragmentTexture(ctx: RawPtr, textureId: Int, index: Int) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let texture = metalLookup(ctx, textureId)
@@ -206,7 +234,7 @@ function metalEncoderBindFragmentTexture(ctx: RawPtr, textureId: Int, index: Int
     return
 }
 
-@Native
+public @Native
 function metalEncoderBindFragmentSampler(ctx: RawPtr, samplerId: Int, index: Int) {
     let encoder = metalMemReadPtr(ctx, metalOffsetEncoder())
     let sampler = metalLookup(ctx, samplerId)

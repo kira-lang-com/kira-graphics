@@ -7,7 +7,7 @@ import Foundation
 //
 // Split from MetalApplication.kira, which owns the device, the pool, and the
 // choice between this path and the window.
-@Native
+public @Native
 function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: RawPtr, userData: RawPtr, pool: RawPtr) {
     metalContextAttachOffscreenFormat(ctxPtr, app.width, app.height, metalPixelFormatForTexture(textureFormatCode(app.colorFormat)))
     kiraGraphicsLiveBackendInitialized()

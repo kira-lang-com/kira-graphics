@@ -3,7 +3,7 @@ import Foundation
 // Vulkan's native run loop. Window events are added at the platform boundary;
 // the GPU lifetime below is deliberately independent of that translation.
 
-@Native
+public @Native
 function vulkanRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) {
     var runtime = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
     runtime.vulkan = VulkanState()
@@ -63,7 +63,7 @@ function vulkanRunApplication(app: borrow GraphicsApplication, runtimeUserData: 
     return
 }
 
-@Native
+public @Native
 function vulkanDriveFrames(runtimeUserData: RawPtr) {
     var runtime = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
     while !runtime.vulkan.quitRequested {
@@ -106,7 +106,7 @@ function vulkanDriveFrames(runtimeUserData: RawPtr) {
     return
 }
 
-@Native
+public @Native
 function vulkanResizeIfNeeded(runtime: borrow mut GraphicsAppRuntimeState) {
     let window = vulkanWindowFor(vulkanWindowPlatformForHost())
     let width = window.clientWidth(runtime.vulkan.window)
@@ -129,7 +129,7 @@ function vulkanResizeIfNeeded(runtime: borrow mut GraphicsAppRuntimeState) {
     return
 }
 
-@Native
+public @Native
 function vulkanPumpWindows(runtime: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
     let messages: WindowMessagePointer = runtime.vulkan.messageBlock
     let onEvent: (borrow AppEvent) -> Void = runtime.app.eventHandler
@@ -148,7 +148,7 @@ function vulkanPumpWindows(runtime: borrow mut GraphicsAppRuntimeState, runtimeU
     return
 }
 
-@Native
+public @Native
 function vulkanDeliverWindowMessage(runtime: borrow mut GraphicsAppRuntimeState, message: U32, wparam: U64, lparam: Int) {
     let onEvent: (borrow AppEvent) -> Void = runtime.app.eventHandler
     let scale = vulkanWindowFor(vulkanWindowPlatformForHost()).scale(runtime.vulkan.window)
@@ -220,7 +220,7 @@ function vulkanDeliverWindowMessage(runtime: borrow mut GraphicsAppRuntimeState,
     return
 }
 
-@Native
+public @Native
 function vulkanDriveScripts(runtime: borrow mut GraphicsAppRuntimeState, frame: borrow mut RenderFrame, scriptFrame: Int) {
     let onEvent: (borrow AppEvent) -> Void = runtime.app.eventHandler
     var clickIndex = 0
@@ -269,7 +269,7 @@ function vulkanDriveScripts(runtime: borrow mut GraphicsAppRuntimeState, frame: 
     return
 }
 
-@Native
+public @Native
 function vulkanShutdownState(state: borrow mut VulkanState) {
     if pointerIsNull(state.instance) {
         if !pointerIsNull(state.window) {

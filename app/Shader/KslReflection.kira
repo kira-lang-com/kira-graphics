@@ -30,21 +30,20 @@
 // different calls. The digest names the kind for exactly that reason.
 import Foundation
 
-@Derive(Equatable, Clone)
-enum UniformScalarKind {
+public enum UniformScalarKind {
     Floating
     Signed
     Unsigned
 }
 
-struct KslUniformMember {
+public struct KslUniformMember {
     var name: String = ""
     var offset: Int = 0
     var size: Int = 0
     var kind: UniformScalarKind = .Floating
 }
 
-struct KslUniformBlock {
+public struct KslUniformBlock {
     var name: String = ""
     var binding: Int = 0
     // The resource group this block sits in. A binding is numbered from zero
@@ -56,7 +55,7 @@ struct KslUniformBlock {
     var members: [KslUniformMember] = []
 }
 
-struct KslTextureBinding {
+public struct KslTextureBinding {
     var name: String = ""
     var binding: Int = 0
     var group: Int = 0
@@ -68,7 +67,7 @@ struct KslTextureBinding {
     var glslName: String = ""
 }
 
-struct KslStorageImage {
+public struct KslStorageImage {
     var name: String = ""
     var binding: Int = 0
     var group: Int = 0
@@ -79,14 +78,14 @@ struct KslStorageImage {
     var writeOnly: Bool = true
 }
 
-struct KslSamplerBinding {
+public struct KslSamplerBinding {
     var name: String = ""
     var binding: Int = 0
     var group: Int = 0
     var stageMask: Int = 0
 }
 
-struct KslStorageBuffer {
+public struct KslStorageBuffer {
     var name: String = ""
     var binding: Int = 0
     var group: Int = 0
@@ -97,7 +96,7 @@ struct KslStorageBuffer {
     var readOnly: Bool = true
 }
 
-struct KslResourceReflection {
+public struct KslResourceReflection {
     var uniforms: [KslUniformBlock] = []
     var textures: [KslTextureBinding] = []
     var images: [KslStorageImage] = []
@@ -110,7 +109,7 @@ struct KslResourceReflection {
 // Zero rather than a trap: a truncated record is a compiler that emitted
 // something this reader does not understand, and the shader it describes will
 // be refused by the validation that follows rather than by a crash here.
-@Native
+public @Native
 function kslDigestInt(text: borrow String) -> Int {
     if text.isInt() {
         return text.toInt()
@@ -118,7 +117,7 @@ function kslDigestInt(text: borrow String) -> Int {
     return 0
 }
 
-@Native
+public @Native
 function kslDigestField(fields: borrow [String], index: Int) -> String {
     if index < fields.count {
         return fields[index]
@@ -127,7 +126,7 @@ function kslDigestField(fields: borrow [String], index: Int) -> String {
 }
 
 // One `name@offset#size` member, with the kind letter that stands beside it.
-@Native
+public @Native
 function kslParseUniformMember(text: borrow String, kind: borrow String) -> KslUniformMember {
     let atSplit = text.split("@")
     var member = KslUniformMember {
@@ -140,7 +139,7 @@ function kslParseUniformMember(text: borrow String, kind: borrow String) -> KslU
     return member
 }
 
-@Native
+public @Native
 function kslUniformScalarKind(letter: borrow String) -> UniformScalarKind {
     if letter == "i" {
         return .Signed
@@ -152,7 +151,7 @@ function kslUniformScalarKind(letter: borrow String) -> UniformScalarKind {
 }
 
 // The letter standing for member `index`, or `f` when the digest carries none.
-@Native
+public @Native
 function kslKindLetter(kinds: borrow String, index: Int) -> String {
     if index >= 0 && index + 1 <= kinds.count {
         return kinds.substring(index, index + 1)
@@ -160,7 +159,7 @@ function kslKindLetter(kinds: borrow String, index: Int) -> String {
     return "f"
 }
 
-@Native
+public @Native
 function kslParseUniformBlock(fields: borrow [String]) -> KslUniformBlock {
     var block = KslUniformBlock {
         name: kslDigestField(fields, 0),
@@ -184,7 +183,7 @@ function kslParseUniformBlock(fields: borrow [String]) -> KslUniformBlock {
 }
 
 // Read one shader's whole digest.
-@Native
+public @Native
 function kslParseResourceReflection(digest: borrow String) -> KslResourceReflection {
     var reflection = KslResourceReflection {}
     for record in digest.split(";") {

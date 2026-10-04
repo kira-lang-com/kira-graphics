@@ -1,4 +1,4 @@
-struct GraphicsBuffer {
+public struct GraphicsBuffer {
     var id: U32 = 0
     // The GPU storage this buffer occupies. Carried because releasing it has to
     // subtract the same number creating it added, and a destroy is handed the
@@ -17,12 +17,12 @@ struct GraphicsBuffer {
 // answer "the block I allocated for you last time", which needs a table keyed by
 // buffer id — exactly the kind of side table this backend spent its migration
 // deleting.
-struct DynamicBuffer {
+public struct DynamicBuffer {
     var buffer: GraphicsBuffer
     var contents: RawPtr
 }
 
-@Native
+public @Native
 function emptyGraphicsBuffer() -> GraphicsBuffer {
     return GraphicsBuffer {
         id: 0
@@ -32,7 +32,7 @@ function emptyGraphicsBuffer() -> GraphicsBuffer {
 // The placeholder a host's state struct holds before its first frame creates
 // the real one — id 0 and a null pointer, so a write that reaches it before
 // creation is refused rather than landing somewhere.
-@Native
+public @Native
 function emptyDynamicBuffer() -> DynamicBuffer {
     return DynamicBuffer {
         buffer: emptyGraphicsBuffer(),

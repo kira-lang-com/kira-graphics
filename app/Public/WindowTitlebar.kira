@@ -10,7 +10,7 @@
 // and placed for a toolbar-height band. What goes in that band is the
 // application's to draw. A backend whose windows have no such bar treats it as
 // `Standard`.
-enum WindowTitlebar {
+public enum WindowTitlebar {
     Standard
     Unified
 }

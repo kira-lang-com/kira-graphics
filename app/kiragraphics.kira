@@ -1,3 +1,3 @@
-function kiraGraphicsApiName() -> String {
+public function kiraGraphicsApiName() -> String {
     return "Kira Graphics"
 }

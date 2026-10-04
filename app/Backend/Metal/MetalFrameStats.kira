@@ -11,12 +11,12 @@
 // decoded by hand. Every one of those decodes is in this file.
 
 // True when a context handle is present (the Metal backend is active for a pass).
-@Native
+public @Native
 function metalContextActive(ctx: RawPtr) -> Bool {
     return !pointerIsNull(ctx)
 }
 
-@Native
+public @Native
 function metalContextSetHighDpi(ctx: RawPtr, enabled: Bool) {
     var value: U64 = 0
     if enabled {
@@ -29,7 +29,7 @@ function metalContextSetHighDpi(ctx: RawPtr, enabled: Bool) {
 // Sleep to just before an absolute deadline, then spin the final 100us. Work that
 // already missed its deadline returns immediately; the caller starts a fresh
 // cadence instead of emitting catch-up frames.
-@Native
+public @Native
 function metalContextWaitUntilNs(ctx: RawPtr, deadlineNs: U64) {
     let nowNs = metalClockNs(metalClockUptimeRaw())
     if deadlineNs <= nowNs {
@@ -54,7 +54,7 @@ function metalContextWaitUntilNs(ctx: RawPtr, deadlineNs: U64) {
 // Sample the frame clock: record the delta since the previous tick as the current
 // frame duration (seconds). Called once per frame by the on-screen run loop; the live
 // FPS readout reads it back through metalContextFrameDuration.
-@Native
+public @Native
 function metalContextTickFrameTime(ctx: RawPtr) {
     let now = metalClockNs(metalClockUptimeRaw())
     let last = metalMemReadU64(ctx, metalOffsetLastFrameNs())
@@ -68,7 +68,7 @@ function metalContextTickFrameTime(ctx: RawPtr) {
 // The most recent inter-frame delta in seconds (nanoseconds / 1e9), for the FPS
 // readout. The conversion is a normal Kira Float division — no floating-point value
 // crosses the FFI boundary.
-@Native
+public @Native
 function metalContextFrameDuration(ctx: RawPtr) -> Float {
     let durNs = metalMemReadU64(ctx, metalOffsetFrameDurationNs())
     return Float(durNs) / 1000000000.0
@@ -77,7 +77,7 @@ function metalContextFrameDuration(ctx: RawPtr) -> Float {
 // Start/end one LOGICAL application frame. A frame may contain many Metal command
 // buffers (the Liquid Glass compositor has capture and blur passes), so the serial
 // groups their asynchronous GPU timestamps into one HUD sample.
-@Native
+public @Native
 function metalContextBeginFrameTiming(ctx: RawPtr) {
     metalContextTickFrameTime(ctx)
     let serial = metalMemReadU64(ctx, metalOffsetLogicalFrameSerial()) + U64(1)
@@ -89,7 +89,7 @@ function metalContextBeginFrameTiming(ctx: RawPtr) {
     return
 }
 
-@Native
+public @Native
 function metalContextEndFrameTiming(ctx: RawPtr) {
     let start = metalMemReadU64(ctx, metalOffsetCpuFrameStartNs())
     let finish = metalClockNs(metalClockUptimeRaw())
@@ -102,23 +102,23 @@ function metalContextEndFrameTiming(ctx: RawPtr) {
     return
 }
 
-@Native
+public @Native
 function metalContextCpuDuration(ctx: RawPtr) -> Float {
     return Float(metalMemReadU64(ctx, metalOffsetCpuFrameDurationNs())) / 1000000000.0
 }
 
-@Native
+public @Native
 function metalContextGpuDuration(ctx: RawPtr) -> Float {
     return Float(metalMemReadU64(ctx, metalOffsetGpuFrameDurationNs())) / 1000000000.0
 }
 
-@Native
+public @Native
 function metalContextCountPass(ctx: RawPtr) {
     metalMemWriteU64(ctx, metalOffsetCurrentPasses(), metalMemReadU64(ctx, metalOffsetCurrentPasses()) + U64(1))
     return
 }
 
-@Native
+public @Native
 function metalContextCountDraw(ctx: RawPtr, triangles: Int) {
     metalMemWriteU64(ctx, metalOffsetCurrentDraws(), metalMemReadU64(ctx, metalOffsetCurrentDraws()) + U64(1))
     if triangles > 0 {
@@ -127,35 +127,35 @@ function metalContextCountDraw(ctx: RawPtr, triangles: Int) {
     return
 }
 
-@Native
+public @Native
 function metalContextPassCount(ctx: RawPtr) -> Int {
     return metalMemReadU64(ctx, metalOffsetLastPasses())
 }
 
-@Native
+public @Native
 function metalContextDrawCount(ctx: RawPtr) -> Int {
     return metalMemReadU64(ctx, metalOffsetLastDraws())
 }
 
-@Native
+public @Native
 function metalContextTriangleCount(ctx: RawPtr) -> Int {
     return metalMemReadU64(ctx, metalOffsetLastTriangles())
 }
 
-@Native
+public @Native
 function metalContextFrameSerial(ctx: RawPtr) -> Int {
     return metalMemReadU64(ctx, metalOffsetLogicalFrameSerial())
 }
 
 // MTLDevice.currentAllocatedSize is the same live figure Instruments exposes in
 // Metal System Trace, so the expanded HUD reports real driver-owned resource bytes.
-@Native
+public @Native
 function metalContextAllocatedBytes(ctx: RawPtr) -> U64 {
     let device = metalMemReadPtr(ctx, metalOffsetDevice())
     return metalMsgSend(device, metalSel("currentAllocatedSize"))
 }
 
-@Native
+public @Native
 function metalContextResourceCount(ctx: RawPtr) -> Int {
     let kinds = metalMemReadPtr(ctx, metalOffsetRegistryKinds())
     let nextId = metalMemReadU64(ctx, metalOffsetNextId())
@@ -170,12 +170,12 @@ function metalContextResourceCount(ctx: RawPtr) -> Int {
     return active
 }
 
-@Native
+public @Native
 function metalContextPhysicalWidth(ctx: RawPtr) -> Int {
     return metalMemReadU64(ctx, metalOffsetPhysicalWidth())
 }
 
-@Native
+public @Native
 function metalContextPhysicalHeight(ctx: RawPtr) -> Int {
     let logicalW = metalMemReadU64(ctx, metalOffsetWidth())
     let logicalH = metalMemReadU64(ctx, metalOffsetHeight())
@@ -186,12 +186,12 @@ function metalContextPhysicalHeight(ctx: RawPtr) -> Int {
     return logicalH * physicalW / logicalW
 }
 
-@Native
+public @Native
 function metalContextWindowState(ctx: RawPtr) -> Int {
     return metalMemReadU64(ctx, metalOffsetWindowState())
 }
 
-@Native
+public @Native
 function metalContextSetWindowState(ctx: RawPtr, state: Int) {
     metalMemWriteU64(ctx, metalOffsetWindowState(), state)
     return
@@ -203,7 +203,7 @@ function metalContextSetWindowState(ctx: RawPtr, state: Int) {
 // fetched into a buffer via NSValue -getValue: and decoded here. 2^52 = 4503599627370496.
 // Implicit U64->Int coercion (an explicit Int(u64) cast does not lower; a return-typed
 // coercion does, as metalContextWidth relies on).
-@Native
+public @Native
 function metalU64ToInt(v: U64) -> Int {
     return v
 }
@@ -212,7 +212,7 @@ function metalU64ToInt(v: U64) -> Int {
 // coordinates and scroll deltas, where metalDoubleBitsToInt's positive-integer
 // truncation drops trackpad sub-point deltas and negative values entirely.
 // Works in the sign-free domain: top 12 bits = sign(1) + exponent(11).
-@Native
+public @Native
 function metalDoubleBitsToFloat(bits: U64) -> Float {
     let top = metalU64ToInt(bits / U64(4503599627370496))
     let sign = top / 2048
@@ -237,7 +237,7 @@ function metalDoubleBitsToFloat(bits: U64) -> Float {
     return frac
 }
 
-@Native
+public @Native
 function metalDoubleBitsToInt(bits: U64) -> Int {
     let b = metalU64ToInt(bits)
     if b <= 0 {
@@ -269,7 +269,7 @@ function metalDoubleBitsToInt(bits: U64) -> Int {
 // the direct CGRect/CGFloat message returns do not marshal across the FFI: -valueForKey:
 // returns an NSValue/NSNumber (a pointer), -getValue: writes the boxed NSRect's four
 // doubles into a buffer, and -integerValue returns the scale as a plain integer.
-@Native
+public @Native
 function metalContextSyncViewportFromView(ctx: RawPtr) {
     let view = metalMemReadPtr(ctx, metalOffsetHostView())
     if pointerIsNull(view) {
@@ -292,8 +292,14 @@ function metalContextSyncViewportFromView(ctx: RawPtr) {
     var scale = 1
     let window: RawPtr = metalMsgSend(view, metalSel("window"))
     if !pointerIsNull(window) {
-        let scaleKey: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "backingScaleFactor")
-        let scaleNum: RawPtr = metalMsgSend(window, metalSel("valueForKey:"), scaleKey)
+        var scaleOwner = window
+        var scaleName = "backingScaleFactor"
+        if metalUsesUIKit!() {
+            scaleOwner = metalMsgSend(window, metalSel("screen"))
+            scaleName = "scale"
+        }
+        let scaleKey: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), scaleName)
+        let scaleNum: RawPtr = metalMsgSend(scaleOwner, metalSel("valueForKey:"), scaleKey)
         if !pointerIsNull(scaleNum) {
             let s = metalU64ToInt(metalMsgSendCount(scaleNum, metalSel("integerValue")))
             if s >= 1 && s <= 4 {
@@ -357,7 +363,7 @@ function metalContextSyncViewportFromView(ctx: RawPtr) {
 }
 
 // Backing (Retina) scale = physical pixels / points. 1.0 until the first viewport sync.
-@Native
+public @Native
 function metalContextScale(ctx: RawPtr) -> Float {
     let pw = metalMemReadU64(ctx, metalOffsetPhysicalWidth())
     let w = metalMemReadU64(ctx, metalOffsetWidth())
@@ -369,12 +375,12 @@ function metalContextScale(ctx: RawPtr) -> Float {
 
 // Drawable dimensions recorded on the context (the UI layout/viewport source on the
 // Metal path, where Sokol's sapp_width/height are not valid).
-@Native
+public @Native
 function metalContextWidth(ctx: RawPtr) -> Int {
     return metalMemReadU64(ctx, metalOffsetWidth())
 }
 
-@Native
+public @Native
 function metalContextHeight(ctx: RawPtr) -> Int {
     return metalMemReadU64(ctx, metalOffsetHeight())
 }
@@ -382,7 +388,7 @@ function metalContextHeight(ctx: RawPtr) -> Int {
 // The Metal backend's answer to `RenderFrame.statistics()`: the same context
 // fields the HUD used to read one accessor at a time, gathered into the shape
 // both backends report in.
-@Native
+public @Native
 function metalFrameStatistics(ctx: RawPtr, framesInFlight: Int) -> FrameStatistics {
     if pointerIsNull(ctx) {
         return FrameStatistics {}

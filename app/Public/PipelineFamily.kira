@@ -22,29 +22,26 @@ import Foundation
 // members returns, which is what keeps a simple pipeline three lines long.
 
 // One attribute in the vertex stream a pipeline reads.
-@Derive(Equatable, Clone)
-struct VertexAttributeSpec {
+public struct VertexAttributeSpec {
     var location: Int = 0
     var format: VertexFormat = .Float4
     var offset: Int = 0
 }
 
 // The vertex stream's shape: how wide one vertex is, and what it holds.
-struct VertexStream {
+public struct VertexStream {
     var stride: Int = 0
     var attributes: [VertexAttributeSpec]
 }
 
 // How a pipeline's color output combines with what is already there.
-@Derive(Equatable, Clone)
-struct Blending {
+public struct Blending {
     var enabled: Bool = true
     var preset: BlendPreset = .PremultipliedAlpha
 }
 
 // Whether and how a pipeline depth-tests.
-@Derive(Equatable, Clone)
-struct DepthTest {
+public struct DepthTest {
     var enabled: Bool = false
     var writes: Bool = false
     var compare: CompareFunction = .Less
@@ -52,8 +49,7 @@ struct DepthTest {
 }
 
 // Which faces survive rasterization, and which winding is front.
-@Derive(Equatable, Clone)
-struct Rasterization {
+public struct Rasterization {
     var cull: CullMode = .None
     var front: FrontFace = .CounterClockwise
     var topology: PrimitiveTopology = .TriangleList
@@ -64,7 +60,7 @@ struct Rasterization {
 // The runtime reads this rather than the declaration, so building a pipeline
 // and declaring one stay separate: a declaration says what it is, and the
 // engine decides when to realize it.
-struct PipelinePlan {
+public struct PipelinePlan {
     var label: String = ""
     // The shader it runs, as `ksl!` handed it back: every backend's compiled
     // text at build time, so nothing reads a file to realize the pipeline.
@@ -79,7 +75,7 @@ struct PipelinePlan {
     var colorFormat: TextureFormat = .Swapchain
 }
 
-construct Pipeline {
+public construct Pipeline {
     // What it runs, and what it reads. A pipeline without these is not one.
     @Required function shader() -> KslArtifact
     @Required function vertices() -> VertexStream

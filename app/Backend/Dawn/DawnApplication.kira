@@ -9,7 +9,7 @@ import Foundation
 // runtime state is in hand, because a `WNDPROC` is handed no user pointer to
 // reach it through (see `DawnWindow.kira`).
 
-@Native
+public @Native
 function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: RawPtr) -> Void {
     var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
     state.dawn = dawnEmptyState()
@@ -105,7 +105,7 @@ function dawnRunApplication(app: borrow GraphicsApplication, runtimeUserData: Ra
 // frame takes the resize path — the same `WM_SIZE`, the same reconfigure, the
 // same relayout — and a frame-cost summary describes resizing rather than
 // idling.
-@Native
+public @Native
 function dawnSweepWindowSize(state: borrow mut GraphicsAppRuntimeState) {
     if state.resizeSweep <= 0 {
         return
@@ -123,7 +123,7 @@ function dawnSweepWindowSize(state: borrow mut GraphicsAppRuntimeState) {
 
 // One frame after another until the window closes, the application requests a
 // quit, or the harness's frame limit is reached.
-@Native
+public @Native
 function dawnDriveFrames(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
     while !state.dawn.quitRequested {
         // Draining the platform's queue. The two window systems are least
@@ -158,7 +158,7 @@ function dawnDriveFrames(state: borrow mut GraphicsAppRuntimeState, runtimeUserD
 
 // One frame: hand the application a `RenderFrame`, then end whatever it left
 // open and present.
-@Native
+public @Native
 function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
     let graphics = Graphics {
         userData: state.userData,
@@ -292,7 +292,7 @@ function dawnRunFrame(state: borrow mut GraphicsAppRuntimeState, runtimeUserData
 // Polled rather than driven from `WM_SIZE`: a size message arrives while the
 // window is being dragged, several times a frame, and reconfiguring a surface
 // mid-drag costs more than measuring the rectangle once.
-@Native
+public @Native
 function dawnResizeIfNeeded(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
     let width = dawnWindowFor(dawnPlatformForHost()).clientWidth(state.dawn.window)
     let height = dawnWindowFor(dawnPlatformForHost()).clientHeight(state.dawn.window)
@@ -326,7 +326,7 @@ function dawnResizeIfNeeded(state: borrow mut GraphicsAppRuntimeState, runtimeUs
 // can pump, and a pumped `WM_SIZE` arriving inside a frame would begin a second
 // one against an encoder the first still holds. The dropped frame costs a
 // repeated size; running it would corrupt the one in flight.
-@Native
+public @Native
 function dawnDriveResizeFrame(runtimeUserData: RawPtr) {
     var state = nativeRecover<GraphicsAppRuntimeState>(runtimeUserData)
     if state.dawn.inFrame || state.dawn.quitRequested || pointerIsNull(state.dawn.device) {
@@ -341,7 +341,7 @@ function dawnDriveResizeFrame(runtimeUserData: RawPtr) {
 
 // Drains the message queue, turning what the application cares about into
 // `AppEvent`s and dispatching the rest.
-@Native
+public @Native
 function dawnPumpMessages(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) {
     let messages: WindowMessagePointer = state.dawn.messageBlock
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
@@ -364,7 +364,7 @@ function dawnPumpMessages(state: borrow mut GraphicsAppRuntimeState, runtimeUser
 
 // One queued message as an `AppEvent`, or nothing when the application has no
 // vocabulary for it.
-@Native
+public @Native
 function dawnDeliverMessage(state: borrow mut GraphicsAppRuntimeState, message: U32, wparam: U64, lparam: Int) {
     let onEvent: (borrow AppEvent) -> Void = state.app.eventHandler
     let scale = dawnWindowFor(dawnPlatformForHost()).scale(state.dawn.window)
@@ -460,7 +460,7 @@ function dawnDeliverMessage(state: borrow mut GraphicsAppRuntimeState, message: 
     return
 }
 
-function dawnMessageIsPointerButton(message: U32) -> Bool {
+public function dawnMessageIsPointerButton(message: U32) -> Bool {
     return message == dawnMessageLeftDown()
         || message == dawnMessageLeftUp()
         || message == dawnMessageRightDown()
@@ -469,13 +469,13 @@ function dawnMessageIsPointerButton(message: U32) -> Bool {
         || message == dawnMessageMiddleUp()
 }
 
-function dawnMessageIsPointerDown(message: U32) -> Bool {
+public function dawnMessageIsPointerDown(message: U32) -> Bool {
     return message == dawnMessageLeftDown()
         || message == dawnMessageRightDown()
         || message == dawnMessageMiddleDown()
 }
 
-function dawnPointerButton(message: U32) -> PointerButton {
+public function dawnPointerButton(message: U32) -> PointerButton {
     if message == dawnMessageLeftDown() || message == dawnMessageLeftUp() {
         return .Left
     }
@@ -486,7 +486,7 @@ function dawnPointerButton(message: U32) -> PointerButton {
 }
 
 // The wheel delta out of `wParam`'s high half, as a signed number of 120ths.
-function dawnWheelNotches(wparam: U64) -> Int {
+public function dawnWheelNotches(wparam: U64) -> Int {
     let high = Int(wparam >> U64(16)) & 65535
     if high >= 32768 {
         return high - 65536
@@ -500,7 +500,7 @@ function dawnWheelNotches(wparam: U64) -> Int {
 // keys are their ASCII uppercase, and the rest are numbered from 256. Windows
 // agrees on letters and digits and disagrees on everything else, so only the
 // disagreements are listed.
-function dawnKeyCode(virtualKey: Int) -> Int {
+public function dawnKeyCode(virtualKey: Int) -> Int {
     if virtualKey == 8 { return 259 }
     if virtualKey == 9 { return 258 }
     if virtualKey == 13 { return 257 }
@@ -525,7 +525,7 @@ function dawnKeyCode(virtualKey: Int) -> Int {
 
 // The button a script names: 0 left, 1 right, 2 middle — the spelling the drag
 // scripts on every backend already use.
-function dawnScriptButton(raw: Int) -> PointerButton {
+public function dawnScriptButton(raw: Int) -> PointerButton {
     if raw == 1 {
         return .Right
     }

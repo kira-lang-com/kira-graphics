@@ -1,26 +1,26 @@
-struct VertexAttribute {
+public struct VertexAttribute {
     var name: String = ""
     var location: Int = 0
     var format: VertexFormat = .Float4
     var offset: Int = 0
 }
 
-struct VertexLayout {
+public struct VertexLayout {
     var stride: Int = 0
     var attributes: [VertexAttribute]
 }
 
-struct BlendState {
+public struct BlendState {
     var enabled: Bool = false
     var preset: BlendPreset = .PremultipliedAlpha
 }
 
-struct ColorTargetDescriptor {
+public struct ColorTargetDescriptor {
     var format: TextureFormat = .Swapchain
     var blend: BlendState
 }
 
-struct DepthStencilDescriptor {
+public struct DepthStencilDescriptor {
     var depthEnabled: Bool = false
     var depthWriteEnabled: Bool = false
     var depthCompare: CompareFunction = .Less
@@ -35,16 +35,16 @@ struct DepthStencilDescriptor {
     var format: TextureFormat = .None
 }
 
-struct RasterizationDescriptor {
+public struct RasterizationDescriptor {
     var cullMode: CullMode = .None
     var frontFace: FrontFace = .CounterClockwise
 }
 
-struct PrimitiveDescriptor {
+public struct PrimitiveDescriptor {
     var topology: PrimitiveTopology = .TriangleList
 }
 
-struct RenderPipelineDescriptor {
+public struct RenderPipelineDescriptor {
     var label: String = ""
     var shader: GraphicsShader
     var vertexLayout: VertexLayout

@@ -1,0 +1,7 @@
+// Space reserved by the window system, in logical viewport points.
+public struct ViewportInsets {
+    let top: Float = 0.0
+    let leading: Float = 0.0
+    let bottom: Float = 0.0
+    let trailing: Float = 0.0
+}

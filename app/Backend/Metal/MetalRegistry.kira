@@ -10,17 +10,17 @@
 
 // MTLCommandBufferStatus.Completed. Anything below it — NotEnqueued, Enqueued,
 // Committed, Scheduled — is a buffer whose GPU work may still be running.
-function metalCommandBufferStatusCompleted() -> U64 { return 4 }
+public function metalCommandBufferStatusCompleted() -> U64 { return 4 }
 
 // Registry entry kinds (parallel `registryKinds` table). An entry is either a
 // +1-owned Objective-C object (released at teardown) or a raw metalMemAlloc block
 // such as a bind group (freed at teardown); the untyped pointer registry cannot
 // tell them apart, so the kind is recorded when the handle is registered.
-function metalRegistryKindObject() -> U8 { return 1 }
-function metalRegistryKindRawBlock() -> U8 { return 2 }
+public function metalRegistryKindObject() -> U8 { return 1 }
+public function metalRegistryKindRawBlock() -> U8 { return 2 }
 // A slot whose resource was released. Its pointer word holds the next free id
 // rather than a resource, so nothing may release or free what it points at.
-function metalRegistryKindFree() -> U8 { return 0 }
+public function metalRegistryKindFree() -> U8 { return 0 }
 
 // Stash the frame's command buffer for the DEFERRED readback wait (the GPU wait was
 // moved out of endAndCommit into metalContextReadPixel so offscreen frames pipeline).
@@ -28,7 +28,7 @@ function metalRegistryKindFree() -> U8 { return 0 }
 // autorelease pool would free it at frame end — before the post-loop readback runs.
 // Retain it here (releasing the previous frame's committed buffer) so it survives the
 // pool pop; metalContextFree releases the last one.
-@Native
+public @Native
 function metalStashCommandBuffer(ctx: RawPtr, commandBuffer: RawPtr) {
     let previous = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
     if !pointerIsNull(previous) {
@@ -43,7 +43,7 @@ function metalStashCommandBuffer(ctx: RawPtr, commandBuffer: RawPtr) {
 // boundaries still end their encoders (so texture writes are visible to later
 // encoders), but capture/blur/composite no longer pay a commit and pacing wait per
 // pass. The frame submission hook commits this buffer once.
-@Native
+public @Native
 function metalContextActiveCommandBuffer(ctx: RawPtr) -> RawPtr {
     var commandBuffer = metalMemReadPtr(ctx, metalOffsetActiveCommandBuffer())
     if !pointerIsNull(commandBuffer) {
@@ -67,14 +67,14 @@ function metalContextActiveCommandBuffer(ctx: RawPtr) -> RawPtr {
 // enough resources — a lot of entities, each with its own buffers — would start
 // finding its own data changed underneath it, which reads as geometry shifting
 // slightly for no reason.
-function metalRegistryInitialCapacity() -> U64 { return 1024 }
+public function metalRegistryInitialCapacity() -> U64 { return 1024 }
 
 // Make room for id `needed`, doubling until it fits.
 //
 // Copies both parallel blocks and frees the old ones. Growth is amortised, so a
 // scene that registers n resources copies O(n) entries in total rather than per
 // registration.
-function metalRegistryReserve(ctx: RawPtr, needed: U64) {
+public function metalRegistryReserve(ctx: RawPtr, needed: U64) {
     let cap = metalMemReadU64(ctx, metalOffsetRegistryCap())
     if needed < cap {
         return
@@ -111,7 +111,7 @@ function metalRegistryReserve(ctx: RawPtr, needed: U64) {
 
 // Register a +1-owned Objective-C resource pointer and return its handle id. The
 // entry is tagged as an object so teardown releases it.
-@Native
+public @Native
 function metalRegister(ctx: RawPtr, object: RawPtr) -> Int {
     let id = metalTakeId(ctx)
     let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
@@ -124,7 +124,7 @@ function metalRegister(ctx: RawPtr, object: RawPtr) -> Int {
 // Register a raw metalMemAlloc block (e.g. a bind group) and return its handle id.
 // The entry is tagged as a raw block so teardown frees it with metalMemFree rather
 // than sending it an Objective-C `release` (which would crash on a non-object).
-@Native
+public @Native
 function metalRegisterRawBlock(ctx: RawPtr, block: RawPtr) -> Int {
     let id = metalTakeId(ctx)
     let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
@@ -146,7 +146,7 @@ function metalRegisterRawBlock(ctx: RawPtr, block: RawPtr) -> Int {
 // vertex buffer handed a dead uniform's slot would be bound part-way into itself.
 // Clearing on the way OUT (rather than trusting each creator to overwrite it) keeps
 // that true for every resource kind, ringed or not.
-function metalTakeId(ctx: RawPtr) -> U64 {
+public function metalTakeId(ctx: RawPtr) -> U64 {
     let free = metalMemReadU64(ctx, metalOffsetFreeId())
     if free != 0 {
         let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
@@ -168,7 +168,7 @@ function metalTakeId(ctx: RawPtr) -> U64 {
 // nor a block. That matters because a caller cannot see the difference — a
 // double `destroyUniform` would otherwise over-release an Objective-C object and
 // take the process down some frames later.
-@Native
+public @Native
 function metalUnregister(ctx: RawPtr, id: Int) {
     if id <= 0 {
         return
@@ -200,7 +200,7 @@ function metalUnregister(ctx: RawPtr, id: Int) {
 }
 
 // Resolve a handle id back to its Objective-C resource pointer.
-@Native
+public @Native
 function metalLookup(ctx: RawPtr, id: Int) -> RawPtr {
     let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
     return metalMemReadPtr(registry, id * 8)
@@ -209,7 +209,7 @@ function metalLookup(ctx: RawPtr, id: Int) -> RawPtr {
 
 // Resolve a handle id (as U64) to its Objective-C resource pointer. Used by the
 // bind-group apply loop, which carries ids as U64 in its raw entry block.
-@Native
+public @Native
 function metalLookupU64(ctx: RawPtr, id: U64) -> RawPtr {
     let registry = metalMemReadPtr(ctx, metalOffsetRegistry())
     return metalMemReadPtr(registry, id * 8)
@@ -217,14 +217,14 @@ function metalLookupU64(ctx: RawPtr, id: U64) -> RawPtr {
 
 // Metal enum constants we reference (kept local and explicit, not magic numbers
 // at the call sites).
-function metalPixelFormatBGRA8Unorm() -> U64 { return 80 }
-function metalTextureUsageRenderTarget() -> U64 { return 4 }
-function metalStorageModeShared() -> U64 { return 0 }
-function metalLoadActionClear() -> U64 { return 2 }
-function metalLoadActionLoad() -> U64 { return 1 }
-function metalLoadActionDontCare() -> U64 { return 0 }
-function metalStoreActionStore() -> U64 { return 1 }
-function metalStoreActionDontCare() -> U64 { return 0 }
-function metalPixelFormatDepth32Float() -> U64 { return 252 }
-function metalStorageModePrivate() -> U64 { return 2 }
-function metalCompareFunctionLess() -> U64 { return 1 }
+public function metalPixelFormatBGRA8Unorm() -> U64 { return 80 }
+public function metalTextureUsageRenderTarget() -> U64 { return 4 }
+public function metalStorageModeShared() -> U64 { return 0 }
+public function metalLoadActionClear() -> U64 { return 2 }
+public function metalLoadActionLoad() -> U64 { return 1 }
+public function metalLoadActionDontCare() -> U64 { return 0 }
+public function metalStoreActionStore() -> U64 { return 1 }
+public function metalStoreActionDontCare() -> U64 { return 0 }
+public function metalPixelFormatDepth32Float() -> U64 { return 252 }
+public function metalStorageModePrivate() -> U64 { return 2 }
+public function metalCompareFunctionLess() -> U64 { return 1 }

@@ -13,13 +13,13 @@
 // caller adds — and a uniform entry holds a reference to the very
 // `Uniform` its caller passed in (see `Uniform.kira`), not a copy of
 // whatever it held when the entry was added.
-struct StoredUniformBindEntry {
+public struct StoredUniformBindEntry {
     var uniformSlot: Int = 0
     var uniformId: U32 = 0
     var storage: NativeState<UniformState>
 }
 
-struct BindGroupState {
+public struct BindGroupState {
     var label: String = ""
     var uniformEntries: [StoredUniformBindEntry] = []
     var textureEntries: [TextureBindEntry] = []
@@ -56,7 +56,7 @@ struct BindGroupState {
     var identity: Int = 0
 }
 
-class BindGroup {
+public class BindGroup {
     // Typed affine owner of the CPU-side group state. Nested uniform owners are
     // released recursively with this state, so no raw token carries a hidden
     // destruction obligation.
@@ -64,7 +64,7 @@ class BindGroup {
     var id: U32 = 0
 }
 
-@Native
+public @Native
 function emptyBindGroup() -> BindGroup {
     return BindGroup {
         storage: nativeState(BindGroupState {}),
@@ -77,7 +77,7 @@ function emptyBindGroup() -> BindGroup {
 // there is nothing behind the token to read — and nothing to free, which is
 // the point. `emptyBindGroup` stays for callers that may still add entries;
 // this is for slots whose emptiness is final.
-@Native
+public @Native
 function unboundBindGroup() -> BindGroup {
     return BindGroup {
         storage: nativeState(BindGroupState {}),
@@ -89,13 +89,13 @@ function unboundBindGroup() -> BindGroup {
 // entry's *slot* is checked against these before it is kept — Sokol itself
 // would only catch an out-of-range slot at the draw that finally applies it,
 // past the point a caller could tell why.
-function sokolMaxViewBindSlots() -> Int { return 32 }
+public function sokolMaxViewBindSlots() -> Int { return 32 }
 // `SG_MAX_UNIFORMBLOCK_BINDSLOTS`: how many uniform blocks one pipeline may
 // have. Not a limit on where a SHADER numbers its uniform — that is a binding
 // index in the same space as its textures — but on the slot sokol resolves that
 // binding to, which is what `sg_apply_uniforms` takes.
-function sokolMaxUniformBlockSlots() -> Int { return 8 }
-function sokolMaxSamplerBindSlots() -> Int { return 12 }
+public function sokolMaxUniformBlockSlots() -> Int { return 8 }
+public function sokolMaxSamplerBindSlots() -> Int { return 12 }
 
 // Sokol's half of `Graphics.beginBindGroup` / `createBindGroup` /
 // `createUniformBindGroup` / `createTextureSamplerBindGroup`: an empty group
@@ -103,7 +103,7 @@ function sokolMaxSamplerBindSlots() -> Int { return 12 }
 // `sg_bind_group` — so there is nothing to allocate beyond this value.
 // 1 rather than a counter: sokol keys nothing on this id, so every live
 // group answers the same "not empty" sentinel `bindGroupResult` reads.
-@Native
+public @Native
 function sokolCreateBindGroupId(label: borrow String) -> BindGroup {
     return BindGroup {
         storage: nativeState(BindGroupState {
@@ -119,7 +119,7 @@ function sokolCreateBindGroupId(label: borrow String) -> BindGroup {
 // range this is checked against is the binding space a KSL group numbers into —
 // the same one a texture entry is checked against — and a shader that declares
 // its uniform after eight textures is not asking sokol for a ninth block.
-@Native
+public @Native
 function sokolBindGroupAddUniform(group: borrow BindGroup, uniformSlot: Int, uniform: borrow Uniform) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if uniformSlot < 0 || uniformSlot >= sokolMaxViewBindSlots() {
@@ -134,7 +134,7 @@ function sokolBindGroupAddUniform(group: borrow BindGroup, uniformSlot: Int, uni
     return
 }
 
-@Native
+public @Native
 function sokolBindGroupAddTexture(group: borrow BindGroup, textureSlot: Int, texture: borrow GraphicsTexture) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if texture.viewId == 0 {
@@ -152,7 +152,7 @@ function sokolBindGroupAddTexture(group: borrow BindGroup, textureSlot: Int, tex
     return
 }
 
-@Native
+public @Native
 function sokolBindGroupAddSampler(group: borrow BindGroup, samplerSlot: Int, sampler: borrow GraphicsSampler) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if sampler.id == 0 {
@@ -170,7 +170,7 @@ function sokolBindGroupAddSampler(group: borrow BindGroup, samplerSlot: Int, sam
     return
 }
 
-@Native
+public @Native
 function sokolBindGroupAddStorageBuffer(group: borrow BindGroup, storageSlot: Int, viewId: U32) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if viewId == 0 {
@@ -191,7 +191,7 @@ function sokolBindGroupAddStorageBuffer(group: borrow BindGroup, storageSlot: In
 // A no-op on Sokol: a `BindGroup` is an ordinary Kira value with no device
 // resource behind it — it never was one, even in the C-side table this
 // replaced, which only ever held CPU-side bookkeeping.
-@Native
+public @Native
 function sokolDestroyBindGroupId(bindGroupId: U32) {
     return
 }
@@ -202,7 +202,7 @@ function sokolDestroyBindGroupId(bindGroupId: U32) {
 // NativeState it contains. Callers that intentionally need another handle spell
 // that ownership operation here, and the returned value carries the matching
 // structural release.
-function shareBindGroup(group: borrow BindGroup) -> BindGroup {
+public function shareBindGroup(group: borrow BindGroup) -> BindGroup {
     return BindGroup {
         storage: nativeUserData(group.storage),
         id: group.id

@@ -35,7 +35,7 @@ import Foundation
 // How many timestamps the set holds — one pair per segment. A liquid-glass
 // frame uses five pairs; the rest is headroom for a program that stacks more
 // passes, and a frame that ran out simply stops recording and says so once.
-function dawnMaxTimestamps() -> Int { return 32 }
+public function dawnMaxTimestamps() -> Int { return 32 }
 
 // How many frames of results may be in flight at once.
 //
@@ -43,13 +43,13 @@ function dawnMaxTimestamps() -> Int { return 32 }
 // open when frame N+1 wants to record, and the frame skipped is exactly as
 // likely to be the expensive one as any other. Three covers the two frames the
 // swapchain keeps in flight with a slot to spare.
-function dawnTimestampSlots() -> Int { return 3 }
+public function dawnTimestampSlots() -> Int { return 3 }
 
-function dawnQueryTypeTimestamp() -> I32 { return I32(2) }
-function dawnBufferUsageQueryResolve() -> U64 { return U64(512) }
-function dawnFeatureTimestampQuery() -> I32 { return I32(9) }
+public function dawnQueryTypeTimestamp() -> I32 { return I32(2) }
+public function dawnBufferUsageQueryResolve() -> U64 { return U64(512) }
+public function dawnFeatureTimestampQuery() -> I32 { return I32(9) }
 
-struct DawnGpuClock {
+public struct DawnGpuClock {
     var supported: Bool = false
     var querySetId: U32 = 0
     var resolveBufferId: U32 = 0
@@ -82,7 +82,7 @@ struct DawnGpuClock {
     var logging: Bool = false
 }
 
-@Native
+public @Native
 function dawnReadGpuTimesKnob(state: borrow mut GraphicsAppRuntimeState) {
     let value = environmentValue("KIRA_GRAPHICS_GPU_TIMES")
     state.dawn.clock.logging = value.count > 0 && value != "0"
@@ -90,7 +90,7 @@ function dawnReadGpuTimesKnob(state: borrow mut GraphicsAppRuntimeState) {
 }
 
 // Whether this adapter can time a frame without stopping it.
-@Native
+public @Native
 function dawnAdapterTimesFrames(adapter: RawPtr) -> Bool {
     if pointerIsNull(adapter) {
         return false
@@ -99,7 +99,7 @@ function dawnAdapterTimesFrames(adapter: RawPtr) -> Bool {
 }
 
 // Builds the query set and its buffers, once, on the first frame that records.
-@Native
+public @Native
 function dawnClockEnsure(state: borrow mut GraphicsAppRuntimeState) {
     if !state.dawn.clock.supported || state.dawn.clock.querySetId != 0 {
         return
@@ -144,7 +144,7 @@ function dawnClockEnsure(state: borrow mut GraphicsAppRuntimeState) {
 
 // Opens a frame's recording. Nothing is written until a pass or a dispatch says
 // so, and a frame that records nothing reports nothing.
-@Native
+public @Native
 function dawnClockBeginFrame(state: borrow mut GraphicsAppRuntimeState) {
     if !state.dawn.clock.supported {
         return
@@ -164,7 +164,7 @@ function dawnClockBeginFrame(state: borrow mut GraphicsAppRuntimeState) {
 // end one as it retires. Writing them on the command encoder instead is a Dawn
 // extension behind an unsafe-API toggle, and a measurement that needs the device
 // put in an unsupported mode is not one a shipped program can take.
-@Native
+public @Native
 function dawnClockOpenPair(state: borrow mut GraphicsAppRuntimeState, composite: Bool) -> Int {
     if !state.dawn.clock.supported || state.dawn.clock.querySetId == 0 {
         return 0 - 1
@@ -186,7 +186,7 @@ function dawnClockOpenPair(state: borrow mut GraphicsAppRuntimeState, composite:
 
 // The pair a pass descriptor carries, for a segment `dawnClockOpenPair` gave a
 // slot to.
-@Native
+public @Native
 function dawnClockWrites(state: borrow GraphicsAppRuntimeState, first: Int) -> WGPUPassTimestampWrites {
     return WGPUPassTimestampWrites {
         querySet: dawnObject(state, state.dawn.clock.querySetId),
@@ -199,7 +199,7 @@ function dawnClockWrites(state: borrow GraphicsAppRuntimeState, first: Int) -> W
 // the frame's own encoder and therefore inside the one submission the frame
 // makes. Answers the readback slot the results will arrive in, or -1 when this
 // frame goes unmeasured.
-@Native
+public @Native
 function dawnClockResolve(state: borrow mut GraphicsAppRuntimeState) -> Int {
     if !state.dawn.clock.supported || state.dawn.clock.used < 2 {
         return 0 - 1
@@ -237,7 +237,7 @@ function dawnClockResolve(state: borrow mut GraphicsAppRuntimeState) -> Int {
 
 // Asks for the slot's bytes. Called after the frame has been submitted, and it
 // waits for nothing: the callback runs inside a later `wgpuInstanceProcessEvents`.
-@Native
+public @Native
 function dawnClockRequest(state: borrow mut GraphicsAppRuntimeState, context: RawPtr, slot: Int) {
     if slot < 0 {
         return
@@ -257,7 +257,7 @@ function dawnClockRequest(state: borrow mut GraphicsAppRuntimeState, context: Ra
 }
 
 // One frame's timestamps, arriving.
-function dawnClockMapped(status: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
+public function dawnClockMapped(status: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
     if pointerIsNull(userdata1) || pointerIsNull(userdata2) {
         return
     }
@@ -282,7 +282,7 @@ function dawnClockMapped(status: I32, message: WGPUStringViewPointer, userdata1:
 // A pair whose end is not after its beginning is dropped rather than clamped:
 // the GPU's clock can be reset under the driver, and a negative span is a
 // reading that did not happen, not a segment that took no time.
-@Native
+public @Native
 function dawnClockReadSlot(state: borrow mut GraphicsAppRuntimeState, slot: Int) {
     let readback = dawnObject(state, state.dawn.clock.readbackIds[slot])
     let count = state.dawn.clock.readbackUsed[slot]

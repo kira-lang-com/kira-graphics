@@ -32,7 +32,7 @@ import Foundation
 // The draw path. `RenderEncoder` carries its own backend selection through the
 // native state a pass hands it, and a draw is the one call frequent enough that
 // re-deriving a backend value per invocation would show up.
-construct RenderBackend {
+public construct RenderBackend {
     // --- shaders ---------------------------------------------------------
     @Required function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult
     // Compile a KSL asset that `kira shader build` has already written out.
@@ -112,6 +112,10 @@ construct RenderBackend {
     // a texture the caller composites into itself — a glyph atlas, whose CPU
     // side has to exist anyway so a new glyph can be packed beside the old ones.
     @Required function updateTextureBytes(texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) -> Void
+    // The same image, of which only `rowCount` rows from `firstRow` changed:
+    // `bytes` is still the whole image. A backend that cannot upload part of
+    // one uploads all of it.
+    @Required function updateTextureRows(texture: borrow GraphicsTexture, bytes: RawPtr, firstRow: Int, rowCount: Int) -> Void
     @Required function destroyTexture(texture: borrow GraphicsTexture) -> Void
     @Required function createSampler(descriptor: borrow SamplerDescriptor) -> SamplerResult
     @Required function destroySampler(sampler: borrow GraphicsSampler) -> Void
@@ -138,6 +142,7 @@ construct RenderBackend {
     // would lose the fraction every layout pass below needs.
     @Required function viewportWidth() -> Float
     @Required function viewportHeight() -> Float
+    @Required function safeAreaInsets() -> ViewportInsets
     // How the window is presented right now, and moving it to another mode.
     //
     // Read from the window itself rather than remembered from the last request:
@@ -279,7 +284,7 @@ construct RenderBackend {
 // before any context exists — and `Any RenderBackend` is the *dispatch*
 // vocabulary. Everything past this line asks the backend rather than asking
 // which backend it is.
-function renderBackendFor(backend: RenderBackendKind, context: RawPtr) -> Any RenderBackend {
+public function renderBackendFor(backend: RenderBackendKind, context: RawPtr) -> Any RenderBackend {
     match backend {
         Metal -> return MetalRenderBackend(context: context)
         Dawn -> return DawnRenderBackend(context: context)

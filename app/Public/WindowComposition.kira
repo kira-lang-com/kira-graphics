@@ -22,7 +22,7 @@ import Foundation
 // endpoints comes back a byte or two off once the swapchain encodes it. Zero and
 // one are the two values every encoding agrees on, and no interface draws this
 // color by accident.
-function graphicsTransparentKey() -> Color {
+public function graphicsTransparentKey() -> Color {
     return Color {
         r: 1.0,
         g: 0.0,
@@ -32,6 +32,6 @@ function graphicsTransparentKey() -> Color {
 }
 
 // The same color as the desktop names it: `0x00BBGGRR`.
-function graphicsTransparentKeyRef() -> U32 {
+public function graphicsTransparentKeyRef() -> U32 {
     return U32(16711935)
 }

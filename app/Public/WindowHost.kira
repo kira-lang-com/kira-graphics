@@ -1,7 +1,7 @@
 // Backend-neutral host accessors for embedders that attach a native child
 // control to the graphics window. Window size comes off the frame's drawable
 // rather than a backend's own call, so there is one path for every backend.
-function kiraGraphicsHostWindowHandle(frame: borrow RenderFrame) -> RawPtr {
+public function kiraGraphicsHostWindowHandle(frame: borrow RenderFrame) -> RawPtr {
     match frame.backend {
         Dawn -> {
             if pointerIsNull(frame.backendContext) {
@@ -19,14 +19,14 @@ function kiraGraphicsHostWindowHandle(frame: borrow RenderFrame) -> RawPtr {
     }
 }
 
-function kiraGraphicsHostDrawableWidth(frame: borrow RenderFrame) -> I32 {
+public function kiraGraphicsHostDrawableWidth(frame: borrow RenderFrame) -> I32 {
     return I32(frame.drawableWidth())
 }
 
-function kiraGraphicsHostDrawableHeight(frame: borrow RenderFrame) -> I32 {
+public function kiraGraphicsHostDrawableHeight(frame: borrow RenderFrame) -> I32 {
     return I32(frame.drawableHeight())
 }
 
-function kiraGraphicsHostBackingScale(frame: borrow RenderFrame) -> Float {
+public function kiraGraphicsHostBackingScale(frame: borrow RenderFrame) -> Float {
     return frame.backingScale()
 }

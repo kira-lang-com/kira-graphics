@@ -4,7 +4,7 @@ import Foundation
 // sole in-flight slot, so the next acquire waits for all commands that can read
 // the CPU-visible ring buffers before those buffers are reused.
 
-@Native
+public @Native
 function vulkanSubmitFrame(context: RawPtr, frame: borrow RenderFrame) {
     if !vulkanHasDevice(context) { return }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -14,7 +14,7 @@ function vulkanSubmitFrame(context: RawPtr, frame: borrow RenderFrame) {
     return
 }
 
-@Native
+public @Native
 function vulkanSubmitFrameState(state: borrow mut VulkanState) {
     if !state.frameActive || !state.acquired { return }
     if state.passActive {

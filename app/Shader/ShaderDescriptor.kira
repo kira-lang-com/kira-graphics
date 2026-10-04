@@ -1,4 +1,4 @@
-struct ShaderDescriptor {
+public struct ShaderDescriptor {
     var label: String = ""
     var vertexSource: String = ""
     var fragmentSource: String = ""

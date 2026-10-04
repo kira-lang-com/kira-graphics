@@ -5,7 +5,7 @@ import Foundation
 // public bind groups' pipeline-independent lifetime without leaking one set per
 // frame.
 
-function vulkanResourceBinding(reflection: borrow KslResourceReflection, group: Int, binding: Int) -> I32 {
+public function vulkanResourceBinding(reflection: borrow KslResourceReflection, group: Int, binding: Int) -> I32 {
     for item in reflection.uniforms {
         if item.group == group && item.binding == binding && item.stageMask != 0 { return vulkanDescriptorUniformBuffer() }
     }
@@ -24,7 +24,7 @@ function vulkanResourceBinding(reflection: borrow KslResourceReflection, group: 
     return I32(0 - 1)
 }
 
-function vulkanHasUniform(group: borrow BindGroupState, binding: Int) -> Bool {
+public function vulkanHasUniform(group: borrow BindGroupState, binding: Int) -> Bool {
     var index = 0
     while index < group.uniformEntries.count {
         if group.uniformEntries[index].uniformSlot == binding { return true }
@@ -33,28 +33,28 @@ function vulkanHasUniform(group: borrow BindGroupState, binding: Int) -> Bool {
     return false
 }
 
-function vulkanHasTexture(group: borrow BindGroupState, binding: Int) -> Bool {
+public function vulkanHasTexture(group: borrow BindGroupState, binding: Int) -> Bool {
     for entry in group.textureEntries {
         if entry.textureSlot == binding { return true }
     }
     return false
 }
 
-function vulkanHasSampler(group: borrow BindGroupState, binding: Int) -> Bool {
+public function vulkanHasSampler(group: borrow BindGroupState, binding: Int) -> Bool {
     for entry in group.samplerEntries {
         if entry.samplerSlot == binding { return true }
     }
     return false
 }
 
-function vulkanHasStorage(group: borrow BindGroupState, binding: Int) -> Bool {
+public function vulkanHasStorage(group: borrow BindGroupState, binding: Int) -> Bool {
     for entry in group.storageEntries {
         if entry.storageSlot == binding { return true }
     }
     return false
 }
 
-@Native
+public @Native
 function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, binding: Int, descriptorType: I32, group: borrow BindGroupState) -> Bool {
     if descriptorType == vulkanDescriptorUniformBuffer() {
         var index = 0
@@ -150,7 +150,7 @@ function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, bindi
     return false
 }
 
-@Native
+public @Native
 function vulkanDynamicOffsetWords(state: borrow VulkanState, reflection: borrow KslResourceReflection, groupIndex: Int, group: borrow BindGroupState) -> [U32] {
     var offsets: [U32] = []
     for binding in vulkanDescriptorBindings(reflection, groupIndex) {
@@ -174,7 +174,7 @@ function vulkanDynamicOffsetWords(state: borrow VulkanState, reflection: borrow 
     return offsets
 }
 
-@Native
+public @Native
 function vulkanBindDescriptorGroup(state: borrow mut VulkanState, pipeline: borrow VulkanPipelineRecord, reflection: borrow KslResourceReflection, groupIndex: Int, group: borrow BindGroup, present: Bool) -> Bool {
     let bindings = vulkanDescriptorBindings(reflection, groupIndex)
     if bindings.count == 0 { return true }
@@ -186,7 +186,7 @@ function vulkanBindDescriptorGroup(state: borrow mut VulkanState, pipeline: borr
     return vulkanBindDescriptorState(state, pipeline, reflection, groupIndex, groupState)
 }
 
-@Native
+public @Native
 function vulkanBindDescriptorState(state: borrow mut VulkanState, pipeline: borrow VulkanPipelineRecord, reflection: borrow KslResourceReflection, groupIndex: Int, groupState: borrow BindGroupState) -> Bool {
     let bindings = vulkanDescriptorBindings(reflection, groupIndex)
     for binding in bindings {
@@ -236,7 +236,7 @@ function vulkanBindDescriptorState(state: borrow mut VulkanState, pipeline: borr
     return true
 }
 
-@Native
+public @Native
 function vulkanDrawWithBindings(
     runtime: RawPtr,
     hasScissor: Bool,
@@ -328,7 +328,7 @@ function vulkanDrawWithBindings(
     return
 }
 
-@Native
+public @Native
 function vulkanEncoderDrawIndirect(encoder: borrow RenderEncoderState, indirectBufferId: Int) {
     if pointerIsNull(encoder.vulkanRuntime) { return }
     var state = nativeRecover<GraphicsAppRuntimeState>(encoder.vulkanRuntime)

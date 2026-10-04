@@ -12,7 +12,7 @@
 // Two `has*` flags rather than a zero. A counter a backend cannot measure is
 // not a counter that measured zero, and a HUD that cannot tell the two apart
 // reports a fast frame where there is no timer at all.
-struct FrameStatistics {
+public struct FrameStatistics {
     var frameSeconds: Float = 0.0
     var cpuSeconds: Float = 0.0
     var gpuSeconds: Float = 0.0

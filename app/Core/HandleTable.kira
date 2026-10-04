@@ -1,4 +1,4 @@
-struct HandleTable {
+public struct HandleTable {
     var nextId: Int
 }
 

@@ -2,7 +2,7 @@ import Foundation
 
 // Compute may run during initialization as well as between render passes.
 // Standalone work uses the same command buffer only after its frame retires.
-@Native
+public @Native
 function vulkanBeginComputeCommands(state: borrow mut VulkanState) -> Bool {
     if state.passActive {
         graphicsDiagnostic("Kira Graphics: end the Vulkan render pass before dispatching compute")
@@ -20,7 +20,7 @@ function vulkanBeginComputeCommands(state: borrow mut VulkanState) -> Bool {
 
 // Make compute writes visible to subsequent shaders, vertex/index fetches,
 // indirect commands, transfers and host readback.
-@Native
+public @Native
 function vulkanComputeBarrier(state: borrow VulkanState) {
     let barrier = VkMemoryBarrier {
         sType: I32(VK_STRUCTURE_TYPE_MEMORY_BARRIER),
@@ -35,7 +35,7 @@ function vulkanComputeBarrier(state: borrow VulkanState) {
 // Flush recorded commands without presenting. A readback in the middle of a
 // frame consumes the acquire semaphore once, then resumes recording on the
 // same acquired image. The final submission still signals the frame fence.
-@Native
+public @Native
 function vulkanFlushCommands(state: borrow mut VulkanState, resume: Bool) -> Bool {
     if state.passActive { return false }
     if vkEndCommandBuffer(state.commandBuffer) != vulkanSuccess() { return false }
@@ -67,7 +67,7 @@ function vulkanFlushCommands(state: borrow mut VulkanState, resume: Bool) -> Boo
     }) == vulkanSuccess()
 }
 
-@Native
+public @Native
 function vulkanFinishComputeCommands(state: borrow mut VulkanState) {
     vulkanComputeBarrier(state)
     if !state.frameActive && !vulkanFlushCommands(state, false) {

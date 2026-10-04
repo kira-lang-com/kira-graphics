@@ -6,7 +6,7 @@
 // KIRA_GRAPHICS_LOG_FPS, and the KIRA_UI_*_SCRIPT family. A caller that builds one
 // hands the run its settings directly; a run given none reads the environment as
 // before, so a driven run and an environment-driven run resolve to the same knobs.
-struct HarnessConfig {
+public struct HarnessConfig {
     // Whether a caller filled this in. A default-constructed value is the
     // "nothing given" case that leaves the environment as the source, which is
     // what keeps every existing environment-driven run working unchanged.
@@ -27,7 +27,7 @@ struct HarnessConfig {
 //
 // `atFrame` is which frame to capture; zero takes the last one drawn — the frame
 // the run quits after — so a settle-then-shoot needs only a frame count and a path.
-function harnessCapture(path: String, atFrame: Int, quitAfterFrames: Int) -> HarnessConfig {
+public function harnessCapture(path: String, atFrame: Int, quitAfterFrames: Int) -> HarnessConfig {
     return HarnessConfig {
         configured: true,
         capturePath: path,

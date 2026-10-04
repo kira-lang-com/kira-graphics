@@ -1,17 +1,17 @@
-struct Float3 {
+public struct Float3 {
     var x: Float = 0.0
     var y: Float = 0.0
     var z: Float = 0.0
 }
 
-struct Float4 {
+public struct Float4 {
     var x: Float = 0.0
     var y: Float = 0.0
     var z: Float = 0.0
     var w: Float = 0.0
 }
 
-struct Float4x4 {
+public struct Float4x4 {
     var m00: Float = 1.0
     var m01: Float = 0.0
     var m02: Float = 0.0
@@ -30,19 +30,19 @@ struct Float4x4 {
     var m33: Float = 1.0
 }
 
-function float3(x: Float, y: Float, z: Float) -> Float3 {
+public function float3(x: Float, y: Float, z: Float) -> Float3 {
     return Float3 { x: x, y: y, z: z }
 }
 
-function float4(x: Float, y: Float, z: Float, w: Float) -> Float4 {
+public function float4(x: Float, y: Float, z: Float, w: Float) -> Float4 {
     return Float4 { x: x, y: y, z: z, w: w }
 }
 
-function dot3(a: borrow Float3, b: borrow Float3) -> Float {
+public function dot3(a: borrow Float3, b: borrow Float3) -> Float {
     return a.x * b.x + a.y * b.y + a.z * b.z
 }
 
-function cross3(a: borrow Float3, b: borrow Float3) -> Float3 {
+public function cross3(a: borrow Float3, b: borrow Float3) -> Float3 {
     return Float3 {
         x: a.y * b.z - a.z * b.y,
         y: a.z * b.x - a.x * b.z,
@@ -50,7 +50,7 @@ function cross3(a: borrow Float3, b: borrow Float3) -> Float3 {
     }
 }
 
-function subtract3(a: borrow Float3, b: borrow Float3) -> Float3 {
+public function subtract3(a: borrow Float3, b: borrow Float3) -> Float3 {
     return Float3 {
         x: a.x - b.x,
         y: a.y - b.y,
@@ -58,11 +58,11 @@ function subtract3(a: borrow Float3, b: borrow Float3) -> Float3 {
     }
 }
 
-function length3(v: borrow Float3) -> Float {
+public function length3(v: borrow Float3) -> Float {
     return sqrt(dot3(v, v))
 }
 
-function normalize3(v: borrow Float3) -> Float3 {
+public function normalize3(v: borrow Float3) -> Float3 {
     let length = length3(v)
     if (length <= 0.000001) {
         return Float3 { x: 0.0, y: 0.0, z: 0.0 }
@@ -74,11 +74,11 @@ function normalize3(v: borrow Float3) -> Float3 {
     }
 }
 
-function matrixIdentity4x4() -> Float4x4 {
+public function matrixIdentity4x4() -> Float4x4 {
     return Float4x4 {}
 }
 
-function matrixTranslation(position: borrow Float3) -> Float4x4 {
+public function matrixTranslation(position: borrow Float3) -> Float4x4 {
     return Float4x4 {
         m03: position.x,
         m13: position.y,
@@ -86,7 +86,7 @@ function matrixTranslation(position: borrow Float3) -> Float4x4 {
     }
 }
 
-function matrixScale(scale: borrow Float3) -> Float4x4 {
+public function matrixScale(scale: borrow Float3) -> Float4x4 {
     return Float4x4 {
         m00: scale.x,
         m11: scale.y,
@@ -94,7 +94,7 @@ function matrixScale(scale: borrow Float3) -> Float4x4 {
     }
 }
 
-function matrixRotationX(radians: Float) -> Float4x4 {
+public function matrixRotationX(radians: Float) -> Float4x4 {
     let c = cos(radians)
     let s = sin(radians)
     return Float4x4 {
@@ -105,7 +105,7 @@ function matrixRotationX(radians: Float) -> Float4x4 {
     }
 }
 
-function matrixRotationY(radians: Float) -> Float4x4 {
+public function matrixRotationY(radians: Float) -> Float4x4 {
     let c = cos(radians)
     let s = sin(radians)
     return Float4x4 {
@@ -116,7 +116,7 @@ function matrixRotationY(radians: Float) -> Float4x4 {
     }
 }
 
-function matrixRotationZ(radians: Float) -> Float4x4 {
+public function matrixRotationZ(radians: Float) -> Float4x4 {
     let c = cos(radians)
     let s = sin(radians)
     return Float4x4 {
@@ -127,7 +127,7 @@ function matrixRotationZ(radians: Float) -> Float4x4 {
     }
 }
 
-function matrixMultiply(a: borrow Float4x4, b: borrow Float4x4) -> Float4x4 {
+public function matrixMultiply(a: borrow Float4x4, b: borrow Float4x4) -> Float4x4 {
     return Float4x4 {
         m00: a.m00 * b.m00 + a.m01 * b.m10 + a.m02 * b.m20 + a.m03 * b.m30,
         m01: a.m00 * b.m01 + a.m01 * b.m11 + a.m02 * b.m21 + a.m03 * b.m31,
@@ -151,7 +151,7 @@ function matrixMultiply(a: borrow Float4x4, b: borrow Float4x4) -> Float4x4 {
     }
 }
 
-function matrixPerspectiveRightHanded(fovYRadians: Float, aspect: Float, nearPlane: Float, farPlane: Float) -> Float4x4 {
+public function matrixPerspectiveRightHanded(fovYRadians: Float, aspect: Float, nearPlane: Float, farPlane: Float) -> Float4x4 {
     let f = 1.0 / tan(fovYRadians * 0.5)
     return Float4x4 {
         m00: f / aspect,
@@ -163,7 +163,7 @@ function matrixPerspectiveRightHanded(fovYRadians: Float, aspect: Float, nearPla
     }
 }
 
-function matrixLookAtRightHanded(eye: borrow Float3, target: borrow Float3, up: borrow Float3) -> Float4x4 {
+public function matrixLookAtRightHanded(eye: borrow Float3, target: borrow Float3, up: borrow Float3) -> Float4x4 {
     let f = normalize3(subtract3(target, eye))
     let s = normalize3(cross3(f, up))
     let u = cross3(s, f)

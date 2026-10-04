@@ -13,11 +13,11 @@ import Foundation
 // is write-only unless the layer opted out of `framebufferOnly` (see
 // metalContextAttachLayerToView), which a capture run does.
 
-@FFI.Extern { library: kira_metal, symbol: fopen, abi: c }
+public @FFI.Extern { library: kira_metal, symbol: fopen, abi: c }
 function metalFOpen(path: CString, mode: CString): RawPtr
 
 // What a run was launched to capture, and how long it lasts.
-struct MetalHarnessKnobs {
+public struct MetalHarnessKnobs {
     var capturePath: String = ""
     var captureAtFrame: Int = 0
     var quitAfterFrames: Int = 0
@@ -27,7 +27,7 @@ struct MetalHarnessKnobs {
 // none — the same resolution, and the same defaults, the sokol and Dawn loops
 // apply: an unset capture frame with a path means the LAST frame drawn, and a
 // path-less harness captures nothing.
-function metalHarnessKnobs(app: borrow GraphicsApplication) -> MetalHarnessKnobs {
+public function metalHarnessKnobs(app: borrow GraphicsApplication) -> MetalHarnessKnobs {
     var knobs = MetalHarnessKnobs {}
     if app.harness.configured {
         knobs.capturePath = copy app.harness.capturePath
@@ -54,7 +54,7 @@ function metalHarnessKnobs(app: borrow GraphicsApplication) -> MetalHarnessKnobs
 
 // The texture of the drawable this frame is being rendered into, while the
 // context still holds it: submitting the frame presents it and lets it go.
-@Native
+public @Native
 function metalContextDrawableTexture(ctx: RawPtr) -> RawPtr {
     let drawable = metalMemReadPtr(ctx, metalOffsetDrawable())
     if pointerIsNull(drawable) {
@@ -64,13 +64,13 @@ function metalContextDrawableTexture(ctx: RawPtr) -> RawPtr {
 }
 
 // One ASCII byte of a PPM header.
-function metalCaptureWriteByte(buffer: RawPtr, cursor: borrow mut Int, value: Int) {
+public function metalCaptureWriteByte(buffer: RawPtr, cursor: borrow mut Int, value: Int) {
     metalMemWriteU8(buffer, U64(cursor), U8(value))
     cursor = cursor + 1
     return
 }
 
-function metalCaptureWriteNumber(buffer: RawPtr, cursor: borrow mut Int, value: Int) {
+public function metalCaptureWriteNumber(buffer: RawPtr, cursor: borrow mut Int, value: Int) {
     if value >= 10 {
         metalCaptureWriteNumber(buffer, cursor, value / 10)
     }
@@ -79,7 +79,7 @@ function metalCaptureWriteNumber(buffer: RawPtr, cursor: borrow mut Int, value: 
 }
 
 // `P6 <width> <height> 255`, the header a binary PPM opens with.
-function metalCaptureWriteHeader(buffer: RawPtr, width: Int, height: Int) -> Int {
+public function metalCaptureWriteHeader(buffer: RawPtr, width: Int, height: Int) -> Int {
     var cursor = 0
     metalCaptureWriteByte(buffer, cursor, 80)
     metalCaptureWriteByte(buffer, cursor, 54)
@@ -94,7 +94,7 @@ function metalCaptureWriteHeader(buffer: RawPtr, width: Int, height: Int) -> Int
 }
 
 // A texture the CPU may read, with everything that wrote it finished.
-function metalCaptureReadableTexture(ctx: RawPtr, texture: RawPtr) -> RawPtr {
+public function metalCaptureReadableTexture(ctx: RawPtr, texture: RawPtr) -> RawPtr {
     let pending = metalMemReadPtr(ctx, metalOffsetCommandBuffer())
     if !pointerIsNull(pending) {
         metalMsgSend(pending, metalSel("waitUntilCompleted"))
@@ -117,7 +117,7 @@ function metalCaptureReadableTexture(ctx: RawPtr, texture: RawPtr) -> RawPtr {
 }
 
 // The frame at `texture`, as a binary PPM at `path`.
-@Native
+public @Native
 function metalCapturePpm(ctx: RawPtr, texture: RawPtr, width: Int, height: Int, path: borrow String) -> Bool {
     if width <= 0 || height <= 0 {
         return false

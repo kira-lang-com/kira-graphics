@@ -1,8 +1,8 @@
-struct GraphicsSampler {
+public struct GraphicsSampler {
     var id: U32 = 0
 }
 
-@Native
+public @Native
 function emptyGraphicsSampler() -> GraphicsSampler {
     return GraphicsSampler {
         id: 0

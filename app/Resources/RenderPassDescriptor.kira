@@ -1,12 +1,12 @@
 import Foundation
-struct RenderTarget {
+public struct RenderTarget {
     var kind: RenderTargetKind = .Swapchain
     var texture: GraphicsTexture
     var mipLevel: Int = 0
     var arrayLayer: Int = 0
 }
 
-struct ColorAttachment {
+public struct ColorAttachment {
     var target: RenderTarget
     var loadAction: LoadAction = .Clear
     var storeAction: StoreAction = .Store
@@ -15,7 +15,7 @@ struct ColorAttachment {
     var hasResolveTarget: Bool = false
 }
 
-struct DepthAttachment {
+public struct DepthAttachment {
     var texture: GraphicsTexture
     var loadAction: LoadAction = .Clear
     var storeAction: StoreAction = .Store
@@ -23,7 +23,7 @@ struct DepthAttachment {
     var readOnly: Bool = false
 }
 
-struct StencilAttachment {
+public struct StencilAttachment {
     var texture: GraphicsTexture
     var loadAction: LoadAction = .Clear
     var storeAction: StoreAction = .Store
@@ -31,7 +31,7 @@ struct StencilAttachment {
     var readOnly: Bool = false
 }
 
-struct RenderPassDescriptor {
+public struct RenderPassDescriptor {
     var label: String = ""
     var colorAttachments: [ColorAttachment]
     var primaryColorAttachment: ColorAttachment
@@ -42,7 +42,7 @@ struct RenderPassDescriptor {
     var hasStencilAttachment: Bool = false
 }
 
-@Native
+public @Native
 function emptyRenderTarget() -> RenderTarget {
     return RenderTarget {
         kind: .Swapchain,
@@ -52,7 +52,7 @@ function emptyRenderTarget() -> RenderTarget {
     }
 }
 
-@Native
+public @Native
 function emptyDepthAttachment() -> DepthAttachment {
     return DepthAttachment {
         texture: emptyGraphicsTexture(),
@@ -63,7 +63,7 @@ function emptyDepthAttachment() -> DepthAttachment {
     }
 }
 
-@Native
+public @Native
 function swapchainDepthAttachment() -> DepthAttachment {
     return DepthAttachment {
         texture: emptyGraphicsTexture(),
@@ -74,7 +74,7 @@ function swapchainDepthAttachment() -> DepthAttachment {
     }
 }
 
-@Native
+public @Native
 function emptyStencilAttachment() -> StencilAttachment {
     return StencilAttachment {
         texture: emptyGraphicsTexture(),
@@ -85,7 +85,7 @@ function emptyStencilAttachment() -> StencilAttachment {
     }
 }
 
-@Native
+public @Native
 function swapchainRenderTarget() -> RenderTarget {
     return RenderTarget {
         kind: .Swapchain,
@@ -104,7 +104,7 @@ function swapchainRenderTarget() -> RenderTarget {
 // attachment names. Everything above it -- the batch, the pipelines, the
 // glyph atlas -- is unchanged, which is the property worth having: a view does
 // not know, and cannot know, whether it is being drawn for a window.
-function clearTextureRenderPass(target: borrow GraphicsTexture, clearColor: borrow Color) -> RenderPassDescriptor {
+public function clearTextureRenderPass(target: borrow GraphicsTexture, clearColor: borrow Color) -> RenderPassDescriptor {
     let attachment = ColorAttachment {
         target: RenderTarget {
             kind: .Texture,
@@ -130,7 +130,7 @@ function clearTextureRenderPass(target: borrow GraphicsTexture, clearColor: borr
     }
 }
 
-function clearSwapchainRenderPass(clearColor: borrow Color) -> RenderPassDescriptor {
+public function clearSwapchainRenderPass(clearColor: borrow Color) -> RenderPassDescriptor {
     return RenderPassDescriptor {
         label: "swapchain-pass",
         colorAttachments: [

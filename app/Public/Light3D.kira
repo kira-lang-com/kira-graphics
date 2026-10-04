@@ -1,29 +1,29 @@
-struct DirectionalLight {
+public struct DirectionalLight {
     var direction: Float3 = Float3 { x: -0.35, y: -0.70, z: -0.55 }
     var color: Float3 = Float3 { x: 1.0, y: 0.96, z: 0.88 }
     var intensity: Float = 0.85
 }
 
-struct SceneUniforms {
+public struct SceneUniforms {
     var viewProjection: Float4x4
     var lightDirection: Float4
     var lightColor: Float4
 }
 
-struct ObjectUniforms {
+public struct ObjectUniforms {
     var model: Float4x4
     var baseColor: Float4
 }
 
-function sceneUniformFloatCount() -> Int {
+public function sceneUniformFloatCount() -> Int {
     return 24
 }
 
-function objectUniformFloatCount() -> Int {
+public function objectUniformFloatCount() -> Int {
     return 20
 }
 
-function sceneUniforms(camera: borrow PerspectiveCamera, light: borrow DirectionalLight, ambient: Float) -> SceneUniforms {
+public function sceneUniforms(camera: borrow PerspectiveCamera, light: borrow DirectionalLight, ambient: Float) -> SceneUniforms {
     return SceneUniforms {
         viewProjection: cameraViewProjectionMatrix(camera),
         lightDirection: Float4 {
@@ -41,14 +41,14 @@ function sceneUniforms(camera: borrow PerspectiveCamera, light: borrow Direction
     }
 }
 
-function objectUniforms(model: borrow Float4x4, baseColor: borrow Float4) -> ObjectUniforms {
+public function objectUniforms(model: borrow Float4x4, baseColor: borrow Float4) -> ObjectUniforms {
     return ObjectUniforms {
         model: model,
         baseColor: baseColor
     }
 }
 
-function sceneUniformData(uniforms: borrow SceneUniforms) -> [F32] {
+public function sceneUniformData(uniforms: borrow SceneUniforms) -> [F32] {
     let m = uniforms.viewProjection
     let lightDirection = uniforms.lightDirection
     let lightColor = uniforms.lightColor
@@ -65,7 +65,7 @@ function sceneUniformData(uniforms: borrow SceneUniforms) -> [F32] {
     ]
 }
 
-function objectUniformData(uniforms: borrow ObjectUniforms) -> [F32] {
+public function objectUniformData(uniforms: borrow ObjectUniforms) -> [F32] {
     let m = uniforms.model
     let baseColor = uniforms.baseColor
 

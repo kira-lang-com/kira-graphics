@@ -10,7 +10,7 @@ import Foundation
 // is the guarantee the family exists to give: an operation this backend has not
 // implemented does not compile, so it can never be discovered as a missing
 // draw.
-construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
+public construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
     // --- shaders ---------------------------------------------------------
     function createShader(descriptor: borrow ShaderDescriptor) -> ShaderResult {
         return shaderResult(metalCreateGraphicsShader(context, descriptor.vertexSource))
@@ -150,6 +150,11 @@ construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
 
     function updateTextureBytes(texture: borrow GraphicsTexture, bytes: RawPtr, byteCount: Int) -> Void {
         metalUpdateTextureBytes(context, texture.id, texture.width, texture.height, bytes, byteCount)
+        return
+    }
+
+    function updateTextureRows(texture: borrow GraphicsTexture, bytes: RawPtr, firstRow: Int, rowCount: Int) -> Void {
+        metalUpdateTextureRows(context, texture.id, texture.width, texture.height, bytes, firstRow, rowCount)
         return
     }
 
@@ -324,6 +329,10 @@ construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
     // The window the layer is attached to. Offscreen runs have no host view, so
     // `metalViewWindowMode` answers for a null view rather than this reading the
     // context twice.
+    function safeAreaInsets() -> ViewportInsets {
+        return metalUIKitSafeAreaInsets()
+    }
+
     function windowMode() -> WindowMode {
         return metalViewWindowMode(metalMemReadPtr(context, metalOffsetHostView()))
     }
@@ -345,7 +354,7 @@ construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
         return
     }
     function mouseShown() -> Bool {
-        return metalCursorIsVisible()
+        return metalPlatformCursorIsVisible!()
     }
     function lockMouse(lock: Bool) -> Void {
         metalSetMouseLocked(lock)
@@ -355,7 +364,7 @@ construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
     // visibility doubles as the lock state without a flag of this backend's own
     // to keep in step with the OS — see `metalCursorIsVisible`.
     function mouseLocked() -> Bool {
-        return metalCursorIsVisible() == false
+        return metalPlatformCursorIsVisible!() == false
     }
     // No soft keyboard on macOS: a hardware keyboard is always present and
     // nothing is summoned. The touch platform that summoned one was sokol's, and

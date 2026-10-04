@@ -10,13 +10,13 @@
 // C-side table held the values behind an id. There is no such table anymore:
 // sokol has no `sg_uniform` object, uniforms were never a resource it
 // tracked, and the values now live in the one place everyone already shares.
-struct UniformState {
+public struct UniformState {
     var label: String = ""
     var expectedFloatCount: Int = 0
     var values: [F32] = []
 }
 
-class Uniform {
+public class Uniform {
     // Typed affine owner of the CPU-side uniform state. Copying this owner is
     // only possible through the explicit `nativeUserData(owner)` clone
     // operation, and ordinary structural drop releases it automatically.
@@ -24,7 +24,7 @@ class Uniform {
     var id: U32 = 0
 }
 
-@Native
+public @Native
 function emptyUniform() -> Uniform {
     return Uniform {
         storage: nativeState(UniformState {}),
@@ -36,7 +36,7 @@ function emptyUniform() -> Uniform {
 // hands back the live value the draw path reads from — there is no device
 // call to make: a uniform's bytes reach the GPU only at the draw that binds
 // them, through `sokolApplyUniformFloats`.
-@Native
+public @Native
 function sokolCreateUniform(descriptor: borrow UniformDescriptor) -> Uniform {
     if descriptor.expectedFloatCount <= 0 {
         graphicsDiagnostic("Kira Graphics: uniform buffer '" + descriptor.label + "' needs a positive expected float count")
@@ -59,7 +59,7 @@ function sokolCreateUniform(descriptor: borrow UniformDescriptor) -> Uniform {
 }
 
 // Replaces a uniform's current values in place.
-@Native
+public @Native
 function setUniformValues(uniform: borrow Uniform, data: borrow [F32]) {
     var state = nativeRecover<UniformState>(uniform.storage)
     state.values = data
@@ -68,7 +68,7 @@ function setUniformValues(uniform: borrow Uniform, data: borrow [F32]) {
 
 // The uniform's current values, for the draw path (see `SokolDraw.kira`) to
 // read.
-@Native
+public @Native
 function sokolUniformState(uniform: borrow Uniform) -> UniformState {
     return nativeRecover<UniformState>(uniform.storage)
 }
@@ -77,7 +77,7 @@ function sokolUniformState(uniform: borrow Uniform) -> UniformState {
 // device resource behind it, so there is nothing to release beyond what
 // Kira's own memory management already does when the last reference goes
 // away.
-@Native
+public @Native
 function sokolDestroyUniformId(uniformId: U32) {
     return
 }

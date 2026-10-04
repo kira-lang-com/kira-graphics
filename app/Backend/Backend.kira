@@ -6,14 +6,14 @@ import Foundation
 // happen before any device context exists. `Any RenderBackend` (see
 // `app/Public/RenderBackend.kira`) is the *dispatch* vocabulary, and everything
 // past `renderBackendFor` asks the backend rather than asking which one it is.
-enum RenderBackendKind {
+public enum RenderBackendKind {
     Metal
     Dawn
     Vulkan
 }
 
 
-enum Platform {
+public enum Platform {
     Windows
     Linux
     MacOS
@@ -23,7 +23,7 @@ enum Platform {
 }
 
 
-struct RenderBackendSelection {
+public struct RenderBackendSelection {
     var backend: RenderBackendKind = .Dawn
     var platform: Platform = .Unknown
     var supported: Bool = true
@@ -39,7 +39,7 @@ struct RenderBackendSelection {
 // Web/WASM lands on Dawn honestly: the browser sandbox has no host-OS probe, so
 // `hostPlatform()` returns `Unknown` there, and Dawn is the only backend that
 // exists on wasm32-emscripten, through emscripten's WebGPU port.
-@Native
+public @Native
 function graphicsDefaultBackend() -> RenderBackendKind {
     let platform = hostPlatform()
     if platform == .MacOS {
@@ -60,7 +60,7 @@ function graphicsDefaultBackend() -> RenderBackendKind {
 // KiraUI supplies window furniture for the undecorated Wayland
 // window. Cocoa and Win32 keep the controls supplied by their native window
 // implementation.
-function graphicsUsesWaylandClientWindowControls() -> Bool {
+public function graphicsUsesWaylandClientWindowControls() -> Bool {
     let backend = graphicsDefaultBackend()
     return hostPlatform() == .Linux && (backend == .Dawn || backend == .Vulkan)
 }
@@ -76,7 +76,7 @@ function graphicsUsesWaylandClientWindowControls() -> Bool {
 // A name that is neither is reported rather than ignored: a typo in an
 // environment variable that silently selects the default is a run that proves
 // nothing about the backend it was supposed to exercise.
-@Native
+public @Native
 function graphicsBackendFromEnvironment(fallback: RenderBackendKind) -> RenderBackendKind {
     let requested = environmentValue("KIRA_GRAPHICS_BACKEND")
     if requested.count == 0 {
@@ -96,7 +96,7 @@ function graphicsBackendFromEnvironment(fallback: RenderBackendKind) -> RenderBa
 }
 
 
-function effectivePlatform(requested: Platform) -> Platform {
+public function effectivePlatform(requested: Platform) -> Platform {
     if requested == .Unknown {
         return hostPlatform()
     }
@@ -104,7 +104,7 @@ function effectivePlatform(requested: Platform) -> Platform {
 }
 
 
-@Native
+public @Native
 function validateRenderBackend(backend: RenderBackendKind, platform: Platform) -> RenderBackendSelection {
     let resolvedPlatform = effectivePlatform(move platform)
     match backend {
@@ -115,7 +115,7 @@ function validateRenderBackend(backend: RenderBackendKind, platform: Platform) -
 }
 
 
-@Native
+public @Native
 function validateVulkanBackend(platform: Platform) -> RenderBackendSelection {
     if platform == .Windows || platform == .Linux {
         return RenderBackendSelection {
@@ -138,7 +138,7 @@ function validateVulkanBackend(platform: Platform) -> RenderBackendSelection {
 // of what was Windows-only here. The second platform is `DawnWindowWayland`,
 // beside `DawnWindow.kira`, and the platform list in `DawnPlatform.kira` is
 // what demands one per platform it names.
-@Native
+public @Native
 function validateDawnBackend(platform: Platform) -> RenderBackendSelection {
     if platform == .Windows {
         return RenderBackendSelection {
@@ -164,7 +164,7 @@ function validateDawnBackend(platform: Platform) -> RenderBackendSelection {
 }
 
 
-@Native
+public @Native
 function validateMetalBackend(platform: Platform) -> RenderBackendSelection {
     if platform == .MacOS {
         return RenderBackendSelection {
@@ -189,7 +189,7 @@ function validateMetalBackend(platform: Platform) -> RenderBackendSelection {
     return unsupportedBackend(.Metal, move platform, "Kira Graphics Metal backend is only supported on macOS and iOS")
 }
 
-function unsupportedBackend(backend: RenderBackendKind, platform: Platform, reason: String) -> RenderBackendSelection {
+public function unsupportedBackend(backend: RenderBackendKind, platform: Platform, reason: String) -> RenderBackendSelection {
     return RenderBackendSelection {
         backend: backend,
         platform: platform,

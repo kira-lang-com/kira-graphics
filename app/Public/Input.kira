@@ -1,4 +1,4 @@
-enum AppEventKind {
+public enum AppEventKind {
     None
     KeyDown
     KeyUp
@@ -25,7 +25,7 @@ enum AppEventKind {
     FilesDropped
 }
 
-enum PointerButton {
+public enum PointerButton {
     None
     Left
     Right
@@ -37,7 +37,7 @@ enum PointerButton {
 // report `Began`, then `Changed` while they move, then `Ended` when they lift
 // (or `Cancelled`); the glide the system adds after they lift arrives as a
 // second run of phases in `scrollMomentum`. A wheel reports `None` for both.
-enum ScrollPhase {
+public enum ScrollPhase {
     None
     MayBegin
     Began
@@ -46,7 +46,7 @@ enum ScrollPhase {
     Cancelled
 }
 
-struct ModifierState {
+public struct ModifierState {
     let shift: Bool = false
     let control: Bool = false
     let alt: Bool = false
@@ -56,7 +56,7 @@ struct ModifierState {
     let middlePointerButton: Bool = false
 }
 
-struct AppEvent {
+public struct AppEvent {
     let kind: AppEventKind = .None
     let frameCount: Int = 0
     let keyCode: Int = 0
@@ -84,7 +84,7 @@ struct AppEvent {
     let framebufferHeight: Int = 0
 }
 
-function graphicsEventKindFromRaw(kind: Int) -> AppEventKind {
+public function graphicsEventKindFromRaw(kind: Int) -> AppEventKind {
     if kind == 1 {
         return .KeyDown
     }
@@ -157,7 +157,7 @@ function graphicsEventKindFromRaw(kind: Int) -> AppEventKind {
     return .None
 }
 
-function graphicsPointerButtonFromRaw(button: Int) -> PointerButton {
+public function graphicsPointerButtonFromRaw(button: Int) -> PointerButton {
     if button == 0 {
         return .Left
     }
@@ -173,7 +173,7 @@ function graphicsPointerButtonFromRaw(button: Int) -> PointerButton {
     return .Other
 }
 
-function graphicsModifierStateFromRaw(raw: Int) -> ModifierState {
+public function graphicsModifierStateFromRaw(raw: Int) -> ModifierState {
     let shift = (raw / 1) % 2 == 1
     let control = (raw / 2) % 2 == 1
     let alt = (raw / 4) % 2 == 1
@@ -192,7 +192,7 @@ function graphicsModifierStateFromRaw(raw: Int) -> ModifierState {
     }
 }
 
-function graphicsEventUsesPointerPosition(kind: borrow AppEventKind) -> Bool {
+public function graphicsEventUsesPointerPosition(kind: borrow AppEventKind) -> Bool {
     if kind == .PointerDown {
         return true
     }
@@ -227,22 +227,22 @@ function graphicsEventUsesPointerPosition(kind: borrow AppEventKind) -> Bool {
 }
 
 
-@Native
+public @Native
 function graphicsStringFromCodepoint(codepoint: Int) -> String {
     return scalarText(codepoint)
 }
 
-@Native
+public @Native
 function graphicsAppendCodepoint(base: borrow String, codepoint: Int) -> String {
     return base + scalarText(codepoint)
 }
 
-@Native
+public @Native
 function graphicsDropLastScalar(base: borrow String) -> String {
     return base.dropLastScalar()
 }
 
-@Native
+public @Native
 function graphicsStringConcat(a: borrow String, b: borrow String) -> String {
     return a + b
 }
@@ -256,23 +256,23 @@ function graphicsStringConcat(a: borrow String, b: borrow String) -> String {
 // cursor, the pointer lock — is the window server's and not a per-run object.
 // `graphicsDefaultBackend` is what a run without an explicit choice selects,
 // which is the same backend its window was opened by.
-@Native
+public @Native
 function graphicsInputBackend() -> Any RenderBackend {
     return renderBackendFor(graphicsDefaultBackend(), nullPointer())
 }
 
-@Native
+public @Native
 function graphicsShowKeyboard(show: Bool) {
     graphicsInputBackend().showKeyboard(show)
     return
 }
 
-@Native
+public @Native
 function graphicsKeyboardShown() -> Bool {
     return graphicsInputBackend().keyboardShown()
 }
 
-@Native
+public @Native
 function graphicsShowMouse(show: Bool) {
     graphicsInputBackend().showMouse(show)
     return
@@ -284,18 +284,18 @@ function graphicsShowMouse(show: Bool) {
 // Separate from `graphicsShowMouse` because they are separate things — a hidden
 // cursor that still roams is what makes a camera drag run off the window and
 // jam at the screen edge — and paired the same way: one lock per one unlock.
-@Native
+public @Native
 function graphicsLockMouse(lock: Bool) {
     graphicsInputBackend().lockMouse(lock)
     return
 }
 
-@Native
+public @Native
 function graphicsMouseLocked() -> Bool {
     return graphicsInputBackend().mouseLocked()
 }
 
-@Native
+public @Native
 function graphicsMouseShown() -> Bool {
     return graphicsInputBackend().mouseShown()
 }

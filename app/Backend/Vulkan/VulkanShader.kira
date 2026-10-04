@@ -6,7 +6,7 @@ import Foundation
 // generated files textual — eight hexadecimal characters per word — so the
 // file path decodes it back to words through `vulkanSpirvWords` before upload.
 
-function vulkanHexDigit(value: borrow String) -> Int {
+public function vulkanHexDigit(value: borrow String) -> Int {
     if value == "0" { return 0 }
     if value == "1" { return 1 }
     if value == "2" { return 2 }
@@ -26,7 +26,7 @@ function vulkanHexDigit(value: borrow String) -> Int {
     return 0 - 1
 }
 
-@Native
+public @Native
 function vulkanSpirvWords(hex: borrow String) -> [U32] {
     var words: [U32] = []
     if hex.count == 0 || hex.count % 8 != 0 {
@@ -54,7 +54,7 @@ function vulkanSpirvWords(hex: borrow String) -> [U32] {
     return words
 }
 
-@Native
+public @Native
 function vulkanCreateShaderModule(state: borrow VulkanState, label: borrow String, words: borrow [U32]) -> RawPtr {
     if words.count == 0 {
         graphicsDiagnostic("Kira Graphics: Vulkan shader '" + label + "' has no valid SPIR-V words")
@@ -81,7 +81,7 @@ function vulkanCreateShaderModule(state: borrow VulkanState, label: borrow Strin
     return module
 }
 
-function vulkanUniformBlocks(reflection: borrow KslResourceReflection) -> [UniformBlockDescriptor] {
+public function vulkanUniformBlocks(reflection: borrow KslResourceReflection) -> [UniformBlockDescriptor] {
     var blocks: [UniformBlockDescriptor] = []
     for block in reflection.uniforms {
         blocks.append(UniformBlockDescriptor {
@@ -92,7 +92,7 @@ function vulkanUniformBlocks(reflection: borrow KslResourceReflection) -> [Unifo
     return blocks
 }
 
-@Native
+public @Native
 function vulkanRecordShader(state: borrow mut VulkanState, record: VulkanShaderRecord) -> GraphicsShader {
     for index in 0..state.shaders.count {
         if !state.shaders[index].live {
@@ -110,7 +110,7 @@ function vulkanRecordShader(state: borrow mut VulkanState, record: VulkanShaderR
     }
 }
 
-@Native
+public @Native
 function vulkanCreateGraphicsShader(context: RawPtr, label: borrow String, vertexSpirv: borrow [U32], fragmentSpirv: borrow [U32], vertexEntry: borrow String, fragmentEntry: borrow String, reflection: borrow String) -> ShaderResult {
     if !vulkanHasDevice(context) {
         return .Error(.DeviceRefused)
@@ -134,7 +134,7 @@ function vulkanCreateGraphicsShader(context: RawPtr, label: borrow String, verte
     }))
 }
 
-@Native
+public @Native
 function vulkanCreateComputeShader(context: RawPtr, label: borrow String, computeSpirv: borrow [U32], computeEntry: borrow String, reflection: borrow String) -> ShaderResult {
     if !vulkanHasDevice(context) {
         return .Error(.DeviceRefused)
@@ -154,7 +154,7 @@ function vulkanCreateComputeShader(context: RawPtr, label: borrow String, comput
     }))
 }
 
-@Native
+public @Native
 function vulkanCreateShaderFromArtifact(context: RawPtr, label: borrow String, artifact: borrow KslArtifact) -> ShaderResult {
     if artifact.computeEntry.count > 0 {
         return vulkanCreateComputeShader(context, label, artifact.computeSpirv, artifact.computeEntry, artifact.resourceReflection)
@@ -162,7 +162,7 @@ function vulkanCreateShaderFromArtifact(context: RawPtr, label: borrow String, a
     return vulkanCreateGraphicsShader(context, label, artifact.vertexSpirv, artifact.fragmentSpirv, artifact.vertexEntry, artifact.fragmentEntry, artifact.resourceReflection)
 }
 
-@Native
+public @Native
 function vulkanCreateShaderFromKsl(context: RawPtr, descriptor: borrow KslShaderDescriptor) -> ShaderResult {
     let base = descriptor.directory + "/" + descriptor.asset
     let compute = readFile(base + ".comp.spv")
@@ -180,7 +180,7 @@ function vulkanCreateShaderFromKsl(context: RawPtr, descriptor: borrow KslShader
     return vulkanCreateGraphicsShader(context, descriptor.label, vulkanSpirvWords(vertex.text), vulkanSpirvWords(fragment.text), "vertex_main", "fragment_main", reflection.ok ? reflection.text : "")
 }
 
-@Native
+public @Native
 function vulkanCreateShaderFromSources(context: RawPtr, descriptor: borrow ShaderDescriptor) -> ShaderResult {
     var vertex = descriptor.vertexSource
     var fragment = descriptor.fragmentSource
@@ -195,7 +195,7 @@ function vulkanCreateShaderFromSources(context: RawPtr, descriptor: borrow Shade
     return vulkanCreateGraphicsShader(context, descriptor.label, vulkanSpirvWords(vertex), vulkanSpirvWords(fragment), "vertex_main", "fragment_main", "")
 }
 
-@Native
+public @Native
 function vulkanDestroyShader(context: RawPtr, shader: borrow GraphicsShader) {
     if !vulkanHasDevice(context) || shader.id == 0 {
         return
