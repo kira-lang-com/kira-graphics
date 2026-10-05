@@ -29,13 +29,16 @@ function vulkanBeginHeadlessFrame(state: borrow mut VulkanState) -> Bool {
     if !pointerIsNull(state.descriptorPool) {
         let _ = vkResetDescriptorPool(state.device, state.descriptorPool, U32(0))
     }
-    if vkResetCommandBuffer(state.commandBuffer, U32(0)) != vulkanSuccess() { return false }
+    if vkResetCommandBuffer(state.commandBuffer, U32(0)) != vulkanSuccess() {
+        graphicsFail(.Frame, "could not reset the headless command buffer")
+        return false
+    }
     let beginResult = vkBeginCommandBuffer(state.commandBuffer, VkCommandBufferBeginInfo {
         sType: vulkanStructureCommandBufferBeginInfo(),
         flags: vulkanCommandBufferOneTime()
     })
     if beginResult != vulkanSuccess() {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not begin its headless command buffer (" + vulkanResultName(beginResult) + ")")
+        graphicsFail(.Frame, "could not begin its headless command buffer (" + vulkanResultName(beginResult) + ")")
         return false
     }
     state.frameActive = true
@@ -51,12 +54,12 @@ function vulkanBeginHeadlessFrame(state: borrow mut VulkanState) -> Bool {
 
 public @Native
 function vulkanSubmitHeadlessFrame(context: RawPtr) {
-    if !vulkanHasDevice(context) { return }
+    if !vulkanRequireDevice(context, "vulkanSubmitHeadlessFrame") { return }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
     if !runtime.vulkan.frameActive { return }
     if runtime.vulkan.passActive { vulkanEndPassAndCommitState(runtime.vulkan) }
     if vkEndCommandBuffer(runtime.vulkan.commandBuffer) != vulkanSuccess() {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not finish its headless command buffer")
+        graphicsFail(.Frame, "could not finish its headless command buffer")
         runtime.vulkan.frameActive = false
         return
     }
@@ -77,12 +80,12 @@ function vulkanSubmitHeadlessFrame(context: RawPtr) {
     }, runtime.vulkan.inFlightFence)
     freeBytes(commandSlot)
     if submitResult != vulkanSuccess() {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not submit its headless frame (" + vulkanResultName(submitResult) + ")")
+        graphicsFail(.Frame, "could not submit its headless frame (" + vulkanResultName(submitResult) + ")")
         runtime.vulkan.frameActive = false
         return
     }
     if !vulkanWaitForFrame(runtime.vulkan) {
-        graphicsDiagnostic("Kira Graphics: Vulkan headless submission did not complete")
+        graphicsFail(.Frame, "headless submission did not complete")
         runtime.vulkan.frameActive = false
         return
     }
@@ -103,7 +106,7 @@ function vulkanSubmitHeadlessFrame(context: RawPtr) {
 
 public @Native
 function vulkanPrepareHeadlessFrame(context: RawPtr) -> Bool {
-    if !vulkanHasDevice(context) { return false }
+    if !vulkanRequireDevice(context, "vulkanPrepareHeadlessFrame") { return false }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
     return vulkanBeginHeadlessFrame(runtime.vulkan)
 }

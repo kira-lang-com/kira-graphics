@@ -6,7 +6,7 @@ import Foundation
 
 public @Native
 function vulkanSubmitFrame(context: RawPtr, frame: borrow RenderFrame) {
-    if !vulkanHasDevice(context) { return }
+    if !vulkanRequireDevice(context, "vulkanSubmitFrame") { return }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
     vulkanSubmitFrameState(runtime.vulkan)
     noteFrameCost(runtime, runtime.vulkan.stats.frameSeconds, runtime.vulkan.stats.passCount, runtime.vulkan.stats.drawCount)
@@ -16,15 +16,20 @@ function vulkanSubmitFrame(context: RawPtr, frame: borrow RenderFrame) {
 
 public @Native
 function vulkanSubmitFrameState(state: borrow mut VulkanState) {
-    if !state.frameActive || !state.acquired { return }
+    state.presentedThisFrame = false
+    if !state.frameActive { return }
     if state.passActive {
         vulkanEndPassAndCommitState(state)
+    }
+    if !state.acquired {
+        vulkanSubmitUnpresentedFrame(state)
+        return
     }
     vulkanTransitionSwapchainImage(state, state.swapchainImages[Int(state.currentImageIndex)], state.currentImageIndex,
         vulkanImageLayoutPresent(), vulkanStageTopOfPipe(), vulkanStageBottomOfPipe(), vulkanAccessNone(), vulkanAccessNone())
     let endResult = vkEndCommandBuffer(state.commandBuffer)
     if endResult != vulkanSuccess() {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not finish its frame command buffer (" + vulkanResultName(endResult) + ")")
+        graphicsFail(.Frame, "could not finish its frame command buffer (" + vulkanResultName(endResult) + ")")
         state.frameActive = false
         state.acquired = false
         state.quitRequested = true
@@ -64,7 +69,7 @@ function vulkanSubmitFrameState(state: borrow mut VulkanState) {
         pSignalSemaphores: signalSemaphoreSlot
     }, state.inFlightFence)
     if submitResult != vulkanSuccess() {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not submit the frame (" + vulkanResultName(submitResult) + ")")
+        graphicsFail(.Frame, "could not submit the frame (" + vulkanResultName(submitResult) + ")")
         state.quitRequested = true
     } else {
         state.acquireWaitPending = false
@@ -81,10 +86,11 @@ function vulkanSubmitFrameState(state: borrow mut VulkanState) {
             pImageIndices: presentImageIndexSlot
         })
         if presentResult != vulkanSuccess() && presentResult != vulkanSuboptimal() && presentResult != vulkanErrorOutOfDate() {
-            graphicsDiagnostic("Kira Graphics: Vulkan could not present the frame (" + vulkanResultName(presentResult) + ")")
+            graphicsFail(.Present, "could not present the frame (" + vulkanResultName(presentResult) + ")")
         }
         freeBytes(swapchainSlot)
         freeBytes(presentImageIndexSlot)
+        state.presentedThisFrame = true
         if !state.announcedFramePresented {
             state.announcedFramePresented = true
             kiraGraphicsLiveFramePresented()
@@ -110,5 +116,48 @@ function vulkanSubmitFrameState(state: borrow mut VulkanState) {
     state.stats.framesInFlight = 1
     state.stats.frameSerial = state.stats.frameSerial + 1
     state.stats.windowState = state.focused ? 1 : 2
+    return
+}
+
+// A frame that drew nothing to the window still ends its command buffer and
+// signals the frame fence, so its offscreen work runs and the next frame's wait
+// holds; nothing is presented.
+public @Native
+function vulkanSubmitUnpresentedFrame(state: borrow mut VulkanState) {
+    state.frameActive = false
+    let endResult = vkEndCommandBuffer(state.commandBuffer)
+    if endResult != vulkanSuccess() {
+        graphicsFail(.Frame, "Vulkan could not finish an unpresented frame's command buffer (" + vulkanResultName(endResult) + ")")
+        state.quitRequested = true
+        return
+    }
+    let fenceSlot = vulkanPointerSlot()
+    writePointer(fenceSlot, U64(0), state.inFlightFence)
+    let resetResult = vkResetFences(state.device, U32(1), fenceSlot)
+    freeBytes(fenceSlot)
+    if resetResult != vulkanSuccess() {
+        graphicsFail(.Frame, "Vulkan could not reset the frame fence (" + vulkanResultName(resetResult) + ")")
+        state.quitRequested = true
+        return
+    }
+    let commandBufferSlot = vulkanPointerSlot()
+    writePointer(commandBufferSlot, U64(0), state.commandBuffer)
+    let submitResult = vkQueueSubmit(state.queue, U32(1), VkSubmitInfo {
+        sType: vulkanStructureSubmitInfo(),
+        commandBufferCount: U32(1),
+        pCommandBuffers: commandBufferSlot
+    }, state.inFlightFence)
+    freeBytes(commandBufferSlot)
+    if submitResult != vulkanSuccess() {
+        graphicsFail(.Frame, "Vulkan could not submit an unpresented frame (" + vulkanResultName(submitResult) + ")")
+        state.quitRequested = true
+    }
+    if graphicsTracing() {
+        graphicsTrace(.Frame, "frame " + String(state.stats.frameSerial) + ": nothing drawn to the window, nothing presented ("
+            + String(state.framePassCount) + " offscreen passes)")
+    }
+    state.stats.passCount = state.framePassCount
+    state.stats.drawCount = state.frameDrawCount
+    state.stats.frameSerial = state.stats.frameSerial + 1
     return
 }

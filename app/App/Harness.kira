@@ -13,6 +13,9 @@ import Foundation
 public @FFI.Extern { library: graphics_support, symbol: kg_monotonic_seconds, abi: c }
 function kgMonotonicSeconds() -> Float
 
+public @FFI.Extern { library: graphics_support, symbol: kg_sleep_seconds, abi: c }
+function kgSleepSeconds(seconds: Float): Void
+
 // The live-reload hooks. Weak no-ops unless a live-reload runner defines them,
 // which is the only place they do anything.
 public @FFI.Extern { library: graphics_support, symbol: kira_live_emit_log_line, abi: c }

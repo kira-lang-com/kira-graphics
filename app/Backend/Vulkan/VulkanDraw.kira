@@ -62,7 +62,10 @@ function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, bindi
             if group.uniformEntries[index].uniformSlot == binding {
                 let bufferId = vulkanSnapshotUniform(state, group.uniformEntries[index])
                 let buffer = vulkanObject(state, bufferId)
-                if pointerIsNull(buffer) { return false }
+                if pointerIsNull(buffer) {
+                    graphicsFail(.Binding, "the uniform at binding " + String(binding) + " has no live buffer")
+                    return false
+                }
                 let info = VkDescriptorBufferInfo {
                     buffer: buffer,
                     range: vulkanObjectStride(state, bufferId)
@@ -79,13 +82,17 @@ function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, bindi
             }
             index = index + 1
         }
+        graphicsFail(.Binding, "the shader reads a uniform at binding " + String(binding) + " and the bind group supplies none there")
         return false
     }
     if descriptorType == vulkanDescriptorStorageBuffer() {
         for entry in group.storageEntries {
             if entry.storageSlot == binding {
                 let buffer = vulkanObject(state, entry.viewId)
-                if pointerIsNull(buffer) { return false }
+                if pointerIsNull(buffer) {
+                    graphicsFail(.Binding, "the storage buffer at binding " + String(binding) + " has no live buffer")
+                    return false
+                }
                 let info = VkDescriptorBufferInfo {
                     buffer: buffer,
                     range: vulkanObjectStride(state, entry.viewId)
@@ -101,6 +108,7 @@ function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, bindi
                 return true
             }
         }
+        graphicsFail(.Binding, "the shader reads a storage buffer at binding " + String(binding) + " and the bind group supplies none there")
         return false
     }
     if descriptorType == vulkanDescriptorSampledImage() || descriptorType == vulkanDescriptorStorageImage() {
@@ -108,7 +116,10 @@ function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, bindi
             if entry.textureSlot == binding {
                 let viewId = descriptorType == vulkanDescriptorStorageImage() ? entry.texture.storageViewId : entry.texture.viewId
                 let view = vulkanObject(state, viewId)
-                if pointerIsNull(view) { return false }
+                if pointerIsNull(view) {
+                    graphicsFail(.Binding, "the texture at binding " + String(binding) + " has no live " + (descriptorType == vulkanDescriptorStorageImage() ? "storage view; was it created with storage usage?" : "view; was it destroyed?"))
+                    return false
+                }
                 let info = VkDescriptorImageInfo {
                     imageView: view,
                     imageLayout: descriptorType == vulkanDescriptorStorageImage() ? vulkanImageLayoutGeneral() : vulkanImageLayoutShaderRead()
@@ -124,13 +135,17 @@ function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, bindi
                 return true
             }
         }
+        graphicsFail(.Binding, "the shader reads a texture at binding " + String(binding) + " and the bind group supplies none there")
         return false
     }
     if descriptorType == vulkanDescriptorSampler() {
         for entry in group.samplerEntries {
             if entry.samplerSlot == binding {
                 let sampler = vulkanObject(state, entry.sampler.id)
-                if pointerIsNull(sampler) { return false }
+                if pointerIsNull(sampler) {
+                    graphicsFail(.Binding, "the sampler at binding " + String(binding) + " has no live sampler")
+                    return false
+                }
                 let info = VkDescriptorImageInfo {
                     sampler: sampler
                 }
@@ -145,8 +160,10 @@ function vulkanWriteDescriptor(state: borrow mut VulkanState, set: RawPtr, bindi
                 return true
             }
         }
+        graphicsFail(.Binding, "the shader reads a sampler at binding " + String(binding) + " and the bind group supplies none there")
         return false
     }
+    graphicsFail(.Binding, "binding " + String(binding) + " has a descriptor type this backend does not write (" + String(Int(descriptorType)) + ")")
     return false
 }
 
@@ -179,7 +196,7 @@ function vulkanBindDescriptorGroup(state: borrow mut VulkanState, pipeline: borr
     let bindings = vulkanDescriptorBindings(reflection, groupIndex)
     if bindings.count == 0 { return true }
     if !present {
-        graphicsDiagnostic("Kira Graphics: Vulkan draw left descriptor group " + String(groupIndex) + " unbound")
+        graphicsFail(.Binding, "the shader reads bind group " + String(groupIndex) + " and the draw set none")
         return false
     }
     let groupState = nativeRecover<BindGroupState>(group.storage)
@@ -197,7 +214,7 @@ function vulkanBindDescriptorState(state: borrow mut VulkanState, pipeline: borr
         if descriptorType == vulkanDescriptorSampledImage() || descriptorType == vulkanDescriptorStorageImage() { supplied = vulkanHasTexture(groupState, Int(binding.binding)) }
         if descriptorType == vulkanDescriptorSampler() { supplied = vulkanHasSampler(groupState, Int(binding.binding)) }
         if !supplied {
-            graphicsDiagnostic("Kira Graphics: Vulkan draw did not supply descriptor binding " + String(binding.binding))
+            graphicsFail(.Binding, "bind group " + String(groupIndex) + " supplies nothing at binding " + String(binding.binding) + ", which the shader reads")
             return false
         }
     }
@@ -215,7 +232,7 @@ function vulkanBindDescriptorState(state: borrow mut VulkanState, pipeline: borr
     freeBytes(layoutSlot)
     if allocationResult != vulkanSuccess() || pointerIsNull(set) {
         freeBytes(setSlot)
-        graphicsDiagnostic("Kira Graphics: Vulkan could not allocate a descriptor set (" + vulkanResultName(allocationResult) + ")")
+        graphicsFail(.Binding, "could not allocate a descriptor set for group " + String(groupIndex) + " (" + vulkanResultName(allocationResult) + "); the frame's descriptor pool may be exhausted")
         return false
     }
     for binding in bindings {
@@ -263,13 +280,23 @@ function vulkanDrawWithBindings(
     indexCount: Int,
     instanceCount: Int,
 ) {
-    if !vulkanHasDevice(runtime) { return }
+    if !vulkanRequireDevice(runtime, "vulkanDrawWithBindings") { return }
     var state = nativeRecover<GraphicsAppRuntimeState>(runtime)
-    if !state.vulkan.passActive || pipeline.id == 0 { return }
+    if !state.vulkan.passActive {
+        graphicsFail(.Draw, "a draw was issued outside a render pass; it was dropped")
+        return
+    }
+    if pipeline.id == 0 {
+        graphicsFail(.Draw, "a draw named no pipeline (id 0); it was dropped")
+        return
+    }
     let record = vulkanPipelineRecord(state.vulkan, Int(pipeline.id))
-    if !record.live || pointerIsNull(record.pipeline) { return }
+    if !record.live || pointerIsNull(record.pipeline) {
+        graphicsFail(.Draw, "a draw named pipeline " + String(Int(pipeline.id)) + ", which " + (record.live ? "has no Vulkan pipeline; its creation failed" : "was destroyed or never created"))
+        return
+    }
     if record.sampleCount != state.vulkan.passSampleCount {
-        graphicsDiagnostic("Kira Graphics: Vulkan pipeline sampleCount must match the active render pass")
+        graphicsFail(.Draw, "pipeline " + String(Int(pipeline.id)) + " renders at " + String(record.sampleCount) + " samples into a pass of " + String(state.vulkan.passSampleCount))
         return
     }
     vkCmdBindPipeline(state.vulkan.commandBuffer, vulkanPipelineGraphics(), record.pipeline)
@@ -293,13 +320,22 @@ function vulkanDrawWithBindings(
         if x + width > state.vulkan.passWidth { width = state.vulkan.passWidth - x }
         if y + height > state.vulkan.passHeight { height = state.vulkan.passHeight - y }
     }
-    if width <= 0 || height <= 0 { return }
+    if width <= 0 || height <= 0 {
+        if graphicsTracing() {
+            graphicsTrace(.Draw, "a draw's scissor (" + String(scissorX) + ", " + String(scissorY) + ", " + String(scissorWidth) + "x" + String(scissorHeight) + ") lies outside the " + String(state.vulkan.passWidth) + "x" + String(state.vulkan.passHeight) + " pass; skipped")
+        }
+        return
+    }
     vkCmdSetScissor(state.vulkan.commandBuffer, U32(0), U32(1), VkRect2D {
         offset: VkOffset2D { x: I32(x), y: I32(y) },
         extent: VkExtent2D { width: U32(width), height: U32(height) }
     })
     if hasVertexBuffer {
         let buffer = vulkanObject(state.vulkan, vertexBufferId)
+        if pointerIsNull(buffer) {
+            graphicsFail(.Draw, "a draw's vertex buffer " + String(Int(vertexBufferId)) + " is not live; the draw was dropped")
+            return
+        }
         let bufferSlot = vulkanPointerSlot()
         let offsetSlot = vulkanPointerSlot()
         writePointer(bufferSlot, U64(0), buffer)
@@ -310,9 +346,16 @@ function vulkanDrawWithBindings(
     }
     if hasIndexBuffer {
         let buffer = vulkanObject(state.vulkan, indexBufferId)
+        if pointerIsNull(buffer) {
+            graphicsFail(.Draw, "a draw's index buffer " + String(Int(indexBufferId)) + " is not live; the draw was dropped")
+            return
+        }
         vkCmdBindIndexBuffer(state.vulkan.commandBuffer, buffer, vulkanObjectOffset(state.vulkan, indexBufferId), indexFormat == .Uint16 ? vulkanIndexUint16() : vulkanIndexUint32())
     }
-    if !vulkanApplyBindings(state.vulkan, record, bindGroup0, hasBindGroup0, bindGroup1, hasBindGroup1, bindGroup2, hasBindGroup2, bindGroup3, hasBindGroup3) { return }
+    if !vulkanApplyBindings(state.vulkan, record, bindGroup0, hasBindGroup0, bindGroup1, hasBindGroup1, bindGroup2, hasBindGroup2, bindGroup3, hasBindGroup3) {
+        graphicsFail(.Draw, "a draw with pipeline " + String(Int(pipeline.id)) + " was dropped because its bind groups could not be bound")
+        return
+    }
     let instances = instanceCount <= 0 ? 1 : instanceCount
     if indexCount > 0 && hasIndexBuffer {
         vkCmdDrawIndexed(state.vulkan.commandBuffer, U32(indexCount), U32(instances), U32(firstIndex), I32(0), U32(0))
@@ -324,20 +367,39 @@ function vulkanDrawWithBindings(
         vkCmdDraw(state.vulkan.commandBuffer, U32(vertexCount), U32(instances), U32(0), U32(0))
         state.vulkan.frameDrawCount = state.vulkan.frameDrawCount + 1
         state.vulkan.frameTriangleCount = state.vulkan.frameTriangleCount + vertexCount * instances / 3
+        return
     }
+    if indexCount > 0 {
+        graphicsWarn(.Draw, "an indexed draw of " + String(indexCount) + " indices has no index buffer; nothing was drawn")
+        return
+    }
+    graphicsWarn(.Draw, "a draw of zero vertices with pipeline " + String(Int(pipeline.id)) + "; nothing was drawn")
     return
 }
 
 public @Native
 function vulkanEncoderDrawIndirect(encoder: borrow RenderEncoderState, indirectBufferId: Int) {
-    if pointerIsNull(encoder.vulkanRuntime) { return }
+    if pointerIsNull(encoder.vulkanRuntime) {
+        graphicsFail(.Draw, "an indirect draw came from an encoder with no Vulkan runtime")
+        return
+    }
     var state = nativeRecover<GraphicsAppRuntimeState>(encoder.vulkanRuntime)
-    if !state.vulkan.passActive { return }
+    if !state.vulkan.passActive {
+        graphicsFail(.Draw, "an indirect draw was issued outside a render pass; it was dropped")
+        return
+    }
     let pipeline = vulkanPipelineRecord(state.vulkan, Int(encoder.pipeline.id))
     let arguments = vulkanObject(state.vulkan, U32(indirectBufferId))
-    if !pipeline.live || pointerIsNull(arguments) { return }
+    if !pipeline.live {
+        graphicsFail(.Draw, "an indirect draw named pipeline " + String(Int(encoder.pipeline.id)) + ", which is not live")
+        return
+    }
+    if pointerIsNull(arguments) {
+        graphicsFail(.Draw, "an indirect draw's argument buffer " + String(indirectBufferId) + " is not live")
+        return
+    }
     if pipeline.sampleCount != state.vulkan.passSampleCount {
-        graphicsDiagnostic("Kira Graphics: Vulkan pipeline sampleCount must match the active render pass")
+        graphicsFail(.Draw, "pipeline " + String(Int(encoder.pipeline.id)) + " renders at " + String(pipeline.sampleCount) + " samples into a pass of " + String(state.vulkan.passSampleCount))
         return
     }
     vkCmdBindPipeline(state.vulkan.commandBuffer, vulkanPipelineGraphics(), pipeline.pipeline)
@@ -359,13 +421,20 @@ function vulkanEncoderDrawIndirect(encoder: borrow RenderEncoderState, indirectB
         if x + width > state.vulkan.passWidth { width = state.vulkan.passWidth - x }
         if y + height > state.vulkan.passHeight { height = state.vulkan.passHeight - y }
     }
-    if width <= 0 || height <= 0 { return }
+    if width <= 0 || height <= 0 {
+        if graphicsTracing() { graphicsTrace(.Draw, "an indirect draw's scissor lies outside the pass; skipped") }
+        return
+    }
     vkCmdSetScissor(state.vulkan.commandBuffer, U32(0), U32(1), VkRect2D {
         offset: VkOffset2D { x: I32(x), y: I32(y) },
         extent: VkExtent2D { width: U32(width), height: U32(height) }
     })
     if encoder.hasVertexBuffer {
         let buffer = vulkanObject(state.vulkan, encoder.vertexBufferId)
+        if pointerIsNull(buffer) {
+            graphicsFail(.Draw, "an indirect draw's vertex buffer " + String(Int(encoder.vertexBufferId)) + " is not live; the draw was dropped")
+            return
+        }
         let bufferSlot = vulkanPointerSlot()
         let offsetSlot = vulkanPointerSlot()
         writePointer(bufferSlot, U64(0), buffer)
@@ -374,7 +443,10 @@ function vulkanEncoderDrawIndirect(encoder: borrow RenderEncoderState, indirectB
         freeBytes(bufferSlot)
         freeBytes(offsetSlot)
     }
-    if !vulkanApplyBindings(state.vulkan, pipeline, encoder.bindGroup0, encoder.hasBindGroup0, encoder.bindGroup1, encoder.hasBindGroup1, encoder.bindGroup2, encoder.hasBindGroup2, encoder.bindGroup3, encoder.hasBindGroup3) { return }
+    if !vulkanApplyBindings(state.vulkan, pipeline, encoder.bindGroup0, encoder.hasBindGroup0, encoder.bindGroup1, encoder.hasBindGroup1, encoder.bindGroup2, encoder.hasBindGroup2, encoder.bindGroup3, encoder.hasBindGroup3) {
+        graphicsFail(.Draw, "an indirect draw was dropped because its bind groups could not be bound")
+        return
+    }
     vkCmdDrawIndirect(state.vulkan.commandBuffer, arguments, U64(0), U32(1), U32(16))
     state.vulkan.frameDrawCount = state.vulkan.frameDrawCount + 1
     return

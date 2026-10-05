@@ -290,7 +290,7 @@ public function dawnAdapterReady(status: I32, adapter: WGPUAdapterImpl_ptr, mess
     var state = nativeRecover<GraphicsAppRuntimeState>(userdata1)
     state.dawn.adapterResolved = true
     if status != dawnRequestAdapterSucceeded() {
-        graphicsDiagnostic("Kira Graphics: Dawn refused an adapter — " + dawnViewText(message))
+        graphicsFail(.Device, "refused an adapter — " + dawnViewText(message))
         return
     }
     state.dawn.adapter = adapter
@@ -301,7 +301,7 @@ public function dawnAdapterReady(status: I32, adapter: WGPUAdapterImpl_ptr, mess
 // TDR. Nothing can be recorded on the runtime state from here: the callback
 // carries no user data this backend can trust past shutdown, so it reports.
 public function dawnDeviceLost(device: RawPtr, reason: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
-    graphicsDiagnostic("Kira Graphics: the Dawn device was lost — " + dawnViewText(message))
+    graphicsFail(.Device, "the Dawn device was lost — " + dawnViewText(message))
     return
 }
 
@@ -313,7 +313,7 @@ public function dawnDeviceLost(device: RawPtr, reason: I32, message: WGPUStringV
 // from the pass's is refused at the draw. All three arrive here and nowhere
 // else.
 public function dawnUncapturedError(device: RawPtr, kind: I32, message: WGPUStringViewPointer, userdata1: RawPtr, userdata2: RawPtr) -> Void {
-    graphicsDiagnostic("Kira Graphics: Dawn reported a " + dawnErrorText(kind) + " error — " + dawnViewText(message))
+    graphicsFail(.Device, "reported a " + dawnErrorText(kind) + " error — " + dawnViewText(message))
     return
 }
 
@@ -323,7 +323,7 @@ public @Native
 function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, runtimeUserData: RawPtr) -> Bool {
     state.dawn.instance = wgpuCreateInstance(WGPUInstanceDescriptor {})
     if pointerIsNull(state.dawn.instance) {
-        graphicsDiagnostic("Kira Graphics: Dawn could not create a WebGPU instance")
+        graphicsFail(.Device, "could not create a WebGPU instance")
         return false
     }
     state.dawn.adapterResolved = false
@@ -344,7 +344,7 @@ function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, run
         spins = spins + 1
     }
     if pointerIsNull(state.dawn.adapter) {
-        graphicsDiagnostic("Kira Graphics: Dawn found no adapter for this machine")
+        graphicsFail(.Device, "found no adapter for this machine")
         return false
     }
     // A device gets the optional features it asked for and no others, so timing
@@ -389,7 +389,7 @@ function dawnCreateDeviceAndQueue(state: borrow mut GraphicsAppRuntimeState, run
         }
     })
     if pointerIsNull(state.dawn.device) {
-        graphicsDiagnostic("Kira Graphics: Dawn refused a device on the adapter it chose")
+        graphicsFail(.Device, "refused a device on the adapter it chose")
         return false
     }
     dawnReadGpuTimesKnob(state)
@@ -417,7 +417,7 @@ function dawnCreateSurface(state: borrow mut GraphicsAppRuntimeState, width: Int
     let window = dawnWindowFor(dawnPlatformForHost())
     state.dawn.surface = window.createSurface(state.dawn.instance, state.dawn.window)
     if pointerIsNull(state.dawn.surface) {
-        graphicsDiagnostic("Kira Graphics: Dawn could not create a surface for the window")
+        graphicsFail(.Device, "could not create a surface for the window")
         return false
     }
     // A window that measures itself is asked; one that does not is told. Win32

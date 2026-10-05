@@ -378,7 +378,7 @@ function dawnWaylandAttachInput(state: borrow mut GraphicsAppRuntimeState, runti
     }
     let toplevel = kira_wayland_proxy_get_user_data(current.dawn.window)
     if pointerIsNull(toplevel) {
-        graphicsDiagnostic("Kira Graphics: the Wayland surface has no xdg toplevel role")
+        graphicsFail(.Window, "the Wayland surface has no xdg toplevel role")
         return
     }
     current.dawn.toplevel = toplevel
@@ -399,7 +399,7 @@ function dawnWaylandAttachInput(state: borrow mut GraphicsAppRuntimeState, runti
     let ignoredInitialConfigure = kira_wayland_display_roundtrip(display)
     let registry = kira_wayland_display_get_registry(display)
     if pointerIsNull(registry) {
-        graphicsDiagnostic("Kira Graphics: the Wayland display refused a registry for the seat")
+        graphicsFail(.Window, "the Wayland display refused a registry for the seat")
         return
     }
     var seatRegistryListener = kira_wayland_registry_listener {
@@ -414,7 +414,7 @@ function dawnWaylandAttachInput(state: borrow mut GraphicsAppRuntimeState, runti
     let ignoredGlobals = kira_wayland_display_roundtrip(display)
     let ignoredCapabilities = kira_wayland_display_roundtrip(display)
     if pointerIsNull(current.dawn.pointer) {
-        graphicsDiagnostic("Kira Graphics: this Wayland seat offers no pointer, so the window answers no mouse")
+        graphicsWarn(.Window, "this Wayland seat offers no pointer, so the window answers no mouse")
     }
     return
 }

@@ -13,7 +13,10 @@ function vulkanRunApplication(app: borrow GraphicsApplication, runtimeUserData: 
     }
     let window = vulkanWindowFor(vulkanWindowPlatformForHost())
     runtime.vulkan.window = window.open(app.title, app.width, app.height, app.windowMode, app.transparent, app.opacity)
-    if pointerIsNull(runtime.vulkan.window) { return }
+    if pointerIsNull(runtime.vulkan.window) {
+        graphicsFail(.Window, "could not open the window '" + app.title + "' (" + String(app.width) + "x" + String(app.height) + "); is a display server running?")
+        return
+    }
     if hostPlatform() == .Windows {
         runtime.vulkan.messageBlock = allocateBytes(U64(48))
         dawnAttachWindowRuntime(runtime.vulkan.window, runtimeUserData)
@@ -31,7 +34,7 @@ function vulkanRunApplication(app: borrow GraphicsApplication, runtimeUserData: 
     }
     runtime.vulkan.surface = window.createSurface(runtime.vulkan.instance, runtime.vulkan.window)
     if pointerIsNull(runtime.vulkan.surface) {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not create a surface for its window")
+        graphicsFail(.Device, "could not create a surface for its window")
         vulkanShutdownState(runtime.vulkan)
         return
     }
@@ -62,6 +65,8 @@ function vulkanRunApplication(app: borrow GraphicsApplication, runtimeUserData: 
     vulkanShutdownState(runtime.vulkan)
     return
 }
+
+let vulkanIdleFrameSeconds: Float = 1.0 / 60.0
 
 public @Native
 function vulkanDriveFrames(runtimeUserData: RawPtr) {
@@ -99,6 +104,14 @@ function vulkanDriveFrames(runtimeUserData: RawPtr) {
         }
         vulkanSubmitFrame(runtimeUserData, frame)
         vulkanWriteFrameCapture(runtime.vulkan, captureBuffer, runtime.capturePath)
+        if !runtime.vulkan.presentedThisFrame {
+            // Presenting is what paces a frame to the display. A frame that
+            // presents nothing waits out the interval itself, or the loop spins.
+            kgSleepSeconds(vulkanIdleFrameSeconds - (kgMonotonicSeconds() - Float(Int(runtime.vulkan.frameStartedAt)) / 1000000000.0))
+        } else if graphicsTracing() {
+            graphicsTrace(.Frame, "frame " + String(runtime.frameIndex) + ": presented image " + String(Int(runtime.vulkan.currentImageIndex))
+                + " after " + String(runtime.vulkan.stats.passCount) + " passes, " + String(runtime.vulkan.stats.drawCount) + " draws")
+        }
         if runtime.quitAfterFrames > 0 && runtime.frameIndex >= runtime.quitAfterFrames {
             return
         }

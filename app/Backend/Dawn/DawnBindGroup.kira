@@ -40,11 +40,11 @@ function dawnCreateUniform(context: RawPtr, descriptor: borrow UniformDescriptor
         return .Error(.DeviceRefused)
     }
     if descriptor.expectedFloatCount <= 0 {
-        graphicsDiagnostic("Kira Graphics: uniform buffer '" + descriptor.label + "' needs a positive expected float count")
+        graphicsFail(.Binding, "uniform buffer '" + descriptor.label + "' needs a positive expected float count")
         return .Error(.DeviceRefused)
     }
     if descriptor.data.count != descriptor.expectedFloatCount {
-        graphicsDiagnostic("Kira Graphics: uniform buffer '" + descriptor.label + "' upload size does not match its expected float count")
+        graphicsFail(.Binding, "uniform buffer '" + descriptor.label + "' upload size does not match its expected float count")
         return .Error(.DeviceRefused)
     }
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -108,7 +108,7 @@ public @Native
 function dawnBindGroupAddUniform(group: borrow BindGroup, slot: Int, uniform: borrow Uniform) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if uniform.id == 0 {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' cannot bind a uniform the device refused")
+        graphicsFail(.Binding, "bind group '" + state.label + "' cannot bind a uniform the device refused")
         return
     }
     state.uniformEntries.append(StoredUniformBindEntry {
@@ -124,7 +124,7 @@ public @Native
 function dawnBindGroupAddTexture(group: borrow BindGroup, slot: Int, texture: borrow GraphicsTexture) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if texture.viewId == 0 {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' cannot bind a texture with no sampled view")
+        graphicsFail(.Binding, "bind group '" + state.label + "' cannot bind a texture with no sampled view")
         return
     }
     state.textureEntries.append(TextureBindEntry {
@@ -139,7 +139,7 @@ public @Native
 function dawnBindGroupAddSampler(group: borrow BindGroup, slot: Int, sampler: borrow GraphicsSampler) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if sampler.id == 0 {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' cannot bind a sampler the device refused")
+        graphicsFail(.Binding, "bind group '" + state.label + "' cannot bind a sampler the device refused")
         return
     }
     state.samplerEntries.append(SamplerBindEntry {
@@ -154,7 +154,7 @@ public @Native
 function dawnBindGroupAddStorageBuffer(group: borrow BindGroup, slot: Int, bufferId: U32, byteSize: Int) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if bufferId == 0 {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' cannot bind a storage buffer the device refused")
+        graphicsFail(.Binding, "bind group '" + state.label + "' cannot bind a storage buffer the device refused")
         return
     }
     state.storageEntries.append(StorageBindEntry {
@@ -334,7 +334,7 @@ function dawnDeviceBindGroup(runtime: borrow mut GraphicsAppRuntimeState, group:
     dawnReleaseCachedGroup(runtime, group.storage)
     let entries = dawnBindGroupEntries(runtime, group.storage)
     if entries.count == 0 || entries.count > dawnMaxBindGroupEntries() {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' holds " + String(entries.count) + " resources, which WebGPU will not bind as one group")
+        graphicsFail(.Binding, "bind group '" + state.label + "' holds " + String(entries.count) + " resources, which WebGPU will not bind as one group")
         return nullPointer()
     }
     let handle = wgpuDeviceCreateBindGroup(runtime.dawn.device, WGPUBindGroupDescriptor {

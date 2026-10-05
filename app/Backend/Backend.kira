@@ -91,7 +91,7 @@ function graphicsBackendFromEnvironment(fallback: RenderBackendKind) -> RenderBa
     if requested == "vulkan" {
         return .Vulkan
     }
-    graphicsDiagnostic("Kira Graphics: KIRA_GRAPHICS_BACKEND names '" + requested + "', which is not `metal`, `dawn` or `vulkan`")
+    graphicsFail(.Device, "KIRA_GRAPHICS_BACKEND names '" + requested + "', which is not `metal`, `dawn` or `vulkan`")
     return fallback
 }
 

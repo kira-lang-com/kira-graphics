@@ -27,7 +27,7 @@ function metalCreateShader(ctx: RawPtr, source: borrow String) -> Int {
     // was reading. The next thing to fail is the pipeline, reporting only that
     // its vertex function is nil — which says nothing about why. Say why.
     if pointerIsNull(library) {
-        graphicsDiagnostic("kira-graphics: Metal rejected a shader library")
+        graphicsFail(.Resource, "kira-graphics: Metal rejected a shader library")
         let err = metalMemReadPtr(errSlot, 0)
         if !pointerIsNull(err) {
             let described: RawPtr = metalMsgSend(err, metalSel("localizedDescription"))

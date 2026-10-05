@@ -6,7 +6,11 @@ import Foundation
 // exported dma-buf descriptor handed to the compositor.
 public @Native
 function vulkanCreateSharedTexture(context: RawPtr, width: Int, height: Int) -> SharedTexture {
-    if !vulkanHasDevice(context) || width <= 0 || height <= 0 { return SharedTexture {} }
+    if !vulkanRequireDevice(context, "vulkanCreateSharedTexture") { return SharedTexture {} }
+    if width <= 0 || height <= 0 {
+        graphicsFail(.Resource, "a shared texture was created " + String(width) + "x" + String(height))
+        return SharedTexture {}
+    }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
     let record = kira_shared_surface_vulkan_create(
         runtime.vulkan.device,
@@ -15,7 +19,7 @@ function vulkanCreateSharedTexture(context: RawPtr, width: Int, height: Int) -> 
         I32(height)
     )
     if pointerIsNull(record) {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not create the shared render target (" + sharedSurfaceDiagnostic() + ")")
+        graphicsFail(.Resource, "could not create the shared render target (" + sharedSurfaceDiagnostic() + ")")
         return SharedTexture {}
     }
     let image = kira_shared_surface_vulkan_import_image(record)
@@ -60,11 +64,15 @@ function vulkanCreateSharedTexture(context: RawPtr, width: Int, height: Int) -> 
 // image description on this VkDevice, and returns handles this backend owns.
 public @Native
 function vulkanImportSharedTexture(context: RawPtr, surface: borrow SharedSurface) -> SharedTexture {
-    if !vulkanHasDevice(context) || !surface.isValid() { return SharedTexture {} }
+    if !vulkanRequireDevice(context, "vulkanImportSharedTexture") { return SharedTexture {} }
+    if !surface.isValid() {
+        graphicsFail(.Resource, "a shared texture was imported from a surface that is not valid")
+        return SharedTexture {}
+    }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
     let record = kira_shared_surface_vulkan_import(runtime.vulkan.device, I32(surface.id.raw))
     if pointerIsNull(record) {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not import the shared surface (" + sharedSurfaceDiagnostic() + ")")
+        graphicsFail(.Resource, "could not import the shared surface (" + sharedSurfaceDiagnostic() + ")")
         return SharedTexture {}
     }
     let image = kira_shared_surface_vulkan_import_image(record)

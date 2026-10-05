@@ -296,7 +296,7 @@ function metalRunOffscreenApplication(app: borrow GraphicsApplication, ctxPtr: R
             let offscreenW = metalContextPhysicalWidth(ctxPtr)
             let offscreenH = metalContextPhysicalHeight(ctxPtr)
             if metalCapturePpm(ctxPtr, metalMemReadPtr(ctxPtr, metalOffsetColorTexture()), offscreenW, offscreenH, offscreenHarness.capturePath) {
-                graphicsDiagnostic("Kira Graphics wrote the rendered frame to " + offscreenHarness.capturePath)
+                graphicsFail(.Device, "Kira Graphics wrote the rendered frame to " + offscreenHarness.capturePath)
             }
         }
         metalAutoreleasePoolPop(framePool)

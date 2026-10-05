@@ -53,7 +53,7 @@ function reportFrameCost(state: borrow GraphicsAppRuntimeState) {
     }
     let mean = state.frameCostTotalSeconds / Float(state.frameCostCount) * 1000.0
     var sorted = graphicsSortedCosts(state.frameCostSamples)
-    graphicsDiagnostic(
+    graphicsFail(.Frame, 
         "KiraGraphics: frames=" + String(state.frameCostCount)
             + " mean=" + graphicsHundredths(mean) + "ms"
             + " p50=" + graphicsHundredths(graphicsPercentile(sorted, 50) * 1000.0) + "ms"
@@ -88,7 +88,7 @@ function graphicsReportBudgetMisses(state: borrow GraphicsAppRuntimeState, budge
         }
         index = index + 1
     }
-    graphicsDiagnostic(
+    graphicsFail(.Frame, 
         "KiraGraphics: over" + graphicsHundredths(budgetMs) + "ms=" + String(count)
             + " of " + String(state.frameCostSamples.count)
             + " at" + (where.count > 0 ? where : " none")
@@ -140,7 +140,7 @@ function graphicsRuntimeRun(app: borrow GraphicsApplication, userData: RawPtr) {
 
     let selection = validateRenderBackend(app.backend, app.platform)
     if (!selection.supported) {
-        graphicsDiagnostic(selection.reason)
+        graphicsFail(.Frame, selection.reason)
         return
     }
 

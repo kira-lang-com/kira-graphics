@@ -166,7 +166,10 @@ function vulkanEnsureDepthTarget(state: borrow mut VulkanState, width: Int, heig
         storage: .Transient
     }
     state.managedDepthId = vulkanCreateImageHandle(state, descriptor)
-    if state.managedDepthId == 0 { return nullPointer() }
+    if state.managedDepthId == 0 {
+        graphicsFail(.Resource, "could not create the " + String(width) + "x" + String(height) + " depth target a pass asked for")
+        return nullPointer()
+    }
     state.managedDepthViewId = vulkanCreateImageView(state, state.managedDepthId, vulkanFormatDepth24Stencil8(), vulkanAspectDepth() | vulkanAspectStencil())
     state.managedDepthWidth = width
     state.managedDepthHeight = height
@@ -220,7 +223,7 @@ function vulkanWaitForFrame(state: borrow mut VulkanState) -> Bool {
     let waitResult = vkWaitForFences(state.device, U32(1), fenceSlot, U32(1), U64(9223372036854775807))
     freeBytes(fenceSlot)
     if waitResult != vulkanSuccess() {
-        graphicsDiagnostic("Kira Graphics: Vulkan frame fence failed (" + vulkanResultName(waitResult) + ")")
+        graphicsFail(.Frame, "waiting on the frame fence failed (" + vulkanResultName(waitResult) + ")")
         return false
     }
     return true
@@ -234,33 +237,51 @@ function vulkanAcquireFrame(state: borrow mut VulkanState) -> Bool {
     if !pointerIsNull(state.descriptorPool) {
         vkResetDescriptorPool(state.device, state.descriptorPool, U32(0))
     }
-    let imageIndexSlot = vulkanWordSlot()
-    let result = vkAcquireNextImageKHR(state.device, state.swapchain, U64(9223372036854775807), state.imageAvailable, nullPointer(), imageIndexSlot)
-    state.currentImageIndex = wordAt(imageIndexSlot, U64(0))
-    freeBytes(imageIndexSlot)
-    if result == vulkanErrorOutOfDate() {
-        if !vulkanRecreateSwapchain(state) {
-            return false
-        }
-        return vulkanAcquireFrame(state)
-    }
-    if result != vulkanSuccess() && result != vulkanSuboptimal() {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not acquire a swapchain image (" + vulkanResultName(result) + ")")
-        return false
-    }
     vkResetCommandBuffer(state.commandBuffer, U32(0))
     let beginResult = vkBeginCommandBuffer(state.commandBuffer, VkCommandBufferBeginInfo {
         sType: vulkanStructureCommandBufferBeginInfo(),
         flags: U32(0)
     })
     if beginResult != vulkanSuccess() {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not begin its frame command buffer (" + vulkanResultName(beginResult) + ")")
+        graphicsFail(.Frame, "could not begin the frame command buffer (" + vulkanResultName(beginResult) + ")")
         return false
     }
     state.frameActive = true
+    state.acquired = false
+    state.acquireWaitPending = false
+    state.dynamicFrame = state.dynamicFrame + 1
+    return true
+}
+
+// The swapchain image is taken only when a pass first draws to it. A frame
+// that never does presents nothing, and the window keeps the image it showed
+// last; presenting an image nothing was drawn into would show its undefined
+// contents instead.
+public @Native
+function vulkanAcquireSwapchainImage(state: borrow mut VulkanState) -> Bool {
+    if state.acquired { return true }
+    if !state.frameActive {
+        graphicsFail(.Swapchain, "a swapchain image was asked for outside a frame")
+        return false
+    }
+    let imageIndexSlot = vulkanWordSlot()
+    var result = vkAcquireNextImageKHR(state.device, state.swapchain, U64(9223372036854775807), state.imageAvailable, nullPointer(), imageIndexSlot)
+    if result == vulkanErrorOutOfDate() {
+        if !vulkanRecreateSwapchain(state) {
+            graphicsFail(.Swapchain, "the swapchain went out of date and could not be recreated")
+            freeBytes(imageIndexSlot)
+            return false
+        }
+        result = vkAcquireNextImageKHR(state.device, state.swapchain, U64(9223372036854775807), state.imageAvailable, nullPointer(), imageIndexSlot)
+    }
+    state.currentImageIndex = wordAt(imageIndexSlot, U64(0))
+    freeBytes(imageIndexSlot)
+    if result != vulkanSuccess() && result != vulkanSuboptimal() {
+        graphicsFail(.Swapchain, "could not acquire a swapchain image (" + vulkanResultName(result) + ")")
+        return false
+    }
     state.acquired = true
     state.acquireWaitPending = true
-    state.dynamicFrame = state.dynamicFrame + 1
     return true
 }
 
@@ -275,7 +296,7 @@ function vulkanReleasePendingUploads(state: borrow mut VulkanState) {
 
 public @Native
 function vulkanBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bool {
-    if !vulkanHasDevice(context) {
+    if !vulkanRequireDevice(context, "vulkanBeginRenderPass") {
         return false
     }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -284,7 +305,16 @@ function vulkanBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bo
 
 public @Native
 function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow RenderFrame) -> Bool {
-    if !state.frameActive || state.passActive || !frame.attachments.hasColor {
+    if !state.frameActive {
+        graphicsFail(.Pass, "a render pass began outside a frame")
+        return false
+    }
+    if state.passActive {
+        graphicsFail(.Pass, "a render pass began while another is still open; end it first")
+        return false
+    }
+    if !frame.attachments.hasColor {
+        graphicsFail(.Pass, "a render pass began with no color attachment")
         return false
     }
     var colorImage = nullPointer()
@@ -296,12 +326,19 @@ function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow
     var sampleCount = swapchain ? 1 : frame.attachments.colorSampleCount()
     if sampleCount <= 0 { sampleCount = 1 }
     if vulkanSampleCount(sampleCount) == I32(0) {
-        graphicsDiagnostic("Kira Graphics: Vulkan render pass sampleCount must be one of 1, 2, 4, 8, 16, 32 or 64")
+        graphicsFail(.Pass, "render pass sampleCount must be one of 1, 2, 4, 8, 16, 32 or 64")
+        return false
+    }
+    if swapchain && !vulkanAcquireSwapchainImage(state) {
+        graphicsFail(.Pass, "a pass to the window has no swapchain image to draw into")
         return false
     }
     var imageIndex = state.currentImageIndex
     if swapchain {
-        if Int(imageIndex) >= state.swapchainImages.count { return false }
+        if Int(imageIndex) >= state.swapchainImages.count {
+            graphicsFail(.Swapchain, "acquired image " + String(Int(imageIndex)) + " is outside the swapchain's " + String(state.swapchainImages.count) + " images")
+            return false
+        }
         colorImage = state.swapchainImages[Int(imageIndex)]
         colorView = state.swapchainViews[Int(imageIndex)]
         width = state.swapchainWidth
@@ -312,10 +349,16 @@ function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow
         colorImage = vulkanObject(state, colorId)
         colorView = vulkanObject(state, frame.attachments.colorViewId())
         format = vulkanObjectFormat(state, colorId)
-        if pointerIsNull(colorImage) || pointerIsNull(colorView) { return false }
+        if pointerIsNull(colorImage) || pointerIsNull(colorView) {
+            graphicsFail(.Pass, "the pass's color target, texture " + String(Int(colorId)) + ", has no live image or view; it was destroyed or never created")
+            return false
+        }
         vulkanTransitionImage(state, colorId, vulkanImageLayoutColorAttachment(), vulkanStageTopOfPipe(), vulkanStageColorAttachmentOutput(), vulkanAccessNone(), vulkanAccessColorAttachmentWrite(), vulkanAspectColor())
     }
-    if width <= 0 || height <= 0 || pointerIsNull(colorView) { return false }
+    if width <= 0 || height <= 0 || pointerIsNull(colorView) {
+        graphicsFail(.Pass, "the pass's color target is " + String(width) + "x" + String(height) + (pointerIsNull(colorView) ? " with no view" : "") + "; nothing can be drawn into it")
+        return false
+    }
     var depthView = nullPointer()
     var depthImageId = U32(0)
     if frame.attachments.hasDepth {
@@ -323,7 +366,7 @@ function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow
         if depthImageId != 0 {
             let depthSamples = frame.attachments.depth.texture.sampleCount <= 0 ? 1 : frame.attachments.depth.texture.sampleCount
             if depthSamples != sampleCount {
-                graphicsDiagnostic("Kira Graphics: Vulkan depth attachment sampleCount must match the color attachment")
+                graphicsFail(.Pass, "depth attachment sampleCount must match the color attachment")
                 return false
             }
             depthView = vulkanObject(state, frame.attachments.depthViewId())
@@ -331,25 +374,28 @@ function vulkanBeginRenderPassState(state: borrow mut VulkanState, frame: borrow
             depthView = vulkanEnsureDepthTarget(state, width, height, sampleCount)
             depthImageId = state.managedDepthId
         }
-        if pointerIsNull(depthView) { return false }
+        if pointerIsNull(depthView) {
+            graphicsFail(.Pass, "the pass's depth target has no live view")
+            return false
+        }
         vulkanTransitionImage(state, depthImageId, vulkanImageLayoutDepthAttachment(), vulkanStageTopOfPipe(), vulkanStageEarlyFragmentTests(), vulkanAccessNone(), vulkanAccessDepthStencilWrite(), vulkanAspectDepth() | vulkanAspectStencil())
     }
     var resolveView = nullPointer()
     if frame.attachments.color.hasResolveTarget {
         if sampleCount <= 1 {
-            graphicsDiagnostic("Kira Graphics: Vulkan resolve targets require a multisampled color attachment")
+            graphicsFail(.Pass, "resolve targets require a multisampled color attachment")
             return false
         }
         let resolveTexture = frame.attachments.color.resolveTarget.texture
         let resolveSamples = resolveTexture.sampleCount <= 0 ? 1 : resolveTexture.sampleCount
         if resolveSamples != 1 || resolveTexture.width != width || resolveTexture.height != height {
-            graphicsDiagnostic("Kira Graphics: Vulkan resolve target must be single-sampled and match the color attachment extent")
+            graphicsFail(.Pass, "resolve target must be single-sampled and match the color attachment extent")
             return false
         }
         let resolveId = resolveTexture.id
         resolveView = vulkanObject(state, frame.attachments.resolveViewId())
         if resolveId == 0 || pointerIsNull(resolveView) || vulkanObjectFormat(state, resolveId) != format {
-            graphicsDiagnostic("Kira Graphics: Vulkan resolve target must match the color attachment format")
+            graphicsFail(.Pass, "resolve target must match the color attachment format")
             return false
         }
         vulkanTransitionImage(state, resolveId, vulkanImageLayoutColorAttachment(), vulkanStageTopOfPipe(), vulkanStageColorAttachmentOutput(), vulkanAccessNone(), vulkanAccessColorAttachmentWrite(), vulkanAspectColor())

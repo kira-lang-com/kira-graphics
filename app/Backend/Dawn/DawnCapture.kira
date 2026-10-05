@@ -22,7 +22,7 @@ function dawnCaptureFrame(context: RawPtr, path: borrow String) {
     let width = state.dawn.surfaceWidth
     let height = state.dawn.surfaceHeight
     if width <= 0 || height <= 0 || pointerIsNull(state.dawn.frameTexture) {
-        graphicsDiagnostic("Kira Graphics could not read the Dawn swapchain back into " + path)
+        graphicsFail(.Capture, "Kira Graphics could not read the Dawn swapchain back into " + path)
         return
     }
     let _ = dawnCaptureTextureHandle(
@@ -68,7 +68,7 @@ public function dawnCaptureTextureHandle(context: RawPtr, texture: RawPtr, width
         size: U64(byteCount)
     })
     if pointerIsNull(readback) {
-        graphicsDiagnostic("Kira Graphics could not allocate a capture buffer for " + path)
+        graphicsFail(.Capture, "Kira Graphics could not allocate a capture buffer for " + path)
         return false
     }
     let encoder = wgpuDeviceCreateCommandEncoder(state.dawn.device, WGPUCommandEncoderDescriptor {
@@ -115,7 +115,7 @@ public function dawnCaptureTextureHandle(context: RawPtr, texture: RawPtr, width
         spins = spins + 1
     }
     if !state.dawn.mapSucceeded {
-        graphicsDiagnostic("Kira Graphics could not map the Dawn capture buffer for " + path)
+        graphicsFail(.Capture, "Kira Graphics could not map the Dawn capture buffer for " + path)
         wgpuBufferDestroy(readback)
         wgpuBufferRelease(readback)
         return false
@@ -126,9 +126,9 @@ public function dawnCaptureTextureHandle(context: RawPtr, texture: RawPtr, width
     wgpuBufferDestroy(readback)
     wgpuBufferRelease(readback)
     if wrote {
-        graphicsDiagnostic("Kira Graphics wrote the captured texture to " + path)
+        graphicsFail(.Capture, "Kira Graphics wrote the captured texture to " + path)
     } else {
-        graphicsDiagnostic("Kira Graphics could not write the captured texture to " + path)
+        graphicsFail(.Capture, "Kira Graphics could not write the captured texture to " + path)
     }
     return wrote
 }

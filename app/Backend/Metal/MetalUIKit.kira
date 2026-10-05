@@ -177,8 +177,8 @@ function metalUIKitStartFrames(renderFrame: () -> Bool, cleanup: () -> Void, liv
     state.cleanup = move cleanup
     let link: RawPtr = metalMsgSend(metalObjcGetClass("CADisplayLink"), metalSel("displayLinkWithTarget:selector:"), state.delegate, metalSel("renderKiraFrame:"))
     state.displayLink = link
-    if pointerIsNull(link) { graphicsDiagnostic("UIKit could not create its display link") }
-    if pointerIsNull(state.delegate) { graphicsDiagnostic("UIKit display link has no scene delegate") }
+    if pointerIsNull(link) { graphicsFail(.Window, "UIKit could not create its display link") }
+    if pointerIsNull(state.delegate) { graphicsFail(.Window, "UIKit display link has no scene delegate") }
     metalMsgSend(link, metalSel("setPreferredFramesPerSecond:"), U64(metalViewMaximumFramesPerSecond(state.view)))
     // Run loops recognize the common-modes set by the identity of the
     // `kCFRunLoopCommonModes` constant, so a string spelled the same names an
@@ -200,10 +200,10 @@ function metalUIKitRenderFrame(delegate: RawPtr, selector: RawPtr, link: RawPtr)
     var state = nativeRecover<MetalUIKitApplication>(metalUIKitApplicationPointer())
     if !state.renderStarted {
         state.renderStarted = true
-        graphicsDiagnostic("UIKit entered its first display-link frame")
+        graphicsFail(.Window, "UIKit entered its first display-link frame")
     }
     if !state.renderFrame() {
-        graphicsDiagnostic("UIKit frame handler requested completion")
+        graphicsFail(.Window, "UIKit frame handler requested completion")
         metalMsgSend(link, metalSel("invalidate"))
         state.displayLink = RawPtr(0)
         state.cleanup()

@@ -136,7 +136,7 @@ function dawnPresentModeFromEnvironment() -> I32 {
     if requested == "mailbox" {
         return dawnPresentModeMailbox()
     }
-    graphicsDiagnostic("Kira Graphics: KIRA_GRAPHICS_PRESENT_MODE names '" + requested + "', which is not `fifo`, `fifo-relaxed`, `immediate` or `mailbox`")
+    graphicsFail(.Resource, "KIRA_GRAPHICS_PRESENT_MODE names '" + requested + "', which is not `fifo`, `fifo-relaxed`, `immediate` or `mailbox`")
     return dawnPresentModeFifo()
 }
 // `SuccessOptimal` and `SuccessSuboptimal`. A suboptimal texture still draws;

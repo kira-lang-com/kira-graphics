@@ -40,7 +40,7 @@ function dawnAcquireSurfaceTexture(state: borrow mut GraphicsAppRuntimeState) ->
         }
         wgpuSurfaceGetCurrentTexture(state.dawn.surface, block)
         if !dawnSurfaceStatusIsUsable(block.status) {
-            graphicsDiagnostic("Kira Graphics: the Dawn surface has no drawable this frame")
+            graphicsFail(.Pass, "the Dawn surface has no drawable this frame")
             return false
         }
     }
@@ -93,7 +93,7 @@ function dawnEnsureDepthTarget(state: borrow mut GraphicsAppRuntimeState, width:
         sampleCount: U32(1)
     })
     if pointerIsNull(texture) {
-        graphicsDiagnostic("Kira Graphics: Dawn refused a managed depth buffer for this pass")
+        graphicsFail(.Pass, "refused a managed depth buffer for this pass")
         return U32(0)
     }
     let view = dawnMakeView(texture, format, "depth")
@@ -128,12 +128,12 @@ function dawnReleaseDepthTarget(state: borrow mut GraphicsAppRuntimeState) {
 public @Native
 function dawnBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bool {
     if !dawnHasDevice(context) {
-        graphicsDiagnostic("Kira Graphics skipped a render pass because the frame carries no Dawn device")
+        graphicsFail(.Pass, "Kira Graphics skipped a render pass because the frame carries no Dawn device")
         return false
     }
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     if state.dawn.passActive {
-        graphicsDiagnostic("Kira Graphics: a Dawn render pass is already open; end it before beginning another")
+        graphicsFail(.Pass, "a Dawn render pass is already open; end it before beginning another")
         return false
     }
     var colorView = nullPointer()
@@ -156,7 +156,7 @@ function dawnBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bool
             height = frame.attachments.colorHeight()
             format = dawnObjectFormat(state, frame.attachments.colorViewId())
             if pointerIsNull(colorView) {
-                graphicsDiagnostic("Kira Graphics: offscreen render pass needs a color texture with an attachment view")
+                graphicsFail(.Pass, "offscreen render pass needs a color texture with an attachment view")
                 return false
             }
         }
@@ -172,7 +172,7 @@ function dawnBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bool
         }
         depthView = dawnObject(state, depthId)
         if pointerIsNull(depthView) {
-            graphicsDiagnostic("Kira Graphics: render pass asked for depth and has no depth view to attach")
+            graphicsFail(.Pass, "render pass asked for depth and has no depth view to attach")
             return false
         }
     }
@@ -247,7 +247,7 @@ function dawnBeginRenderPass(context: RawPtr, frame: borrow RenderFrame) -> Bool
         }
     }
     if pointerIsNull(state.dawn.passEncoder) {
-        graphicsDiagnostic("Kira Graphics: Dawn refused to begin the render pass")
+        graphicsFail(.Pass, "refused to begin the render pass")
         return false
     }
     state.dawn.passActive = true
@@ -279,7 +279,7 @@ function dawnEndPassAndCommit(context: RawPtr) {
     }
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     if !state.dawn.passActive {
-        graphicsDiagnostic("Kira Graphics: end pass skipped because no Dawn render pass is currently active")
+        graphicsFail(.Pass, "end pass skipped because no Dawn render pass is currently active")
         return
     }
     wgpuRenderPassEncoderEnd(state.dawn.passEncoder)
@@ -323,7 +323,7 @@ function dawnPresentFrame(context: RawPtr, capturePath: borrow String) {
     }
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     if state.dawn.passActive {
-        graphicsDiagnostic("Kira Graphics: the frame ended with a Dawn render pass still open")
+        graphicsFail(.Pass, "the frame ended with a Dawn render pass still open")
         dawnEndPassAndCommit(context)
     }
     // The resolve and the copy ride the frame's own encoder, so this frame's

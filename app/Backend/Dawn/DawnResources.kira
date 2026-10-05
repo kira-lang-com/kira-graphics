@@ -196,7 +196,7 @@ function dawnReadBufferWord(context: RawPtr, buffer: borrow GraphicsBuffer, inde
         size: U64(4)
     })
     if pointerIsNull(staging) {
-        graphicsDiagnostic("Kira Graphics: Dawn could not allocate a readback buffer")
+        graphicsFail(.Resource, "could not allocate a readback buffer")
         return U32(0)
     }
     let encoder = wgpuDeviceCreateCommandEncoder(state.dawn.device, WGPUCommandEncoderDescriptor {
@@ -228,7 +228,7 @@ function dawnReadBufferWord(context: RawPtr, buffer: borrow GraphicsBuffer, inde
         word = wordAt(mapped, U64(0))
         wgpuBufferUnmap(staging)
     } else {
-        graphicsDiagnostic("Kira Graphics: Dawn never completed the buffer readback map")
+        graphicsFail(.Resource, "never completed the buffer readback map")
     }
     wgpuBufferDestroy(staging)
     wgpuBufferRelease(staging)
@@ -242,7 +242,7 @@ public function dawnBufferMapped(status: I32, message: WGPUStringViewPointer, us
     state.dawn.mapResolved = true
     state.dawn.mapSucceeded = status == dawnMapSucceeded()
     if !state.dawn.mapSucceeded {
-        graphicsDiagnostic("Kira Graphics: Dawn refused a buffer map — " + dawnViewText(message))
+        graphicsFail(.Resource, "refused a buffer map — " + dawnViewText(message))
     }
     return
 }
@@ -276,7 +276,7 @@ function dawnCreateTexture(context: RawPtr, descriptor: borrow TextureDescriptor
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     let format = dawnResolvedFormat(state, descriptor.format)
     if format == dawnFormatUndefined() {
-        graphicsDiagnostic("Kira Graphics: texture '" + descriptor.label + "' names no format WebGPU has")
+        graphicsFail(.Resource, "texture '" + descriptor.label + "' names no format WebGPU has")
         return .Error(.DeviceRefused)
     }
     let samples = descriptor.sampleCount <= 1 ? 1 : descriptor.sampleCount

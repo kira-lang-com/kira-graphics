@@ -6,15 +6,28 @@ import Foundation
 
 public @Native
 function vulkanCreateComputePipeline(context: RawPtr, label: borrow String, shader: borrow GraphicsShader, entryName: borrow String) -> Int {
-    if !vulkanHasDevice(context) || shader.id == 0 { return 0 }
+    if !vulkanRequireDevice(context, "vulkanCreateComputePipeline") {
+        return 0
+    }
+    if shader.id == 0 {
+        graphicsFail(.Pipeline, "a compute pipeline was created with no shader (shader id 0)")
+        return 0
+    }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
     let shaderRecord = vulkanShaderRecord(runtime.vulkan, shader.id)
-    if !shaderRecord.live || pointerIsNull(shaderRecord.computeModule) { return 0 }
+    if !shaderRecord.live || pointerIsNull(shaderRecord.computeModule) {
+        graphicsFail(.Pipeline, "compute pipeline '" + label + "' names shader " + String(Int(shader.id)) + ", which " + (shaderRecord.live ? "has no compute stage" : "is not live"))
+        return 0
+    }
     let layouts = vulkanCreateDescriptorSetLayouts(runtime.vulkan, shaderRecord.reflection)
-    if layouts.count != vulkanReflectionGroupCount(shaderRecord.reflection) { return 0 }
+    if layouts.count != vulkanReflectionGroupCount(shaderRecord.reflection) {
+        graphicsFail(.Pipeline, "compute pipeline '" + label + "': only " + String(layouts.count) + " of its shader's " + String(vulkanReflectionGroupCount(shaderRecord.reflection)) + " descriptor set layouts could be created")
+        return 0
+    }
     let layout = vulkanCreatePipelineLayout(runtime.vulkan, layouts)
     if pointerIsNull(layout) {
         for held in layouts { vkDestroyDescriptorSetLayout(runtime.vulkan.device, held, nullPointer()) }
+        graphicsFail(.Pipeline, "compute pipeline '" + label + "': could not create its pipeline layout")
         return 0
     }
     let stage = VkPipelineShaderStageCreateInfo {
@@ -36,7 +49,7 @@ function vulkanCreateComputePipeline(context: RawPtr, label: borrow String, shad
     if result != vulkanSuccess() || pointerIsNull(pipeline) {
         vkDestroyPipelineLayout(runtime.vulkan.device, layout, nullPointer())
         for held in layouts { vkDestroyDescriptorSetLayout(runtime.vulkan.device, held, nullPointer()) }
-        graphicsDiagnostic("Kira Graphics: Vulkan rejected compute pipeline '" + label + "' (" + vulkanResultName(result) + ")")
+        graphicsFail(.Compute, "rejected compute pipeline '" + label + "' (" + vulkanResultName(result) + ")")
         return 0
     }
     return vulkanRecordPipeline(runtime.vulkan, VulkanPipelineRecord {
@@ -74,11 +87,23 @@ function vulkanComputeBufferGroup(state: borrow VulkanState, bufferIds: borrow [
 
 public @Native
 function vulkanDispatchComputeBuffers(context: RawPtr, pipelineId: Int, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
-    if !vulkanHasDevice(context) || pipelineId <= 0 { return }
+    if !vulkanRequireDevice(context, "vulkanDispatchComputeBuffers") {
+        return
+    }
+    if pipelineId <= 0 {
+        graphicsFail(.Compute, "a dispatch named compute pipeline " + String(pipelineId) + ", which does not exist")
+        return
+    }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
     let pipeline = vulkanPipelineRecord(runtime.vulkan, pipelineId)
-    if !pipeline.live || !pipeline.compute || pointerIsNull(runtime.vulkan.commandBuffer) { return }
-    if !vulkanBeginComputeCommands(runtime.vulkan) { return }
+    if !pipeline.live || !pipeline.compute || pointerIsNull(runtime.vulkan.commandBuffer) {
+        graphicsFail(.Compute, "a dispatch named pipeline " + String(pipelineId) + ", which " + (!pipeline.live ? "is not live" : !pipeline.compute ? "is a render pipeline, not a compute one" : "has no command buffer to record into"))
+        return
+    }
+    if !vulkanBeginComputeCommands(runtime.vulkan) {
+        graphicsFail(.Compute, "a dispatch of pipeline " + String(pipelineId) + " could not begin recording; it was dropped")
+        return
+    }
     let group = vulkanComputeBufferGroup(runtime.vulkan, bufferIds, 0)
     vkCmdBindPipeline(runtime.vulkan.commandBuffer, vulkanPipelineCompute(), pipeline.pipeline)
     let bound = pipeline.groupCount == 0 || vulkanBindDescriptorGroup(runtime.vulkan, pipeline, pipeline.reflection, 0, group, true)
@@ -89,11 +114,23 @@ function vulkanDispatchComputeBuffers(context: RawPtr, pipelineId: Int, bufferId
 
 public @Native
 function vulkanDispatchDepthComputeBuffers(context: RawPtr, pipelineId: Int, depth: borrow GraphicsTexture, bufferIds: borrow [U32], threadCount: Int, threadsPerGroup: Int) {
-    if !vulkanHasDevice(context) || pipelineId <= 0 { return }
+    if !vulkanRequireDevice(context, "vulkanDispatchDepthComputeBuffers") {
+        return
+    }
+    if pipelineId <= 0 {
+        graphicsFail(.Compute, "a depth dispatch named compute pipeline " + String(pipelineId) + ", which does not exist")
+        return
+    }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
     let pipeline = vulkanPipelineRecord(runtime.vulkan, pipelineId)
-    if !pipeline.live || !pipeline.compute { return }
-    if !vulkanBeginComputeCommands(runtime.vulkan) { return }
+    if !pipeline.live || !pipeline.compute {
+        graphicsFail(.Compute, "a depth dispatch named pipeline " + String(pipelineId) + ", which " + (pipeline.live ? "is a render pipeline, not a compute one" : "is not live"))
+        return
+    }
+    if !vulkanBeginComputeCommands(runtime.vulkan) {
+        graphicsFail(.Compute, "a depth dispatch of pipeline " + String(pipelineId) + " could not begin recording; it was dropped")
+        return
+    }
     let group = vulkanComputeBufferGroup(runtime.vulkan, bufferIds, 1)
     vulkanTransitionImage(runtime.vulkan, depth.id, vulkanImageLayoutShaderRead(),
         vulkanStageEarlyFragmentTests() | U32(VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT), vulkanStageComputeShader(),
@@ -122,11 +159,14 @@ function vulkanDispatchTextureComputePair(
     width: Int,
     height: Int,
 ) {
-    if !vulkanHasDevice(context) { return }
+    if !vulkanRequireDevice(context, "vulkanDispatchTextureComputePair") { return }
     var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
     let horizontal = vulkanPipelineRecord(runtime.vulkan, horizontalPipeline)
     let vertical = vulkanPipelineRecord(runtime.vulkan, verticalPipeline)
-    if !horizontal.live || !vertical.live || !horizontal.compute || !vertical.compute { return }
+    if !horizontal.live || !vertical.live || !horizontal.compute || !vertical.compute {
+        graphicsFail(.Compute, "a two-pass texture dispatch named pipelines " + String(horizontalPipeline) + " and " + String(verticalPipeline) + "; both must be live compute pipelines")
+        return
+    }
     let extentId = vulkanCreateBufferHandle(runtime.vulkan, "kira-vulkan-blur-extent",
         vulkanBufferUsageUniform(), 16, vulkanMemoryHostVisible() | vulkanMemoryHostCoherent())
     if extentId == 0 { return }
@@ -193,21 +233,37 @@ function vulkanRetireComputeBuffer(state: borrow mut VulkanState, id: U32) {
 
 public @Native
 function vulkanReadBufferU32(context: RawPtr, buffer: borrow GraphicsBuffer, index: Int) -> U32 {
-    if !vulkanHasDevice(context) || buffer.id == 0 || index < 0 { return U32(0) }
-    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
-    if runtime.vulkan.passActive {
-        graphicsDiagnostic("Kira Graphics: end the Vulkan render pass before reading a buffer")
+    if !vulkanRequireDevice(context, "vulkanReadBufferU32") {
         return U32(0)
     }
-    if U64(index) >= vulkanObjectStride(runtime.vulkan, buffer.id) / U64(4) { return U32(0) }
+    if buffer.id == 0 || index < 0 {
+        graphicsFail(.Resource, "a read of word " + String(index) + " from " + (buffer.id == 0 ? "a buffer that was never created" : "a buffer"))
+        return U32(0)
+    }
+    var runtime = nativeRecover<GraphicsAppRuntimeState>(context)
+    if runtime.vulkan.passActive {
+        graphicsFail(.Compute, "end the Vulkan render pass before reading a buffer")
+        return U32(0)
+    }
+    if U64(index) >= vulkanObjectStride(runtime.vulkan, buffer.id) / U64(4) {
+        graphicsFail(.Resource, "a read of word " + String(index) + " is past the end of a " + String(Int(vulkanObjectStride(runtime.vulkan, buffer.id) / U64(4))) + "-word buffer")
+        return U32(0)
+    }
     if runtime.vulkan.frameActive {
         if !vulkanFlushCommands(runtime.vulkan, true) {
+            graphicsFail(.Frame, "flushing the frame's commands for a buffer read failed; quitting")
             runtime.vulkan.quitRequested = true
             return U32(0)
         }
-    } else if vkQueueWaitIdle(runtime.vulkan.queue) != vulkanSuccess() { return U32(0) }
+    } else if vkQueueWaitIdle(runtime.vulkan.queue) != vulkanSuccess() {
+        graphicsFail(.Device, "waiting for the queue before a buffer read failed")
+        return U32(0)
+    }
     let mapped = vulkanObjectExtra(runtime.vulkan, buffer.id)
-    if pointerIsNull(mapped) { return U32(0) }
+    if pointerIsNull(mapped) {
+        graphicsFail(.Resource, "a buffer read from buffer " + String(Int(buffer.id)) + ", which is not host-visible")
+        return U32(0)
+    }
     return wordAt(mapped, vulkanObjectOffset(runtime.vulkan, buffer.id) + U64(index * 4))
 }
 

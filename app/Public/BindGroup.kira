@@ -123,7 +123,7 @@ public @Native
 function sokolBindGroupAddUniform(group: borrow BindGroup, uniformSlot: Int, uniform: borrow Uniform) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if uniformSlot < 0 || uniformSlot >= sokolMaxViewBindSlots() {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' uniform slot is outside the binding range a shader group numbers into")
+        graphicsFail(.Binding, "bind group '" + state.label + "' uniform slot is outside the binding range a shader group numbers into")
         return
     }
     state.uniformEntries.append(StoredUniformBindEntry {
@@ -138,11 +138,11 @@ public @Native
 function sokolBindGroupAddTexture(group: borrow BindGroup, textureSlot: Int, texture: borrow GraphicsTexture) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if texture.viewId == 0 {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' cannot bind a texture with no sampled view")
+        graphicsFail(.Binding, "bind group '" + state.label + "' cannot bind a texture with no sampled view")
         return
     }
     if textureSlot < 0 || textureSlot >= sokolMaxViewBindSlots() {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' texture slot is outside Sokol's supported view range")
+        graphicsFail(.Binding, "bind group '" + state.label + "' texture slot is outside Sokol's supported view range")
         return
     }
     state.textureEntries.append(TextureBindEntry {
@@ -156,11 +156,11 @@ public @Native
 function sokolBindGroupAddSampler(group: borrow BindGroup, samplerSlot: Int, sampler: borrow GraphicsSampler) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if sampler.id == 0 {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' cannot bind sampler 0")
+        graphicsFail(.Binding, "bind group '" + state.label + "' cannot bind sampler 0")
         return
     }
     if samplerSlot < 0 || samplerSlot >= sokolMaxSamplerBindSlots() {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' sampler slot is outside Sokol's supported sampler range")
+        graphicsFail(.Binding, "bind group '" + state.label + "' sampler slot is outside Sokol's supported sampler range")
         return
     }
     state.samplerEntries.append(SamplerBindEntry {
@@ -174,11 +174,11 @@ public @Native
 function sokolBindGroupAddStorageBuffer(group: borrow BindGroup, storageSlot: Int, viewId: U32) {
     var state = nativeRecover<BindGroupState>(group.storage)
     if viewId == 0 {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' cannot bind a storage buffer with no view")
+        graphicsFail(.Binding, "bind group '" + state.label + "' cannot bind a storage buffer with no view")
         return
     }
     if storageSlot < 0 || storageSlot >= sokolMaxViewBindSlots() {
-        graphicsDiagnostic("Kira Graphics: bind group '" + state.label + "' storage slot is outside Sokol's supported view range")
+        graphicsFail(.Binding, "bind group '" + state.label + "' storage slot is outside Sokol's supported view range")
         return
     }
     state.storageEntries.append(StorageBindEntry {

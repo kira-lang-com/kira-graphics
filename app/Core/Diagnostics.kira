@@ -1,5 +1,96 @@
+// What the library reports, and from where.
+//
+// Every operation that refuses or fails says so, naming the stage it failed
+// in, rather than returning quietly and leaving a black window to be explained
+// by taking the frame apart. `KIRA_GRAPHICS_LOG` selects how much is printed:
+// `off`, `error`, `warn` (the default) or `trace`, which also narrates each
+// frame's lifecycle. Printing, the level and the folding of repeats live in the
+// support library, so they hold process-wide on every backend.
+
+public enum GraphicsStage {
+    Device
+    Window
+    Swapchain
+    Frame
+    Pass
+    Pipeline
+    Shader
+    Resource
+    Binding
+    Draw
+    Compute
+    Present
+    Capture
+}
+
+public function graphicsStageName(stage: borrow GraphicsStage) -> String {
+    match stage {
+        Device -> return "device"
+        Window -> return "window"
+        Swapchain -> return "swapchain"
+        Frame -> return "frame"
+        Pass -> return "pass"
+        Pipeline -> return "pipeline"
+        Shader -> return "shader"
+        Resource -> return "resource"
+        Binding -> return "binding"
+        Draw -> return "draw"
+        Compute -> return "compute"
+        Present -> return "present"
+        Capture -> return "capture"
+    }
+}
+
+public function graphicsStageIndex(stage: borrow GraphicsStage) -> I32 {
+    match stage {
+        Device -> return I32(0)
+        Window -> return I32(1)
+        Swapchain -> return I32(2)
+        Frame -> return I32(3)
+        Pass -> return I32(4)
+        Pipeline -> return I32(5)
+        Shader -> return I32(6)
+        Resource -> return I32(7)
+        Binding -> return I32(8)
+        Draw -> return I32(9)
+        Compute -> return I32(10)
+        Present -> return I32(11)
+        Capture -> return I32(12)
+    }
+}
+
+public @FFI.Extern { library: graphics_support, symbol: kg_diagnostic, abi: c }
+function kgDiagnostic(stage: CString, stageIndex: I32, level: I32, message: CString): Void
+
+public @FFI.Extern { library: graphics_support, symbol: kg_diagnostics_enabled, abi: c }
+function kgDiagnosticsEnabled(level: I32) -> I32
+
+// Something failed: the operation did not happen.
+public function graphicsFail(stage: GraphicsStage, message: String) {
+    kgDiagnostic(graphicsStageName(stage), graphicsStageIndex(stage), I32(0), message)
+    return
+}
+
+// Something happened that is allowed but almost never meant.
+public function graphicsWarn(stage: GraphicsStage, message: String) {
+    kgDiagnostic(graphicsStageName(stage), graphicsStageIndex(stage), I32(1), message)
+    return
+}
+
+// The narration `KIRA_GRAPHICS_LOG=trace` asks for.
+public function graphicsTrace(stage: GraphicsStage, message: String) {
+    kgDiagnostic(graphicsStageName(stage), graphicsStageIndex(stage), I32(2), message)
+    return
+}
+
+// Whether trace lines are printed, so a hot path builds none it would drop.
+public function graphicsTracing() -> Bool {
+    return kgDiagnosticsEnabled(I32(2)) != I32(0)
+}
+
+// The older entry point: an unstaged failure.
 public @Native
 function graphicsDiagnostic(message: String) {
-    print(message)
+    kgDiagnostic("general", I32(-1), I32(0), message)
     return
 }

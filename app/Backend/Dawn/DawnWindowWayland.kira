@@ -73,7 +73,7 @@ public construct DawnWindowWayland() extends DawnWindow {
     function open(title: borrow String, width: Int, height: Int, mode: borrow WindowMode, transparent: Bool, opacity: Float) -> RawPtr {
         let display = kira_wayland_display_connect()
         if pointerIsNull(display) {
-            graphicsDiagnostic(
+            graphicsFail(.Window, 
                 "Kira Graphics: no Wayland display to open the Dawn backend's window on"
             )
             return nullPointer()
@@ -81,7 +81,7 @@ public construct DawnWindowWayland() extends DawnWindow {
 
         let registry = kira_wayland_display_get_registry(display)
         if pointerIsNull(registry) {
-            graphicsDiagnostic("Kira Graphics: the Wayland display refused a registry")
+            graphicsFail(.Window, "the Wayland display refused a registry")
             kira_wayland_display_disconnect(display)
             return nullPointer()
         }
@@ -96,7 +96,7 @@ public construct DawnWindowWayland() extends DawnWindow {
         // The second registry, for the second global. See the handlers above.
         let shellRegistry = kira_wayland_display_get_registry(display)
         if pointerIsNull(shellRegistry) {
-            graphicsDiagnostic("Kira Graphics: the Wayland display refused a second registry")
+            graphicsFail(.Window, "the Wayland display refused a second registry")
             kira_wayland_display_disconnect(display)
             return nullPointer()
         }
@@ -114,7 +114,7 @@ public construct DawnWindowWayland() extends DawnWindow {
         let compositor = kira_wayland_proxy_get_user_data(registry)
         let shell = kira_wayland_proxy_get_user_data(shellRegistry)
         if pointerIsNull(compositor) || pointerIsNull(shell) {
-            graphicsDiagnostic(
+            graphicsFail(.Window, 
                 "Kira Graphics: this Wayland compositor offers no wl_compositor or no \
                  xdg_wm_base, and a window needs both"
             )
@@ -131,14 +131,14 @@ public construct DawnWindowWayland() extends DawnWindow {
         // xdg_surface becomes a toplevel.
         let surface = kira_wayland_compositor_create_surface(compositor)
         if pointerIsNull(surface) {
-            graphicsDiagnostic("Kira Graphics: the Wayland compositor refused a surface")
+            graphicsFail(.Window, "the Wayland compositor refused a surface")
             kira_wayland_display_disconnect(display)
             return nullPointer()
         }
 
         let xdgSurface = kira_wayland_shell_get_surface(shell, surface)
         if pointerIsNull(xdgSurface) {
-            graphicsDiagnostic("Kira Graphics: xdg_wm_base refused a surface role")
+            graphicsFail(.Window, "xdg_wm_base refused a surface role")
             kira_wayland_display_disconnect(display)
             return nullPointer()
         }
@@ -148,7 +148,7 @@ public construct DawnWindowWayland() extends DawnWindow {
 
         let toplevel = kira_wayland_surface_get_toplevel(xdgSurface)
         if pointerIsNull(toplevel) {
-            graphicsDiagnostic("Kira Graphics: xdg_surface refused a toplevel")
+            graphicsFail(.Window, "xdg_surface refused a toplevel")
             kira_wayland_display_disconnect(display)
             return nullPointer()
         }

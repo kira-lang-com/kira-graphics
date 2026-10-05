@@ -24,7 +24,7 @@ function dawnCreateComputePipeline(context: RawPtr, label: borrow String, shader
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     let record = dawnShaderRecord(state, shader.id)
     if !record.live || pointerIsNull(record.computeModule) {
-        graphicsDiagnostic("Kira Graphics: compute pipeline '" + label + "' names no compiled compute shader")
+        graphicsFail(.Compute, "compute pipeline '" + label + "' names no compiled compute shader")
         return 0
     }
     let entry = entryName.count > 0 ? entryName : record.computeEntry
@@ -70,7 +70,7 @@ function dawnDispatch(state: borrow mut GraphicsAppRuntimeState, pipelineId: Int
         return
     }
     if state.dawn.passActive {
-        graphicsDiagnostic("Kira Graphics: a compute dispatch was asked for while a Dawn render pass is open; end the pass first")
+        graphicsFail(.Compute, "a compute dispatch was asked for while a Dawn render pass is open; end the pass first")
         wgpuBindGroupRelease(group)
         return
     }
@@ -230,7 +230,7 @@ function dawnDispatchDepthComputeBuffers(context: RawPtr, pipeline: Int, depth: 
     var entries = dawnBufferEntries(state, bufferIds, 1)
     let view = dawnObject(state, depth.depthViewId != 0 ? depth.depthViewId : depth.viewId)
     if pointerIsNull(view) {
-        graphicsDiagnostic("Kira Graphics: the depth texture handed to a compute dispatch has no view to bind")
+        graphicsFail(.Compute, "the depth texture handed to a compute dispatch has no view to bind")
         return
     }
     var ordered: [WGPUBindGroupEntry] = []

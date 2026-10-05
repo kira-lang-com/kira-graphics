@@ -314,7 +314,7 @@ function dawnBindMergedGroup(
     dawnCollectSlot(state, collected, wanted, group2, has2)
     dawnCollectSlot(state, collected, wanted, group3, has3)
     if collected.count != wanted.count {
-        graphicsDiagnostic("Kira Graphics: a draw bound " + String(collected.count) + " of the " + String(wanted.count) + " resources its shader reads, so it was skipped rather than refused by the device")
+        graphicsFail(.Binding, "a draw bound " + String(collected.count) + " of the " + String(wanted.count) + " resources its shader reads, so it was skipped rather than refused by the device")
         return false
     }
     let layout = wgpuRenderPipelineGetBindGroupLayout(pipelineHandle, U32(0))
@@ -394,13 +394,13 @@ function dawnBindOneGroup(
         return true
     }
     if !present {
-        graphicsDiagnostic("Kira Graphics: a draw left group " + String(index) + " unbound, which its shader reads, so it was skipped rather than refused by the device")
+        graphicsFail(.Binding, "a draw left group " + String(index) + " unbound, which its shader reads, so it was skipped rather than refused by the device")
         return false
     }
     var collected: [WGPUBindGroupEntry] = []
     dawnCollectSlot(state, collected, wanted, group, present)
     if collected.count != wanted.count {
-        graphicsDiagnostic("Kira Graphics: a draw bound " + String(collected.count) + " of the " + String(wanted.count) + " resources its shader reads in group " + String(index) + ", so it was skipped rather than refused by the device")
+        graphicsFail(.Binding, "a draw bound " + String(collected.count) + " of the " + String(wanted.count) + " resources its shader reads in group " + String(index) + ", so it was skipped rather than refused by the device")
         return false
     }
     let layout = wgpuRenderPipelineGetBindGroupLayout(pipelineHandle, U32(index))

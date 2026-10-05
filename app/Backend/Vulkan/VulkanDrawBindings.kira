@@ -6,7 +6,7 @@ public @Native
 function vulkanSnapshotUniform(state: borrow mut VulkanState, uniform: borrow StoredUniformBindEntry) -> U32 {
     let values = nativeRecover<UniformState>(uniform.storage)
     if values.expectedFloatCount <= 0 || values.values.count != values.expectedFloatCount {
-        graphicsDiagnostic("Kira Graphics: Vulkan uniform values do not match the declared size")
+        graphicsFail(.Binding, "uniform values do not match the declared size")
         return U32(0)
     }
     let id = vulkanCreateBufferHandle(state, values.label, vulkanBufferUsageUniform(),

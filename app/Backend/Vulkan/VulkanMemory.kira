@@ -23,6 +23,7 @@ function vulkanFindMemoryType(state: borrow VulkanState, typeBits: U32, required
 public @Native
 function vulkanCreateBufferHandle(state: borrow mut VulkanState, label: borrow String, usage: U32, byteSize: Int, memoryFlags: U32) -> U32 {
     if byteSize <= 0 || pointerIsNull(state.device) {
+        graphicsFail(.Resource, "buffer '" + label + "' of " + String(byteSize) + " bytes " + (pointerIsNull(state.device) ? "has no device to be created on" : "cannot be created; a buffer needs at least one byte"))
         return U32(0)
     }
     let bufferInfo = VkBufferCreateInfo {
@@ -36,7 +37,7 @@ function vulkanCreateBufferHandle(state: borrow mut VulkanState, label: borrow S
     let buffer = pointerAt(bufferSlot, U64(0))
     freeBytes(bufferSlot)
     if createResult != vulkanSuccess() || pointerIsNull(buffer) {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not create buffer '" + label + "' (" + vulkanResultName(createResult) + ")")
+        graphicsFail(.Resource, "could not create buffer '" + label + "' (" + vulkanResultName(createResult) + ")")
         return U32(0)
     }
     let requirements = allocateBytes(U64(24))
@@ -47,7 +48,7 @@ function vulkanCreateBufferHandle(state: borrow mut VulkanState, label: borrow S
     let memoryType = vulkanFindMemoryType(state, memoryTypeBits, memoryFlags)
     if memoryType == U32(4294967295) {
         vkDestroyBuffer(state.device, buffer, nullPointer())
-        graphicsDiagnostic("Kira Graphics: Vulkan found no compatible memory for buffer '" + label + "'")
+        graphicsFail(.Resource, "found no compatible memory for buffer '" + label + "'")
         return U32(0)
     }
     let allocation = VkMemoryAllocateInfo {
@@ -61,14 +62,14 @@ function vulkanCreateBufferHandle(state: borrow mut VulkanState, label: borrow S
     freeBytes(memorySlot)
     if memoryResult != vulkanSuccess() || pointerIsNull(memory) {
         vkDestroyBuffer(state.device, buffer, nullPointer())
-        graphicsDiagnostic("Kira Graphics: Vulkan could not allocate memory for buffer '" + label + "' (" + vulkanResultName(memoryResult) + ")")
+        graphicsFail(.Resource, "could not allocate memory for buffer '" + label + "' (" + vulkanResultName(memoryResult) + ")")
         return U32(0)
     }
     let bindResult = vkBindBufferMemory(state.device, buffer, memory, U64(0))
     if bindResult != vulkanSuccess() {
         vkFreeMemory(state.device, memory, nullPointer())
         vkDestroyBuffer(state.device, buffer, nullPointer())
-        graphicsDiagnostic("Kira Graphics: Vulkan could not bind memory for buffer '" + label + "' (" + vulkanResultName(bindResult) + ")")
+        graphicsFail(.Resource, "could not bind memory for buffer '" + label + "' (" + vulkanResultName(bindResult) + ")")
         return U32(0)
     }
     var mapped = nullPointer()
@@ -80,7 +81,7 @@ function vulkanCreateBufferHandle(state: borrow mut VulkanState, label: borrow S
         if mapResult != vulkanSuccess() || pointerIsNull(mapped) {
             vkDestroyBuffer(state.device, buffer, nullPointer())
             vkFreeMemory(state.device, memory, nullPointer())
-            graphicsDiagnostic("Kira Graphics: Vulkan could not map buffer '" + label + "' (" + vulkanResultName(mapResult) + ")")
+            graphicsFail(.Resource, "could not map buffer '" + label + "' (" + vulkanResultName(mapResult) + ")")
             return U32(0)
         }
     }
@@ -98,7 +99,7 @@ function vulkanWriteFloats(state: borrow VulkanState, bufferId: U32, data: borro
     }
     let size = vulkanObjectSize(state, bufferId)
     if offset > size || U64(data.count) > (size - offset) / U64(4) {
-        graphicsDiagnostic("Kira Graphics: Vulkan buffer write exceeds its size")
+        graphicsFail(.Resource, "buffer write exceeds its size")
         return
     }
     for index in 0..data.count {

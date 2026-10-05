@@ -30,6 +30,7 @@ public @Native
 function vulkanSpirvWords(hex: borrow String) -> [U32] {
     var words: [U32] = []
     if hex.count == 0 || hex.count % 8 != 0 {
+        graphicsFail(.Shader, "SPIR-V text of " + String(hex.count) + " characters is not whole 32-bit words; was the shader built for SPIR-V?")
         return words
     }
     var offset = 0
@@ -46,6 +47,7 @@ function vulkanSpirvWords(hex: borrow String) -> [U32] {
             digit = digit + 1
         }
         if !valid {
+            graphicsFail(.Shader, "SPIR-V text has a character that is not hexadecimal at offset " + String(offset))
             return []
         }
         words.append(word)
@@ -57,7 +59,7 @@ function vulkanSpirvWords(hex: borrow String) -> [U32] {
 public @Native
 function vulkanCreateShaderModule(state: borrow VulkanState, label: borrow String, words: borrow [U32]) -> RawPtr {
     if words.count == 0 {
-        graphicsDiagnostic("Kira Graphics: Vulkan shader '" + label + "' has no valid SPIR-V words")
+        graphicsFail(.Shader, "shader '" + label + "' has no valid SPIR-V words")
         return nullPointer()
     }
     let code = allocateBytes(U64(words.count * 4))
@@ -75,7 +77,7 @@ function vulkanCreateShaderModule(state: borrow VulkanState, label: borrow Strin
     freeBytes(moduleSlot)
     freeBytes(code)
     if result != vulkanSuccess() || pointerIsNull(module) {
-        graphicsDiagnostic("Kira Graphics: Vulkan rejected shader '" + label + "' (" + vulkanResultName(result) + ")")
+        graphicsFail(.Shader, "rejected shader '" + label + "' (" + vulkanResultName(result) + ")")
         return nullPointer()
     }
     return module
@@ -112,7 +114,7 @@ function vulkanRecordShader(state: borrow mut VulkanState, record: VulkanShaderR
 
 public @Native
 function vulkanCreateGraphicsShader(context: RawPtr, label: borrow String, vertexSpirv: borrow [U32], fragmentSpirv: borrow [U32], vertexEntry: borrow String, fragmentEntry: borrow String, reflection: borrow String) -> ShaderResult {
-    if !vulkanHasDevice(context) {
+    if !vulkanRequireDevice(context, "vulkanCreateGraphicsShader") {
         return .Error(.DeviceRefused)
     }
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -136,7 +138,7 @@ function vulkanCreateGraphicsShader(context: RawPtr, label: borrow String, verte
 
 public @Native
 function vulkanCreateComputeShader(context: RawPtr, label: borrow String, computeSpirv: borrow [U32], computeEntry: borrow String, reflection: borrow String) -> ShaderResult {
-    if !vulkanHasDevice(context) {
+    if !vulkanRequireDevice(context, "vulkanCreateComputeShader") {
         return .Error(.DeviceRefused)
     }
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
@@ -173,7 +175,7 @@ function vulkanCreateShaderFromKsl(context: RawPtr, descriptor: borrow KslShader
     let vertex = readFile(base + ".vert.spv")
     let fragment = readFile(base + ".frag.spv")
     if !vertex.ok || !fragment.ok {
-        graphicsDiagnostic("Kira Graphics: no SPIR-V for '" + descriptor.asset + "' under " + descriptor.directory + " — run `kira shader build --target spirv`")
+        graphicsFail(.Shader, "no SPIR-V for '" + descriptor.asset + "' under " + descriptor.directory + " — run `kira shader build --target spirv`")
         return .Error(.AssetUnreadable)
     }
     let reflection = readFile(base + ".resources")

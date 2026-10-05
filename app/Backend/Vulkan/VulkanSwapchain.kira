@@ -70,7 +70,7 @@ function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
     let capabilitiesResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(state.physicalDevice, state.surface, capabilities)
     if capabilitiesResult != vulkanSuccess() {
         freeBytes(capabilities)
-        graphicsDiagnostic("Kira Graphics: Vulkan could not query surface capabilities (" + vulkanResultName(capabilitiesResult) + ")")
+        graphicsFail(.Swapchain, "could not query surface capabilities (" + vulkanResultName(capabilitiesResult) + ")")
         return false
     }
     let formatsCountSlot = vulkanWordSlot()
@@ -79,7 +79,7 @@ function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
     if formatsResult != vulkanSuccess() || formatCount <= 0 {
         freeBytes(formatsCountSlot)
         freeBytes(capabilities)
-        graphicsDiagnostic("Kira Graphics: Vulkan surface reported no usable formats")
+        graphicsFail(.Swapchain, "surface reported no usable formats")
         return false
     }
     let formats = allocateBytes(U64(formatCount * 8))
@@ -88,6 +88,7 @@ function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
         freeBytes(formats)
         freeBytes(formatsCountSlot)
         freeBytes(capabilities)
+        graphicsFail(.Swapchain, "could not read the surface's formats (" + vulkanResultName(formatsReadResult) + ")")
         return false
     }
     let chosen = vulkanChooseSurfaceFormat(state, formatCount, formats)
@@ -127,7 +128,7 @@ function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
     freeBytes(formatsCountSlot)
     freeBytes(capabilities)
     if formatsReadResult != vulkanSuccess() || swapchainResult != vulkanSuccess() || pointerIsNull(state.swapchain) {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not create a swapchain (" + vulkanResultName(swapchainResult) + ")")
+        graphicsFail(.Swapchain, "could not create a swapchain (" + vulkanResultName(swapchainResult) + ")")
         return false
     }
     let imageCountSlot = vulkanWordSlot()
@@ -135,6 +136,7 @@ function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
     let count = Int(wordAt(imageCountSlot, U64(0)))
     if imagesResult != vulkanSuccess() || count <= 0 {
         freeBytes(imageCountSlot)
+        graphicsFail(.Swapchain, "the swapchain reports " + String(count) + " images (" + vulkanResultName(imagesResult) + ")")
         return false
     }
     let images = allocateBytes(U64(count * 8))
@@ -142,6 +144,7 @@ function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
     if imageReadResult != vulkanSuccess() {
         freeBytes(images)
         freeBytes(imageCountSlot)
+        graphicsFail(.Swapchain, "could not read the swapchain's images (" + vulkanResultName(imageReadResult) + ")")
         return false
     }
     state.swapchainImages = []
@@ -171,6 +174,7 @@ function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
         if viewResult != vulkanSuccess() || pointerIsNull(view) {
             freeBytes(images)
             freeBytes(imageCountSlot)
+            graphicsFail(.Swapchain, "could not create a view of a swapchain image (" + vulkanResultName(viewResult) + ")")
             return false
         }
         state.swapchainViews.append(view)
@@ -183,6 +187,7 @@ function vulkanCreateSwapchain(state: borrow mut VulkanState) -> Bool {
         if semaphoreResult != vulkanSuccess() || pointerIsNull(semaphore) {
             freeBytes(images)
             freeBytes(imageCountSlot)
+            graphicsFail(.Swapchain, "could not create a present semaphore (" + vulkanResultName(semaphoreResult) + ")")
             return false
         }
         state.swapchainPresentSemaphores.append(semaphore)

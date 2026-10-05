@@ -172,7 +172,7 @@ function dawnLogFrameRate(state: borrow mut GraphicsAppRuntimeState) {
     let elapsed = Float(Int(now - state.dawn.stats.fpsWindowStartNanoseconds))
         / Float(Int(dawnPerformanceTicksPerSecond()))
     if elapsed >= 1.0 {
-        graphicsDiagnostic(
+        graphicsFail(.Frame, 
             "KiraGraphics: fps=" + dawnTenths(Float(state.dawn.stats.fpsFrames) / elapsed)
                 + " frames=" + String(state.dawn.stats.fpsFrames)
         )

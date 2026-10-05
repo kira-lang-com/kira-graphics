@@ -46,7 +46,7 @@ function dawnEmptyShaderRecord() -> DawnShaderRecord {
 public @Native
 function dawnCompileWgsl(state: borrow GraphicsAppRuntimeState, label: borrow String, source: borrow String) -> RawPtr {
     if source.count == 0 {
-        graphicsDiagnostic("Kira Graphics: shader '" + label + "' has no WGSL for this stage")
+        graphicsFail(.Shader, "shader '" + label + "' has no WGSL for this stage")
         return nullPointer()
     }
     return wgpuDeviceCreateShaderModule(state.dawn.device, WGPUShaderModuleDescriptor {
@@ -166,7 +166,7 @@ function dawnCreateShaderFromKsl(context: RawPtr, descriptor: borrow KslShaderDe
     let vertex = readFile(base + ".vert.wgsl")
     let fragment = readFile(base + ".frag.wgsl")
     if !vertex.ok || !fragment.ok {
-        graphicsDiagnostic("Kira Graphics: no WGSL for '" + descriptor.asset + "' under " + descriptor.directory + " — run `kira shader build`")
+        graphicsFail(.Shader, "no WGSL for '" + descriptor.asset + "' under " + descriptor.directory + " — run `kira shader build`")
         return .Error(.AssetUnreadable)
     }
     let reflection = readFile(base + ".resources")
@@ -186,7 +186,7 @@ function dawnCreateShaderFromSources(context: RawPtr, descriptor: borrow ShaderD
     if vertexSource.count == 0 && descriptor.vertexPath.count > 0 {
         let contents = readFile(descriptor.vertexPath)
         if !contents.ok {
-            graphicsDiagnostic("Kira Graphics: no vertex shader at " + descriptor.vertexPath)
+            graphicsFail(.Shader, "no vertex shader at " + descriptor.vertexPath)
             return .Error(.AssetUnreadable)
         }
         vertexSource = contents.text
@@ -194,7 +194,7 @@ function dawnCreateShaderFromSources(context: RawPtr, descriptor: borrow ShaderD
     if fragmentSource.count == 0 && descriptor.fragmentPath.count > 0 {
         let contents = readFile(descriptor.fragmentPath)
         if !contents.ok {
-            graphicsDiagnostic("Kira Graphics: no fragment shader at " + descriptor.fragmentPath)
+            graphicsFail(.Shader, "no fragment shader at " + descriptor.fragmentPath)
             return .Error(.AssetUnreadable)
         }
         fragmentSource = contents.text

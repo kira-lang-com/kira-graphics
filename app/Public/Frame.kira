@@ -130,7 +130,7 @@ public class RenderFrame {
         self.renderPassActive = self.renderBackend().beginRenderPass(self)
 
         if (!self.renderPassActive) {
-            graphicsDiagnostic("Kira Graphics skipped render pass because the backend could not begin it")
+            graphicsFail(.Frame, "Kira Graphics skipped render pass because the backend could not begin it")
         }
 
         // The pass encoder has a single owner: the caller that draws with it,

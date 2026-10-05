@@ -166,6 +166,7 @@ function vulkanCreatePipelineLayout(state: borrow mut VulkanState, layouts: borr
     freeBytes(layoutSlot)
     freeBytes(layoutPointers)
     if result != vulkanSuccess() {
+        graphicsFail(.Pipeline, "could not create a pipeline layout of " + String(layouts.count) + " descriptor sets (" + vulkanResultName(result) + ")")
         return nullPointer()
     }
     return layout
@@ -257,25 +258,31 @@ public function vulkanBuildBlend(preset: borrow BlendPreset) -> VkPipelineColorB
 
 public @Native
 function vulkanCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPipelineDescriptor) -> PipelineResult {
-    if !vulkanHasDevice(context) || descriptor.shader.id == 0 {
+    if !vulkanRequireDevice(context, "vulkanCreateRenderPipeline") {
+        return .Error(.DeviceRefused)
+    }
+    if descriptor.shader.id == 0 {
+        graphicsFail(.Pipeline, "a render pipeline was created with no shader (shader id 0)")
         return .Error(.DeviceRefused)
     }
     let samples = vulkanSampleCount(descriptor.sampleCount <= 0 ? 1 : descriptor.sampleCount)
     if samples == I32(0) {
-        graphicsDiagnostic("Kira Graphics: Vulkan pipeline sampleCount must be one of 1, 2, 4, 8, 16, 32 or 64")
+        graphicsFail(.Pipeline, "pipeline sampleCount must be one of 1, 2, 4, 8, 16, 32 or 64")
         return .Error(.DeviceRefused)
     }
     if descriptor.colorTargets.count > 1 || descriptor.vertexLayout.attributes.count > 16 {
-        graphicsDiagnostic("Kira Graphics: Vulkan currently exposes one color attachment and at most sixteen vertex attributes per pipeline")
+        graphicsFail(.Pipeline, "currently exposes one color attachment and at most sixteen vertex attributes per pipeline")
         return .Error(.DeviceRefused)
     }
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     let shader = vulkanShaderRecord(state.vulkan, descriptor.shader.id)
     if !shader.live || pointerIsNull(shader.vertexModule) || pointerIsNull(shader.fragmentModule) {
+        graphicsFail(.Pipeline, "a render pipeline names shader " + String(Int(descriptor.shader.id)) + ", which " + (!shader.live ? "is not live" : pointerIsNull(shader.vertexModule) ? "has no vertex stage" : "has no fragment stage"))
         return .Error(.ShaderRejected)
     }
     let layouts = vulkanCreateDescriptorSetLayouts(state.vulkan, shader.reflection)
     if vulkanReflectionGroupCount(shader.reflection) > 0 && layouts.count == 0 {
+        graphicsFail(.Pipeline, "could not create the descriptor set layouts of shader " + String(Int(descriptor.shader.id)))
         return .Error(.DeviceRefused)
     }
     let layout = vulkanCreatePipelineLayout(state.vulkan, layouts)
@@ -395,7 +402,7 @@ function vulkanCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPi
     if result != vulkanSuccess() || pointerIsNull(pipeline) {
         vkDestroyPipelineLayout(state.vulkan.device, layout, nullPointer())
         for held in layouts { vkDestroyDescriptorSetLayout(state.vulkan.device, held, nullPointer()) }
-        graphicsDiagnostic("Kira Graphics: Vulkan rejected pipeline '" + descriptor.label + "' (" + vulkanResultName(result) + ")")
+        graphicsFail(.Pipeline, "rejected pipeline '" + descriptor.label + "' (" + vulkanResultName(result) + ")")
         return .Error(.DeviceRefused)
     }
     let id = vulkanRecordPipeline(state.vulkan, VulkanPipelineRecord {

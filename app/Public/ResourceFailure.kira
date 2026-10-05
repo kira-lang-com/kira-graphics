@@ -226,6 +226,6 @@ function samplerOrReport(outcome: SamplerResult, what: borrow String) -> Graphic
 
 public @Native
 function reportMissingResource(what: borrow String, failure: ResourceFailure) {
-    graphicsDiagnostic("Kira Graphics: no " + what + " — " + resourceFailureReason(move failure))
+    graphicsFail(.Resource, "no " + what + " — " + resourceFailureReason(move failure))
     return
 }

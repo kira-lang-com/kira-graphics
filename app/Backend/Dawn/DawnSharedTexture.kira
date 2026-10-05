@@ -90,17 +90,17 @@ function dawnImportSharedTexture(context: RawPtr, surface: borrow SharedSurface)
     // device that cannot make one wants to hear so now, while falling back to
     // copying pixels is still cheap.
     if dawnDeviceSharesTextures(state.dawn.device) == false {
-        graphicsDiagnostic("Kira Graphics: this device did not enable shared texture memory")
+        graphicsFail(.Resource, "this device did not enable shared texture memory")
         return SharedTexture {}
     }
     let memory = kira_shared_texture_import_memory(state.dawn.device, I32(surface.id.raw))
     if pointerIsNull(memory) {
-        graphicsDiagnostic("Kira Graphics: " + kira_shared_texture_diagnostic())
+        graphicsFail(.Resource, "" + kira_shared_texture_diagnostic())
         return SharedTexture {}
     }
     let object = kira_shared_texture_create(memory, I32(surface.id.raw))
     if pointerIsNull(object) {
-        graphicsDiagnostic("Kira Graphics: a shared surface imported but produced no texture")
+        graphicsFail(.Resource, "a shared surface imported but produced no texture")
         return SharedTexture {}
     }
     // A dmabuf in ARGB8888 arrives as BGRA8, which is what the swapchain is in

@@ -33,15 +33,15 @@ function dawnCreateRenderPipeline(context: RawPtr, descriptor: borrow RenderPipe
     var state = nativeRecover<GraphicsAppRuntimeState>(context)
     let shader = dawnShaderRecord(state, descriptor.shader.id)
     if !shader.live || pointerIsNull(shader.vertexModule) || pointerIsNull(shader.fragmentModule) {
-        graphicsDiagnostic("Kira Graphics: pipeline '" + descriptor.label + "' names no compiled graphics shader")
+        graphicsFail(.Pipeline, "pipeline '" + descriptor.label + "' names no compiled graphics shader")
         return .Error(.ShaderRejected)
     }
     if descriptor.vertexLayout.attributes.count > dawnMaxVertexAttributes() {
-        graphicsDiagnostic("Kira Graphics: pipeline '" + descriptor.label + "' declares more vertex attributes than WebGPU accepts")
+        graphicsFail(.Pipeline, "pipeline '" + descriptor.label + "' declares more vertex attributes than WebGPU accepts")
         return .Error(.DeviceRefused)
     }
     if descriptor.colorTargets.count > dawnMaxColorTargets() {
-        graphicsDiagnostic("Kira Graphics: pipeline '" + descriptor.label + "' declares more color targets than WebGPU accepts")
+        graphicsFail(.Pipeline, "pipeline '" + descriptor.label + "' declares more color targets than WebGPU accepts")
         return .Error(.DeviceRefused)
     }
     var attributes: [WGPUVertexAttribute] = []

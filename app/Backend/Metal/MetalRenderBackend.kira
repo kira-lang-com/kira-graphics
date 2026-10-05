@@ -25,7 +25,7 @@ public construct MetalRenderBackend(context: RawPtr) extends RenderBackend {
     function createShaderFromKsl(descriptor: borrow KslShaderDescriptor) -> ShaderResult {
         let source = readFile(descriptor.directory + "/" + descriptor.asset + ".metal")
         if !source.ok {
-            graphicsDiagnostic("Kira Graphics: no Metal library for '" + descriptor.asset + "' in " + descriptor.directory + " — run `kira shader build`")
+            graphicsFail(.Device, "no Metal library for '" + descriptor.asset + "' in " + descriptor.directory + " — run `kira shader build`")
             return .Error(.AssetUnreadable)
         }
         return shaderResult(metalCreateGraphicsShader(context, source.text))

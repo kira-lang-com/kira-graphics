@@ -16,7 +16,7 @@ function vulkanNewBindGroup(label: borrow String) -> BindGroup {
 
 public @Native
 function vulkanCreateBindGroup(context: RawPtr, descriptor: borrow BindGroupDescriptor) -> BindGroupResult {
-    if !vulkanHasDevice(context) {
+    if !vulkanRequireDevice(context, "vulkanCreateBindGroup") {
         return .Error(.DeviceRefused)
     }
     let group = vulkanNewBindGroup(descriptor.label)

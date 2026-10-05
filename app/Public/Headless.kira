@@ -167,7 +167,7 @@ public function openHeadlessGraphicsWithBackend(backend: RenderBackendKind) -> G
         created = dawnCreateDeviceAndQueue(state, context)
     }
     if !created {
-        graphicsDiagnostic("Kira Graphics: no headless device could be created")
+        graphicsFail(.Device, "no headless device could be created")
         return GraphicsHeadless {
             context: move runtimeState,
             graphics: Graphics {

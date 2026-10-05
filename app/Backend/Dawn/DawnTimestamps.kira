@@ -111,7 +111,7 @@ function dawnClockEnsure(state: borrow mut GraphicsAppRuntimeState) {
     })
     if pointerIsNull(querySet) {
         state.dawn.clock.supported = false
-        graphicsDiagnostic("Kira Graphics: Dawn refused a timestamp query set, so frame GPU time goes unmeasured")
+        graphicsFail(.Frame, "refused a timestamp query set, so frame GPU time goes unmeasured")
         return
     }
     state.dawn.clock.querySetId = dawnRegisterObject(state, querySet, dawnFormatUndefined())
@@ -172,7 +172,7 @@ function dawnClockOpenPair(state: borrow mut GraphicsAppRuntimeState, composite:
     if state.dawn.clock.used + 2 > dawnMaxTimestamps() {
         if !state.dawn.clock.overflowed {
             state.dawn.clock.overflowed = true
-            graphicsDiagnostic("Kira Graphics: a frame recorded more segments than the GPU clock holds, so the rest went untimed")
+            graphicsFail(.Frame, "a frame recorded more segments than the GPU clock holds, so the rest went untimed")
         }
         return 0 - 1
     }
@@ -312,7 +312,7 @@ function dawnClockReadSlot(state: borrow mut GraphicsAppRuntimeState, slot: Int)
     state.dawn.clock.frameMilliseconds = state.dawn.clock.prepMilliseconds + state.dawn.clock.compositeMilliseconds
     state.dawn.clock.measured = true
     if state.dawn.clock.logging {
-        graphicsDiagnostic(
+        graphicsFail(.Frame, 
             "KiraGraphics: gpu live frame=" + String(state.dawn.clock.readbackSerial[slot])
                 + " prep=" + graphicsHundredths(state.dawn.clock.prepMilliseconds)
                 + " composite=" + graphicsHundredths(state.dawn.clock.compositeMilliseconds)

@@ -7,8 +7,12 @@ import Foundation
 
 public @Native
 function vulkanRecordFrameCapture(state: borrow mut VulkanState) -> U32 {
-    if !state.captureSupported || !state.frameActive || !state.acquired || state.swapchainImages.count == 0 {
-        graphicsDiagnostic("Kira Graphics: Vulkan cannot capture this swapchain")
+    if !state.captureSupported || state.swapchainImages.count == 0 {
+        graphicsFail(.Capture, "this swapchain cannot be read back")
+        return U32(0)
+    }
+    if !vulkanAcquireSwapchainImage(state) {
+        graphicsFail(.Capture, "no swapchain image to capture: the frame was not begun or the acquire failed")
         return U32(0)
     }
     if state.passActive { vulkanEndPassAndCommitState(state) }
@@ -38,16 +42,16 @@ public @Native
 function vulkanWriteFrameCapture(state: borrow mut VulkanState, staging: U32, path: borrow String) {
     if staging == 0 { return }
     if vkQueueWaitIdle(state.queue) != vulkanSuccess() {
-        graphicsDiagnostic("Kira Graphics: Vulkan capture submission did not complete")
+        graphicsFail(.Capture, "capture submission did not complete")
         return
     }
     let mapped = vulkanObjectExtra(state, staging)
     if !pointerIsNull(mapped) {
         let pixels = vulkanPortablePixmap(mapped, state.swapchainWidth, state.swapchainHeight, state.swapchainFormat)
         if writeBytesFile(path, pixels) {
-            graphicsDiagnostic("Kira Graphics wrote the presented frame to " + path)
+            graphicsTrace(.Capture, "wrote the presented frame to " + path)
         } else {
-            graphicsDiagnostic("Kira Graphics could not write the presented frame to " + path)
+            graphicsFail(.Capture, "could not write the presented frame to " + path)
         }
     }
     vulkanReleaseBuffer(state, staging)

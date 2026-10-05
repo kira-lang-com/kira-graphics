@@ -131,7 +131,7 @@ function dawnTraceEndFrame(state: borrow mut GraphicsAppRuntimeState) {
     if !state.dawn.trace.enabled || state.dawn.trace.line.count == 0 {
         return
     }
-    graphicsDiagnostic(
+    graphicsFail(.Frame, 
         "KiraGraphics: gpu frame=" + String(state.dawn.stats.frameSerial)
             + state.dawn.trace.line
             + " prep=" + graphicsHundredths(state.dawn.trace.prepMilliseconds)
@@ -160,7 +160,7 @@ function dawnReportGpuTrace(state: borrow GraphicsAppRuntimeState) {
         return
     }
     let frames = Float(state.dawn.trace.frames)
-    graphicsDiagnostic(
+    graphicsFail(.Frame, 
         "KiraGraphics: gpu frames=" + String(state.dawn.trace.frames)
             + " prepMean=" + graphicsHundredths(state.dawn.trace.prepTotal / frames) + "ms"
             + " prepWorst=" + graphicsHundredths(state.dawn.trace.prepWorst) + "ms"

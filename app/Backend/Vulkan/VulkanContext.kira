@@ -32,6 +32,7 @@ public struct VulkanState {
     var frameActive: Bool = false
     var acquired: Bool = false
     var acquireWaitPending: Bool = false
+    var presentedThisFrame: Bool = false
     var focused: Bool = true
     var pointerX: Float = 0.0
     var pointerY: Float = 0.0
@@ -112,6 +113,15 @@ function vulkanHasDevice(context: RawPtr) -> Bool {
         return false
     }
     return !pointerIsNull(nativeRecover<GraphicsAppRuntimeState>(context).vulkan.device)
+}
+
+// `vulkanHasDevice` for an operation that cannot proceed without one: a missing
+// device is reported against the operation that needed it.
+public @Native
+function vulkanRequireDevice(context: RawPtr, operation: String) -> Bool {
+    if vulkanHasDevice(context) { return true }
+    graphicsFail(.Device, operation + " needs a Vulkan device, and " + (pointerIsNull(context) ? "there is no graphics context" : "the device was never created or is already shut down"))
+    return false
 }
 
 public @Native
@@ -328,7 +338,7 @@ function vulkanCreateInstance(state: borrow mut VulkanState, needsSurface: Bool)
     state.instance = pointerAt(resultSlot, U64(0))
     freeBytes(resultSlot)
     if result != vulkanSuccess() || pointerIsNull(state.instance) {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not create an instance (" + vulkanResultName(result) + ")")
+        graphicsFail(.Device, "could not create an instance (" + vulkanResultName(result) + ")")
         return false
     }
     return true
@@ -358,7 +368,7 @@ function vulkanChooseHeadlessPhysicalDevice(state: borrow mut VulkanState) -> Bo
     let count = Int(wordAt(countSlot, U64(0)))
     if count <= 0 {
         freeBytes(countSlot)
-        graphicsDiagnostic("Kira Graphics: Vulkan found no physical device")
+        graphicsFail(.Device, "found no physical device")
         return false
     }
     let devices = allocateBytes(U64(count * 8))
@@ -366,7 +376,7 @@ function vulkanChooseHeadlessPhysicalDevice(state: borrow mut VulkanState) -> Bo
     if result != vulkanSuccess() {
         freeBytes(devices)
         freeBytes(countSlot)
-        graphicsDiagnostic("Kira Graphics: Vulkan could not enumerate physical devices (" + vulkanResultName(result) + ")")
+        graphicsFail(.Device, "could not enumerate physical devices (" + vulkanResultName(result) + ")")
         return false
     }
     var deviceIndex = 0
@@ -382,7 +392,7 @@ function vulkanChooseHeadlessPhysicalDevice(state: borrow mut VulkanState) -> Bo
     }
     freeBytes(devices)
     freeBytes(countSlot)
-    graphicsDiagnostic("Kira Graphics: Vulkan found no physical device with a graphics and compute queue")
+    graphicsFail(.Device, "found no physical device with a graphics and compute queue")
     return false
 }
 
@@ -393,7 +403,7 @@ function vulkanChoosePhysicalDevice(state: borrow mut VulkanState) -> Bool {
     let count = Int(wordAt(countSlot, U64(0)))
     if count <= 0 {
         freeBytes(countSlot)
-        graphicsDiagnostic("Kira Graphics: Vulkan found no physical device")
+        graphicsFail(.Device, "found no physical device")
         return false
     }
     let devices = allocateBytes(U64(count * 8))
@@ -401,7 +411,7 @@ function vulkanChoosePhysicalDevice(state: borrow mut VulkanState) -> Bool {
     if result != vulkanSuccess() {
         freeBytes(devices)
         freeBytes(countSlot)
-        graphicsDiagnostic("Kira Graphics: Vulkan could not enumerate physical devices (" + vulkanResultName(result) + ")")
+        graphicsFail(.Device, "could not enumerate physical devices (" + vulkanResultName(result) + ")")
         return false
     }
     var deviceIndex = 0
@@ -417,7 +427,7 @@ function vulkanChoosePhysicalDevice(state: borrow mut VulkanState) -> Bool {
     }
     freeBytes(devices)
     freeBytes(countSlot)
-    graphicsDiagnostic("Kira Graphics: Vulkan found no physical device with graphics and presentation support")
+    graphicsFail(.Device, "found no physical device with graphics and presentation support")
     return false
 }
 
@@ -491,11 +501,11 @@ function vulkanCreateDevice(state: borrow mut VulkanState, needsSurface: Bool) -
     state.device = pointerAt(deviceSlot, U64(0))
     freeBytes(deviceSlot)
     if result != vulkanSuccess() || pointerIsNull(state.device) {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not create a device (" + vulkanResultName(result) + ")")
+        graphicsFail(.Device, "could not create a device (" + vulkanResultName(result) + ")")
         return false
     }
     if vulkanHasDynamicRendering(state.device) == I32(0) {
-        graphicsDiagnostic("Kira Graphics: Vulkan device lacks dynamic rendering commands")
+        graphicsFail(.Device, "device lacks dynamic rendering commands")
         return false
     }
     let queueSlot = vulkanPointerSlot()
@@ -503,7 +513,7 @@ function vulkanCreateDevice(state: borrow mut VulkanState, needsSurface: Bool) -
     state.queue = pointerAt(queueSlot, U64(0))
     freeBytes(queueSlot)
     if pointerIsNull(state.queue) {
-        graphicsDiagnostic("Kira Graphics: Vulkan returned no graphics queue")
+        graphicsFail(.Device, "returned no graphics queue")
         return false
     }
     return true
@@ -521,7 +531,7 @@ function vulkanCreateCommandState(state: borrow mut VulkanState) -> Bool {
     state.commandPool = pointerAt(poolSlot, U64(0))
     freeBytes(poolSlot)
     if poolResult != vulkanSuccess() || pointerIsNull(state.commandPool) {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not create a command pool (" + vulkanResultName(poolResult) + ")")
+        graphicsFail(.Device, "could not create a command pool (" + vulkanResultName(poolResult) + ")")
         return false
     }
     let allocation = VkCommandBufferAllocateInfo {
@@ -535,7 +545,7 @@ function vulkanCreateCommandState(state: borrow mut VulkanState) -> Bool {
     state.commandBuffer = pointerAt(commandSlot, U64(0))
     freeBytes(commandSlot)
     if commandResult != vulkanSuccess() || pointerIsNull(state.commandBuffer) {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not allocate a command buffer (" + vulkanResultName(commandResult) + ")")
+        graphicsFail(.Device, "could not allocate a command buffer (" + vulkanResultName(commandResult) + ")")
         return false
     }
     if !vulkanCreateDescriptorPool(state) {
@@ -567,7 +577,7 @@ function vulkanCreateDescriptorPool(state: borrow mut VulkanState) -> Bool {
     state.descriptorPool = pointerAt(poolSlot, U64(0))
     freeBytes(poolSlot)
     if result != vulkanSuccess() || pointerIsNull(state.descriptorPool) {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not create its descriptor pool (" + vulkanResultName(result) + ")")
+        graphicsFail(.Device, "could not create its descriptor pool (" + vulkanResultName(result) + ")")
         return false
     }
     return true
@@ -589,7 +599,7 @@ function vulkanCreateSyncObjects(state: borrow mut VulkanState) -> Bool {
     state.inFlightFence = pointerAt(fenceSlot, U64(0))
     freeBytes(fenceSlot)
     if imageResult != vulkanSuccess() || fenceResult != vulkanSuccess() {
-        graphicsDiagnostic("Kira Graphics: Vulkan could not create frame synchronization objects")
+        graphicsFail(.Device, "could not create frame synchronization objects")
         return false
     }
     return !pointerIsNull(state.imageAvailable) && !pointerIsNull(state.inFlightFence)

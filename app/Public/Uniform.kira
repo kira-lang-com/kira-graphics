@@ -39,11 +39,11 @@ function emptyUniform() -> Uniform {
 public @Native
 function sokolCreateUniform(descriptor: borrow UniformDescriptor) -> Uniform {
     if descriptor.expectedFloatCount <= 0 {
-        graphicsDiagnostic("Kira Graphics: uniform buffer '" + descriptor.label + "' needs a positive expected float count")
+        graphicsFail(.Resource, "uniform buffer '" + descriptor.label + "' needs a positive expected float count")
         return emptyUniform()
     }
     if descriptor.data.count != descriptor.expectedFloatCount {
-        graphicsDiagnostic("Kira Graphics: uniform buffer '" + descriptor.label + "' upload size does not match its expected float count")
+        graphicsFail(.Resource, "uniform buffer '" + descriptor.label + "' upload size does not match its expected float count")
         return emptyUniform()
     }
     // 1 rather than a counter: sokol keys nothing on this id anymore, so every

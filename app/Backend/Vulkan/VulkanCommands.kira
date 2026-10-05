@@ -5,13 +5,19 @@ import Foundation
 public @Native
 function vulkanBeginComputeCommands(state: borrow mut VulkanState) -> Bool {
     if state.passActive {
-        graphicsDiagnostic("Kira Graphics: end the Vulkan render pass before dispatching compute")
+        graphicsFail(.Frame, "end the Vulkan render pass before dispatching compute")
         return false
     }
     if state.frameActive { return true }
     if !vulkanWaitForFrame(state) { return false }
-    if vkResetCommandBuffer(state.commandBuffer, U32(0)) != vulkanSuccess() { return false }
-    if vkResetDescriptorPool(state.device, state.descriptorPool, U32(0)) != vulkanSuccess() { return false }
+    if vkResetCommandBuffer(state.commandBuffer, U32(0)) != vulkanSuccess() {
+        graphicsFail(.Compute, "could not reset the command buffer for compute work outside a frame")
+        return false
+    }
+    if vkResetDescriptorPool(state.device, state.descriptorPool, U32(0)) != vulkanSuccess() {
+        graphicsFail(.Compute, "could not reset the descriptor pool for compute work outside a frame")
+        return false
+    }
     return vkBeginCommandBuffer(state.commandBuffer, VkCommandBufferBeginInfo {
         sType: vulkanStructureCommandBufferBeginInfo(),
         flags: vulkanCommandBufferOneTime()
@@ -37,8 +43,14 @@ function vulkanComputeBarrier(state: borrow VulkanState) {
 // same acquired image. The final submission still signals the frame fence.
 public @Native
 function vulkanFlushCommands(state: borrow mut VulkanState, resume: Bool) -> Bool {
-    if state.passActive { return false }
-    if vkEndCommandBuffer(state.commandBuffer) != vulkanSuccess() { return false }
+    if state.passActive {
+        graphicsFail(.Frame, "commands cannot be flushed while a render pass is open")
+        return false
+    }
+    if vkEndCommandBuffer(state.commandBuffer) != vulkanSuccess() {
+        graphicsFail(.Frame, "could not end the command buffer to flush it")
+        return false
+    }
     let commandSlot = vulkanPointerSlot()
     let semaphoreSlot = vulkanPointerSlot()
     let stageSlot = vulkanWordSlot()
@@ -56,11 +68,20 @@ function vulkanFlushCommands(state: borrow mut VulkanState, resume: Bool) -> Boo
     freeBytes(commandSlot)
     freeBytes(semaphoreSlot)
     freeBytes(stageSlot)
-    if result != vulkanSuccess() { return false }
+    if result != vulkanSuccess() {
+        graphicsFail(.Frame, "could not submit flushed commands (" + vulkanResultName(result) + ")")
+        return false
+    }
     state.acquireWaitPending = false
-    if vkQueueWaitIdle(state.queue) != vulkanSuccess() { return false }
+    if vkQueueWaitIdle(state.queue) != vulkanSuccess() {
+        graphicsFail(.Device, "waiting for the queue after a flush failed")
+        return false
+    }
     if !resume { return true }
-    if vkResetCommandBuffer(state.commandBuffer, U32(0)) != vulkanSuccess() { return false }
+    if vkResetCommandBuffer(state.commandBuffer, U32(0)) != vulkanSuccess() {
+        graphicsFail(.Frame, "could not reset the command buffer to resume recording after a flush")
+        return false
+    }
     return vkBeginCommandBuffer(state.commandBuffer, VkCommandBufferBeginInfo {
         sType: vulkanStructureCommandBufferBeginInfo(),
         flags: vulkanCommandBufferOneTime()
@@ -71,7 +92,7 @@ public @Native
 function vulkanFinishComputeCommands(state: borrow mut VulkanState) {
     vulkanComputeBarrier(state)
     if !state.frameActive && !vulkanFlushCommands(state, false) {
-        graphicsDiagnostic("Kira Graphics: Vulkan compute submission failed")
+        graphicsFail(.Frame, "compute submission failed")
         state.quitRequested = true
     }
 }
