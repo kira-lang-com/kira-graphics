@@ -218,6 +218,11 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> AppEve
         let boundsKey: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "bounds")
         metalKvcValueInto(view, boundsKey, buf)
         let boundsH = metalDoubleBitsToFloat(metalMemReadU64(buf, 24))
+        // `timestamp` counts seconds on mach_absolute_time, the clock a
+        // frame's monotonicNanoseconds reads.
+        let stampKey: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "timestamp")
+        metalKvcValueInto(event, stampKey, buf)
+        let stamp = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
         var sx = 0.0
         var sy = 0.0
         var phase: ScrollPhase = .None
@@ -283,6 +288,7 @@ function metalTranslateEvent(event: RawPtr, view: RawPtr, ctx: RawPtr) -> AppEve
             scrollMomentum: momentum,
             scrollPrecise: precise,
             scrollInverted: inverted,
+            timestamp: stamp,
             modifiers: metalModifiersFromFlags(flags)
         }
     }

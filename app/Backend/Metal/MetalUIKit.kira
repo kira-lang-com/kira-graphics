@@ -114,7 +114,12 @@ function metalUIKitAppendTouch(view: RawPtr, touches: RawPtr, kind: AppEventKind
         if !contains { return }
     }
     let point: MetalNSPoint = metalMsgSend(state.activeTouch, metalSel("locationInView:"), view)
-    state.events.append(AppEvent { kind: kind, touchCount: 1, pointerX: point.x, pointerY: point.y })
+    let buf = metalMemAlloc(32)
+    let stampKey: RawPtr = metalMsgSend(metalObjcGetClass("NSString"), metalSel("stringWithUTF8String:"), "timestamp")
+    metalKvcValueInto(state.activeTouch, stampKey, buf)
+    let stamp = metalDoubleBitsToFloat(metalMemReadU64(buf, 0))
+    metalMemFree(buf)
+    state.events.append(AppEvent { kind: kind, touchCount: 1, pointerX: point.x, pointerY: point.y, timestamp: stamp })
     if kind == .TouchesEnded || kind == .TouchesCancelled { state.activeTouch = RawPtr(0) }
     return
 }

@@ -8,7 +8,7 @@ function vulkanSelfTestCapturePath() -> String {
 @Native
 function vulkanSelfTestClear() -> Bool {
     if hostPlatform() != .Linux && hostPlatform() != .Windows {
-        printLine("Vulkan rendering requires Linux or Windows; no GPU test was executed")
+        print("Vulkan rendering requires Linux or Windows; no GPU test was executed")
         return false
     }
     let path = vulkanSelfTestCapturePath()

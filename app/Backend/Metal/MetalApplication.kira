@@ -313,7 +313,8 @@ function metalRunApplication(app: borrow GraphicsApplication, runtimeUserData: R
                     scrollY: sdy,
                     scrollPhase: phase,
                     scrollPrecise: true,
-                    scrollInverted: true
+                    scrollInverted: true,
+                    timestamp: Float(metalClockNs(metalClockUptimeRaw())) / 1000000000.0
                 })
             }
             osi = osi + 6

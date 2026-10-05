@@ -77,6 +77,11 @@ public struct AppEvent {
     // rather than run against them.
     let scrollPrecise: Bool = false
     let scrollInverted: Bool = false
+    // When the event happened, in seconds on the clock a frame's
+    // `monotonicNanoseconds` counts on; negative where the platform does not
+    // say. A velocity is distance over THIS time, not over the frames the
+    // events happened to be delivered in.
+    let timestamp: Float = -1.0
     let touchCount: Int = 0
     let windowWidth: Int = 0
     let windowHeight: Int = 0

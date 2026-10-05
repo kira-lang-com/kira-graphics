@@ -45,10 +45,10 @@ function describe(plan: borrow PipelinePlan) -> String {
 @Main
 function main() {
     let plans = declaredPipelines()
-    printLine("declared pipelines: " + String(plans.count))
+    print("declared pipelines: " + String(plans.count))
     var index = 0
     while index < plans.count {
-        printLine("  " + describe(plans[index]))
+        print("  " + describe(plans[index]))
         index = index + 1
     }
     return
